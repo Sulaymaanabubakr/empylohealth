@@ -171,13 +171,34 @@ const DownloadApp = () => {
             background: #FAFAFA;
         }
 
-        @media(max-width: 960px) {
+        /* Tablet adjustments */
+        @media(max-width: 1024px) {
+            .download-container {
+                grid-template-columns: 1fr;
+                text-align: center;
+                gap: 60px;
+            }
+            .download-title {
+                margin: 0 auto 24px;
+            }
+            .download-desc {
+                margin: 0 auto 40px;
+            }
+            .app-buttons {
+                justify-content: center;
+            }
+            .download-image {
+                display: flex;
+                justify-content: center;
+            }
+        }
+
+        /* Mobile adjustments */
+        @media(max-width: 768px) {
             .download-section {
                 padding: 60px 0;
             }
             .download-container {
-                grid-template-columns: 1fr;
-                text-align: center;
                 gap: 40px;
             }
             .download-title {
@@ -188,7 +209,6 @@ const DownloadApp = () => {
                 font-size: 1rem;
             }
             .app-buttons {
-                justify-content: center;
                 flex-direction: column; /* Stack buttons on mobile */
                 align-items: center;
             }

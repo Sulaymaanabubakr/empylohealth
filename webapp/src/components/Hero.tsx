@@ -170,6 +170,16 @@ const Hero = () => {
         /* Tablet adjustments */
         @media (max-width: 1024px) {
           .hero-title { font-size: 3.5rem; }
+          .hero-container {
+            grid-template-columns: 1fr;
+            text-align: center;
+            gap: 60px;
+          }
+           .hero-subtitle { margin: 0 auto 20px; }
+           .hero-description { margin: 0 auto 40px; }
+           .img-container-skew { 
+               transform: scale(0.9); /* Slightly smaller skew for tablet */
+           }
         }
 
         /* Mobile adjustments */

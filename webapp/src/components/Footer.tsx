@@ -159,18 +159,48 @@ const Footer = () => {
               cursor: pointer;
           }
           
-          @media (max-width: 960px) {
+          @media (max-width: 1024px) {
             .footer-content {
               grid-template-columns: 1fr 1fr;
+              text-align: center;
+              gap: 60px;
+            }
+            .footer-brand {
+                grid-column: 1 / -1; /* Brand spans full width on tablet top */
+                margin-bottom: 20px;
+            }
+            .footer-links-group {
+                text-align: center;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            .footer-socials {
+                grid-column: 1 / -1; /* Socials span full width at bottom */
+                margin-top: 20px;
             }
           }
+
           @media (max-width: 600px) {
             .footer-content {
               grid-template-columns: 1fr;
+              gap: 40px;
+            }
+            .footer-brand, .footer-socials {
+                grid-column: auto;
             }
             .footer-bottom {
-                justify-content: center;
-                margin-top: 20px;
+                flex-direction: column;
+                gap: 12px;
+                text-align: center;
+            }
+            .legal-links {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .legal-links span {
+                display: block; /* Stack links on very small screens */
             }
           }
         `}</style>

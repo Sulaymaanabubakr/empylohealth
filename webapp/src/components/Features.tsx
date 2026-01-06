@@ -217,12 +217,24 @@ const Features = () => {
         @media (max-width: 1024px) {
           .features-grid {
             grid-template-columns: 1fr;
-            gap: 40px;
+            gap: 60px;
+            justify-items: center; /* Center grid items */
           }
-          .features-center-img {
+           .features-center-img {
              width: 80%;
              margin: 0 auto;
              order: -1;
+           }
+           .feature-card {
+             flex-direction: column;
+             text-align: center;
+             align-items: center;
+             max-width: 600px; /* Limit width for nice centering */
+             margin: 0 auto;
+           }
+           .features-column {
+               width: 100%;
+               align-items: center;
            }
         }
 
