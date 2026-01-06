@@ -222,11 +222,12 @@ const Footer = () => {
              .footer-logo-text { justify-content: flex-start; } 
           }
 
+
           @media (max-width: 600px) {
             .footer-content {
               grid-template-columns: 1fr;
               text-align: center;
-              gap: 40px;
+              gap: 32px; /* Slightly tighter gap */
             }
             .footer-brand, .footer-socials {
                 grid-column: auto;
@@ -239,10 +240,23 @@ const Footer = () => {
                 align-items: center;
             }
             
+            /* Mobile Font Size Reductions */
+            .footer h4 {
+                font-size: 1rem; /* Smaller headings */
+                margin-bottom: 16px;
+            }
+            .footer ul li {
+                font-size: 0.95rem; /* Smaller links */
+                margin-bottom: 12px;
+            }
+            .footer-brand p {
+                font-size: 0.9rem;
+            }
+            
             /* Clean Mobile Stack for Legal Links */
             .legal-links {
                 flex-direction: column;
-                gap: 12px;
+                gap: 10px;
             }
             .legal-links span {
                 display: block;
@@ -254,7 +268,9 @@ const Footer = () => {
             }
             
             .footer-bottom {
-                gap: 24px;
+                gap: 20px;
+                font-size: 0.85rem; /* Smaller legal text */
+                margin-top: 10px;
             }
           }
         `}</style>

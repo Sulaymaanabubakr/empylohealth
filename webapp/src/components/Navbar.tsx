@@ -1,12 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { FaBars, FaTimes } from 'react-icons/fa';
 import logo from '../assets/logo.png';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLUListElement>(null);
+  const toggleRef = useRef<HTMLDivElement>(null);
 
   const toggleMenu = () => setIsOpen(!isOpen);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isOpen &&
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node) &&
+        toggleRef.current &&
+        !toggleRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
 
   return (
     <nav className="navbar">
@@ -16,12 +37,12 @@ const Navbar = () => {
         </Link>
 
         {/* Mobile Menu Toggle */}
-        <div className="mobile-toggle" onClick={toggleMenu}>
+        <div className="mobile-toggle" onClick={toggleMenu} ref={toggleRef}>
           {isOpen ? <FaTimes /> : <FaBars />}
         </div>
 
         {/* Desktop Menu */}
-        <ul className={`nav-links ${isOpen ? 'active' : ''}`}>
+        <ul className={`nav-links ${isOpen ? 'active' : ''}`} ref={menuRef}>
           <li><Link to="/" onClick={() => setIsOpen(false)}>Home</Link></li>
           <li><Link to="/features" onClick={() => setIsOpen(false)}>Features</Link></li>
           <li><Link to="/pricing" onClick={() => setIsOpen(false)}>Pricing</Link></li>
@@ -112,7 +133,7 @@ const Navbar = () => {
         @media (max-width: 960px) {
           .mobile-toggle {
               display: block;
-              z-index: 1001; /* Above overlay */
+              z-index: 1001;
           }
           
           .desktop-btn {
@@ -121,33 +142,59 @@ const Navbar = () => {
           
           .mobile-btn {
               display: block;
-              margin-top: 20px;
+              margin-top: 10px;
+              width: 100%;
+          }
+          
+          .mobile-btn button {
+              width: 100%;
           }
 
           .nav-links {
-            /* Full screen overlay for mobile */
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100vh;
+            /* Compact Card Dropdown for Mobile */
+            position: absolute;
+            top: 70px; /* Below navbar */
+            right: 20px;
+            width: 250px; /* Fixed small width */
+            height: auto;
             background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            border: 1px solid rgba(0,0,0,0.05);
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            gap: 40px;
-            transform: translateY(-100%);
-            transition: transform 0.4s ease-in-out;
+            text-align: center;
+            gap: 16px;
+            padding: 24px;
+            
+            /* Hidden State */
+            transform: translateY(-10px);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.2s ease-in-out;
             z-index: 999;
           }
           
           .nav-links.active {
               transform: translateY(0);
+              opacity: 1;
+              pointer-events: auto;
+          }
+          
+          .nav-links li {
+              width: 100%;
           }
           
           .nav-links a {
-              font-size: 1.5rem;
+              font-size: 1.05rem; /* Normal size */
               color: var(--color-secondary);
+              display: block;
+              padding: 4px 0;
+          }
+          
+          .nav-links a:hover {
+              color: var(--color-primary);
           }
         }
         
