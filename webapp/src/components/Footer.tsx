@@ -53,10 +53,10 @@ const Footer = () => {
 
       <style>{`
           .footer {
-            background-color: #F1F5F9; /* Very light slate */
-            color: #334155;
+            background-color: var(--color-primary);
+            color: #fff;
             padding: 80px 0 40px;
-            border-top: 1px solid rgba(0,0,0,0.05);
+            border-top: 1px solid rgba(255,255,255,0.1);
           }
           
           .footer-logo-text {
@@ -72,8 +72,7 @@ const Footer = () => {
           .footer-logo-img {
               height: 36px;
               width: auto;
-              /* Filter Black -> Teal #0F766E approximation */
-              filter: invert(33%) sepia(90%) saturate(634%) hue-rotate(129deg) brightness(91%) contrast(96%);
+              filter: brightness(0) invert(1); /* Make logo white */
           }
           
           .footer-content {
@@ -81,7 +80,7 @@ const Footer = () => {
             grid-template-columns: 1.5fr 1fr 1fr 1fr;
             gap: 40px;
             margin-bottom: 60px;
-            border-bottom: 1px solid rgba(0,0,0,0.1); /* Darker border for light bg */
+            border-bottom: 1px solid rgba(255,255,255,0.1);
             padding-bottom: 40px;
             text-align: center;
           }
@@ -93,30 +92,30 @@ const Footer = () => {
             opacity: 1;
             margin-bottom: 24px;
             font-weight: 800;
-            color: #0F766E; /* Teal Heading */
+            color: #fff; /* White Heading */
           }
           
           .footer ul li {
             margin-bottom: 14px;
-            font-size: 1.05rem;
+            font-size: 1.1rem; /* Slightly larger */
             cursor: pointer;
             opacity: 1;
             transition: all 0.2s;
-            font-weight: 500;
-            color: #475569; /* Slate 600 */
+            font-weight: 700; /* Bold */
+            color: rgba(255,255,255,0.9);
           }
           
           .footer ul li:hover {
             transform: translateX(4px);
-            color: #0F766E;
+            color: #fff;
           }
           
           .footer-brand p {
-            font-size: 0.95rem;
-            opacity: 0.8;
+            font-size: 1rem;
+            opacity: 0.9;
             margin-top: auto; 
-            font-weight: 500;
-            color: #64748B;
+            font-weight: 600; /* Semi-Bold/Bold */
+            color: rgba(255,255,255,0.8);
           }
           
           .social-icons {
@@ -129,30 +128,30 @@ const Footer = () => {
               width: 44px;
               height: 44px;
               border-radius: 50%;
-              background: #E2E8F0; /* Light slate bg */
+              background: rgba(255,255,255,0.1);
               display: flex;
               align-items: center;
               justify-content: center;
               font-size: 1.2rem;
               cursor: pointer;
               transition: all 0.3s;
-              color: #0F766E; /* Teal icon */
+              color: white;
           }
           
           .social-icon:hover {
               transform: translateY(-4px);
-              background: #0F766E;
-              color: white;
+              background: white;
+              color: var(--color-primary);
           }
   
           .footer-bottom {
               display: flex;
               justify-content: center;
-              font-size: 0.95rem;
-              opacity: 0.9;
-              font-weight: 500;
+              font-size: 1rem;
+              opacity: 1;
+              font-weight: 600; /* Bold */
               margin-top: 20px;
-              color: #64748B;
+              color: rgba(255,255,255,0.8);
           }
           
           .legal-links span {

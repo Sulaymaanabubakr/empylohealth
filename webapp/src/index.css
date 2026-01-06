@@ -2,20 +2,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Brand Colors - Richer & Classier */
-  --color-primary: #0F766E;
-  /* Deep Teal/Emerald */
-  --color-primary-light: #2DD4BF;
-  /* Vibrant Teal Accent */
-  --color-secondary: #0F172A;
-  /* Deep Navy/Slate for Text */
-  --color-accent: #F59E0B;
-  /* Golden Orange */
+  /* Brand Colors - Official Palette */
+  --color-primary: #00a99d;
+  /* Empylo Turquoise */
+  --color-primary-dark: #008F85;
+  /* Slightly darker */
+  --color-primary-light: #D6E4E8;
+  /* Empylo Light Blue */
+
+  --color-secondary: #191919;
+  /* Empylo Black */
+  --color-accent: #FFB347;
+  /* Empylo Orange */
+
+  --color-bg: #FFFFFF;
+  /* Empylo White */
+  --color-text: #191919;
+  /* Empylo Black */
 
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #0F766E 0%, #14B8A6 100%);
-  --gradient-glass: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.6));
-  --gradient-subtle: linear-gradient(120deg, #F0FDFA 0%, #F8FAFC 100%);
+  --gradient-primary: linear-gradient(135deg, #00a99d 0%, #008F85 100%);
+  --gradient-glass: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.8));
+  --gradient-subtle: linear-gradient(120deg, #FAFAFA 0%, #FFFFFF 100%);
 
   /* Typography */
   --font-heading: 'Outfit', sans-serif;

@@ -1,5 +1,6 @@
 import { FaApple, FaGooglePlay } from 'react-icons/fa';
-// Ideally use images for stores, but icons work for refined prototype
+import appScreen1 from '../assets/app-screen-1.png';
+import appScreen2 from '../assets/app-screen-2.png';
 
 const DownloadApp = () => {
   return (
@@ -37,8 +38,12 @@ const DownloadApp = () => {
         <div className="download-image">
           {/* Phone Mockups placed to overlap section */}
           <div className="phone-group">
-            <div className="phone-mockup phone-1"></div>
-            <div className="phone-mockup phone-2"></div>
+            <div className="phone-mockup phone-1">
+              <img src={appScreen1} alt="App Profile" />
+            </div>
+            <div className="phone-mockup phone-2">
+              <img src={appScreen2} alt="App Circles" />
+            </div>
           </div>
         </div>
 
@@ -46,7 +51,7 @@ const DownloadApp = () => {
 
       <style>{`
         .download-section {
-          background: linear-gradient(135deg, #115E59 0%, #0F766E 100%); /* Deep Teal Premium */
+          background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
           padding: 120px 0;
           overflow: hidden;
           color: white; /* White text for contrast */
@@ -145,20 +150,14 @@ const DownloadApp = () => {
           overflow: hidden;
         }
         
-        .phone-mockup::before {
-            content: 'App Screen';
-            color: #555;
-            font-size: 0.9rem;
+        .phone-mockup img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 20px; /* Match inner curvature roughly */
         }
-        .phone-mockup::after {
-            content: '';
-            position: absolute;
-            top: 20px;
-            width: 80px;
-            height: 20px;
-            background: #111;
-            border-radius: 0 0 12px 12px;
-        }
+        
+        /* Removed ::after pseudo-element that was creating the obstructing notch */
         
         .phone-1 {
             transform: rotate(-10deg) translateX(-30px);
