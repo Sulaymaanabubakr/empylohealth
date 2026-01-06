@@ -1,11 +1,13 @@
 import 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useState } from 'react';
 import Navigation from './src/Navigation';
+import { AuthProvider } from './src/context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
 import { View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -36,9 +38,11 @@ export default function App() {
   }
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <Navigation />
+    <SafeAreaProvider style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <AuthProvider>
+        <Navigation />
+      </AuthProvider>
       <StatusBar style="auto" />
-    </View>
+    </SafeAreaProvider>
   );
 }

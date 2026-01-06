@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TextInput, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, Image, TextInput, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Button from '../components/Button';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
-const VerificationScreen = ({ navigation }) => {
+import EmailIllustration from '../../assets/images/email_icon.svg';
+
+const VerificationScreen = ({ navigation, route }) => {
+  const { type = 'personal' } = route.params || {};
   const [code, setCode] = useState(['', '', '', '']);
   const inputs = useRef([]);
 
@@ -34,7 +38,7 @@ const VerificationScreen = ({ navigation }) => {
         <Text style={styles.title}>Enter Your Verification Code</Text>
 
         <View style={[styles.icon, { justifyContent: 'center', alignItems: 'center' }]}>
-          <MaterialCommunityIcons name="message-lock" size={100} color={COLORS.primary} />
+          <EmailIllustration width={120} height={120} />
         </View>
 
         <View style={styles.codeContainer}>
@@ -59,7 +63,7 @@ const VerificationScreen = ({ navigation }) => {
 
         <Button
           title="Verify"
-          onPress={() => navigation.navigate('ProfileSetup')}
+          onPress={() => navigation.navigate(type === 'client' ? 'ProfileSetupClient' : 'ProfileSetup')}
           style={styles.verifyButton}
         />
 

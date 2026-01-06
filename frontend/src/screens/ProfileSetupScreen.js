@@ -1,13 +1,101 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, SafeAreaView, Platform, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
+import Dropdown from '../components/Dropdown';
+import DatePicker from '../components/DatePicker';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-// import { Picker } from '@react-native-picker/picker'; // Removed unused mock import
+import * as ImagePicker from 'expo-image-picker';
+
+// Cloudinary configuration
+const CLOUDINARY_CLOUD_NAME = 'your_cloud_name'; // Replace with your Cloudinary cloud name
+const CLOUDINARY_UPLOAD_PRESET = 'your_upload_preset'; // Replace with your upload preset
 
 const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
     const isPersonal = userType === 'personal';
+    const [gender, setGender] = useState('');
+    const [location, setLocation] = useState('');
+    const [dateOfBirth, setDateOfBirth] = useState('');
+    const [avatarUri, setAvatarUri] = useState('');
+    const [uploading, setUploading] = useState(false);
+
+    const genderOptions = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+    const locationOptions = [
+        'England - East Midlands',
+        'England - East of England',
+        'England - London',
+        'England - North East',
+        'England - North West',
+        'England - South East',
+        'England - South West',
+        'England - West Midlands',
+        'England - Yorkshire and the Humber',
+        'Scotland',
+        'Wales',
+        'Northern Ireland'
+    ];
+
+    const pickImage = async () => {
+        // Request permission
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Please grant camera roll permissions to upload an image.');
+            return;
+        }
+
+        // Pick image
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+            const imageUri = result.assets[0].uri;
+            setAvatarUri(imageUri);
+
+            // Upload to Cloudinary
+            uploadToCloudinary(imageUri);
+        }
+    };
+
+    const uploadToCloudinary = async (uri) => {
+        setUploading(true);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', {
+                uri,
+                type: 'image/jpeg',
+                name: 'avatar.jpg',
+            });
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+            const response = await fetch(
+                `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+                {
+                    method: 'POST',
+                    body: formData,
+                }
+            );
+
+            const data = await response.json();
+
+            if (data.secure_url) {
+                console.log('Image uploaded to Cloudinary:', data.secure_url);
+                // You can save data.secure_url to your backend here
+            }
+        } catch (error) {
+            console.error('Cloudinary upload error:', error);
+            Alert.alert('Upload failed', 'Could not upload image. Please try again.');
+        } finally {
+            setUploading(false);
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -19,40 +107,46 @@ const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
                 <Text style={styles.title}>Profile Setup</Text>
 
                 <View style={styles.avatarContainer}>
-                    <View style={styles.avatar}>
-                        <MaterialCommunityIcons name="account" size={60} color="#E0E0E0" />
-                    </View>
-                    <TouchableOpacity style={styles.editIcon}>
+                    <TouchableOpacity style={styles.avatar} onPress={pickImage} disabled={uploading}>
+                        {avatarUri ? (
+                            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                        ) : (
+                            <MaterialCommunityIcons name="account" size={60} color="#E0E0E0" />
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.editIcon} onPress={pickImage} disabled={uploading}>
                         <Feather name="edit-2" size={16} color={COLORS.primary} />
                     </TouchableOpacity>
+                    {uploading && <Text style={styles.uploadingText}>Uploading...</Text>}
                 </View>
 
                 {isPersonal ? (
                     <>
                         <Input label="Name" placeholder="Enter your name" />
-                        <Input
+
+                        <DatePicker
                             label="Date of Birth"
+                            value={dateOfBirth}
+                            onSelect={setDateOfBirth}
                             placeholder="mm.dd.yyyy"
                             icon={<MaterialCommunityIcons name="calendar-outline" size={20} color={COLORS.secondary} />}
                         />
 
-                        <View style={styles.dropdownContainer}>
-                            <Text style={styles.label}>Gender</Text>
-                            <View style={styles.dropdown}>
-                                <MaterialCommunityIcons name="gender-male-female" size={20} color={COLORS.secondary} style={styles.dropdownIcon} />
-                                <Text style={styles.dropdownText}>Select</Text>
-                                <Feather name="chevron-down" size={20} color="black" />
-                            </View>
-                        </View>
+                        <Dropdown
+                            label="Gender"
+                            value={gender}
+                            options={genderOptions}
+                            onSelect={setGender}
+                            icon={<MaterialCommunityIcons name="gender-male-female" size={20} color={COLORS.secondary} />}
+                        />
 
-                        <View style={styles.dropdownContainer}>
-                            <Text style={styles.label}>Location</Text>
-                            <View style={styles.dropdown}>
-                                <MaterialCommunityIcons name="map-marker-outline" size={20} color={COLORS.secondary} style={styles.dropdownIcon} />
-                                <Text style={styles.dropdownText}>Select</Text>
-                                <Feather name="chevron-down" size={20} color="black" />
-                            </View>
-                        </View>
+                        <Dropdown
+                            label="Location"
+                            value={location}
+                            options={locationOptions}
+                            onSelect={setLocation}
+                            icon={<MaterialCommunityIcons name="map-marker-outline" size={20} color={COLORS.secondary} />}
+                        />
                     </>
                 ) : (
                     <>
@@ -128,6 +222,16 @@ const styles = StyleSheet.create({
         padding: 6,
         borderWidth: 2,
         borderColor: COLORS.white,
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 50,
+    },
+    uploadingText: {
+        marginTop: SPACING.xs,
+        fontSize: 12,
+        color: COLORS.primary,
     },
     label: {
         ...TYPOGRAPHY.caption,

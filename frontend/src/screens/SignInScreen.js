@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
   View,
   Text,
@@ -6,9 +7,9 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Dimensions
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -17,6 +18,35 @@ import { MaterialCommunityIcons, AntDesign, FontAwesome } from '@expo/vector-ico
 const { width } = Dimensions.get('window');
 
 const SignInScreen = ({ navigation }) => {
+  const { login } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSignIn = async () => {
+    if (!email || !password) {
+      alert("Please enter both email and password");
+      return;
+    }
+
+    setLoading(true);
+    const result = await login(email, password);
+    setLoading(false);
+
+    if (result.success) {
+      // Navigation is handled by RootNavigator/App or we can manually navigate if needed
+      // Typically the AuthProvider state change triggers a re-render in Navigation
+      // But if standard stack, we might need to navigate.  
+      // For now, let's assume manual navigation is okay as a fallback or if the structure relies on it.
+      // Ideally, the root navigator switches stacks. 
+      // Based on Navigation.js, all screens are in one stack. 
+      // So we should navigate to Dashboard.
+      navigation.replace('Dashboard');
+    } else {
+      alert(result.error);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -36,22 +66,26 @@ const SignInScreen = ({ navigation }) => {
             placeholder="Enter your email..."
             keyboardType="email-address"
             icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
           />
 
           <View style={styles.passwordContainer}>
             <Input
               label="Password"
-              placeholder=""
+              placeholder="Enter your password"
               secureTextEntry
-            /* Password field in screenshot has a gray circle as if typing or placeholder */
+              value={password}
+              onChangeText={setPassword}
             />
           </View>
 
           <Button
-            title="Sign in"
-            onPress={() => navigation.navigate('ProfileSetup')}
+            title={loading ? "Signing in..." : "Sign in"}
+            onPress={handleSignIn}
             style={styles.signInButton}
-          /* Screenshot shows an arrow in the button */
+            disabled={loading}
           />
 
           <View style={styles.socialContainer}>

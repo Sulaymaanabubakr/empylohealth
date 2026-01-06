@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
     View,
     Text,
@@ -6,9 +7,9 @@ import {
     Image,
     ScrollView,
     TouchableOpacity,
-    SafeAreaView,
     Dimensions
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -17,8 +18,50 @@ import { MaterialCommunityIcons, AntDesign, FontAwesome } from '@expo/vector-ico
 
 const { width } = Dimensions.get('window');
 
-const SignUpScreen = ({ navigation }) => {
+const SignUpScreen = ({ navigation, route }) => {
+    const { type = 'personal' } = route.params || {};
+    const { register } = useAuth();
+
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [agree, setAgree] = useState(false);
+    const [loading, setLoading] = useState(false);
+
+    const handleSignUp = async () => {
+        if (!name || !email || !password || !confirmPassword) {
+            alert("Please fill in all fields");
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            alert("Passwords do not match");
+            return;
+        }
+
+        if (!agree) {
+            alert("Please agree to the Terms and Privacy");
+            return;
+        }
+
+        setLoading(true);
+        // Call register from AuthContext
+        const result = await register(email, password, name, type);
+        setLoading(false);
+
+        if (result.success) {
+            // Navigate to Verification (if we want to simulate that flow) 
+            // or directly to ProfileSetup or Dashboard.
+            // Given the existing flow likely expects verification, let's go to Verification 
+            // but pass the user info if needed. 
+            // HOWEVER, with standard Firebase Email/Pass, we are now logged in.
+            // Let's go to ProfileSetup to complete the profile (avatar, etc).
+            navigation.replace('ProfileSetup');
+        } else {
+            alert(result.error);
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -35,10 +78,21 @@ const SignUpScreen = ({ navigation }) => {
                     <Text style={styles.title}>Sign Up</Text>
 
                     <Input
+                        label="Full Name"
+                        placeholder="Enter your full name"
+                        icon={<MaterialCommunityIcons name="account-outline" size={20} color={COLORS.secondary} />}
+                        value={name}
+                        onChangeText={setName}
+                    />
+
+                    <Input
                         label="Email Address"
                         placeholder="Enter your email..."
                         keyboardType="email-address"
                         icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
+                        value={email}
+                        onChangeText={setEmail}
+                        autoCapitalize="none"
                     />
 
                     <Input
@@ -46,17 +100,20 @@ const SignUpScreen = ({ navigation }) => {
                         placeholder="Enter your password..."
                         secureTextEntry
                         icon={<MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.secondary} />}
+                        value={password}
+                        onChangeText={setPassword}
                     />
 
                     <Input
                         label="Confirm password"
-                        placeholder="Enter your password..."
+                        placeholder="Re-enter your password..."
                         secureTextEntry
                         icon={<MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.secondary} />}
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
                     />
 
                     <View style={styles.checkboxContainer}>
-                        {/* Simple checkbox mockup if expo-checkbox is not installed or available */}
                         <TouchableOpacity
                             style={[styles.checkbox, agree && styles.checked]}
                             onPress={() => setAgree(!agree)}
@@ -67,9 +124,9 @@ const SignUpScreen = ({ navigation }) => {
                     </View>
 
                     <Button
-                        title="Sign up"
-                        onPress={() => navigation.navigate('Verification')}
-                        disabled={!agree}
+                        title={loading ? "Creating account..." : "Sign up"}
+                        onPress={handleSignUp}
+                        disabled={!agree || loading}
                         style={styles.signUpButton}
                     />
 

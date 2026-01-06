@@ -1,0 +1,526 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { COLORS, SPACING } from '../theme/theme';
+import { SUPPORT_GROUPS } from '../data/mockData';
+import { resourceService } from '../services/api/resourceService';
+
+const { width } = Dimensions.get('window');
+
+const ExploreScreen = ({ navigation }) => {
+    const [activeTab, setActiveTab] = useState('Self-development');
+    const [activeFilter, setActiveFilter] = useState('Love');
+    const [activities, setActivities] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadContent = async () => {
+            try {
+                const items = await resourceService.getExploreContent();
+                setActivities(items);
+            } catch (err) {
+                console.log("Failed to load resources", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadContent();
+    }, []);
+
+    const displayedActivities = activities.filter(item =>
+        activeTab === 'Self-development' ? item.category === 'Self-development' : item.category === 'Group'
+    );
+    // If empty (e.g. first run before seed), maybe show static fallback or specific empty state.
+    // For now, assuming backend seed is run or will be run.
+
+    const affirmations = [
+        { id: '1', title: 'Every step I take, brings me closer to my dreams', tag: 'Today', date: '', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1353&q=80' },
+        { id: '2', title: 'I am strong and capable; I can overcome any obstacle', tag: 'Thursday', date: '22 November', image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1351&q=80' },
+    ];
+
+    const filters = ['Love', 'Hard work', 'Career', 'Courage', 'Relationships'];
+
+    return (
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Explore</Text>
+                <View style={{ width: 44 }} />
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+
+                {/* Search Bar */}
+                <View style={styles.searchContainer}>
+                    <Ionicons name="search" size={20} color="#9E9E9E" style={styles.searchIcon} />
+                    <TextInput
+                        placeholder="Search anything..."
+                        placeholderTextColor="#9E9E9E"
+                        style={styles.searchInput}
+                    />
+                </View>
+
+                {/* Segmented Control */}
+                <View style={styles.tabContainer}>
+                    <TouchableOpacity
+                        style={[styles.tab, activeTab === 'Self-development' && styles.activeTab]}
+                        onPress={() => setActiveTab('Self-development')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'Self-development' && styles.activeTabText]}>Self-development</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.tab, activeTab === 'Group activities' && styles.activeTab]}
+                        onPress={() => setActiveTab('Group activities')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'Group activities' && styles.activeTabText]}>Group activities</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Recommended Activities */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Recommended activities</Text>
+                    <Text style={styles.seeAllText}>See all</Text>
+                </View>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+                    {displayedActivities.map((item) => (
+                        <TouchableOpacity
+                            key={item.id}
+                            style={[styles.activityCard, { backgroundColor: item.color }]}
+                            onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                        >
+                            <View style={styles.timeBadge}>
+                                <Text style={styles.timeText}>{item.time}</Text>
+                            </View>
+                            <Image
+                                source={typeof item.image === 'string' ? { uri: item.image } : item.image}
+                                style={styles.activityImage}
+                                resizeMode="contain"
+                            />
+                            <View style={styles.activityContent}>
+                                <Text style={styles.activityTitle}>{item.title}</Text>
+                                <Text style={[styles.activityTag, { color: item.tag === 'LEARN' ? '#EF6C00' : '#00695C' }]}>
+                                    {item.tag}
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+
+                {/* Support Groups Preview (Only for Group activities tab) */}
+                {activeTab === 'Group activities' && (
+                    <View style={{ marginTop: 24 }}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Support Groups</Text>
+                            <TouchableOpacity onPress={() => navigation.navigate('SupportGroups')}>
+                                <Text style={styles.seeAllText}>See all</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <View style={{ paddingHorizontal: SPACING.lg }}>
+                            <Text style={{ color: '#757575', marginBottom: 12 }}>Showing support groups near you</Text>
+                            {SUPPORT_GROUPS.slice(0, 3).map((group) => (
+                                <View key={group.id} style={styles.groupCardPreview}>
+                                    <Image source={group.image} style={styles.groupImagePreview} />
+                                    <View style={{ flex: 1 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Text style={styles.groupNamePreview}>{group.name}</Text>
+                                            {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />}
+                                        </View>
+                                        <Text style={styles.groupMembersPreview}>{group.members} members</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.viewButtonPreview}
+                                        onPress={() => navigation.navigate('SupportGroupDetail', { group })}
+                                    >
+                                        <Text style={styles.viewButtonTextPreview}>VIEW</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
+
+                {/* Daily Affirmations */}
+                <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Daily Affirmations</Text>
+
+                {/* Filters */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+                    {filters.map((filter) => (
+                        <TouchableOpacity
+                            key={filter}
+                            style={[styles.filterChip, activeFilter === filter && styles.activeFilterChip]}
+                            onPress={() => setActiveFilter(filter)}
+                        >
+                            <Text style={[styles.filterText, activeFilter === filter && styles.activeFilterText]}>{filter}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+
+                <View style={styles.affirmationRow}>
+                    {affirmations.map((item) => (
+                        <TouchableOpacity
+                            key={item.id}
+                            style={styles.affirmationCard}
+                            onPress={() => navigation.navigate('Affirmations')}
+                        >
+                            <Image source={{ uri: item.image }} style={styles.affirmationImage} />
+                            <View style={styles.affirmationOverlay}>
+                                <View style={styles.affirmationHeader}>
+                                    <Text style={styles.affirmationDate}>{item.tag === 'Today' ? 'Today' : item.date}</Text>
+                                    <TouchableOpacity style={styles.expandButton}>
+                                        <Ionicons name="resize" size={12} color="#FFF" />
+                                    </TouchableOpacity>
+                                </View>
+                                <Text style={styles.affirmationText}>{item.title}</Text>
+                            </View>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+            </ScrollView>
+
+            {/* Bottom Navigation */}
+            <View style={styles.bottomNavContainer}>
+                <View style={styles.bottomNav}>
+                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Dashboard')}>
+                        <Ionicons name="home-outline" size={26} color="#BDBDBD" />
+                        <Text style={styles.navLabel}>Home</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.navItem}>
+                        <View style={[styles.activeNavIcon, { backgroundColor: '#E0F2F1' }]}>
+                            <Feather name="compass" size={24} color={COLORS.primary} />
+                        </View>
+                        <Text style={[styles.navLabel, { color: COLORS.primary, fontWeight: '700' }]}>Explore</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ChatList')}>
+                        <Ionicons name="chatbubble-outline" size={26} color="#BDBDBD" />
+                        <Text style={styles.navLabel}>Chat</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.navItem}>
+                        <Ionicons name="person-outline" size={26} color="#BDBDBD" />
+                        <Text style={styles.navLabel}>Profile</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </SafeAreaView>
+    );
+};
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#FCFCFC',
+        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingTop: 0,
+        marginTop: -24, // Matched to Dashboard spacing
+        paddingBottom: SPACING.xs,
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#ECEFF1',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scrollContent: {
+        paddingHorizontal: SPACING.lg,
+        paddingBottom: 110,
+    },
+    headerTitle: {
+        fontSize: 28, // Increased size
+        fontWeight: '800',
+        color: '#1A1A1A',
+        flex: 1,
+        textAlign: 'center',
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        height: 50,
+        marginTop: 40, // Much more space from header
+        marginBottom: SPACING.lg,
+        borderWidth: 1,
+        borderColor: '#F5F5F5',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 5,
+        elevation: 2,
+    },
+    searchIcon: {
+        marginRight: 10,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        color: '#1A1A1A',
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#ECEFF1',
+        borderRadius: 25,
+        padding: 4,
+        marginBottom: SPACING.xl,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 22,
+    },
+    activeTab: {
+        backgroundColor: '#FFFFFF',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#757575',
+    },
+    activeTabText: {
+        color: '#1A1A1A',
+        fontWeight: '700',
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.md,
+    },
+    sectionTitle: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#1A1A1A',
+    },
+    seeAllText: {
+        fontSize: 14,
+        color: '#FFA726',
+        fontWeight: '700',
+    },
+    horizontalScroll: {
+        marginBottom: SPACING.xl,
+        marginHorizontal: -SPACING.lg, // Allow full bleed
+        paddingHorizontal: SPACING.lg,
+    },
+    activityCard: {
+        width: width * 0.42,
+        height: 220,
+        borderRadius: 24,
+        padding: 16,
+        marginRight: 16,
+        justifyContent: 'space-between',
+    },
+    timeBadge: {
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    timeText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#1A1A1A',
+    },
+    activityImage: {
+        width: '100%',
+        height: 100,
+        marginBottom: 10,
+    },
+    activityContent: {
+
+    },
+    activityTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1A1A1A',
+        marginBottom: 4,
+        lineHeight: 22,
+    },
+    activityTag: {
+        fontSize: 11,
+        fontWeight: '800',
+        textTransform: 'uppercase',
+    },
+    filterScroll: {
+        flexDirection: 'row',
+        marginBottom: 24,
+        marginTop: 16, // Added space between title and filters
+    },
+    filterChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#009688',
+        marginRight: 8,
+        backgroundColor: '#FFFFFF',
+    },
+    activeFilterChip: {
+        backgroundColor: '#E0F2F1',
+    },
+    filterText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#1A1A1A',
+    },
+    activeFilterText: {
+        color: '#1A1A1A',
+    },
+    affirmationRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+    },
+    affirmationCard: {
+        width: '48%',
+        height: 220, // Taller card
+        borderRadius: 24,
+        overflow: 'hidden',
+        position: 'relative',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 5,
+        backgroundColor: '#FFF',
+    },
+    affirmationImage: {
+        width: '100%',
+        height: '100%',
+    },
+    affirmationOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.2)', // Darken slightly
+        padding: 16,
+        justifyContent: 'space-between',
+    },
+    affirmationHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+    },
+    affirmationDate: {
+        fontSize: 11,
+        color: '#FFF',
+        fontWeight: '600',
+    },
+    expandButton: {
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        borderRadius: 12,
+        padding: 6,
+    },
+    affirmationText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
+        lineHeight: 24,
+    },
+    groupCardPreview: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 14, // Slightly larger padding
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: '#F5F5F5',
+    },
+    groupImagePreview: {
+        width: 54, // Larger image (was 40/50)
+        height: 54,
+        borderRadius: 27,
+        marginRight: 14,
+    },
+    groupNamePreview: {
+        fontSize: 16, // Larger text (was 14)
+        fontWeight: '700',
+        color: '#1A1A1A',
+        marginBottom: 2,
+    },
+    groupMembersPreview: {
+        fontSize: 13,
+        color: '#757575',
+    },
+    viewButtonPreview: {
+        paddingHorizontal: 18,
+        paddingVertical: 8, // Larger button
+        borderRadius: 8,
+        borderWidth: 1.5, // Slightly thicker border
+        borderColor: COLORS.primary,
+    },
+    viewButtonTextPreview: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: COLORS.primary,
+    },
+    bottomNavContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingHorizontal: 20,
+        paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+        backgroundColor: 'transparent',
+    },
+    bottomNav: {
+        flexDirection: 'row',
+        backgroundColor: '#FFF',
+        paddingVertical: 12,
+        borderRadius: 32,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 10,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 25,
+        justifyContent: 'space-around',
+    },
+    navItem: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: 1,
+    },
+    activeNavIcon: {
+        padding: 10,
+        borderRadius: 20,
+        marginBottom: 4,
+    },
+    navLabel: {
+        fontSize: 11,
+        color: '#BDBDBD',
+        fontWeight: '600',
+    },
+});
+
+export default ExploreScreen;

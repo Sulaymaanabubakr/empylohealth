@@ -4,6 +4,7 @@ import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import EmailIllustration from '../../assets/images/email_icon.svg';
 
 const ForgotPasswordScreen = ({ navigation }) => {
     return (
@@ -16,7 +17,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
                 <Text style={styles.title}>Forgot Password</Text>
 
                 <View style={[styles.icon, { justifyContent: 'center', alignItems: 'center' }]}>
-                    <MaterialCommunityIcons name="email-lock" size={100} color={COLORS.primary} />
+                    <EmailIllustration width={120} height={120} />
                 </View>
 
                 <Text style={styles.infoText}>

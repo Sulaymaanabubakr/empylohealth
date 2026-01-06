@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Button from '../components/Button';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
-const NineIndexScreen = () => {
+const NineIndexScreen = ({ navigation }) => {
     const questions = [
         "I've been feeling relaxed",
         "I've been feeling useful",
@@ -15,6 +16,18 @@ const NineIndexScreen = () => {
 
     const options = ["Not at all", "Rarely", "Sometimes", "Most times", "Always"];
 
+    // Map each option to a different emoji
+    const getEmojiIcon = (option) => {
+        const emojiMap = {
+            "Not at all": "emoticon-sad-outline",
+            "Rarely": "emoticon-neutral-outline",
+            "Sometimes": "emoticon-outline",
+            "Most times": "emoticon-happy-outline",
+            "Always": "emoticon-excited-outline"
+        };
+        return emojiMap[option] || "emoticon-outline";
+    };
+
     const [answers, setAnswers] = useState({});
 
     const handleSelect = (qIndex, option) => {
@@ -24,13 +37,14 @@ const NineIndexScreen = () => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton}>
+                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Ionicons name="chevron-back" size={24} color="black" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>In the past week...</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <Text style={styles.title}>In the past week...</Text>
+
                 {questions.map((question, qIndex) => (
                     <View key={qIndex} style={styles.questionCard}>
                         <Text style={styles.questionText}>"{question}"</Text>
@@ -44,10 +58,12 @@ const NineIndexScreen = () => {
                                     ]}
                                     onPress={() => handleSelect(qIndex, option)}
                                 >
-                                    <View style={[
-                                        styles.radio,
-                                        answers[qIndex] === option && styles.selectedRadio
-                                    ]} />
+                                    <MaterialCommunityIcons
+                                        name={getEmojiIcon(option)}
+                                        size={16}
+                                        color={answers[qIndex] === option ? COLORS.white : '#666'}
+                                        style={styles.smileyIcon}
+                                    />
                                     <Text style={[
                                         styles.optionText,
                                         answers[qIndex] === option && styles.selectedOptionText
@@ -60,7 +76,7 @@ const NineIndexScreen = () => {
 
                 <Button
                     title="Save"
-                    onPress={() => { }}
+                    onPress={() => navigation.navigate('Dashboard')}
                     style={styles.saveButton}
                 />
             </ScrollView>
@@ -71,84 +87,73 @@ const NineIndexScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F5F5F5',
+        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
         paddingHorizontal: SPACING.lg,
-        paddingVertical: SPACING.md,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
+        paddingVertical: SPACING.sm,
     },
     backButton: {
-        marginRight: SPACING.md,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        textAlign: 'center',
-        flex: 1,
+        width: 40,
     },
     scrollContent: {
-        padding: SPACING.lg,
+        paddingHorizontal: SPACING.lg,
+        paddingBottom: SPACING.xxl,
+    },
+    title: {
+        fontSize: 20,
+        fontWeight: '600',
+        marginBottom: SPACING.xl,
+        color: COLORS.text,
+        textAlign: 'center',
     },
     questionCard: {
         backgroundColor: COLORS.white,
         borderRadius: RADIUS.lg,
         padding: SPACING.lg,
-        marginBottom: SPACING.lg,
-        borderWidth: 1,
-        borderColor: '#EAEAEA',
+        marginBottom: SPACING.md,
+        borderWidth: 2,
+        borderColor: '#B2DFDB',
     },
     questionText: {
-        ...TYPOGRAPHY.body,
-        fontWeight: '600',
-        fontStyle: 'italic',
+        fontSize: 16,
+        fontWeight: '500',
         marginBottom: SPACING.md,
+        color: COLORS.text,
     },
     optionsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: SPACING.sm,
+        gap: SPACING.xs,
     },
     optionButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
         borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
-        marginBottom: 4,
+        borderWidth: 1.5,
+        borderColor: '#333',
+        backgroundColor: COLORS.white,
     },
     selectedOptionButton: {
         backgroundColor: COLORS.primary,
         borderColor: COLORS.primary,
     },
-    radio: {
-        width: 14,
-        height: 14,
-        borderRadius: 7,
-        borderWidth: 1,
-        borderColor: '#999',
+    smileyIcon: {
         marginRight: 6,
     },
-    selectedRadio: {
-        backgroundColor: COLORS.white,
-        borderColor: COLORS.white,
-    },
     optionText: {
-        fontSize: 12,
-        color: '#666',
+        fontSize: 14,
+        color: COLORS.text,
     },
     selectedOptionText: {
         color: COLORS.white,
-        fontWeight: 'bold',
+        fontWeight: '600',
     },
     saveButton: {
         marginTop: SPACING.xl,
-        marginBottom: SPACING.xxl,
     },
 });
 
