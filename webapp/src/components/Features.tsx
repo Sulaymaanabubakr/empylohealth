@@ -214,27 +214,32 @@ const Features = () => {
            margin-top: -1px; /* seamless join */
         }
 
+        /* Tablet adjustments (iPad Pro / Horizontal Tablet) */
         @media (max-width: 1024px) {
           .features-grid {
-            grid-template-columns: 1fr;
-            gap: 60px;
-            justify-items: center; /* Center grid items */
+            /* Restore grid layout for tablet, don't stack yet */
+            grid-template-columns: 1fr 1fr; 
+            gap: 40px;
+            align-items: start; /* Align to top */
           }
            .features-center-img {
-             width: 80%;
-             margin: 0 auto;
-             order: -1;
+             /* Place image in the generic flow or hide? 
+                Let's put it as the last item or first full width?
+                Better: Spans both columns at the bottom or top.
+             */
+             grid-column: 1 / -1; 
+             width: 60%;
+             margin: 40px auto 0;
+             order: 10; /* Move to bottom */
            }
            .feature-card {
-             flex-direction: column;
+             flex-direction: column; /* Stack icon/text inside card */
              text-align: center;
              align-items: center;
-             max-width: 600px; /* Limit width for nice centering */
-             margin: 0 auto;
+             height: 100%; /* Uniform height */
            }
            .features-column {
-               width: 100%;
-               align-items: center;
+               display: contents; /* Flatten struct to use main grid */
            }
         }
 

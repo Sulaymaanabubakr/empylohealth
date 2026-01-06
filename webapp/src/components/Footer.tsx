@@ -9,7 +9,7 @@ const Footer = () => {
           <div className="footer-logo-text">
             <img src={logo} alt="Empylo" className="footer-logo-img" />
           </div>
-          <p>© Copyright Empylo 2026. All rights reserved</p>
+          {/* Copyright moved to bottom */}
         </div>
 
         <div className="footer-links-group">
@@ -39,7 +39,7 @@ const Footer = () => {
           <div className="social-icons">
             <span className="social-icon"><FaLinkedinIn /></span>
             <span className="social-icon"><FaInstagram /></span>
-            <span className="social-icon"><FaTwitter /></span> {/* Placeholder for X */}
+            <span className="social-icon"><FaTwitter /></span>
             <span className="social-icon"><FaFacebookF /></span>
           </div>
         </div>
@@ -47,8 +47,11 @@ const Footer = () => {
 
       <div className="footer-bottom container">
         <div className="legal-links">
-          <span>Privacy Policy</span> | <span>Terms of Use</span> | <span>Data Processing Agreement</span>
+          <span>Privacy Policy</span>
+          <span>Terms of Use</span>
+          <span>Data Processing Agreement</span>
         </div>
+        <p className="copyright-text">© Copyright Empylo 2026. All rights reserved</p>
       </div>
 
       <style>{`
@@ -110,13 +113,7 @@ const Footer = () => {
             color: #fff;
           }
           
-          .footer-brand p {
-            font-size: 1rem;
-            opacity: 0.9;
-            margin-top: auto; 
-            font-weight: 600; /* Semi-Bold/Bold */
-            color: rgba(255,255,255,0.8);
-          }
+          /* Socials styling unchanged */
           
           .social-icons {
               display: flex;
@@ -146,7 +143,9 @@ const Footer = () => {
   
           .footer-bottom {
               display: flex;
-              justify-content: center;
+              flex-direction: column;
+              align-items: center;
+              gap: 20px;
               font-size: 1rem;
               opacity: 1;
               font-weight: 600; /* Bold */
@@ -154,53 +153,108 @@ const Footer = () => {
               color: rgba(255,255,255,0.8);
           }
           
-          .legal-links span {
-              margin: 0 8px;
-              cursor: pointer;
+          .legal-links {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-wrap: wrap; /* Allow wrapping on small screens */
+              gap: 20px;
           }
           
+          .legal-links span {
+              cursor: pointer;
+              position: relative;
+          }
+
+          /* Default Pipes for Desktop/Tablet */
+          .legal-links span:not(:last-child)::after {
+              content: '|';
+              position: absolute;
+              right: -14px;
+              color: rgba(255,255,255,0.4);
+              pointer-events: none;
+          }
+          
+          .copyright-text {
+              opacity: 0.7;
+              font-weight: 500;
+              text-align: center;
+          }
+
+          /* Tablet adjustments */
           @media (max-width: 1024px) {
             .footer-content {
-              grid-template-columns: 1fr 1fr;
-              text-align: center;
-              gap: 60px;
+               /* Slightly condensed grid for tablet, but keep structure */
+               grid-template-columns: 1.5fr 1fr 1fr 1fr; 
+               text-align: left;
+               gap: 20px;
             }
             .footer-brand {
-                grid-column: 1 / -1; /* Brand spans full width on tablet top */
-                margin-bottom: 20px;
+                grid-column: 1; /* Brand in first column */
+                margin-bottom: 0;
             }
             .footer-links-group {
-                text-align: center;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
+                text-align: left;
+                display: block;
+                align-items: flex-start;
             }
             .footer-socials {
-                grid-column: 1 / -1; /* Socials span full width at bottom */
-                margin-top: 20px;
+                grid-column: 4; /* Socials in last column */
+                margin-top: 0;
             }
+             .footer-logo-text {
+                 justify-content: flex-start;
+             }
+             .social-icons {
+                 justify-content: flex-start;
+             }
+          }
+          
+          /* Intermediate breakpoint for smaller tablets */
+          @media (max-width: 768px) {
+             .footer-content {
+                grid-template-columns: 1fr 1fr; /* 2x2 grid */
+                text-align: left;
+                gap: 40px;
+             }
+             .footer-brand { grid-column: 1 / -1; }
+             .footer-socials { grid-column: 1 / -1; }
+             .footer-logo-text { justify-content: flex-start; } 
           }
 
           @media (max-width: 600px) {
             .footer-content {
               grid-template-columns: 1fr;
+              text-align: center;
               gap: 40px;
             }
             .footer-brand, .footer-socials {
                 grid-column: auto;
             }
-            .footer-bottom {
+             .footer-logo-text { justify-content: center; } 
+             .social-icons { justify-content: center; }
+             
+            .footer-links-group {
+                text-align: center;
+                align-items: center;
+            }
+            
+            /* Clean Mobile Stack for Legal Links */
+            .legal-links {
                 flex-direction: column;
                 gap: 12px;
-                text-align: center;
-            }
-            .legal-links {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
             }
             .legal-links span {
-                display: block; /* Stack links on very small screens */
+                display: block;
+                margin: 0;
+            }
+            /* Hide pipes on mobile stack */
+            .legal-links span:not(:last-child)::after {
+                display: none; 
+            }
+            
+            .footer-bottom {
+                gap: 24px;
             }
           }
         `}</style>

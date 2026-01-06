@@ -171,58 +171,67 @@ const Hero = () => {
         @media (max-width: 1024px) {
           .hero-title { font-size: 3.5rem; }
           .hero-container {
-            grid-template-columns: 1fr;
-            text-align: center;
-            gap: 60px;
+            /* Keep side-by-side for tablet, just tighter */
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            text-align: left; /* Reset text align */
           }
-           .hero-subtitle { margin: 0 auto 20px; }
-           .hero-description { margin: 0 auto 40px; }
+           .hero-subtitle { margin: 0 0 16px; }
+           .hero-description { margin: 0 0 32px; }
            .img-container-skew { 
-               transform: scale(0.9); /* Slightly smaller skew for tablet */
+               transform: perspective(2500px) rotateY(-8deg) rotateX(4deg) scale(1.1); /* Tamed skew */
            }
         }
 
         /* Mobile adjustments */
         @media (max-width: 768px) {
           .hero { 
-              padding: 60px 0 80px; 
+              padding: 40px 0 60px;
+              background: #F0FDFA; /* Slight tint instead of white to separate from header */
           }
           .hero-container {
             grid-template-columns: 1fr;
             text-align: center;
-            gap: 40px;
+            gap: 20px;
           }
+          /* HIDE background elements that might obstruct */
+          .hero-vector-bg, .blob {
+              display: none !important;
+          }
+          
           .hero-subtitle { 
-              margin: 0 auto 16px; 
+              margin: 0 auto 12px; 
               font-size: 0.75rem;
           }
           .hero-title { 
-              font-size: 2.25rem; /* Much smaller mobile title */
+              font-size: 2rem;
               letter-spacing: -1px;
-              margin-bottom: 20px;
+              margin-bottom: 16px;
+              line-height: 1.15;
           }
           .hero-description { 
-              margin: 0 auto 32px; 
-              font-size: 1rem;
-              padding: 0 16px;
+              margin: 0 auto 24px; 
+              font-size: 0.95rem;
+              padding: 0 10px;
+              max-width: 100%;
           }
           .btn-lg {
-              padding: 1rem 2.5rem; /* Smaller button */
+              padding: 0.875rem 2rem;
               font-size: 1rem;
-              width: 100%;
-              max-width: 280px;
+              width: auto;
+              min-width: 200px;
           }
+          
           .img-container-skew { 
               transform: none; 
-              margin-top: 20px;
+              margin-top: 10px;
+              width: 100%;
           }
           .hero-mockup-img {
-              max-width: 100%; /* Ensure it fits */
-          }
-          /* Adjust blobs to not overwhelm small screen */
-          .blob {
-              opacity: 0.3;
-              filter: blur(60px);
+              max-width: 100%;
+              width: 100%;
+              height: auto;
+              filter: drop-shadow(0 5px 15px rgba(0,0,0,0.1));
           }
         }
       `}</style>

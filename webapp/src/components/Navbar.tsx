@@ -103,6 +103,12 @@ const Navbar = () => {
             display: inline-flex;
         }
 
+        @media (max-width: 1024px) {
+           .logo-img {
+               height: 32px; /* Reduced for Tablet */
+           }
+        }
+
         @media (max-width: 960px) {
           .mobile-toggle {
               display: block;
@@ -143,6 +149,15 @@ const Navbar = () => {
               font-size: 1.5rem;
               color: var(--color-secondary);
           }
+        }
+        
+        @media (max-width: 768px) {
+            .logo-img {
+                height: 28px; /* Further reduced for Mobile */
+            }
+            .navbar {
+                height: 64px; /* Slightly tighter navbar height on mobile */
+            }
         }
       `}</style>
     </nav>

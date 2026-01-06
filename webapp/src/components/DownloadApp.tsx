@@ -1,6 +1,7 @@
-import { FaApple, FaGooglePlay } from 'react-icons/fa';
-import appScreen1 from '../assets/app-screen-1.png';
-import appScreen2 from '../assets/app-screen-2.png';
+import mobileMockup from '../assets/iphone-mockup-1.png';
+import desktopMockup from '../assets/iphone-mockup-2.png';
+import googlePlayBadge from '../assets/google-play-badge.png';
+import appStoreBadge from '../assets/app-store-badge.png';
 
 const DownloadApp = () => {
   return (
@@ -10,216 +11,161 @@ const DownloadApp = () => {
         <div className="download-content">
           <h2 className="download-title">
             Download The <br />
-            Circles Health App
+            Circles Health App by Empylo
           </h2>
           <p className="download-desc">
-            A unique data-powered approach to combat loneliness and improve mental and physical health.
-            Experience meaningful connections like never before.
+            Circles Health App by Empylo provides a unique data-powered approach to combat loneliness and improve mental and physical health.
+            Join now to experience meaningful connections like never before.
           </p>
 
           <div className="app-buttons">
-            <button className="store-btn">
-              <FaGooglePlay className="store-icon" />
-              <div className="store-text">
-                <span className="get-on">GET IT ON</span>
-                <span className="store-name">Google Play</span>
-              </div>
-            </button>
-            <button className="store-btn">
-              <FaApple className="store-icon" />
-              <div className="store-text">
-                <span className="get-on">Download on the</span>
-                <span className="store-name">App Store</span>
-              </div>
-            </button>
+            <a href="#" className="store-link">
+              <img src={googlePlayBadge} alt="Get it on Google Play" className="store-img" />
+            </a>
+            <a href="#" className="store-link">
+              <img src={appStoreBadge} alt="Download on the App Store" className="store-img" />
+            </a>
           </div>
         </div>
 
         <div className="download-image">
-          {/* Phone Mockups placed to overlap section */}
-          <div className="phone-group">
-            <div className="phone-mockup phone-1">
-              <img src={appScreen1} alt="App Profile" />
-            </div>
-            <div className="phone-mockup phone-2">
-              <img src={appScreen2} alt="App Circles" />
-            </div>
-          </div>
+          {/* Desktop Image */}
+          <img src={desktopMockup} alt="App Mockup Desktop" className="mockup-desktop" />
+
+          {/* Mobile Image */}
+          <img src={mobileMockup} alt="App Mockup Mobile" className="mockup-mobile" />
         </div>
 
       </div>
 
       <style>{`
         .download-section {
-          background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
-          padding: 120px 0;
+          background: #CCFBF1; /* Light Pastel Teal matching screenshot */
+          padding: 100px 0;
           overflow: hidden;
-          color: white; /* White text for contrast */
+          color: #111827; /* Dark text */
         }
 
         .download-container {
           display: grid;
           grid-template-columns: 1fr 1fr;
           align-items: center;
-          gap: 80px;
+          gap: 60px;
         }
 
         .download-title {
-          font-size: 3.5rem;
+          font-size: 3rem;
           margin-bottom: 24px;
           line-height: 1.1;
-          color: white; /* Override global dark color */
+          color: #111827;
           font-weight: 800;
         }
 
         .download-desc {
-          color: rgba(255,255,255,0.9);
+          color: #374151; /* Dark grey */
           line-height: 1.6;
-          margin-bottom: 48px;
-          max-width: 500px;
-          font-size: 1.15rem;
+          margin-bottom: 40px;
+          max-width: 540px;
+          font-size: 1.125rem;
         }
 
         .app-buttons {
           display: flex;
-          gap: 20px;
-        }
-
-        .store-btn {
-          background: #000;
-          color: white;
-          border-radius: 12px;
-          padding: 12px 24px;
-          display: flex;
+          gap: 24px;
           align-items: center;
-          gap: 16px;
-          min-width: 180px;
-          transition: all 0.2s;
-          border: 1px solid rgba(255,255,255,0.1);
-        }
-        
-        .store-btn:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-            background: #111;
         }
 
-        .store-icon {
-          font-size: 28px;
-        }
-
-        .store-text {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-          line-height: 1.2;
-        }
-
-        .get-on {
-          font-size: 11px;
-          text-transform: uppercase;
-          opacity: 0.8;
-          font-weight: 600;
-        }
-
-        .store-name {
-          font-size: 18px;
-          font-weight: 700;
-        }
-
-        .phone-group {
-          position: relative;
-          height: 480px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .phone-mockup {
-          width: 220px;
-          height: 440px;
-          background: #333;
-          border-radius: 32px;
-          border: 10px solid #111;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          box-shadow: 0 25px 50px rgba(0,0,0,0.5);
-          position: relative;
+        .store-link {
+          display: inline-block;
+          transition: transform 0.2s ease;
+          border-radius: 8px; /* Smooth corners for badge */
           overflow: hidden;
         }
-        
-        .phone-mockup img {
+
+        .store-link:hover {
+            transform: translateY(-4px);
+            opacity: 0.9;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .store-img {
+            height: 50px; /* Standard badge height */
+            width: auto;
+            display: block;
+        }
+
+        .download-image {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .mockup-desktop {
+            display: block;
             width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 20px; /* Match inner curvature roughly */
+            max-width: 600px; /* Limit width */
+            height: auto;
+            transform: scale(1.1); /* Slight pop */
         }
-        
-        /* Removed ::after pseudo-element that was creating the obstructing notch */
-        
-        .phone-1 {
-            transform: rotate(-10deg) translateX(-30px);
-            z-index: 1;
-            background: #FAFAFA;
-        }
-        
-        .phone-2 {
-            transform: rotate(10deg) translateX(30px) translateY(30px);
-            z-index: 2;
-            background: #FAFAFA;
+
+        .mockup-mobile {
+            display: none;
         }
 
         /* Tablet adjustments */
         @media(max-width: 1024px) {
             .download-container {
-                grid-template-columns: 1fr;
-                text-align: center;
-                gap: 60px;
+                grid-template-columns: 1fr 1fr;
+                gap: 40px;
             }
             .download-title {
-                margin: 0 auto 24px;
-            }
-            .download-desc {
-                margin: 0 auto 40px;
-            }
-            .app-buttons {
-                justify-content: center;
-            }
-            .download-image {
-                display: flex;
-                justify-content: center;
+                font-size: 2.5rem;
             }
         }
 
-        /* Mobile adjustments */
+        /* Mobile adjustments: Switch Image & Stack */
         @media(max-width: 768px) {
             .download-section {
                 padding: 60px 0;
             }
             .download-container {
+                grid-template-columns: 1fr;
+                text-align: center;
                 gap: 40px;
             }
+            .download-content {
+                padding: 0 20px;
+            }
             .download-title {
-                font-size: 2.25rem; /* Much smaller */
+                font-size: 2rem;
+                margin: 0 auto 16px;
             }
             .download-desc {
                 margin: 0 auto 32px;
                 font-size: 1rem;
+                padding: 0 10px;
             }
             .app-buttons {
-                flex-direction: column; /* Stack buttons on mobile */
-                align-items: center;
+                flex-direction: row; /* Side by side on mobile if they fit, or stack if small */
+                justify-content: center;
+                flex-wrap: wrap;
+                gap: 16px;
             }
-            .store-btn {
+
+            .store-img {
+                height: 48px; /* Slightly smaller on mobile if needed */
+            }
+
+            /* Toggle Images */
+            .mockup-desktop {
+                display: none;
+            }
+            .mockup-mobile {
+                display: block;
                 width: 100%;
-                max-width: 280px;
-            }
-            .phone-group {
-                margin-top: 40px;
-                height: 380px; /* Reduced height container */
-                transform: scale(0.85); /* Scale down whole group */
+                max-width: 320px; /* Constrain mobile image width */
+                height: auto;
+                margin: 0 auto;
             }
         }
       `}</style>
