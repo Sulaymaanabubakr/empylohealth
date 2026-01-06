@@ -167,19 +167,53 @@ const Hero = () => {
         
         /* Remove unused mock-ui styles */
 
+        /* Tablet adjustments */
         @media (max-width: 1024px) {
-          .hero-title { font-size: 4rem; }
+          .hero-title { font-size: 3.5rem; }
         }
 
-        @media (max-width: 960px) {
-          .hero { padding: 80px 0; }
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+          .hero { 
+              padding: 60px 0 80px; 
+          }
           .hero-container {
             grid-template-columns: 1fr;
             text-align: center;
+            gap: 40px;
           }
-          .hero-subtitle { margin: 0 auto 20px; }
-          .hero-description { margin: 0 auto 40px; }
-          .img-container-skew { transform: none; }
+          .hero-subtitle { 
+              margin: 0 auto 16px; 
+              font-size: 0.75rem;
+          }
+          .hero-title { 
+              font-size: 2.25rem; /* Much smaller mobile title */
+              letter-spacing: -1px;
+              margin-bottom: 20px;
+          }
+          .hero-description { 
+              margin: 0 auto 32px; 
+              font-size: 1rem;
+              padding: 0 16px;
+          }
+          .btn-lg {
+              padding: 1rem 2.5rem; /* Smaller button */
+              font-size: 1rem;
+              width: 100%;
+              max-width: 280px;
+          }
+          .img-container-skew { 
+              transform: none; 
+              margin-top: 20px;
+          }
+          .hero-mockup-img {
+              max-width: 100%; /* Ensure it fits */
+          }
+          /* Adjust blobs to not overwhelm small screen */
+          .blob {
+              opacity: 0.3;
+              filter: blur(60px);
+          }
         }
       `}</style>
     </section>

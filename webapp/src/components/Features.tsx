@@ -217,12 +217,71 @@ const Features = () => {
         @media (max-width: 1024px) {
           .features-grid {
             grid-template-columns: 1fr;
-            gap: 80px;
+            gap: 40px;
           }
           .features-center-img {
              width: 80%;
              margin: 0 auto;
              order: -1;
+           }
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+          .features-section {
+              padding: 60px 0;
+          }
+          .features-header {
+              margin-bottom: 40px;
+              padding: 0 20px;
+          }
+          .features-header h2 {
+              font-size: 2rem;
+          }
+          
+          .features-grid {
+             grid-template-columns: 1fr 1fr; /* Compact 2-column */
+             gap: 12px;
+             align-items: stretch;
+          }
+          
+          .features-center-img {
+             grid-column: 1 / -1;
+             width: 100%;
+             margin-bottom: 24px;
+             order: -1;
+          }
+          
+          .features-column {
+              display: contents; /* Flatten validation */
+          }
+
+          .feature-card {
+             flex-direction: column;
+             padding: 16px;
+             gap: 12px;
+             border-radius: 16px;
+             align-items: center;
+             text-align: center;
+             height: 100%;
+          }
+          
+          .feature-icon-wrapper {
+              width: 48px;
+              height: 48px;
+              font-size: 1.25rem;
+              border-radius: 12px;
+          }
+          
+          .feature-text h3 {
+              font-size: 0.9rem;
+              margin-bottom: 4px;
+              line-height: 1.2;
+          }
+          
+          .feature-text p {
+              font-size: 0.75rem;
+              line-height: 1.35;
           }
         }
       `}</style>

@@ -172,15 +172,34 @@ const DownloadApp = () => {
         }
 
         @media(max-width: 960px) {
+            .download-section {
+                padding: 60px 0;
+            }
             .download-container {
                 grid-template-columns: 1fr;
                 text-align: center;
+                gap: 40px;
+            }
+            .download-title {
+                font-size: 2.25rem; /* Much smaller */
+            }
+            .download-desc {
+                margin: 0 auto 32px;
+                font-size: 1rem;
             }
             .app-buttons {
                 justify-content: center;
+                flex-direction: column; /* Stack buttons on mobile */
+                align-items: center;
+            }
+            .store-btn {
+                width: 100%;
+                max-width: 280px;
             }
             .phone-group {
-                margin-top: 80px;
+                margin-top: 40px;
+                height: 380px; /* Reduced height container */
+                transform: scale(0.85); /* Scale down whole group */
             }
         }
       `}</style>

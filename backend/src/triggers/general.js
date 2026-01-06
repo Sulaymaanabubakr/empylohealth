@@ -99,7 +99,8 @@ exports.onMessageCreate = functions.firestore.document('chats/{chatId}/messages/
         if (tokens.length === 0)
             return;
         // 4. Send Notification
-        const payload = {
+        const messagePayload = {
+            tokens: tokens,
             notification: {
                 title: 'New Message',
                 body: message.type === 'text' ? message.text : 'Sent a photo',
@@ -109,7 +110,7 @@ exports.onMessageCreate = functions.firestore.document('chats/{chatId}/messages/
                 type: 'CHAT_MESSAGE'
             }
         };
-        const response = await admin.messaging().sendToDevice(tokens, payload);
+        const response = await admin.messaging().sendEachForMulticast(messagePayload);
         console.log(`[Backend] Notifications sent: ${response.successCount}`);
         // Cleanup invalid tokens could happen here
     }
