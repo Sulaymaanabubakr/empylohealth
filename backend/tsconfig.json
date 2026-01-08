@@ -2,11 +2,10 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    // "rootDir": "./src",
-    // "outDir": "./dist",
+    "rootDir": "src",
+    "outDir": "lib",
     // Environment Settings
-    // See also https://aka.ms/tsconfig/module
-    "module": "nodenext",
+    "module": "commonjs",
     "target": "esnext",
     "types": [],
     // For nodejs:
@@ -34,6 +33,6 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleDetection": "force",
-    "skipLibCheck": true,
+    "skipLibCheck": true
   }
 }

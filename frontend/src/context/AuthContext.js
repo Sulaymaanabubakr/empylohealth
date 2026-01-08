@@ -11,6 +11,9 @@ export const AuthProvider = ({ children }) => {
 
     // Listen for auth state changes
     useEffect(() => {
+        // Initialize Google Sign In
+        authService.init('607256726988-o9os734pbrr74vner4b542oe51t10rpj.apps.googleusercontent.com');
+
         const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
             setUser(currentUser);
             if (currentUser) {
@@ -50,8 +53,16 @@ export const AuthProvider = ({ children }) => {
         return await authService.logout();
     };
 
+    const loginWithGoogle = async () => {
+        return await authService.loginWithGoogle();
+    };
+
+    const loginWithApple = async () => {
+        return await authService.loginWithApple();
+    };
+
     return (
-        <AuthContext.Provider value={{ user, userData, loading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, userData, loading, login, register, logout, loginWithGoogle, loginWithApple }}>
             {!loading && children}
         </AuthContext.Provider>
     );

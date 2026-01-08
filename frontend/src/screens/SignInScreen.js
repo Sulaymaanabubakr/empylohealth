@@ -18,7 +18,7 @@ import { MaterialCommunityIcons, AntDesign, FontAwesome } from '@expo/vector-ico
 const { width } = Dimensions.get('window');
 
 const SignInScreen = ({ navigation }) => {
-  const { login } = useAuth();
+  const { login, loginWithGoogle, loginWithApple } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -89,14 +89,17 @@ const SignInScreen = ({ navigation }) => {
           />
 
           <View style={styles.socialContainer}>
-            <TouchableOpacity style={styles.socialIcon}>
-              <FontAwesome name="facebook" size={24} color="black" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialIcon}>
+            <TouchableOpacity style={styles.socialIcon} onPress={async () => {
+              const res = await loginWithGoogle();
+              if (res.success) navigation.replace('Dashboard');
+            }}>
               <AntDesign name="google" size={24} color="black" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialIcon}>
-              <AntDesign name="instagram" size={24} color="black" />
+            <TouchableOpacity style={styles.socialIcon} onPress={async () => {
+              const res = await loginWithApple();
+              if (res.success) navigation.replace('Dashboard');
+            }}>
+              <AntDesign name="apple1" size={24} color="black" />
             </TouchableOpacity>
           </View>
 
