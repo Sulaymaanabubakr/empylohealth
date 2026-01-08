@@ -24,7 +24,11 @@
       },
       "package": "com.circlesapp.mobile",
       "googleServicesFile": "./google-services.json",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "navigationBar": {
+        "backgroundColor": "#ffffff",
+        "barStyle": "dark-content"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

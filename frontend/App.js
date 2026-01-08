@@ -6,13 +6,21 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setBackgroundColorAsync('#ffffff');
+      NavigationBar.setButtonStyleAsync('dark');
+    }
+  }, []);
+
   const [fontsLoaded] = useFonts({
     SpaceGrotesk_400Regular,
     SpaceGrotesk_600SemiBold,
