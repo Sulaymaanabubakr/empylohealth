@@ -23,9 +23,14 @@ if (Platform.OS === 'web') {
     auth = getAuth(app);
     setPersistence(auth, browserLocalPersistence).catch(() => {});
 } else {
-    auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-    });
+    try {
+        auth = initializeAuth(app, {
+            persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+        });
+    } catch (error) {
+        // If already initialized (fast refresh), reuse existing instance.
+        auth = getAuth(app);
+    }
 }
 
 const db = getFirestore(app);
