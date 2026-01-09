@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "607256726988",
+    "project_id": "empylo-health",
+    "storage_bucket": "empylo-health.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:607256726988:android:6871866c5f63bbba61a169",
+        "android_client_info": {
+          "package_name": "com.circlesapp.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "607256726988-3bq3nvgr5osq1n7budc4f95mc060lnnk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.circlesapp.mobile",
+            "certificate_hash": "5bdaf893df1b32118a0b9fec080c71d996e26058"
+          }
+        },
+        {
+          "client_id": "607256726988-o9os734pbrr74vner4b542oe51t10rpj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwRSYOslJRDLdc6RGLDFJqHP9GH9EGUXQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "607256726988-o9os734pbrr74vner4b542oe51t10rpj.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "607256726988-m219pfm6ula34j5rmmk3ep193483ailg.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.circlesapp.mobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
