@@ -59,32 +59,67 @@ export const onMessageCreate = functions.firestore.document('chats/{chatId}/mess
 
             if (recipients.length === 0) return;
 
-            // 3. Get Recipient Tokens (Assuming 'fcmTokens' field in User Profile)
-            // Note: This requires a separate implementation of saving FCM tokens on frontend
-            const tokens: string[] = [];
+            // 3. Get Recipient Tokens (Expo + FCM)
+            const expoTokens: string[] = [];
+            const fcmTokens: string[] = [];
             for (const uid of recipients) {
                 const userDoc = await db.collection('users').doc(uid).get();
-                const userTokens = userDoc.data()?.fcmTokens || [];
-                tokens.push(...userTokens);
+                const userData = userDoc.data() || {};
+                const userExpoTokens = userData.expoPushTokens || [];
+                const userFcmTokens = userData.fcmTokens || [];
+                expoTokens.push(...userExpoTokens);
+                fcmTokens.push(...userFcmTokens);
             }
 
-            if (tokens.length === 0) return;
+            if (expoTokens.length === 0 && fcmTokens.length === 0) return;
 
-            // 4. Send Notification
-            const messagePayload: admin.messaging.MulticastMessage = {
-                tokens: tokens,
-                notification: {
-                    title: 'New Message',
-                    body: message.type === 'text' ? message.text : 'Sent a photo',
-                },
+            const payload = {
+                title: 'New Message',
+                body: message.type === 'text' ? message.text : 'Sent a photo',
                 data: {
                     chatId: chatId,
                     type: 'CHAT_MESSAGE'
                 }
             };
 
-            const response = await admin.messaging().sendEachForMulticast(messagePayload);
-            console.log(`[Backend] Notifications sent: ${response.successCount}`);
+            // 4a. Send FCM notifications (native tokens)
+            if (fcmTokens.length > 0) {
+                const messagePayload: admin.messaging.MulticastMessage = {
+                    tokens: fcmTokens,
+                    notification: {
+                        title: payload.title,
+                        body: payload.body,
+                    },
+                    data: payload.data
+                };
+
+                const response = await admin.messaging().sendEachForMulticast(messagePayload);
+                console.log(`[Backend] FCM notifications sent: ${response.successCount}`);
+            }
+
+            // 4b. Send Expo notifications (Expo push tokens)
+            if (expoTokens.length > 0) {
+                const expoMessages = expoTokens.map((token: string) => ({
+                    to: token,
+                    title: payload.title,
+                    body: payload.body,
+                    data: payload.data
+                }));
+
+                try {
+                    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(expoMessages)
+                    });
+                    const result = await response.json();
+                    console.log('[Backend] Expo notifications sent:', result?.data?.length || 0);
+                } catch (error) {
+                    console.error('[Backend] Expo push error:', error);
+                }
+            }
 
             // Cleanup invalid tokens could happen here
         } catch (error) {

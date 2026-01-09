@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { PROFILE_DATA } from '../data/mockData';
 import { COLORS } from '../theme/theme';
 import ConfirmationModal from '../components/ConfirmationModal';
 import ProfilePhotoModal from '../components/ProfilePhotoModal';
+import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
 
 const PersonalProfileScreen = ({ navigation }) => {
     // Modal States
-    const { user } = useAuth();
+    const { user, userData } = useAuth();
     const [activeTab, setActiveTab] = useState('My circles');
     const [isLogoutVisible, setIsLogoutVisible] = useState(false);
     const [isEditPhotoVisible, setIsEditPhotoVisible] = useState(false);
@@ -36,6 +36,11 @@ const PersonalProfileScreen = ({ navigation }) => {
         navigation.navigate('SignIn');
     };
 
+    const safeAvatar = userData?.photoURL || user?.photoURL || 'https://via.placeholder.com/150';
+    const displayName = userData?.name || user?.displayName || 'User';
+    const displayEmail = userData?.email || user?.email || '';
+    const displayRole = userData?.role || 'personal';
+
     const renderHeader = () => (
         <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -44,12 +49,12 @@ const PersonalProfileScreen = ({ navigation }) => {
 
             <View style={styles.profileInfo}>
                 <View style={styles.avatarContainer}>
-                    <Image source={{ uri: PROFILE_DATA.user.avatar }} style={styles.avatar} />
+                    <Avatar uri={safeAvatar || ''} name={displayName} size={80} />
                 </View>
-                <Text style={styles.name}>{PROFILE_DATA.user.name}</Text>
-                <Text style={styles.email}>{PROFILE_DATA.user.email}</Text>
+                <Text style={styles.name}>{displayName}</Text>
+                <Text style={styles.email}>{displayEmail}</Text>
                 <Text style={[styles.roleBadge, { color: '#FFA000' }]}>
-                    {PROFILE_DATA.user.role}
+                    {displayRole}
                 </Text>
             </View>
 
@@ -223,7 +228,7 @@ const PersonalProfileScreen = ({ navigation }) => {
             <ProfilePhotoModal
                 visible={isEditPhotoVisible}
                 onClose={() => setIsEditPhotoVisible(false)}
-                currentImage={PROFILE_DATA.user.avatar}
+                currentImage={safeAvatar}
             />
         </SafeAreaView>
     );

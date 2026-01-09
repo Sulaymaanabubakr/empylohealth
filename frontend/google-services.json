@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "607256726988-fq4o6lfou4649gnmi4d38sl81n14rce8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.circlesapp.mobile",
+            "certificate_hash": "9b5dcafec1a2c9e2625794dc046bfee64cb62f6e"
+          }
+        },
+        {
           "client_id": "607256726988-o9os734pbrr74vner4b542oe51t10rpj.apps.googleusercontent.com",
           "client_type": 3
         }

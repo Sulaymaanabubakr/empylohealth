@@ -1,4 +1,27 @@
+import { FormEvent, useState } from 'react';
+
 const Contact = () => {
+  const [status, setStatus] = useState<'idle' | 'sent'>('idle');
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const firstName = String(data.get('firstName') || '');
+    const lastName = String(data.get('lastName') || '');
+    const email = String(data.get('email') || '');
+    const company = String(data.get('company') || '');
+    const message = String(data.get('message') || '');
+
+    const subject = encodeURIComponent(`Empylo Contact - ${firstName} ${lastName}`);
+    const body = encodeURIComponent(
+      `Name: ${firstName} ${lastName}\nEmail: ${email}\nCompany: ${company}\n\n${message}`
+    );
+    window.location.href = `mailto:hello@empylo.com?subject=${subject}&body=${body}`;
+    setStatus('sent');
+    form.reset();
+  };
+
   return (
     <section className="contact-section">
       <div className="container contact-container">
@@ -13,35 +36,39 @@ const Contact = () => {
             <span>📞</span>
           </div>
 
-          <form className="contact-form">
+          <form className="contact-form" onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
                 <label>First name*</label>
-                <input type="text" placeholder="" required />
+                <input type="text" name="firstName" placeholder="Jane" required />
               </div>
               <div className="form-group">
                 <label>Last name*</label>
-                <input type="text" placeholder="" required />
+                <input type="text" name="lastName" placeholder="Doe" required />
               </div>
             </div>
 
             <div className="form-group">
               <label>Email*</label>
-              <input type="email" placeholder="" required />
+              <input type="email" name="email" placeholder="jane@company.com" required />
             </div>
 
             <div className="form-group">
               <label>Company name*</label>
-              <input type="text" placeholder="" required />
+              <input type="text" name="company" placeholder="Company Inc." required />
             </div>
 
             <div className="form-group">
               <label>Message*</label>
-              <textarea rows={5} placeholder="" required></textarea>
+              <textarea name="message" rows={5} placeholder="Tell us a bit about your team..." required></textarea>
             </div>
 
             <button type="submit" className="btn btn-primary btn-block">Send Message</button>
           </form>
+
+          {status === 'sent' && (
+            <p className="contact-success">Thanks! Your message is ready to send.</p>
+          )}
 
           <p className="contact-disclaimer">
             By submitting this form, you agree to our privacy policy and terms of service.
@@ -167,6 +194,13 @@ const Contact = () => {
             color: #9CA3AF;
             line-height: 1.5;
           }
+
+          .contact-success {
+            margin-top: 16px;
+            font-size: 0.95rem;
+            color: #0F766E;
+            font-weight: 600;
+          }
           
           @media(max-width: 600px) {
               .form-row {
@@ -182,4 +216,3 @@ const Contact = () => {
 };
 
 export default Contact;
-

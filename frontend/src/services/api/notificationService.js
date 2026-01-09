@@ -1,7 +1,7 @@
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
+// import * as Device from 'expo-device';
+// import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { db } from '../services/firebaseConfig';
+import { db } from '../firebaseConfig';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 export const notificationService = {
@@ -10,6 +10,11 @@ export const notificationService = {
      * @param {string} uid User ID to save token for
      */
     registerForPushNotificationsAsync: async (uid) => {
+        console.log('Push Notifications are currently disabled to avoid native rebuilds.');
+        return;
+
+        /* 
+        // TEMPORARILY DISABLED TO AVOID REBUILDING DEV CLIENT
         if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync('default', {
                 name: 'default',
@@ -33,18 +38,34 @@ export const notificationService = {
                 return;
             }
 
-            const token = (await Notifications.getExpoPushTokenAsync()).data;
-            console.log("Expo Push Token:", token);
+            const expoToken = (await Notifications.getExpoPushTokenAsync()).data;
+            console.log("Expo Push Token:", expoToken);
+
+            let nativeToken = null;
+            try {
+                const deviceToken = await Notifications.getDevicePushTokenAsync();
+                nativeToken = deviceToken.data;
+            } catch (error) {
+                // Native token may not be available in Expo Go
+            }
 
             // Save token to backend user profile
-            if (uid && token) {
+            if (uid && expoToken) {
                 const userRef = doc(db, 'users', uid);
                 await updateDoc(userRef, {
-                    fcmTokens: arrayUnion(token)
+                    expoPushTokens: arrayUnion(expoToken)
+                });
+            }
+
+            if (uid && nativeToken) {
+                const userRef = doc(db, 'users', uid);
+                await updateDoc(userRef, {
+                    fcmTokens: arrayUnion(nativeToken)
                 });
             }
         } else {
             console.log('Must use physical device for Push Notifications');
         }
+        */
     }
 };

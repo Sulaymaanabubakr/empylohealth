@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import {
   View,
   Text,
@@ -19,13 +20,14 @@ const { width } = Dimensions.get('window');
 
 const SignInScreen = ({ navigation }) => {
   const { login, loginWithGoogle, loginWithApple } = useAuth();
+  const { showToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSignIn = async () => {
     if (!email || !password) {
-      alert("Please enter both email and password");
+      showToast("Please enter both email and password", 'error');
       return;
     }
 
@@ -43,7 +45,7 @@ const SignInScreen = ({ navigation }) => {
       // So we should navigate to Dashboard.
       navigation.replace('Dashboard');
     } else {
-      alert(result.error);
+      showToast(result.error || "Login failed", 'error');
     }
   };
 
@@ -88,6 +90,8 @@ const SignInScreen = ({ navigation }) => {
             disabled={loading}
           />
 
+          <Text style={styles.orText}>Or continue with</Text>
+
           <View style={styles.socialContainer}>
             <TouchableOpacity style={styles.socialIcon} onPress={async () => {
               const res = await loginWithGoogle();
@@ -99,7 +103,7 @@ const SignInScreen = ({ navigation }) => {
               const res = await loginWithApple();
               if (res.success) navigation.replace('Dashboard');
             }}>
-              <AntDesign name="apple1" size={24} color="black" />
+              <FontAwesome name="apple" size={24} color="black" />
             </TouchableOpacity>
           </View>
 
@@ -160,6 +164,12 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     marginTop: SPACING.lg,
+  },
+  orText: {
+    textAlign: 'center',
+    color: '#666',
+    marginTop: SPACING.lg,
+    fontSize: 14,
   },
   socialContainer: {
     flexDirection: 'row',

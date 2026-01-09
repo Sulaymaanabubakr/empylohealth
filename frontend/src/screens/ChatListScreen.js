@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, StatusBar, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
-import { CHAT_LIST } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
+import Avatar from '../components/Avatar';
 
 const ChatListScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
@@ -27,36 +27,38 @@ const ChatListScreen = ({ navigation }) => {
         (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase()) // Fallback name if fetching details is complex
     );
 
-    const renderItem = ({ item }) => (
+    const renderItem = ({ item }) => {
+        return (
         <TouchableOpacity
             style={styles.chatItem}
             onPress={() => navigation.navigate('ChatDetail', { chat: item })}
         >
             <View style={styles.avatarContainer}>
-                <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                <Avatar uri={item.avatar || ''} name={item.name} size={56} />
                 {item.isOnline && <View style={styles.onlineIndicator} />}
             </View>
-            <View style={styles.chatContent}>
-                <View style={styles.chatHeader}>
-                    <Text style={styles.chatName}>{item.name}</Text>
-                    <Text style={styles.chatTime}>{item.time}</Text>
+                <View style={styles.chatContent}>
+                    <View style={styles.chatHeader}>
+                        <Text style={styles.chatName}>{item.name}</Text>
+                        <Text style={styles.chatTime}>{item.time}</Text>
+                    </View>
+                    <View style={styles.chatFooter}>
+                        <Text style={[
+                            styles.lastMessage,
+                            item.unread > 0 ? styles.lastMessageUnread : null
+                        ]} numberOfLines={1}>
+                            {item.lastMessage}
+                        </Text>
+                        {item.unread > 0 && (
+                            <View style={styles.unreadBadge}>
+                                <Text style={styles.unreadText}>{item.unread}</Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
-                <View style={styles.chatFooter}>
-                    <Text style={[
-                        styles.lastMessage,
-                        item.unread > 0 ? styles.lastMessageUnread : null
-                    ]} numberOfLines={1}>
-                        {item.lastMessage}
-                    </Text>
-                    {item.unread > 0 && (
-                        <View style={styles.unreadBadge}>
-                            <Text style={styles.unreadText}>{item.unread}</Text>
-                        </View>
-                    )}
-                </View>
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -257,16 +259,29 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     bottomNavContainer: {
-        borderTopWidth: 1,
-        borderTopColor: '#EEEEEE',
-        backgroundColor: '#FFFFFF',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingHorizontal: 20,
+        paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+        backgroundColor: 'transparent',
+        zIndex: 100, // Ensure it sits on top of FlatList
     },
     bottomNav: {
         flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
+        backgroundColor: '#FFF',
         paddingVertical: 12,
-        paddingHorizontal: SPACING.md,
+        borderRadius: 32,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 10,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 25,
+        justifyContent: 'space-around',
     },
     navItem: {
         alignItems: 'center',
@@ -274,13 +289,10 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     activeNavIcon: {
-        width: 40,
-        height: 40,
+        padding: 10,
         borderRadius: 20,
-        backgroundColor: '#E0F2F1', // Light shade of primary
-        justifyContent: 'center',
-        alignItems: 'center',
         marginBottom: 4,
+        backgroundColor: '#E0F2F1', // Light shade of primary
     },
     navLabel: {
         fontSize: 11,

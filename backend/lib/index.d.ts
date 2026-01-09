@@ -10,5 +10,7 @@ export declare const updateSubscription: import("firebase-functions/v1").HttpsFu
 export declare const startHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateHuddleState: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getExploreContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const getAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const seedResources: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const seedDemoData: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 //# sourceMappingURL=index.d.ts.map

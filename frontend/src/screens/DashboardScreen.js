@@ -7,6 +7,8 @@ import Svg, { Circle, G, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AssessmentModal from '../components/AssessmentModal';
+import { useAuth } from '../context/AuthContext';
+import { circleService } from '../services/api/circleService';
 
 const { width } = Dimensions.get('window');
 
@@ -58,13 +60,42 @@ const CircularProgress = ({ score, label }) => {
     );
 };
 
+import { assessmentService } from '../services/api/assessmentService';
+
 const DashboardScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
+    const { userData, user } = useAuth();
+    const [circles, setCircles] = useState([]);
+    const [wellbeing, setWellbeing] = useState({ score: 0, label: 'Loading...' });
+    const [challenges, setChallenges] = useState([]);
     const [showAssessment, setShowAssessment] = useState(false);
 
     useEffect(() => {
+        console.log('DashboardScreen mounted. User:', user?.email);
         checkDailyAssessment();
-    }, []);
+        fetchDashboardData();
+
+        if (user?.uid) {
+            const unsubscribe = circleService.subscribeToMyCircles(user.uid, (data) => {
+                console.log('Fetched circles:', data.length);
+                setCircles(data);
+            });
+            return () => unsubscribe();
+        }
+    }, [user]);
+
+    const fetchDashboardData = async () => {
+        try {
+            const [stats, challs] = await Promise.all([
+                assessmentService.getWellbeingStats(),
+                assessmentService.getKeyChallenges()
+            ]);
+            setWellbeing(stats);
+            setChallenges(challs);
+        } catch (err) {
+            console.log("Error fetching dashboard data", err);
+        }
+    };
 
     const checkDailyAssessment = async () => {
         try {
@@ -130,20 +161,21 @@ const DashboardScreen = ({ navigation }) => {
             </View>
 
             <ScrollView
+                style={{ flex: 1 }}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 }]}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: 160 }]}
             >
                 {/* User Greeting */}
                 <View style={styles.greetingContainer}>
                     <View style={styles.avatarContainer}>
                         <Image
-                            source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=687&q=80' }}
+                            source={{ uri: userData?.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=687&q=80' }}
                             style={styles.avatar}
                         />
                         <View style={styles.onlineBadge} />
                     </View>
                     <View style={styles.greetingText}>
-                        <Text style={styles.greeting}>Hi, Jane!</Text>
+                        <Text style={styles.greeting}>Hi, {userData?.name?.split(' ')[0] || 'Friend'}!</Text>
                         <Text style={styles.subGreeting}>How're you feeling today?</Text>
                     </View>
                 </View>
@@ -160,7 +192,7 @@ const DashboardScreen = ({ navigation }) => {
                             <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
                         </TouchableOpacity>
                     </View>
-                    <CircularProgress score={79} label="Thriving" />
+                    <CircularProgress score={wellbeing.score} label={wellbeing.label} />
                 </View>
 
                 {/* Circles Section */}
@@ -172,84 +204,91 @@ const DashboardScreen = ({ navigation }) => {
                     </TouchableOpacity>
                 </View>
 
-                <View style={styles.circleCard}>
-                    <View style={styles.circleHeader}>
-                        <View>
-                            <Text style={styles.circleTitle}>Design Team</Text>
-                            <Text style={styles.circleMembers}>5 Members • High Activity</Text>
-                        </View>
-                        <View style={styles.scoreBadge}>
-                            <Text style={styles.scoreBadgeText}>57.5</Text>
-                        </View>
+                {/* Real Circles List */}
+                {circles.length === 0 ? (
+                    <View style={styles.circleCard}>
+                        <Text style={{ textAlign: 'center', color: '#757575', padding: 20 }}>
+                            You haven't joined any circles yet.
+                            {'\n'}Go to Explore to find one!
+                        </Text>
                     </View>
+                ) : (
+                    circles.map((circle) => (
+                        <TouchableOpacity
+                            key={circle.id}
+                            style={styles.circleCard}
+                            onPress={() => navigation.navigate('CircleDetail', { circle })}
+                        >
+                            <View style={styles.circleHeader}>
+                                <View>
+                                    <Text style={styles.circleTitle}>{circle.name}</Text>
+                                    <Text style={styles.circleMembers}>{circle.members?.length || 0} Members • {circle.category || 'General'}</Text>
+                                </View>
+                                <View style={styles.scoreBadge}>
+                                    <Text style={styles.scoreBadgeText}>57.5</Text>
+                                </View>
+                            </View>
 
-                    <Text style={styles.circleLabel}>Visual Timeline</Text>
-
-                    {/* Visual Timeline */}
-                    <View style={styles.timelineContainer}>
-                        <View style={styles.timelineLine}>
-                            <ExpoLinearGradient
-                                colors={['#FF5252', '#FFD740', '#69F0AE']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={{ flex: 1 }}
-                            />
-                        </View>
-
-                        {timelineData.map((person, index) => (
-                            <View
-                                key={index}
-                                style={[
-                                    styles.timelinePerson,
-                                    { left: `${person.position * 100}%`, transform: [{ translateX: -18 }] }
-                                ]}
-                            >
-                                <View style={[styles.avatarBorder, { borderColor: person.status === 'red' ? '#FF5252' : person.status === 'yellow' ? '#FFD740' : '#69F0AE' }]}>
-                                    <Image
-                                        source={{ uri: `https://i.pravatar.cc/150?u=${person.name}` }}
-                                        style={styles.timelineAvatar}
+                            <Text style={styles.circleLabel}>Visual Timeline</Text>
+                            <View style={styles.timelineContainer}>
+                                <View style={styles.timelineLine}>
+                                    <ExpoLinearGradient
+                                        colors={['#FF5252', '#FFD740', '#69F0AE']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={{ flex: 1 }}
                                     />
                                 </View>
-                                <Text style={styles.timelineName}>{person.name}</Text>
+                                {timelineData.map((person, index) => (
+                                    <View
+                                        key={index}
+                                        style={[
+                                            styles.timelinePerson,
+                                            { left: `${person.position * 100}%`, transform: [{ translateX: -18 }] }
+                                        ]}
+                                    >
+                                        <View style={[styles.avatarBorder, { borderColor: person.status === 'red' ? '#FF5252' : person.status === 'yellow' ? '#FFD740' : '#69F0AE' }]}>
+                                            <Image
+                                                source={{ uri: `https://i.pravatar.cc/150?u=${person.name}` }}
+                                                style={styles.timelineAvatar}
+                                            />
+                                        </View>
+                                        <Text style={styles.timelineName}>{person.name}</Text>
+                                    </View>
+                                ))}
                             </View>
-                        ))}
-                    </View>
-
-                    <TouchableOpacity style={styles.viewCircleButton}>
-                        <Text style={styles.viewCircleButtonText}>View Circle Analysis</Text>
-                    </TouchableOpacity>
-                </View>
+                        </TouchableOpacity>
+                    ))
+                )}
 
                 {/* Key Challenges */}
                 <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Key Challenges</Text>
 
                 <View style={styles.challengeRow}>
-                    <View style={[styles.challengeCard, { marginRight: 10, flex: 1 }]}>
-                        <View style={[styles.challengeIcon, { backgroundColor: '#FFF3E0' }]}>
-                            <MaterialCommunityIcons name="weather-night" size={28} color="#FF9800" />
+                    {challenges.length > 0 ? challenges.slice(0, 2).map((challenge, index) => (
+                        <View key={index} style={[styles.challengeCard, { marginRight: index === 0 ? 10 : 0, marginLeft: index === 1 ? 10 : 0, flex: 1 }]}>
+                            <View style={[styles.challengeIcon, { backgroundColor: challenge.bg || '#FFF3E0' }]}>
+                                <MaterialCommunityIcons name={challenge.icon || 'alert-circle-outline'} size={28} color={challenge.color || '#FF9800'} />
+                            </View>
+                            <Text style={styles.challengeTitle}>{challenge.title}</Text>
+                            <Text style={styles.challengeLevel}>Level: {challenge.level}</Text>
                         </View>
-                        <Text style={styles.challengeTitle}>Sleep</Text>
-                        <Text style={styles.challengeLevel}>Quality: Low</Text>
-                    </View>
-
-                    <View style={[styles.challengeCard, { marginLeft: 10, flex: 1 }]}>
-                        <View style={[styles.challengeIcon, { backgroundColor: '#E1F5FE' }]}>
-                            <MaterialCommunityIcons name="emoticon-happy-outline" size={28} color="#039BE5" />
-                        </View>
-                        <Text style={styles.challengeTitle}>Mood</Text>
-                        <Text style={styles.challengeLevel}>Level: Low</Text>
-                    </View>
+                    )) : (
+                        <Text style={{ color: '#999', fontStyle: 'italic', padding: 10 }}>No specific challenges flagged.</Text>
+                    )}
                 </View>
 
-                <View style={[styles.challengeCard, { marginBottom: 30, flexDirection: 'row', alignItems: 'center', paddingVertical: 15, justifyContent: 'center' }]}>
-                    <View style={[styles.challengeIcon, { backgroundColor: '#F3E5F5', marginRight: 15, marginBottom: 0 }]}>
-                        <MaterialCommunityIcons name="head-outline" size={28} color="#8E24AA" />
+                {challenges.length > 2 && (
+                    <View style={[styles.challengeCard, { marginBottom: 30, flexDirection: 'row', alignItems: 'center', paddingVertical: 15, justifyContent: 'center' }]}>
+                        <View style={[styles.challengeIcon, { backgroundColor: '#F3E5F5', marginRight: 15, marginBottom: 0 }]}>
+                            <MaterialCommunityIcons name="head-outline" size={28} color="#8E24AA" />
+                        </View>
+                        <View>
+                            <Text style={[styles.challengeTitle, { textAlign: 'left', marginBottom: 0 }]}>Stress Level</Text>
+                            <Text style={[styles.challengeLevel, { textAlign: 'left' }]}>Currently Low</Text>
+                        </View>
                     </View>
-                    <View>
-                        <Text style={[styles.challengeTitle, { textAlign: 'left', marginBottom: 0 }]}>Stress Level</Text>
-                        <Text style={[styles.challengeLevel, { textAlign: 'left' }]}>Currently Low</Text>
-                    </View>
-                </View>
+                )}
 
             </ScrollView>
 

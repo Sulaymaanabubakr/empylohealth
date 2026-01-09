@@ -1,6 +1,6 @@
-import { functions, db } from '../services/firebaseConfig';
+import { functions, db } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc } from 'firebase/firestore';
 
 export const chatService = {
     /**
@@ -76,8 +76,39 @@ export const chatService = {
             where('participants', 'array-contains', uid),
             orderBy('updatedAt', 'desc')
         );
-        return onSnapshot(q, (snapshot) => {
-            const chats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return onSnapshot(q, async (snapshot) => {
+            const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
+                const data = docSnap.data();
+                const participants = data.participants || [];
+                const isGroup = data.type === 'group' || participants.length > 2;
+                let name = data.name || 'Chat';
+                let avatar = data.avatar || null;
+
+                if (!isGroup) {
+                    const otherId = participants.find((id) => id !== uid);
+                    if (otherId) {
+                        const userDoc = await getDoc(doc(db, 'users', otherId));
+                        const userData = userDoc.exists() ? userDoc.data() : {};
+                        name = userData?.name || userData?.displayName || 'Anonymous';
+                        avatar = userData?.photoURL || null;
+                    }
+                }
+
+                const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
+                const time = updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+                return {
+                    id: docSnap.id,
+                    ...data,
+                    name,
+                    avatar,
+                    time,
+                    members: participants.length,
+                    unread: 0,
+                    isOnline: false,
+                    isGroup
+                };
+            }));
             callback(chats);
         });
     }

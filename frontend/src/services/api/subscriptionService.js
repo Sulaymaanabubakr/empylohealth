@@ -1,4 +1,4 @@
-import { functions } from '../services/firebaseConfig';
+import { functions } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 
 export const subscriptionService = {

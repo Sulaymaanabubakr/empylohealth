@@ -51,8 +51,18 @@ export declare const updateHuddleState: functions.HttpsFunction & functions.Runn
  */
 export declare const getExploreContent: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Get Daily Affirmations
+ * Callable Function: 'getAffirmations'
+ */
+export declare const getAffirmations: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Seed Default Resources (Admin/Dev helper)
  * Callable Function: 'seedResources'
  */
 export declare const seedResources: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Seed Demo Data for current user
+ * Callable Function: 'seedDemoData'
+ */
+export declare const seedDemoData: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=core.d.ts.map

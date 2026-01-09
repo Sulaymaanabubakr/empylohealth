@@ -2,6 +2,7 @@ import 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useState } from 'react';
 import Navigation from './src/Navigation';
 import { AuthProvider } from './src/context/AuthContext';
+import { ToastProvider } from './src/context/ToastContext';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
@@ -14,12 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      NavigationBar.setBackgroundColorAsync('#ffffff');
-      NavigationBar.setButtonStyleAsync('dark');
-    }
-  }, []);
+
 
   const [fontsLoaded] = useFonts({
     SpaceGrotesk_400Regular,
@@ -47,9 +43,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <AuthProvider>
-        <Navigation />
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <Navigation />
+        </AuthProvider>
+      </ToastProvider>
       <StatusBar style="auto" />
     </SafeAreaProvider>
   );

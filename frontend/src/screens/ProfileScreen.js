@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Text } from 'react-native';
-import { PROFILE_DATA } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
 import ClientProfileScreen from './ClientProfileScreen';
 import PersonalProfileScreen from './PersonalProfileScreen';
 
 const ProfileScreen = ({ navigation }) => {
-  // In a real app, this would come from AuthContext or similar global state
-  const isClient = PROFILE_DATA.user.role === 'Client user';
+  const { userData } = useAuth();
+  const role = (userData?.role || 'personal').toLowerCase();
+  const isClient = role === 'client';
 
   if (isClient) {
     return <ClientProfileScreen navigation={navigation} />;

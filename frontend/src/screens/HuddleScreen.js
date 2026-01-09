@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, StatusBar, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
-import { HUDDLE_PARTICIPANTS } from '../data/mockData';
+import { huddleService } from '../services/api/huddleService';
+import { db } from '../services/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 const HuddleScreen = ({ navigation, route }) => {
     // Fallback to avoid crashes if params missing, though they should be there
-    const { chat } = route.params || { chat: { name: 'Chat', isGroup: false, avatar: 'https://via.placeholder.com/150' } };
+    const { chat, huddleId, roomUrl } = route.params || { chat: { name: 'Chat', isGroup: false, avatar: 'https://via.placeholder.com/150' } };
     const insets = useSafeAreaInsets();
     const [seconds, setSeconds] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
     const [isSpeaker, setIsSpeaker] = useState(true);
     const [isHandRaised, setIsHandRaised] = useState(false);
+    const [participants, setParticipants] = useState([]);
 
     const isGroup = chat.isGroup;
+    const safeAvatar = chat.avatar || 'https://via.placeholder.com/150';
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -22,6 +26,46 @@ const HuddleScreen = ({ navigation, route }) => {
         }, 1000);
         return () => clearInterval(timer);
     }, []);
+
+    useEffect(() => {
+        const loadParticipants = async () => {
+            if (!isGroup || !chat.participants || chat.participants.length === 0) {
+                setParticipants([]);
+                return;
+            }
+            try {
+                const docs = await Promise.all(
+                    chat.participants.slice(0, 5).map(async (uid) => {
+                        const userDoc = await getDoc(doc(db, 'users', uid));
+                        const data = userDoc.exists() ? userDoc.data() : {};
+                        return {
+                            id: uid,
+                            name: data?.name || data?.displayName || 'Member',
+                            image: data?.photoURL || 'https://via.placeholder.com/150'
+                        };
+                    })
+                );
+                setParticipants(docs);
+            } catch (error) {
+                setParticipants([]);
+            }
+        };
+        loadParticipants();
+    }, [isGroup, chat]);
+
+    useEffect(() => {
+        if (!huddleId) return;
+        huddleService.updateHuddleState(huddleId, 'join').catch(() => {});
+        return () => {
+            huddleService.updateHuddleState(huddleId, 'leave').catch(() => {});
+        };
+    }, [huddleId]);
+
+    const handleJoinCall = () => {
+        if (roomUrl) {
+            Linking.openURL(roomUrl);
+        }
+    };
 
     const formatTime = (totalSeconds) => {
         const minutes = Math.floor(totalSeconds / 60);
@@ -64,31 +108,45 @@ const HuddleScreen = ({ navigation, route }) => {
                 {isGroup ? (
                     /* Group Layout: Scattered Avatars */
                     <View style={styles.participantsContainer}>
-                        {/* We use the HUDDLE_PARTICIPANTS mock for the group feel */}
-                        <View style={[styles.avatarWrapper, { top: '18%', alignSelf: 'center' }]}>
-                            <Image source={{ uri: HUDDLE_PARTICIPANTS[0].image }} style={styles.avatar} />
-                        </View>
-                        <View style={[styles.avatarWrapper, { top: '36%', left: '18%' }]}>
-                            <Image source={{ uri: HUDDLE_PARTICIPANTS[1].image }} style={styles.avatar} />
-                        </View>
-                        <View style={[styles.avatarWrapper, { top: '36%', right: '18%' }]}>
-                            <Image source={{ uri: HUDDLE_PARTICIPANTS[2].image }} style={styles.avatar} />
-                        </View>
-                        <View style={[styles.avatarWrapper, { top: '54%', left: '26%' }]}>
-                            <Image source={{ uri: HUDDLE_PARTICIPANTS[3].image }} style={styles.avatar} />
-                        </View>
-                        <View style={[styles.avatarWrapper, { top: '54%', right: '26%' }]}>
-                            <Image source={{ uri: HUDDLE_PARTICIPANTS[4].image }} style={styles.avatar} />
-                        </View>
+                        {participants[0] && (
+                            <View style={[styles.avatarWrapper, { top: '18%', alignSelf: 'center' }]}>
+                                <Image source={{ uri: participants[0].image }} style={styles.avatar} />
+                            </View>
+                        )}
+                        {participants[1] && (
+                            <View style={[styles.avatarWrapper, { top: '36%', left: '18%' }]}>
+                                <Image source={{ uri: participants[1].image }} style={styles.avatar} />
+                            </View>
+                        )}
+                        {participants[2] && (
+                            <View style={[styles.avatarWrapper, { top: '36%', right: '18%' }]}>
+                                <Image source={{ uri: participants[2].image }} style={styles.avatar} />
+                            </View>
+                        )}
+                        {participants[3] && (
+                            <View style={[styles.avatarWrapper, { top: '54%', left: '26%' }]}>
+                                <Image source={{ uri: participants[3].image }} style={styles.avatar} />
+                            </View>
+                        )}
+                        {participants[4] && (
+                            <View style={[styles.avatarWrapper, { top: '54%', right: '26%' }]}>
+                                <Image source={{ uri: participants[4].image }} style={styles.avatar} />
+                            </View>
+                        )}
                     </View>
                 ) : (
                     /* 1-on-1 Layout: Centered Single Avatar */
                     <View style={styles.singleParticipantContainer}>
                         <View style={styles.largeAvatarWrapper}>
-                            <Image source={{ uri: chat.avatar }} style={styles.largeAvatar} />
+                            <Image source={{ uri: safeAvatar }} style={styles.largeAvatar} />
                         </View>
                         <Text style={styles.singleName}>{chat.name}</Text>
                         <Text style={styles.singleTimer}>{formatTime(seconds)}</Text>
+                        {roomUrl && (
+                            <TouchableOpacity style={styles.joinButton} onPress={handleJoinCall}>
+                                <Text style={styles.joinButtonText}>Join Call</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 )}
             </View>
@@ -237,6 +295,18 @@ const styles = StyleSheet.create({
         fontSize: 20,
         color: '#424242',
         fontWeight: '400', // Light/Regular
+    },
+    joinButton: {
+        marginTop: 16,
+        backgroundColor: COLORS.primary,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+    },
+    joinButtonText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
     },
     // Controls
     controlsContainer: {

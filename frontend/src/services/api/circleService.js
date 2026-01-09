@@ -1,4 +1,4 @@
-import { functions, db } from '../services/firebaseConfig';
+import { functions, db } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 import { collection, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
 
@@ -50,6 +50,10 @@ export const circleService = {
         return onSnapshot(q, (snapshot) => {
             const circles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             callback(circles);
+        }, (error) => {
+            console.error("Error subscribing to circles:", error);
+            // Don't crash the app, just log. 
+            // In a real app, might want to notify user via Toast.
         });
     },
 

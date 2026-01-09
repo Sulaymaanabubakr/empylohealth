@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.seedResources = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.seedDemoData = exports.seedResources = exports.getAffirmations = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const cloudinary_1 = require("cloudinary");
@@ -200,8 +200,11 @@ exports.sendMessage = functions.https.onCall(async (data, context) => {
     }
     const { chatId, text, type = 'text', mediaUrl = null } = data;
     const uid = context.auth.uid;
-    if (!chatId || !text) {
-        throw new functions.https.HttpsError('invalid-argument', 'Chat ID and Text are required.');
+    if (!chatId || (!text && !mediaUrl)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Chat ID and message content are required.');
+    }
+    if (type === 'text' && !text) {
+        throw new functions.https.HttpsError('invalid-argument', 'Text messages require text.');
     }
     try {
         const chatRef = db.collection('chats').doc(chatId);
@@ -419,6 +422,21 @@ exports.getExploreContent = functions.https.onCall(async (data, context) => {
     }
 });
 /**
+ * Get Daily Affirmations
+ * Callable Function: 'getAffirmations'
+ */
+exports.getAffirmations = functions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    return {
+        items: [
+            { id: 'a1', text: 'I am grounded, calm, and capable.' },
+            { id: 'a2', text: 'I can take one step at a time.' },
+            { id: 'a3', text: 'My growth is steady and real.' }
+        ]
+    };
+});
+/**
  * Seed Default Resources (Admin/Dev helper)
  * Callable Function: 'seedResources'
  */
@@ -444,5 +462,118 @@ exports.seedResources = functions.https.onCall(async (data, context) => {
     });
     await batch.commit();
     return { success: true, count: resources.length };
+});
+/**
+ * Seed Demo Data for current user
+ * Callable Function: 'seedDemoData'
+ */
+exports.seedDemoData = functions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const demoUserId = `demo_${uid.slice(0, 8)}`;
+    const demoUser = {
+        uid: demoUserId,
+        email: 'demo.user@empylo.com',
+        name: 'Demo User',
+        role: 'personal',
+        photoURL: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=crop&w=256&q=80',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    const resources = [
+        {
+            title: 'Sleep hygiene',
+            type: 'article',
+            tag: 'LEARN',
+            time: '12 Mins',
+            status: 'published',
+            category: 'Self-development',
+            image: 'https://img.freepik.com/free-vector/sleep-analysis-concept-illustration_114360-6395.jpg',
+            content: "Good sleep hygiene is typically defined as a set of behavioral and environmental recommendations..."
+        },
+        {
+            title: 'Mindfulness for Beginners',
+            type: 'video',
+            tag: 'WATCH',
+            time: '5 Mins',
+            status: 'published',
+            category: 'Wellness',
+            image: 'https://img.freepik.com/free-vector/meditation-concept-illustration_114360-2212.jpg',
+            mediaUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+            content: "A short video introducing mindfulness techniques."
+        },
+        {
+            title: 'Stress Management 101',
+            type: 'article',
+            tag: 'LEARN',
+            time: '8 Mins',
+            status: 'published',
+            category: 'Mental Health',
+            image: 'https://img.freepik.com/free-vector/stress-concept-illustration_114360-2394.jpg',
+            content: "Learn how to manage stress effectively with these simple tips."
+        }
+    ];
+    const circles = [
+        {
+            name: 'Community Connect',
+            description: 'A community dedicated to connecting people from diverse backgrounds.',
+            category: 'Culture',
+            tags: ['Connect', 'Culture'],
+            image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?ixlib=rb-1.2.1&auto=format&fit=crop&w=640&q=80',
+            activityLevel: 'High'
+        },
+        {
+            name: 'Mindful Moments',
+            description: 'Practice mindfulness and meditation techniques to reduce stress.',
+            category: 'Mental health',
+            tags: ['Mental health'],
+            image: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?ixlib=rb-1.2.1&auto=format&fit=crop&w=640&q=80',
+            activityLevel: 'Medium'
+        }
+    ];
+    const batch = db.batch();
+    // Demo user doc
+    const demoUserRef = db.collection('users').doc(demoUserId);
+    batch.set(demoUserRef, demoUser, { merge: true });
+    // Resources
+    resources.forEach(res => {
+        const ref = db.collection('resources').doc();
+        batch.set(ref, res);
+    });
+    // Circles
+    circles.forEach(circle => {
+        const circleRef = db.collection('circles').doc();
+        batch.set(circleRef, {
+            id: circleRef.id,
+            name: circle.name,
+            description: circle.description,
+            category: circle.category,
+            tags: circle.tags,
+            image: circle.image,
+            adminId: uid,
+            members: [uid, demoUserId],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            score: 75,
+            activityLevel: circle.activityLevel
+        });
+    });
+    await batch.commit();
+    // Direct chat between current user and demo user
+    const chatRef = db.collection('chats').doc();
+    await chatRef.set({
+        type: 'direct',
+        participants: [uid, demoUserId],
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastMessage: 'Welcome to Empylo!',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    await chatRef.collection('messages').add({
+        senderId: demoUserId,
+        text: 'Welcome to Empylo! Glad you are here.',
+        type: 'text',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        readBy: [demoUserId]
+    });
+    return { success: true };
 });
 //# sourceMappingURL=core.js.map

@@ -85,7 +85,11 @@ export const authService = {
     loginWithGoogle: async () => {
         try {
             await GoogleSignin.hasPlayServices();
-            const { idToken } = await GoogleSignin.signIn();
+            const response = await GoogleSignin.signIn();
+            const { idToken } = response.data || response; // Handle both structures just in case
+
+            if (!idToken) throw new Error('No ID token found');
+
             const googleCredential = GoogleAuthProvider.credential(idToken);
             const userCredential = await signInWithCredential(auth, googleCredential);
             return { success: true, user: userCredential.user };

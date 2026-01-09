@@ -1,6 +1,8 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { View, Image } from 'react-native';
 import { authService } from '../services/auth/authService';
 import { userService } from '../services/api/userService';
+import { notificationService } from '../services/api/notificationService';
 
 export const AuthContext = createContext();
 
@@ -17,11 +19,18 @@ export const AuthProvider = ({ children }) => {
         const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
             setUser(currentUser);
             if (currentUser) {
-                // Fetch user data from Service
-                const data = await userService.getUserDocument(currentUser.uid);
-                if (data) {
-                    setUserData(data);
-                } else {
+                try {
+                    // Fetch user data from Service
+                    const data = await userService.getUserDocument(currentUser.uid);
+                    if (data) {
+                        setUserData(data);
+                    } else {
+                        setUserData({ email: currentUser.email, name: currentUser.displayName });
+                    }
+                    notificationService.registerForPushNotificationsAsync(currentUser.uid).catch(() => { });
+                } catch (error) {
+                    console.error("AuthContext: Failed to fetch user data", error);
+                    // Fallback to basic user info
                     setUserData({ email: currentUser.email, name: currentUser.displayName });
                 }
             } else {
@@ -33,7 +42,11 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const login = async (email, password) => {
-        return await authService.login(email, password);
+        try {
+            return await authService.login(email, password);
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
     };
 
     const register = async (email, password, name, role = 'personal') => {
@@ -63,7 +76,16 @@ export const AuthProvider = ({ children }) => {
 
     return (
         <AuthContext.Provider value={{ user, userData, loading, login, register, logout, loginWithGoogle, loginWithApple }}>
-            {!loading && children}
+            {loading ? (
+                <View style={{ flex: 1, backgroundColor: '#009688', justifyContent: 'center', alignItems: 'center' }}>
+                    <Image
+                        source={require('../../assets/images/logo_white.png')}
+                        style={{ width: '60%', height: undefined, aspectRatio: 1, resizeMode: 'contain' }}
+                    />
+                </View>
+            ) : (
+                children
+            )}
         </AuthContext.Provider>
     );
 };

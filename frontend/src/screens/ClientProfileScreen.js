@@ -1,15 +1,38 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { PROFILE_DATA } from '../data/mockData';
 import { COLORS } from '../theme/theme';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { useAuth } from '../context/AuthContext';
+import { circleService } from '../services/api/circleService';
+import Avatar from '../components/Avatar';
 
 const ClientProfileScreen = ({ navigation }) => {
+    const { user, userData } = useAuth();
     const [activeTab, setActiveTab] = useState('My circles'); // 'My circles' | 'Activity' | 'Account'
     const [activityTab, setActivityTab] = useState('Ongoing'); // 'Ongoing' | 'Completed'
+    const [myCircles, setMyCircles] = useState([]);
+
+    useEffect(() => {
+        if (user?.uid) {
+            const unsubscribe = circleService.subscribeToMyCircles(user.uid, (circles) => {
+                setMyCircles(circles);
+            });
+            return () => unsubscribe();
+        }
+    }, [user]);
+
+    const safeAvatar = userData?.photoURL || user?.photoURL || 'https://via.placeholder.com/150';
+    const displayName = userData?.name || user?.displayName || 'User';
+    const displayEmail = userData?.email || user?.email || '';
+    const displayRole = userData?.role || 'client';
+
+    const learningSessions = [];
+    const campaigns = [];
+    const completedLearningSessions = [];
+    const completedCampaigns = [];
 
     const renderHeader = () => (
         <View style={styles.header}>
@@ -19,12 +42,12 @@ const ClientProfileScreen = ({ navigation }) => {
 
             <View style={styles.profileInfo}>
                 <View style={styles.avatarContainer}>
-                    <Image source={{ uri: PROFILE_DATA.user.avatar }} style={styles.avatar} />
+                    <Avatar uri={safeAvatar || ''} name={displayName} size={80} />
                 </View>
-                <Text style={styles.name}>{PROFILE_DATA.user.name}</Text>
-                <Text style={styles.email}>{PROFILE_DATA.user.email}</Text>
+                <Text style={styles.name}>{displayName}</Text>
+                <Text style={styles.email}>{displayEmail}</Text>
                 <Text style={[styles.roleBadge, { color: '#009688' }]}>
-                    {PROFILE_DATA.user.role}
+                    {displayRole}
                 </Text>
             </View>
 
@@ -55,14 +78,17 @@ const ClientProfileScreen = ({ navigation }) => {
                 <Text style={styles.joinButtonText}>Join Organisation</Text>
             </TouchableOpacity>
 
-            {PROFILE_DATA.circles.map((circle) => (
+            {myCircles.length === 0 && (
+                <Text style={styles.emptyStateText}>You are not part of any circles yet.</Text>
+            )}
+            {myCircles.map((circle) => (
                 <View key={circle.id} style={styles.circleCard}>
                     <View style={styles.circleHeader}>
                         <View>
                             <Text style={styles.circleTitle}>{circle.name}</Text>
-                            <Text style={styles.circleSubtitle}>Circle's Wellbeing Score: {circle.score}</Text>
-                            <Text style={styles.circleMembers}>Members: {circle.members}</Text>
-                            <Text style={styles.circleMembers}>Activity level: {circle.activity}</Text>
+                            <Text style={styles.circleSubtitle}>Circle's Wellbeing Score: {circle.score || 0}</Text>
+                            <Text style={styles.circleMembers}>Members: {circle.members?.length || 0}</Text>
+                            <Text style={styles.circleMembers}>Activity level: {circle.activityLevel || '—'}</Text>
                         </View>
                     </View>
 
@@ -75,7 +101,7 @@ const ClientProfileScreen = ({ navigation }) => {
                                 style={{ flex: 1, borderRadius: 7 }}
                             />
                         </View>
-                        {circle.membersAvatars.map((member, index) => (
+                        {(circle.memberAvatars || []).map((member, index) => (
                             <View key={index} style={[styles.timelineAvatarWrapper, { left: `${(index + 1) * 16}%` }]}>
                                 <Image source={{ uri: member.image }} style={styles.timelineAvatar} />
                                 <Text style={styles.memberName}>{member.name}</Text>
@@ -112,8 +138,11 @@ const ClientProfileScreen = ({ navigation }) => {
 
                 {isOngoing ? (
                     <>
-                        <Text style={styles.sectionHeader}>Learning sessions ({PROFILE_DATA.learningSessions.length})</Text>
-                        {PROFILE_DATA.learningSessions.map((session) => (
+                        <Text style={styles.sectionHeader}>Learning sessions ({learningSessions.length})</Text>
+                        {learningSessions.length === 0 && (
+                            <Text style={styles.emptyStateText}>No ongoing learning sessions yet.</Text>
+                        )}
+                        {learningSessions.map((session) => (
                             <TouchableOpacity
                                 key={session.id}
                                 style={styles.sessionCard}
@@ -133,8 +162,11 @@ const ClientProfileScreen = ({ navigation }) => {
                         ))}
 
                         <Text style={styles.sectionHeader}>Campaigns</Text>
+                        {campaigns.length === 0 && (
+                            <Text style={styles.emptyStateText}>No active campaigns yet.</Text>
+                        )}
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.campaignList}>
-                            {PROFILE_DATA.campaigns.map((camp) => (
+                            {campaigns.map((camp) => (
                                 <View key={camp.id} style={styles.campaignCard}>
                                     <Image source={{ uri: camp.image }} style={styles.campaignImage} />
                                     <View style={styles.campaignInfo}>
@@ -150,8 +182,11 @@ const ClientProfileScreen = ({ navigation }) => {
                     </>
                 ) : (
                     <>
-                        <Text style={styles.sectionHeader}>Learning sessions ({PROFILE_DATA.completedLearningSessions?.length || 0})</Text>
-                        {PROFILE_DATA.completedLearningSessions?.map((session) => (
+                        <Text style={styles.sectionHeader}>Learning sessions ({completedLearningSessions.length})</Text>
+                        {completedLearningSessions.length === 0 && (
+                            <Text style={styles.emptyStateText}>No completed learning sessions yet.</Text>
+                        )}
+                        {completedLearningSessions.map((session) => (
                             <View key={session.id} style={styles.sessionCard}>
                                 <View style={styles.sessionHeader}>
                                     <Text style={styles.sessionTitle}>{session.title}</Text>
@@ -171,8 +206,11 @@ const ClientProfileScreen = ({ navigation }) => {
                         ))}
 
                         <Text style={styles.sectionHeader}>Campaigns</Text>
+                        {completedCampaigns.length === 0 && (
+                            <Text style={styles.emptyStateText}>No completed campaigns yet.</Text>
+                        )}
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.campaignList}>
-                            {PROFILE_DATA.completedCampaigns?.map((camp) => (
+                            {completedCampaigns.map((camp) => (
                                 <View key={camp.id} style={styles.campaignCard}>
                                     <Image source={{ uri: camp.image }} style={styles.campaignImage} />
                                     <View style={styles.campaignInfo}>
@@ -442,6 +480,11 @@ const styles = StyleSheet.create({
     sectionHeader: {
         fontSize: 16,
         fontWeight: '700',
+        marginBottom: 12,
+    },
+    emptyStateText: {
+        fontSize: 13,
+        color: '#9E9E9E',
         marginBottom: 12,
     },
     sessionCard: {

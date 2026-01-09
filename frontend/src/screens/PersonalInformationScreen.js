@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient'; // Only for button
-import { PROFILE_DATA } from '../data/mockData';
 import Input from '../components/Input';
 import Dropdown from '../components/Dropdown';
 import DatePicker from '../components/DatePicker';
@@ -11,18 +10,19 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
+import Avatar from '../components/Avatar';
 
 const PersonalInformationScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
 
     // Form State (initialized with userData or mock)
-    const [name, setName] = useState(userData?.name || PROFILE_DATA.user.name);
+    const [name, setName] = useState(userData?.name || '');
     // Note: Password usually not editable directly here without re-auth, keeping as placeholder for now or separate flow
     const [password, setPassword] = useState('********');
-    const [dob, setDob] = useState(userData?.dob || '2000-01-01');
+    const [dob, setDob] = useState(userData?.dob || '');
     const [gender, setGender] = useState(userData?.gender || 'Prefer not to say');
-    const [location, setLocation] = useState(userData?.location || 'England - London');
-    const [avatarUri, setAvatarUri] = useState(userData?.photoURL || PROFILE_DATA.user.avatar);
+    const [location, setLocation] = useState(userData?.location || '');
+    const [avatarUri, setAvatarUri] = useState(userData?.photoURL || 'https://via.placeholder.com/150');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Track if avatar changed to avoid unnecessary uploads
@@ -119,7 +119,7 @@ const PersonalInformationScreen = ({ navigation }) => {
                 <View style={styles.avatarSection}>
                     <View style={styles.avatarWrapper}>
                         <View style={styles.avatarBorder}>
-                            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                            <Avatar uri={avatarUri || ''} name={name || user?.displayName || 'User'} size={100} />
                         </View>
                         <TouchableOpacity style={styles.editAvatarButton} onPress={pickImage}>
                             <MaterialCommunityIcons name="camera" size={18} color="#FFF" />

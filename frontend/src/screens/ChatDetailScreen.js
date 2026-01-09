@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, S
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
-import { CHAT_MESSAGES } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
+import { huddleService } from '../services/api/huddleService';
 
 const ChatDetailScreen = ({ navigation, route }) => {
     const { chat } = route.params;
@@ -51,9 +51,17 @@ const ChatDetailScreen = ({ navigation, route }) => {
         }
     };
 
-    const handleCall = () => {
-        navigation.navigate('Huddle', { chat });
+    const handleCall = async () => {
+        try {
+            const result = await huddleService.startHuddle(chat.id, !!chat.isGroup);
+            navigation.navigate('Huddle', { chat, huddleId: result.huddleId, roomUrl: result.roomUrl });
+        } catch (error) {
+            console.error('Failed to start huddle', error);
+            navigation.navigate('Huddle', { chat });
+        }
     };
+
+    const safeAvatar = chat.avatar || 'https://via.placeholder.com/150';
 
     const renderMessage = ({ item }) => {
         const isMe = item.isMe;
@@ -62,7 +70,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
             <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
                 {!isMe && (
                     // Optional: Show avatar next to message for group chats or other style
-                    <Image source={{ uri: chat.avatar }} style={styles.messageAvatar} />
+                    <Image source={{ uri: safeAvatar }} style={styles.messageAvatar} />
                 )}
                 <View style={[styles.messageBubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
                     <Text style={[styles.messageText, isMe ? styles.textMe : styles.textOther]}>
@@ -89,7 +97,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Image source={{ uri: chat.avatar }} style={styles.headerAvatar} />
+                <Image source={{ uri: safeAvatar }} style={styles.headerAvatar} />
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerName}>{chat.name}</Text>
                     <Text style={styles.headerStatus}>{chat.members ? `${chat.members} members` : (chat.isOnline ? 'Online' : 'Offline')}</Text>

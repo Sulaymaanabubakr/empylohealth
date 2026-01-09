@@ -8,6 +8,10 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
     const { group } = route.params;
     const insets = useSafeAreaInsets();
     const [isJoined, setIsJoined] = useState(false);
+    const imageSource = group.image
+        ? (typeof group.image === 'string' ? { uri: group.image } : group.image)
+        : { uri: 'https://via.placeholder.com/600x400' };
+    const tags = group.tags || (group.category ? [group.category] : []);
 
     const handleConnectToggle = () => {
         setIsJoined(!isJoined);
@@ -31,7 +35,7 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                 {/* Hero Section */}
                 <View style={styles.heroSection}>
                     <View style={styles.imageContainer}>
-                        <Image source={group.image} style={styles.heroImage} />
+                        <Image source={imageSource} style={styles.heroImage} />
                     </View>
                     <View style={styles.titleContainer}>
                         <Text style={styles.heroTitle}>{group.name}</Text>
@@ -42,9 +46,9 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
 
                     <View style={styles.statsContainer}>
                         <Ionicons name="people" size={16} color="#757575" />
-                        <Text style={styles.statsText}>{group.members} members</Text>
+                        <Text style={styles.statsText}>{group.members?.length || group.members || 0} members</Text>
                         <Text style={styles.statsDivider}>|</Text>
-                        <Text style={styles.statsText}>{group.tags[0]}</Text>
+                        <Text style={styles.statsText}>{tags[0] || 'General'}</Text>
                     </View>
 
                     <TouchableOpacity
@@ -70,10 +74,10 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Activity</Text>
                     <View style={styles.activityRow}>
-                        <Text style={styles.activityValue}>{group.activeMembers} active members</Text>
+                        <Text style={styles.activityValue}>{group.activeMembers || 0} active members</Text>
                     </View>
                     <View style={styles.activityRow}>
-                        <Text style={styles.activityValue}>{group.meetingsPerWeek} meetings a week</Text>
+                        <Text style={styles.activityValue}>{group.meetingsPerWeek || 0} meetings a week</Text>
                     </View>
                 </View>
 

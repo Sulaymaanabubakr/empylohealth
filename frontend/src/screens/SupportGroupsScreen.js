@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, FlatList, Image, TouchableOpacity, ScrollView, StatusBar, TextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 
-import { SUPPORT_GROUPS } from '../data/mockData';
+import { circleService } from '../services/api/circleService';
 
 const { width } = Dimensions.get('window');
 
@@ -14,16 +14,31 @@ const SupportGroupsScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const [activeFilter, setActiveFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
+    const [groups, setGroups] = useState([]);
 
-    const filteredGroups = SUPPORT_GROUPS.filter(group => {
-        const matchesSearch = group.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesFilter = activeFilter === 'All' || group.tags.includes(activeFilter);
+    useEffect(() => {
+        const loadGroups = async () => {
+            try {
+                const circles = await circleService.getAllCircles();
+                setGroups(circles);
+            } catch (error) {
+                console.error('Failed to load support groups', error);
+                setGroups([]);
+            }
+        };
+        loadGroups();
+    }, []);
+
+    const filteredGroups = groups.filter(group => {
+        const matchesSearch = (group.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+        const tags = group.tags || (group.category ? [group.category] : []);
+        const matchesFilter = activeFilter === 'All' || tags.includes(activeFilter);
         return matchesSearch && matchesFilter;
     });
 
     const renderGroupCard = ({ item }) => (
         <View style={styles.groupCard}>
-            <Image source={item.image} style={styles.groupImage} />
+            <Image source={{ uri: item.image || 'https://via.placeholder.com/150' }} style={styles.groupImage} />
             <View style={styles.groupInfo}>
                 <View style={styles.groupHeader}>
                     <Text style={styles.groupName}>{item.name}</Text>
@@ -34,7 +49,7 @@ const SupportGroupsScreen = ({ navigation }) => {
                     <Text style={styles.memberCount}>{item.members} members</Text>
                 </View>
                 <View style={styles.tagsContainer}>
-                    {item.tags.map(tag => (
+                    {(item.tags || (item.category ? [item.category] : [])).map(tag => (
                         <View key={tag} style={styles.tagBadge}>
                             <Text style={styles.tagText}>{tag}</Text>
                         </View>
@@ -102,8 +117,11 @@ const SupportGroupsScreen = ({ navigation }) => {
                 keyExtractor={item => item.id}
                 contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
                 showsVerticalScrollIndicator={false}
+                ListEmptyComponent={() => (
+                    <Text style={styles.emptyStateText}>No support groups found.</Text>
+                )}
                 ListFooterComponent={() => (
-                    <Text style={styles.loadMoreText}>load more...</Text>
+                    filteredGroups.length > 0 ? <Text style={styles.loadMoreText}>load more...</Text> : null
                 )}
             />
         </SafeAreaView>
@@ -280,6 +298,12 @@ const styles = StyleSheet.create({
         color: '#9E9E9E',
         marginVertical: 20,
         fontSize: 12,
+    },
+    emptyStateText: {
+        textAlign: 'center',
+        color: '#9E9E9E',
+        marginTop: 24,
+        fontSize: 13,
     },
 });
 

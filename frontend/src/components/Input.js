@@ -1,8 +1,12 @@
-import React from 'react';
-import { View, TextInput, Text, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { View, TextInput, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../theme/theme';
+import { Ionicons } from '@expo/vector-icons';
 
-const Input = ({ label, icon, ...props }) => {
+const Input = ({ label, icon, secureTextEntry, ...props }) => {
+    const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+
+    const isPassword = secureTextEntry !== undefined;
     return (
         <View style={styles.container}>
             {label && <Text style={styles.label}>{label}</Text>}
@@ -11,8 +15,18 @@ const Input = ({ label, icon, ...props }) => {
                 <TextInput
                     style={styles.input}
                     placeholderTextColor={COLORS.placeholder}
+                    secureTextEntry={isPassword ? !isPasswordVisible : false}
                     {...props}
                 />
+                {isPassword && (
+                    <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
+                        <Ionicons
+                            name={isPasswordVisible ? "eye-off-outline" : "eye-outline"}
+                            size={20}
+                            color={COLORS.placeholder}
+                        />
+                    </TouchableOpacity>
+                )}
             </View>
         </View>
     );
@@ -51,6 +65,9 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 16,
         color: COLORS.text,
+    },
+    eyeIcon: {
+        padding: SPACING.xs,
     },
 });
 

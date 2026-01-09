@@ -1,24 +1,35 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
-import { SUPPORT_GROUPS } from '../data/mockData';
+import { circleService } from '../services/api/circleService';
 import { resourceService } from '../services/api/resourceService';
 
 const { width } = Dimensions.get('window');
 
 const ExploreScreen = ({ navigation }) => {
+    const insets = useSafeAreaInsets(); // Add hook
     const [activeTab, setActiveTab] = useState('Self-development');
     const [activeFilter, setActiveFilter] = useState('Love');
     const [activities, setActivities] = useState([]);
+    const [supportGroups, setSupportGroups] = useState([]);
+    const [affirmations, setAffirmations] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const loadContent = async () => {
             try {
-                const items = await resourceService.getExploreContent();
+                console.log('ExploreScreen: fetching content...');
+                const [items, circles, affs] = await Promise.all([
+                    resourceService.getExploreContent(),
+                    circleService.getAllCircles(),
+                    resourceService.getAffirmations()
+                ]);
+                console.log('ExploreScreen: fetched', items.length, 'resources,', circles.length, 'circles,', affs.length, 'affirmations');
                 setActivities(items);
+                setSupportGroups(circles);
+                setAffirmations(affs);
             } catch (err) {
                 console.log("Failed to load resources", err);
             } finally {
@@ -34,15 +45,10 @@ const ExploreScreen = ({ navigation }) => {
     // If empty (e.g. first run before seed), maybe show static fallback or specific empty state.
     // For now, assuming backend seed is run or will be run.
 
-    const affirmations = [
-        { id: '1', title: 'Every step I take, brings me closer to my dreams', tag: 'Today', date: '', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1353&q=80' },
-        { id: '2', title: 'I am strong and capable; I can overcome any obstacle', tag: 'Thursday', date: '22 November', image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1351&q=80' },
-    ];
-
     const filters = ['Love', 'Hard work', 'Career', 'Courage', 'Relationships'];
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
             {/* Header */}
@@ -124,15 +130,18 @@ const ExploreScreen = ({ navigation }) => {
                         </View>
                         <View style={{ paddingHorizontal: SPACING.lg }}>
                             <Text style={{ color: '#757575', marginBottom: 12 }}>Showing support groups near you</Text>
-                            {SUPPORT_GROUPS.slice(0, 3).map((group) => (
+                            {supportGroups.slice(0, 3).map((group) => (
                                 <View key={group.id} style={styles.groupCardPreview}>
-                                    <Image source={group.image} style={styles.groupImagePreview} />
+                                    <Image
+                                        source={group.image ? { uri: group.image } : require('../assets/images/icon_support_community.png')}
+                                        style={styles.groupImagePreview}
+                                    />
                                     <View style={{ flex: 1 }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                             <Text style={styles.groupNamePreview}>{group.name}</Text>
-                                            {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />}
+                                            {/* {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />} */}
                                         </View>
-                                        <Text style={styles.groupMembersPreview}>{group.members} members</Text>
+                                        <Text style={styles.groupMembersPreview}>{group.members?.length || 0} members</Text>
                                     </View>
                                     <TouchableOpacity
                                         style={styles.viewButtonPreview}
@@ -186,7 +195,7 @@ const ExploreScreen = ({ navigation }) => {
             </ScrollView>
 
             {/* Bottom Navigation */}
-            <View style={styles.bottomNavContainer}>
+            <View style={[styles.bottomNavContainer, { paddingBottom: insets.bottom }]}>
                 <View style={styles.bottomNav}>
                     <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Dashboard')}>
                         <Ionicons name="home-outline" size={26} color="#BDBDBD" />
@@ -490,6 +499,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingBottom: Platform.OS === 'ios' ? 24 : 12,
         backgroundColor: 'transparent',
+        zIndex: 100, // Ensure it sits on top
     },
     bottomNav: {
         flexDirection: 'row',

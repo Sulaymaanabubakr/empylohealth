@@ -1,10 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Image, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { PROFILE_DATA } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
+import Avatar from '../components/Avatar';
 
 const TellAFriendScreen = ({ navigation }) => {
+    const { user, userData } = useAuth();
+    const avatarUri = userData?.photoURL || user?.photoURL || 'https://via.placeholder.com/150';
 
     const handleShare = async () => {
         try {
@@ -34,7 +37,7 @@ const TellAFriendScreen = ({ navigation }) => {
                 {/* QR Card */}
                 <View style={styles.qrCard}>
                     <View style={styles.avatarContainer}>
-                        <Image source={{ uri: PROFILE_DATA.user.avatar }} style={styles.avatar} />
+                        <Avatar uri={avatarUri || ''} name={userData?.name || user?.displayName || 'User'} size={60} />
                     </View>
 
                     {/* QR Code Placeholder - In a real app we'd use react-native-qrcode-svg */}

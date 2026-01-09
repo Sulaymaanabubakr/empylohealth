@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.seedResources = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
+exports.seedDemoData = exports.seedResources = exports.getAffirmations = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Admin SDK once at entry point
 if (admin.apps.length === 0) {
@@ -57,5 +57,7 @@ exports.updateSubscription = coreApi.updateSubscription;
 exports.startHuddle = coreApi.startHuddle;
 exports.updateHuddleState = coreApi.updateHuddleState;
 exports.getExploreContent = coreApi.getExploreContent;
+exports.getAffirmations = coreApi.getAffirmations;
 exports.seedResources = coreApi.seedResources;
+exports.seedDemoData = coreApi.seedDemoData;
 //# sourceMappingURL=index.js.map

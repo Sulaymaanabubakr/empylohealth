@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import {
     View,
     Text,
@@ -21,6 +22,7 @@ const { width } = Dimensions.get('window');
 const SignUpScreen = ({ navigation, route }) => {
     const { type = 'personal' } = route.params || {};
     const { register, loginWithGoogle, loginWithApple } = useAuth();
+    const { showToast } = useToast();
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -31,17 +33,17 @@ const SignUpScreen = ({ navigation, route }) => {
 
     const handleSignUp = async () => {
         if (!name || !email || !password || !confirmPassword) {
-            alert("Please fill in all fields");
+            showToast("Please fill in all fields", 'error');
             return;
         }
 
         if (password !== confirmPassword) {
-            alert("Passwords do not match");
+            showToast("Passwords do not match", 'error');
             return;
         }
 
         if (!agree) {
-            alert("Please agree to the Terms and Privacy");
+            showToast("Please agree to the Terms and Privacy", 'error');
             return;
         }
 
@@ -59,7 +61,7 @@ const SignUpScreen = ({ navigation, route }) => {
             // Let's go to ProfileSetup to complete the profile (avatar, etc).
             navigation.replace('ProfileSetup');
         } else {
-            alert(result.error);
+            showToast(result.error || "Registration failed", 'error');
         }
     };
 
@@ -130,6 +132,8 @@ const SignUpScreen = ({ navigation, route }) => {
                         style={styles.signUpButton}
                     />
 
+                    <Text style={styles.orText}>Or continue with</Text>
+
                     <View style={styles.socialContainer}>
                         <TouchableOpacity style={styles.socialIcon} onPress={async () => {
                             const res = await loginWithGoogle();
@@ -141,7 +145,7 @@ const SignUpScreen = ({ navigation, route }) => {
                             const res = await loginWithApple();
                             if (res.success) navigation.replace('ProfileSetup');
                         }}>
-                            <AntDesign name="apple1" size={24} color="black" />
+                            <FontAwesome name="apple" size={24} color="black" />
                         </TouchableOpacity>
                     </View>
 
@@ -224,6 +228,12 @@ const styles = StyleSheet.create({
     },
     signUpButton: {
         marginTop: SPACING.md,
+    },
+    orText: {
+        textAlign: 'center',
+        color: '#666',
+        marginTop: SPACING.lg,
+        fontSize: 14,
     },
     socialContainer: {
         flexDirection: 'row',

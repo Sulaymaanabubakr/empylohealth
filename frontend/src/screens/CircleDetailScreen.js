@@ -1,33 +1,58 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { db } from '../services/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 
 const CircleDetailScreen = ({ navigation, route }) => {
+    const { user } = useAuth();
     // Default data if none passed
     const circle = route.params?.circle || {
-        name: 'Circle 1',
-        score: 57.5,
-        members: 5,
-        activity: 'High',
+        name: 'Circle',
+        score: 0,
+        members: [],
+        activityLevel: '—',
     };
 
     const [isLeaveVisible, setIsLeaveVisible] = useState(false);
+    const [memberProfiles, setMemberProfiles] = useState([]);
 
     const handleLeaveCircle = () => {
         setIsLeaveVisible(false);
         navigation.goBack();
     };
 
-    const members = [
-        { id: '1', name: 'Ade', score: 30, image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=crop&w=634&q=80', isAdmin: true, status: 'online' },
-        { id: '2', name: 'Mary', score: 39, image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=687&q=80', status: 'online' },
-        { id: '3', name: 'Chioma', score: 48, image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=crop&w=700&q=80', status: 'online' },
-        { id: '4', name: 'Jane', score: 79, image: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?ixlib=rb-1.2.1&auto=format&fit=crop&w=634&q=80', status: 'offline' }, // Use mock user image
-        { id: '5', name: 'Mike', score: 95, image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&auto=format&fit=crop&w=634&q=80', status: 'offline' },
-    ];
+    useEffect(() => {
+        const loadMembers = async () => {
+            if (!Array.isArray(circle.members) || circle.members.length === 0) {
+                setMemberProfiles([]);
+                return;
+            }
+            try {
+                const docs = await Promise.all(
+                    circle.members.map(async (uid) => {
+                        const userDoc = await getDoc(doc(db, 'users', uid));
+                        const data = userDoc.exists() ? userDoc.data() : {};
+                        return {
+                            id: uid,
+                            name: data?.name || data?.displayName || 'Member',
+                            image: data?.photoURL || 'https://via.placeholder.com/150',
+                            isAdmin: uid === circle.adminId,
+                            status: uid === user?.uid ? 'online' : 'offline'
+                        };
+                    })
+                );
+                setMemberProfiles(docs);
+            } catch (error) {
+                setMemberProfiles([]);
+            }
+        };
+        loadMembers();
+    }, [circle, user]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -57,8 +82,8 @@ const CircleDetailScreen = ({ navigation, route }) => {
                         </View>
                     </View>
 
-                    <Text style={styles.statsText}>Members: {circle.members}</Text>
-                    <Text style={styles.statsText}>Activity level: {circle.activity}</Text>
+                    <Text style={styles.statsText}>Members: {Array.isArray(circle.members) ? circle.members.length : circle.members || 0}</Text>
+                    <Text style={styles.statsText}>Activity level: {circle.activityLevel || circle.activity || '—'}</Text>
                 </View>
 
                 {/* Actions */}
@@ -89,12 +114,15 @@ const CircleDetailScreen = ({ navigation, route }) => {
                 </View>
 
                 <View style={styles.membersList}>
-                    {members.map((member) => (
+                    {memberProfiles.length === 0 && (
+                        <Text style={styles.emptyStateText}>No members to display yet.</Text>
+                    )}
+                    {memberProfiles.map((member) => (
                         <View key={member.id} style={styles.memberCard}>
                             <Image source={{ uri: member.image }} style={styles.memberAvatar} />
                             <View style={styles.memberInfo}>
                                 <Text style={styles.memberName}>{member.name}</Text>
-                                <Text style={styles.memberScore}>Score: {member.score}</Text>
+                                <Text style={styles.memberScore}>Score: {member.score || 0}</Text>
                             </View>
                             <View style={styles.memberRight}>
                                 {member.isAdmin && (
@@ -274,6 +302,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
+    },
+    emptyStateText: {
+        textAlign: 'center',
+        color: '#9E9E9E',
+        marginTop: 8,
     },
     adminBadge: {
         borderWidth: 1,
