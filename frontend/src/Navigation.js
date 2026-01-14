@@ -10,7 +10,7 @@ import SignUpScreen from './screens/SignUpScreen';
 import VerificationScreen from './screens/VerificationScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
-import TwoFactorSignInScreen from './screens/TwoFactorSignInScreen';
+
 import ProfileSetupScreen from './screens/ProfileSetupScreen';
 import ProfileSetupClientScreen from './screens/ProfileSetupClientScreen';
 import AssessmentScreen from './screens/AssessmentScreen';
@@ -33,8 +33,7 @@ import SubscriptionScreen from './screens/SubscriptionScreen';
 import NotificationsSettingsScreen from './screens/NotificationsSettingsScreen';
 import PersonalInformationScreen from './screens/PersonalInformationScreen';
 import SecurityScreen from './screens/SecurityScreen';
-import TwoFactorSetupScreen from './screens/TwoFactorSetupScreen';
-import TwoFactorVerificationScreen from './screens/TwoFactorVerificationScreen';
+
 import TellAFriendScreen from './screens/TellAFriendScreen';
 import FAQScreen from './screens/FAQScreen';
 import { useAuth } from './context/AuthContext';
@@ -70,8 +69,7 @@ export default function Navigation() {
                     <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
                     <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />
                     <Stack.Screen name="Security" component={SecurityScreen} />
-                    <Stack.Screen name="TwoFactorSetup" component={TwoFactorSetupScreen} />
-                    <Stack.Screen name="TwoFactorVerification" component={TwoFactorVerificationScreen} />
+
                     <Stack.Screen name="TellAFriend" component={TellAFriendScreen} />
                     <Stack.Screen name="FAQ" component={FAQScreen} />
                     <Stack.Screen name="Assessment" component={AssessmentScreen} />
@@ -82,12 +80,12 @@ export default function Navigation() {
                     <Stack.Screen name="Splash" component={SplashScreen} />
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     <Stack.Screen name="SignIn" component={SignInScreen} />
-                <Stack.Screen name="SignUpSelection" component={SignUpSelectionScreen} />
-                <Stack.Screen name="SignUp" component={SignUpScreen} />
-                <Stack.Screen name="Verification" component={VerificationScreen} />
-                <Stack.Screen name="TwoFactorSignIn" component={TwoFactorSignInScreen} />
-                <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-                <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+                    <Stack.Screen name="SignUpSelection" component={SignUpSelectionScreen} />
+                    <Stack.Screen name="SignUp" component={SignUpScreen} />
+                    <Stack.Screen name="Verification" component={VerificationScreen} />
+
+                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+                    <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
                     <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
                     <Stack.Screen name="ProfileSetupClient" component={ProfileSetupClientScreen} />
                 </Stack.Navigator>

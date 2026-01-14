@@ -111,29 +111,7 @@ const SecurityScreen = ({ navigation }) => {
                     "shield-checkmark-outline"
                 )}
 
-                <TouchableOpacity onPress={() => navigation.navigate('TwoFactorSetup')}>
-                    {renderToggleCard(
-                        "Two-Factor Authentication",
-                        "Add an extra layer of security to your account.",
-                        twoFactor,
-                        async (value) => {
-                            if (value) {
-                                navigation.navigate('TwoFactorSetup');
-                                return;
-                            }
-                            try {
-                                if (auth.currentUser) {
-                                    const enrolled = multiFactor(auth.currentUser).enrolledFactors;
-                                    await Promise.all(enrolled.map((factor) => multiFactor(auth.currentUser).unenroll(factor)));
-                                }
-                                setTwoFactor(false);
-                            } catch (error) {
-                                Alert.alert('Error', error.message || 'Unable to disable 2FA.');
-                            }
-                        },
-                        "key-outline"
-                    )}
-                </TouchableOpacity>
+
 
                 {renderToggleCard(
                     "Biometrics",
