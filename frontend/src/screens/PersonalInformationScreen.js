@@ -11,18 +11,20 @@ import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
 import Avatar from '../components/Avatar';
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
+import { auth } from '../services/firebaseConfig';
 
 const PersonalInformationScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
 
-    // Form State (initialized with userData or mock)
+    // Form State (initialized with userData)
     const [name, setName] = useState(userData?.name || '');
-    // Note: Password usually not editable directly here without re-auth, keeping as placeholder for now or separate flow
-    const [password, setPassword] = useState('********');
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
     const [dob, setDob] = useState(userData?.dob || '');
     const [gender, setGender] = useState(userData?.gender || 'Prefer not to say');
     const [location, setLocation] = useState(userData?.location || '');
-    const [avatarUri, setAvatarUri] = useState(userData?.photoURL || 'https://via.placeholder.com/150');
+    const [avatarUri, setAvatarUri] = useState(userData?.photoURL || user?.photoURL || '');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Track if avatar changed to avoid unnecessary uploads
@@ -84,6 +86,17 @@ const PersonalInformationScreen = ({ navigation }) => {
                 updatedAt: new Date()
             };
 
+            if (newPassword) {
+                if (!currentPassword) {
+                    Alert.alert('Missing password', 'Enter your current password to update it.');
+                    setIsSubmitting(false);
+                    return;
+                }
+                const credential = EmailAuthProvider.credential(user.email, currentPassword);
+                await reauthenticateWithCredential(auth.currentUser, credential);
+                await updatePassword(auth.currentUser, newPassword);
+            }
+
             // 3. Update Firestore via userService
             if (user?.uid) {
                 await userService.updateUserDocument(user.uid, updateData);
@@ -138,9 +151,18 @@ const PersonalInformationScreen = ({ navigation }) => {
                     />
 
                     <Input
-                        label="Password"
-                        value={password}
-                        onChangeText={setPassword}
+                        label="Current password"
+                        value={currentPassword}
+                        onChangeText={setCurrentPassword}
+                        secureTextEntry
+                        placeholder="Enter current password"
+                        icon={<Ionicons name="lock-closed-outline" size={20} color="#009688" />}
+                    />
+
+                    <Input
+                        label="New password"
+                        value={newPassword}
+                        onChangeText={setNewPassword}
                         secureTextEntry
                         placeholder="Enter new password"
                         icon={<Ionicons name="lock-closed-outline" size={20} color="#009688" />}

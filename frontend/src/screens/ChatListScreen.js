@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
@@ -29,14 +29,14 @@ const ChatListScreen = ({ navigation }) => {
 
     const renderItem = ({ item }) => {
         return (
-        <TouchableOpacity
-            style={styles.chatItem}
-            onPress={() => navigation.navigate('ChatDetail', { chat: item })}
-        >
-            <View style={styles.avatarContainer}>
-                <Avatar uri={item.avatar || ''} name={item.name} size={56} />
-                {item.isOnline && <View style={styles.onlineIndicator} />}
-            </View>
+            <TouchableOpacity
+                style={styles.chatItem}
+                onPress={() => navigation.navigate('ChatDetail', { chat: item })}
+            >
+                <View style={styles.avatarContainer}>
+                    <Avatar uri={item.avatar || ''} name={item.name} size={56} />
+                    {item.isOnline && <View style={styles.onlineIndicator} />}
+                </View>
                 <View style={styles.chatContent}>
                     <View style={styles.chatHeader}>
                         <Text style={styles.chatName}>{item.name}</Text>
@@ -83,9 +83,6 @@ const ChatListScreen = ({ navigation }) => {
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />
-                <TouchableOpacity>
-                    <Feather name="filter" size={20} color="#757575" />
-                </TouchableOpacity>
             </View>
 
             <FlatList
@@ -117,7 +114,7 @@ const ChatListScreen = ({ navigation }) => {
                         </View>
                         <Text style={[styles.navLabel, { color: COLORS.primary, fontWeight: '700' }]}>Chat</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem}>
+                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
                         <Ionicons name="person-outline" size={26} color="#BDBDBD" />
                         <Text style={styles.navLabel}>Profile</Text>
                     </TouchableOpacity>

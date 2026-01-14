@@ -5,8 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 
 const LearningSessionScreen = ({ navigation, route }) => {
-    const { session } = route.params || { session: { title: 'Session Title' } };
+    const session = route.params?.session || route.params?.activity || null;
     const insets = useSafeAreaInsets();
+    const title = session?.title || session?.name || 'Learning session';
+    const paragraphs = Array.isArray(session?.paragraphs)
+        ? session.paragraphs
+        : (session?.content ? [session.content] : []);
 
     return (
         <View style={styles.container}>
@@ -17,32 +21,26 @@ const LearningSessionScreen = ({ navigation, route }) => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>{session.title}</Text>
+                <Text style={styles.headerTitle}>{title}</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                <Text style={styles.paragraph}>
-                    Effective workplace relationships are the cornerstone of a healthy and productive organizational culture. Building strong connections with colleagues fosters trust, enhances collaboration, and creates a supportive environment where everyone can thrive. It starts with open communication and mutual respect.
-                </Text>
-
-                <Text style={styles.paragraph}>
-                    Understanding professional boundaries is crucial. While it's important to be friendly and approachable, maintaining a level of professionalism ensures that interactions remain respectful and focused on shared goals. This balance helps in preventing conflicts and misunderstandings that can arise in a diverse work environment.
-                </Text>
-
-                <Text style={styles.paragraph}>
-                    Active listening is a key skill in nurturing these relationships. By genuinely paying attention to the ideas and concerns of others, you demonstrate that you value their input. This not only boosts morale but also leads to better problem-solving and innovation within the team.
-                </Text>
-
-                <Text style={styles.paragraph}>
-                    Finally, remember that conflict is natural but how you handle it matters. approaching disagreements with empathy and a solution-oriented mindset can turn potential friction into opportunities for growth and deeper understanding. Prioritize clarity and kindness in all your interactions.
-                </Text>
+                {paragraphs.length === 0 ? (
+                    <Text style={styles.paragraph}>Content is not available yet.</Text>
+                ) : (
+                    paragraphs.map((text, index) => (
+                        <Text key={`${index}-${title}`} style={styles.paragraph}>
+                            {text}
+                        </Text>
+                    ))
+                )}
             </ScrollView>
 
             <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
                 <TouchableOpacity style={styles.completeButton} onPress={() => navigation.goBack()}>
                     <Text style={styles.completeButtonText}>Complete!</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.assessmentLink}>
+                <TouchableOpacity style={styles.assessmentLink} onPress={() => navigation.navigate('Assessment')}>
                     <Text style={styles.assessmentLinkText}>Take assessment</Text>
                 </TouchableOpacity>
             </View>

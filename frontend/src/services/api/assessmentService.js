@@ -29,10 +29,10 @@ export const assessmentService = {
             // assuming 'getUserStats' function exists or we create it.
             const getFn = httpsCallable(functions, 'getUserStats');
             const result = await getFn();
-            return result.data || { score: 0, label: 'N/A' };
+            return result.data || { score: null, label: 'No data' };
         } catch (error) {
-            console.log("Error fetching stats, returning default", error);
-            return { score: 79, label: 'Thriving' }; // Fallback to avoid UI crash if backend missing
+            console.log("Error fetching stats", error);
+            throw error;
         }
     },
 
@@ -46,10 +46,7 @@ export const assessmentService = {
             return result.data || [];
         } catch (error) {
             console.log("Error fetching challenges", error);
-            return [
-                { title: 'Sleep', level: 'Low', icon: 'weather-night', color: '#FF9800', bg: '#FFF3E0' },
-                { title: 'Mood', level: 'Low', icon: 'emoticon-happy-outline', color: '#039BE5', bg: '#E1F5FE' }
-            ];
+            throw error;
         }
     }
 };

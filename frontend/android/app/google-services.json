@@ -1,56 +1,48 @@
 {
   "project_info": {
-    "project_number": "607256726988",
-    "project_id": "empylo-health",
-    "storage_bucket": "empylo-health.firebasestorage.app"
+    "project_number": "433309283212",
+    "project_id": "circles-app-by-empylo",
+    "storage_bucket": "circles-app-by-empylo.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:607256726988:android:6871866c5f63bbba61a169",
+        "mobilesdk_app_id": "1:433309283212:android:701cd4e36e56e3c0775ca9",
         "android_client_info": {
-          "package_name": "com.circlesapp.mobile"
+          "package_name": "com.empylo.circlesapp"
         }
       },
       "oauth_client": [
         {
-          "client_id": "607256726988-3bq3nvgr5osq1n7budc4f95mc060lnnk.apps.googleusercontent.com",
+          "client_id": "433309283212-96itqth0i41dajufblhpr8rrhus2hvo7.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.circlesapp.mobile",
-            "certificate_hash": "5bdaf893df1b32118a0b9fec080c71d996e26058"
+            "package_name": "com.empylo.circlesapp",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
           }
         },
         {
-          "client_id": "607256726988-fq4o6lfou4649gnmi4d38sl81n14rce8.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.circlesapp.mobile",
-            "certificate_hash": "9b5dcafec1a2c9e2625794dc046bfee64cb62f6e"
-          }
-        },
-        {
-          "client_id": "607256726988-o9os734pbrr74vner4b542oe51t10rpj.apps.googleusercontent.com",
+          "client_id": "433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyCwRSYOslJRDLdc6RGLDFJqHP9GH9EGUXQ"
+          "current_key": "AIzaSyDVaL0blWgX0_jJQe6TVogePIdD9GqQ_Zk"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "607256726988-o9os734pbrr74vner4b542oe51t10rpj.apps.googleusercontent.com",
+              "client_id": "433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com",
               "client_type": 3
             },
             {
-              "client_id": "607256726988-m219pfm6ula34j5rmmk3ep193483ailg.apps.googleusercontent.com",
+              "client_id": "433309283212-if0mi6urn71gv9n98d7e8m3bmtmkan8g.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.circlesapp.mobile"
+                "bundle_id": "com.empylo.circlesapp"
               }
             }
           ]

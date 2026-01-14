@@ -1,5 +1,5 @@
-// import * as Device from 'expo-device';
-// import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { db } from '../firebaseConfig';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
@@ -10,11 +10,6 @@ export const notificationService = {
      * @param {string} uid User ID to save token for
      */
     registerForPushNotificationsAsync: async (uid) => {
-        console.log('Push Notifications are currently disabled to avoid native rebuilds.');
-        return;
-
-        /* 
-        // TEMPORARILY DISABLED TO AVOID REBUILDING DEV CLIENT
         if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync('default', {
                 name: 'default',
@@ -66,6 +61,5 @@ export const notificationService = {
         } else {
             console.log('Must use physical device for Push Notifications');
         }
-        */
     }
 };

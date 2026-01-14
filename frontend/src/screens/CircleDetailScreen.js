@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
@@ -7,26 +7,38 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import Avatar from '../components/Avatar';
+import { huddleService } from '../services/api/huddleService';
+import { circleService } from '../services/api/circleService';
 
 const CircleDetailScreen = ({ navigation, route }) => {
     const { user } = useAuth();
-    // Default data if none passed
-    const circle = route.params?.circle || {
-        name: 'Circle',
-        score: 0,
-        members: [],
-        activityLevel: '—',
-    };
+    const circle = route.params?.circle;
 
     const [isLeaveVisible, setIsLeaveVisible] = useState(false);
     const [memberProfiles, setMemberProfiles] = useState([]);
+    const [isLeaving, setIsLeaving] = useState(false);
 
-    const handleLeaveCircle = () => {
-        setIsLeaveVisible(false);
-        navigation.goBack();
+    const handleLeaveCircle = async () => {
+        if (!circle?.id) {
+            setIsLeaveVisible(false);
+            navigation.goBack();
+            return;
+        }
+        try {
+            setIsLeaving(true);
+            await circleService.leaveCircle(circle.id);
+            setIsLeaveVisible(false);
+            navigation.goBack();
+        } catch (error) {
+            console.error('Failed to leave circle', error);
+        } finally {
+            setIsLeaving(false);
+        }
     };
 
     useEffect(() => {
+        if (!circle) return;
         const loadMembers = async () => {
             if (!Array.isArray(circle.members) || circle.members.length === 0) {
                 setMemberProfiles([]);
@@ -40,7 +52,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                         return {
                             id: uid,
                             name: data?.name || data?.displayName || 'Member',
-                            image: data?.photoURL || 'https://via.placeholder.com/150',
+                            image: data?.photoURL || '',
                             isAdmin: uid === circle.adminId,
                             status: uid === user?.uid ? 'online' : 'offline'
                         };
@@ -53,6 +65,22 @@ const CircleDetailScreen = ({ navigation, route }) => {
         };
         loadMembers();
     }, [circle, user]);
+
+    if (!circle) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top']}>
+                <StatusBar barStyle="dark-content" />
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>Circle details are unavailable.</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -76,8 +104,10 @@ const CircleDetailScreen = ({ navigation, route }) => {
                         {/* Simple border representation of the ring for now */}
                         <View style={styles.scoreRing}>
                             <View style={styles.scoreInner}>
-                                <Text style={styles.scoreValue}>{circle.score}</Text>
-                                <Text style={styles.scoreLabel}>Thriving</Text>
+                                <Text style={styles.scoreValue}>
+                                    {typeof circle.score === 'number' ? circle.score.toFixed(1) : '—'}
+                                </Text>
+                                <Text style={styles.scoreLabel}>{circle.scoreLabel || circle.status || '—'}</Text>
                             </View>
                         </View>
                     </View>
@@ -88,12 +118,35 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
                 {/* Actions */}
                 <View style={styles.actionsRow}>
-                    <TouchableOpacity style={styles.actionButtonTeal}>
+                    <TouchableOpacity
+                        style={styles.actionButtonTeal}
+                        onPress={() => {
+                            if (circle.chatId) {
+                                navigation.navigate('ChatDetail', { chat: { id: circle.chatId, name: circle.name, isGroup: true } });
+                            } else {
+                                Alert.alert('Chat unavailable', 'This circle does not have a chat yet.');
+                            }
+                        }}
+                    >
                         <MaterialCommunityIcons name="message-outline" size={18} color="#FFF" />
                         <Text style={styles.actionButtonText}>Message</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionButtonTeal}>
+                    <TouchableOpacity
+                        style={styles.actionButtonTeal}
+                        onPress={async () => {
+                            if (!circle.chatId) {
+                                Alert.alert('Huddle unavailable', 'This circle does not have a chat yet.');
+                                return;
+                            }
+                            try {
+                                const result = await huddleService.startHuddle(circle.chatId, true);
+                                navigation.navigate('Huddle', { chat: { id: circle.chatId, name: circle.name, isGroup: true }, huddleId: result.huddleId, roomUrl: result.roomUrl });
+                            } catch (error) {
+                                Alert.alert('Unable to start huddle', 'Please try again later.');
+                            }
+                        }}
+                    >
                         <Ionicons name="call-outline" size={18} color="#FFF" />
                         <Text style={styles.actionButtonText}>Start huddle</Text>
                     </TouchableOpacity>
@@ -101,9 +154,10 @@ const CircleDetailScreen = ({ navigation, route }) => {
                     <TouchableOpacity
                         style={styles.actionButtonYellow}
                         onPress={() => setIsLeaveVisible(true)}
+                        disabled={isLeaving}
                     >
                         <Ionicons name="exit-outline" size={18} color="#5D4037" />
-                        <Text style={styles.actionButtonTextDark}>Leave circle</Text>
+                        <Text style={styles.actionButtonTextDark}>{isLeaving ? 'Leaving...' : 'Leave circle'}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -119,10 +173,12 @@ const CircleDetailScreen = ({ navigation, route }) => {
                     )}
                     {memberProfiles.map((member) => (
                         <View key={member.id} style={styles.memberCard}>
-                            <Image source={{ uri: member.image }} style={styles.memberAvatar} />
+                            <Avatar uri={member.image} name={member.name} size={44} />
                             <View style={styles.memberInfo}>
                                 <Text style={styles.memberName}>{member.name}</Text>
-                                <Text style={styles.memberScore}>Score: {member.score || 0}</Text>
+                                <Text style={styles.memberScore}>
+                                    Score: {typeof member.score === 'number' ? member.score : '—'}
+                                </Text>
                             </View>
                             <View style={styles.memberRight}>
                                 {member.isAdmin && (
@@ -169,6 +225,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#F0F0F0',
         borderRadius: 20,
+    },
+    emptyState: {
+        padding: 24,
+        alignItems: 'center',
+    },
+    emptyStateText: {
+        fontSize: 14,
+        color: '#757575',
     },
     overviewContainer: {
         alignItems: 'center',

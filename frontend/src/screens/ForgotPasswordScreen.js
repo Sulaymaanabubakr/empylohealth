@@ -1,12 +1,32 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import EmailIllustration from '../../assets/images/email_icon.svg';
+import { authService } from '../services/auth/authService';
 
 const ForgotPasswordScreen = ({ navigation }) => {
+    const [email, setEmail] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleReset = async () => {
+        if (!email) {
+            Alert.alert('Missing email', 'Please enter your email address.');
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            await authService.sendPasswordReset(email);
+            Alert.alert('Email sent', 'Check your inbox for reset instructions.');
+        } catch (error) {
+            Alert.alert('Error', error.message || 'Unable to send reset email.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -28,12 +48,16 @@ const ForgotPasswordScreen = ({ navigation }) => {
                     placeholder="Enter your email..."
                     keyboardType="email-address"
                     icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
                 />
 
                 <Button
-                    title="Reset Password"
-                    onPress={() => navigation.navigate('ResetPassword')}
+                    title={isSubmitting ? "Sending..." : "Reset Password"}
+                    onPress={handleReset}
                     style={styles.resetButton}
+                    disabled={isSubmitting}
                 />
             </View>
         </SafeAreaView>

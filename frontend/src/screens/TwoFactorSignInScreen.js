@@ -3,80 +3,42 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, StatusBar, ScrollV
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import QRCode from 'react-native-qrcode-svg';
-import { multiFactor, PhoneAuthProvider, TotpMultiFactorGenerator } from 'firebase/auth';
-import TwoFactorSuccessModal from '../components/TwoFactorSuccessModal';
 import { auth, app } from '../services/firebaseConfig';
+import { authService } from '../services/auth/authService';
 
-const TwoFactorVerificationScreen = ({ navigation, route }) => {
-    const { phoneNumber = '', method = 'sms' } = route.params || {};
+const TwoFactorSignInScreen = ({ navigation }) => {
+    const resolver = authService.getPendingMfaResolver();
+    const [selectedHint, setSelectedHint] = useState(resolver?.hints?.[0] || null);
     const [otp, setOtp] = useState(Array(6).fill(''));
     const [verificationId, setVerificationId] = useState('');
-    const [totpSecret, setTotpSecret] = useState(null);
-    const [qrCodeUrl, setQrCodeUrl] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isSuccessVisible, setIsSuccessVisible] = useState(false);
     const recaptchaVerifier = useRef(null);
 
     const otpValue = otp.join('');
+    const isSms = selectedHint?.factorId === 'phone';
 
     useEffect(() => {
         const init = async () => {
-            if (!auth.currentUser) {
-                Alert.alert('Error', 'Please sign in again to enable 2FA.');
-                return;
-            }
-
-            if (method === 'sms') {
-                await sendSmsCode();
-                return;
-            }
-
-            if (method === 'authApp') {
-                await initTotp();
+            if (!resolver || !selectedHint) return;
+            if (isSms) {
+                const id = await authService.startSmsMfaSignIn(selectedHint, recaptchaVerifier.current);
+                setVerificationId(id);
             }
         };
 
         init().catch((error) => {
-            console.error('2FA setup error', error);
-            Alert.alert('Error', error.message || 'Unable to start 2FA setup.');
+            console.error('MFA sign-in init failed', error);
+            Alert.alert('Error', error.message || 'Unable to start MFA sign-in.');
         });
-    }, [method]);
-
-    const sendSmsCode = async () => {
-        if (!auth.currentUser) return;
-        if (!phoneNumber) {
-            throw new Error('Phone number is required.');
-        }
-
-        const session = await multiFactor(auth.currentUser).getSession();
-        const phoneProvider = new PhoneAuthProvider(auth);
-        const id = await phoneProvider.verifyPhoneNumber(
-            { phoneNumber, session },
-            recaptchaVerifier.current
-        );
-        setVerificationId(id);
-    };
-
-    const initTotp = async () => {
-        if (!auth.currentUser) return;
-        const session = await multiFactor(auth.currentUser).getSession();
-        const secret = await TotpMultiFactorGenerator.generateSecret(session);
-        const email = auth.currentUser.email || 'user';
-        const issuer = 'Empylo';
-        const url = secret.generateQRCodeURL(email, issuer);
-        setTotpSecret(secret);
-        setQrCodeUrl(url);
-    };
-
-    const handleOtpChange = (value, index) => {
-        const newOtp = [...otp];
-        newOtp[index] = value;
-        setOtp(newOtp);
-    };
+    }, [resolver, selectedHint, isSms]);
 
     const handleVerify = async () => {
-        if (!auth.currentUser) return;
+        if (!resolver || !selectedHint) {
+            Alert.alert('Error', 'No MFA session found. Please sign in again.');
+            navigation.goBack();
+            return;
+        }
+
         if (otpValue.length < 6) {
             Alert.alert('Invalid code', 'Enter the 6-digit code.');
             return;
@@ -84,42 +46,47 @@ const TwoFactorVerificationScreen = ({ navigation, route }) => {
 
         setIsSubmitting(true);
         try {
-            if (method === 'sms') {
+            if (isSms) {
                 if (!verificationId) {
                     throw new Error('Verification code not sent.');
                 }
-                const credential = PhoneAuthProvider.credential(verificationId, otpValue);
-                await multiFactor(auth.currentUser).enroll(credential, 'SMS');
-            } else if (method === 'authApp') {
-                if (!totpSecret) {
-                    throw new Error('Authenticator setup not initialized.');
-                }
-                const assertion = TotpMultiFactorGenerator.assertionForEnrollment(totpSecret, otpValue);
-                await multiFactor(auth.currentUser).enroll(assertion, 'Authenticator App');
+                await authService.resolveSmsMfaSignIn(verificationId, otpValue);
+            } else {
+                await authService.resolveTotpMfaSignIn(selectedHint, otpValue);
             }
-
-            setIsSuccessVisible(true);
+            navigation.replace('Dashboard');
         } catch (error) {
-            console.error('2FA enrollment failed', error);
-            Alert.alert('Error', error.message || 'Unable to verify code.');
+            console.error('MFA sign-in failed', error);
+            Alert.alert('Error', error.message || 'Unable to sign in.');
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleResend = async () => {
+        if (!selectedHint) return;
         try {
-            await sendSmsCode();
+            const id = await authService.startSmsMfaSignIn(selectedHint, recaptchaVerifier.current);
+            setVerificationId(id);
             Alert.alert('Code sent', 'Check your phone for the verification code.');
         } catch (error) {
             Alert.alert('Error', error.message || 'Unable to resend code.');
         }
     };
 
-    const handleSuccessContinue = () => {
-        setIsSuccessVisible(false);
-        navigation.navigate('Security');
-    };
+    if (!resolver || !selectedHint) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top']}>
+                <StatusBar barStyle="dark-content" />
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyText}>Multi-factor session expired. Please sign in again.</Text>
+                    <TouchableOpacity style={styles.verifyButton} onPress={() => navigation.replace('SignIn')}>
+                        <Text style={styles.verifyButtonText}>Back to Sign In</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -139,29 +106,12 @@ const TwoFactorVerificationScreen = ({ navigation, route }) => {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                <Text style={styles.title}>2-Step Verification</Text>
-
-                <View style={styles.illustrationContainer}>
-                    <Ionicons name="shield-checkmark-outline" size={72} color="#E0E0E0" />
-                </View>
-
-                {method === 'sms' ? (
-                    <Text style={styles.instruction}>
-                        Enter the code sent to{'
-'}
-                        <Text style={styles.phoneNumber}>{phoneNumber}</Text>
-                    </Text>
-                ) : (
-                    <Text style={styles.instruction}>
-                        Scan this QR code in your authenticator app, then enter the 6-digit code.
-                    </Text>
-                )}
-
-                {method === 'authApp' && qrCodeUrl ? (
-                    <View style={styles.qrContainer}>
-                        <QRCode value={qrCodeUrl} size={180} />
-                    </View>
-                ) : null}
+                <Text style={styles.title}>Two-Factor Sign In</Text>
+                <Text style={styles.instruction}>
+                    {isSms
+                        ? 'Enter the verification code sent to your phone.'
+                        : 'Enter the 6-digit code from your authenticator app.'}
+                </Text>
 
                 <Text style={styles.enterCodeLabel}>Enter 6 digit code</Text>
 
@@ -173,12 +123,16 @@ const TwoFactorVerificationScreen = ({ navigation, route }) => {
                             keyboardType="number-pad"
                             maxLength={1}
                             value={digit}
-                            onChangeText={(text) => handleOtpChange(text, index)}
+                            onChangeText={(text) => {
+                                const next = [...otp];
+                                next[index] = text;
+                                setOtp(next);
+                            }}
                         />
                     ))}
                 </View>
 
-                {method === 'sms' && (
+                {isSms && (
                     <View style={styles.resendContainer}>
                         <Text style={styles.resendText}>Didn't receive code? </Text>
                         <TouchableOpacity onPress={handleResend}>
@@ -189,16 +143,10 @@ const TwoFactorVerificationScreen = ({ navigation, route }) => {
             </ScrollView>
 
             <View style={styles.footer}>
-                <Text style={styles.stepText}>Step 2</Text>
                 <TouchableOpacity style={styles.verifyButton} onPress={handleVerify} disabled={isSubmitting}>
                     <Text style={styles.verifyButtonText}>{isSubmitting ? 'Verifying...' : 'Verify'}</Text>
                 </TouchableOpacity>
             </View>
-
-            <TwoFactorSuccessModal
-                visible={isSuccessVisible}
-                onContinue={handleSuccessContinue}
-            />
         </SafeAreaView>
     );
 };
@@ -235,30 +183,12 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
         marginBottom: 24,
     },
-    illustrationContainer: {
-        marginBottom: 24,
-        position: 'relative',
-        height: 120,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     instruction: {
         fontSize: 14,
         color: '#1A1A1A',
         textAlign: 'center',
         marginBottom: 24,
         lineHeight: 20,
-    },
-    phoneNumber: {
-        fontWeight: '700',
-    },
-    qrContainer: {
-        padding: 16,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
     },
     enterCodeLabel: {
         fontSize: 14,
@@ -294,17 +224,10 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     footer: {
-        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: 24,
         paddingBottom: 40,
         paddingTop: 20,
-    },
-    stepText: {
-        fontSize: 16,
-        color: '#009688',
-        fontWeight: '600',
     },
     verifyButton: {
         backgroundColor: '#4DB6AC',
@@ -317,6 +240,17 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
+    emptyState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+    },
+    emptyText: {
+        color: '#1A1A1A',
+        textAlign: 'center',
+        marginBottom: 20,
+    },
 });
 
-export default TwoFactorVerificationScreen;
+export default TwoFactorSignInScreen;

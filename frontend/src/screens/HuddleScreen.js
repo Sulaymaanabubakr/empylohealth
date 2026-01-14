@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, StatusBar, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 import { huddleService } from '../services/api/huddleService';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import Avatar from '../components/Avatar';
 
 const HuddleScreen = ({ navigation, route }) => {
     // Fallback to avoid crashes if params missing, though they should be there
-    const { chat, huddleId, roomUrl } = route.params || { chat: { name: 'Chat', isGroup: false, avatar: 'https://via.placeholder.com/150' } };
+    const { chat, huddleId, roomUrl } = route.params || { chat: { name: 'Chat', isGroup: false } };
     const insets = useSafeAreaInsets();
     const [seconds, setSeconds] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
@@ -18,8 +19,6 @@ const HuddleScreen = ({ navigation, route }) => {
     const [participants, setParticipants] = useState([]);
 
     const isGroup = chat.isGroup;
-    const safeAvatar = chat.avatar || 'https://via.placeholder.com/150';
-
     useEffect(() => {
         const timer = setInterval(() => {
             setSeconds(prev => prev + 1);
@@ -41,7 +40,7 @@ const HuddleScreen = ({ navigation, route }) => {
                         return {
                             id: uid,
                             name: data?.name || data?.displayName || 'Member',
-                            image: data?.photoURL || 'https://via.placeholder.com/150'
+                            image: data?.photoURL || ''
                         };
                     })
                 );
@@ -110,27 +109,27 @@ const HuddleScreen = ({ navigation, route }) => {
                     <View style={styles.participantsContainer}>
                         {participants[0] && (
                             <View style={[styles.avatarWrapper, { top: '18%', alignSelf: 'center' }]}>
-                                <Image source={{ uri: participants[0].image }} style={styles.avatar} />
+                                <Avatar uri={participants[0].image} name={participants[0].name} size={80} />
                             </View>
                         )}
                         {participants[1] && (
                             <View style={[styles.avatarWrapper, { top: '36%', left: '18%' }]}>
-                                <Image source={{ uri: participants[1].image }} style={styles.avatar} />
+                                <Avatar uri={participants[1].image} name={participants[1].name} size={80} />
                             </View>
                         )}
                         {participants[2] && (
                             <View style={[styles.avatarWrapper, { top: '36%', right: '18%' }]}>
-                                <Image source={{ uri: participants[2].image }} style={styles.avatar} />
+                                <Avatar uri={participants[2].image} name={participants[2].name} size={80} />
                             </View>
                         )}
                         {participants[3] && (
                             <View style={[styles.avatarWrapper, { top: '54%', left: '26%' }]}>
-                                <Image source={{ uri: participants[3].image }} style={styles.avatar} />
+                                <Avatar uri={participants[3].image} name={participants[3].name} size={80} />
                             </View>
                         )}
                         {participants[4] && (
                             <View style={[styles.avatarWrapper, { top: '54%', right: '26%' }]}>
-                                <Image source={{ uri: participants[4].image }} style={styles.avatar} />
+                                <Avatar uri={participants[4].image} name={participants[4].name} size={80} />
                             </View>
                         )}
                     </View>
@@ -138,7 +137,7 @@ const HuddleScreen = ({ navigation, route }) => {
                     /* 1-on-1 Layout: Centered Single Avatar */
                     <View style={styles.singleParticipantContainer}>
                         <View style={styles.largeAvatarWrapper}>
-                            <Image source={{ uri: safeAvatar }} style={styles.largeAvatar} />
+                            <Avatar uri={chat.avatar} name={chat.name} size={140} />
                         </View>
                         <Text style={styles.singleName}>{chat.name}</Text>
                         <Text style={styles.singleTimer}>{formatTime(seconds)}</Text>

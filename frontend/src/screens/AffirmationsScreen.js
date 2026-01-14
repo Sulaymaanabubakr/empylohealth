@@ -1,82 +1,37 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, FlatList, ImageBackground, TouchableOpacity, StatusBar, Platform, Share, Alert } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Dimensions, FlatList, ImageBackground, TouchableOpacity, StatusBar, Share, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { COLORS } from '../theme/theme';
+import { resourceService } from '../services/api/resourceService';
 
 const { width, height } = Dimensions.get('window');
-
-const AFFIRMATIONS = [
-    {
-        id: '1',
-        text: "Every step I take,\nbrings me closer to\nmy dreams",
-        date: "Friday, 23 November",
-        image: 'https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Sunrise/Sunset
-    },
-    {
-        id: '2',
-        text: "I am strong and capable;\nI can overcome any\nobstacle",
-        date: "Saturday, 24 November",
-        image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Forest
-    },
-    {
-        id: '3',
-        text: "I choose to be happy\nand love myself\ntoday",
-        date: "Sunday, 25 November",
-        image: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Nature
-    },
-    {
-        id: '4',
-        text: "My potential is\nlimitless, and I choose\nwhere to spend my energy",
-        date: "Monday, 26 November",
-        image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Mountain
-    },
-    {
-        id: '5',
-        text: "I am improved by\nevery failure and\nsuccess",
-        date: "Tuesday, 27 November",
-        image: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Hills
-    },
-    {
-        id: '6',
-        text: "I radiate positivity\nand good vibes",
-        date: "Wednesday, 28 November",
-        image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Beach
-    },
-    {
-        id: '7',
-        text: "I am enough,\njust as I am",
-        date: "Thursday, 29 November",
-        image: 'https://images.unsplash.com/photo-1426604966848-d7adac402bff?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Water
-    },
-    {
-        id: '8',
-        text: "I am grateful for\nall that I have and all\nthat is to come",
-        date: "Friday, 30 November",
-        image: 'https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Dark forest/Night
-    },
-    {
-        id: '9',
-        text: "I forgive myself and\nset myself free",
-        date: "Saturday, 1 December",
-        image: 'https://images.unsplash.com/photo-1499002238440-d264edd596ec?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Lavender
-    },
-    {
-        id: '10',
-        text: "I trust the process\nof life",
-        date: "Sunday, 2 December",
-        image: 'https://images.unsplash.com/photo-1433086966358-54859d0ed716?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80', // Waterfall
-    },
-];
 
 const AffirmationsScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const flatListRef = useRef(null);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [likedItems, setLikedItems] = useState(new Set());
+    const [affirmations, setAffirmations] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadAffirmations = async () => {
+            try {
+                const items = await resourceService.getAffirmations();
+                const cleaned = items.filter((item) => item.image && (item.text || item.title));
+                setAffirmations(cleaned);
+            } catch (error) {
+                console.log('Failed to load affirmations', error);
+                setAffirmations([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadAffirmations();
+    }, []);
 
     const handleNext = () => {
-        if (currentIndex < AFFIRMATIONS.length - 1) {
+        if (currentIndex < affirmations.length - 1) {
             flatListRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
             setCurrentIndex(currentIndex + 1);
         }
@@ -142,8 +97,8 @@ const AffirmationsScreen = ({ navigation }) => {
 
                 {/* Content */}
                 <View style={styles.contentContainer}>
-                    <Text style={styles.date}>{item.date}</Text>
-                    <Text style={styles.affirmationText}>{item.text}</Text>
+                    <Text style={styles.date}>{item.date || item.tag || ''}</Text>
+                    <Text style={styles.affirmationText}>{item.text || item.title}</Text>
                 </View>
 
                 {/* Bottom Actions */}
@@ -152,7 +107,7 @@ const AffirmationsScreen = ({ navigation }) => {
                         <Ionicons name="arrow-undo-outline" size={28} color={currentIndex === 0 ? "rgba(255,255,255,0.3)" : "#FFF"} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(item.text)}>
+                    <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(item.text || item.title)}>
                         <Ionicons name="share-social-outline" size={28} color="#FFF" />
                     </TouchableOpacity>
 
@@ -169,7 +124,7 @@ const AffirmationsScreen = ({ navigation }) => {
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.actionButton} onPress={handleNext}>
-                        <Ionicons name="arrow-redo-outline" size={28} color={currentIndex === AFFIRMATIONS.length - 1 ? "rgba(255,255,255,0.3)" : "#FFF"} />
+                        <Ionicons name="arrow-redo-outline" size={28} color={currentIndex === affirmations.length - 1 ? "rgba(255,255,255,0.3)" : "#FFF"} />
                     </TouchableOpacity>
                 </View>
             </ImageBackground>
@@ -180,19 +135,29 @@ const AffirmationsScreen = ({ navigation }) => {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-            <FlatList
-                ref={flatListRef}
-                data={AFFIRMATIONS}
-                renderItem={renderItem}
-                keyExtractor={(item) => item.id}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                decelerationRate="fast"
-                snapToInterval={width}
-                bounces={false}
-                onMomentumScrollEnd={onMomentumScrollEnd}
-            />
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                </View>
+            ) : affirmations.length === 0 ? (
+                <View style={styles.loadingContainer}>
+                    <Text style={styles.emptyText}>No affirmations yet.</Text>
+                </View>
+            ) : (
+                <FlatList
+                    ref={flatListRef}
+                    data={affirmations}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    decelerationRate="fast"
+                    snapToInterval={width}
+                    bounces={false}
+                    onMomentumScrollEnd={onMomentumScrollEnd}
+                />
+            )}
         </View>
     );
 };
@@ -201,6 +166,16 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000',
+    },
+    loadingContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#000',
+    },
+    emptyText: {
+        color: '#FFFFFF',
+        fontSize: 16,
     },
     slide: {
         flex: 1,

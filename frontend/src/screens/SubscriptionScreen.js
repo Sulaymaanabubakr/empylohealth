@@ -1,27 +1,60 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Dimensions } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Dimensions, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import PlanDetailModal from '../components/PlanDetailModal';
 import SubscriptionSuccessModal from '../components/SubscriptionSuccessModal';
+import { useAuth } from '../context/AuthContext';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
 
 const { width } = Dimensions.get('window');
 
 const SubscriptionScreen = ({ navigation }) => {
+    const { userData } = useAuth();
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [plans, setPlans] = useState([]);
 
-    const plans = [
-        { id: 'pro', name: 'PRO', price: '$99', features: ['All basic features', 'Unlimited access', 'Priority support'] },
-        { id: 'enterprise', name: 'ENTERPRISE', price: '$199', features: ['All Pro features', 'Dedicated agent', 'Custom branding'] },
-    ];
+    useEffect(() => {
+        const q = query(collection(db, 'subscriptionPlans'));
+        return onSnapshot(q, (snapshot) => {
+            const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+            setPlans(items);
+        }, () => setPlans([]));
+    }, []);
+
+    const formatPrice = (plan) => {
+        if (typeof plan.price === 'number') {
+            const currency = plan.currency || 'GBP';
+            try {
+                return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(plan.price);
+            } catch (error) {
+                return `${plan.currencySymbol || ''}${plan.price}`;
+            }
+        }
+        return plan.priceLabel || plan.price || '';
+    };
+
+    const currentPlanLabel = useMemo(() => {
+        if (!userData?.subscription?.plan) return 'FREE';
+        return String(userData.subscription.plan).toUpperCase();
+    }, [userData?.subscription?.plan]);
+
+    const currentPlanPrice = useMemo(() => {
+        return userData?.subscription?.priceLabel || '';
+    }, [userData?.subscription?.priceLabel]);
 
     const handleSelectPlan = (plan) => {
-        setSelectedPlan(plan);
+        setSelectedPlan({ ...plan, priceLabel: formatPrice(plan) });
     };
 
     const handleSubscribe = () => {
+        if (!selectedPlan?.productId) {
+            Alert.alert('Purchases unavailable', 'This plan is not configured for in-app purchases yet.');
+            return;
+        }
         setSelectedPlan(null);
         setShowSuccess(true);
     };
@@ -30,14 +63,14 @@ const SubscriptionScreen = ({ navigation }) => {
         <View key={plan.id} style={styles.planCard}>
             <View style={styles.planIconContainer}>
                 <MaterialCommunityIcons
-                    name={plan.id === 'pro' ? 'star-outline' : 'crown-outline'}
+                    name={plan.iconName || 'star-outline'}
                     size={28}
-                    color={plan.id === 'pro' ? '#009688' : '#FFA000'}
+                    color={plan.accentColor || '#009688'}
                 />
             </View>
             <Text style={styles.cardName}>{plan.name}</Text>
             <Text style={styles.cardPrice}>
-                {plan.price}<Text style={styles.cardPeriod}>/month</Text>
+                {formatPrice(plan)}{plan.period ? <Text style={styles.cardPeriod}>/{plan.period}</Text> : null}
             </Text>
 
             <TouchableOpacity
@@ -45,10 +78,10 @@ const SubscriptionScreen = ({ navigation }) => {
                 style={styles.selectButtonContainer}
             >
                 <LinearGradient
-                    colors={plan.id === 'pro' ? ['#E0F2F1', '#B2DFDB'] : ['#FFF8E1', '#FFECB3']}
+                    colors={plan.gradientColors || ['#E0F2F1', '#B2DFDB']}
                     style={styles.selectButton}
                 >
-                    <Text style={[styles.selectButtonText, { color: plan.id === 'pro' ? '#00695C' : '#FF6F00' }]}>
+                    <Text style={[styles.selectButtonText, { color: plan.accentColor || '#00695C' }]}>
                         Select Plan
                     </Text>
                 </LinearGradient>
@@ -79,16 +112,20 @@ const SubscriptionScreen = ({ navigation }) => {
                         </View>
                         <View>
                             <Text style={styles.currentPlanLabel}>Current Plan</Text>
-                            <Text style={styles.currentPlanTitle}>BASIC</Text>
-                        </View>
-                    </View>
-                    <Text style={styles.currentPlanPrice}>$0<Text style={styles.period}>/month</Text></Text>
+                    <Text style={styles.currentPlanTitle}>{currentPlanLabel}</Text>
                 </View>
+            </View>
+            <Text style={styles.currentPlanPrice}>
+                {currentPlanPrice || '—'}{currentPlanPrice ? <Text style={styles.period}>/month</Text> : null}
+            </Text>
+        </View>
 
                 <Text style={styles.sectionTitle}>Available Plans</Text>
 
                 <View style={styles.plansContainer}>
-                    {plans.map(renderPlanCard)}
+                    {plans.length === 0 ? (
+                        <Text style={styles.emptyText}>No subscription plans available yet.</Text>
+                    ) : plans.map(renderPlanCard)}
                 </View>
 
                 {/* Footer Links */}
@@ -216,6 +253,12 @@ const styles = StyleSheet.create({
         color: '#1A1A1A',
         marginBottom: 16,
         marginLeft: 4,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#9E9E9E',
+        textAlign: 'center',
+        marginVertical: 20,
     },
     plansContainer: {
         flexDirection: 'row',

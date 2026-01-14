@@ -1,31 +1,51 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING } from '../theme/theme';
+import { SPACING } from '../theme/theme';
+import { useAuth } from '../context/AuthContext';
+import Avatar from '../components/Avatar';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
 
 const NotificationsScreen = ({ navigation }) => {
+  const { user, userData } = useAuth();
+  const [notifications, setNotifications] = useState([]);
 
-  const todayNotifications = [
-    { id: '1', title: 'Daily Check-in Reminder', subtitle: 'It’s time to log your mood for the afternoon. How are you feeling?', color: '#80CBC4' }, // Teal
-    { id: '2', title: 'New Badge Unlocked!', subtitle: 'Congratulations! You’ve reached a 7-day streak.', color: '#FFCC80' }, // Orange
-    { id: '3', title: 'Circle Update', subtitle: 'Sarah posted in "Mindfulness Matters": "Found this great meditation app..."', color: '#CE93D8' }, // Purple
-    { id: '4', title: 'Assessment Complete', subtitle: 'Your weekly insights are ready to view. See how you’ve improved.', color: '#BCAAA4' }, // Brown
-  ];
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    const q = query(
+      collection(db, 'notifications'),
+      where('uid', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return { id: doc.id, ...data };
+      });
+      setNotifications(items);
+    }, () => setNotifications([]));
+  }, [user?.uid]);
 
-  const earlierNotifications = [
-    { id: '5', title: 'Welcome to Empylo', subtitle: 'Thanks for joining! Start your journey to better wellbeing today.', color: '#B2DFDB' }, // Light Teal
-    { id: '6', title: 'Tip of the Day', subtitle: 'Taking short breaks can significantly improve focus and reduce stress.', color: '#BCAAA4' }, // Brown
-    { id: '7', title: 'New Challenge Available', subtitle: 'Join the "Sleep Better" challenge to improve your rest quality.', color: '#FFCC80' }, // Orange
-    { id: '8', title: 'Profile Updated', subtitle: 'Your profile details have been successfully saved.', color: '#CE93D8' }, // Purple
-  ];
+  const { todayNotifications, earlierNotifications } = useMemo(() => {
+    const todayKey = new Date().toDateString();
+    const today = [];
+    const earlier = [];
+    notifications.forEach((item) => {
+      const createdAt = item.createdAt?.toDate ? item.createdAt.toDate() : (item.createdAt ? new Date(item.createdAt) : null);
+      const bucket = createdAt && createdAt.toDateString() === todayKey ? today : earlier;
+      bucket.push(item);
+    });
+    return { todayNotifications: today, earlierNotifications: earlier };
+  }, [notifications]);
 
   const NotificationCard = ({ item }) => (
     <View style={styles.card}>
-      <View style={[styles.iconCircle, { backgroundColor: item.color }]} />
+      <View style={[styles.iconCircle, { backgroundColor: item.color || '#B2DFDB' }]} />
       <View style={styles.textContainer}>
-        <Text style={styles.cardTitle}>{item.title}</Text>
-        <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
+        <Text style={styles.cardTitle}>{item.title || 'Notification'}</Text>
+        <Text style={styles.cardSubtitle}>{item.subtitle || item.body || ''}</Text>
       </View>
     </View>
   );
@@ -39,10 +59,7 @@ const NotificationsScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
-        <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=687&q=80' }}
-          style={styles.avatar}
-        />
+        <Avatar uri={userData?.photoURL || user?.photoURL} name={userData?.name || user?.displayName || 'User'} size={44} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -50,12 +67,18 @@ const NotificationsScreen = ({ navigation }) => {
 
         {/* Today Section */}
         <Text style={styles.sectionTitle}>Today</Text>
+        {todayNotifications.length === 0 && (
+          <Text style={styles.emptyText}>No notifications yet.</Text>
+        )}
         {todayNotifications.map((item) => (
           <NotificationCard key={item.id} item={item} />
         ))}
 
         {/* Earlier Section */}
         <Text style={styles.sectionTitle}>Earlier this week</Text>
+        {earlierNotifications.length === 0 && (
+          <Text style={styles.emptyText}>Nothing earlier this week.</Text>
+        )}
         {earlierNotifications.map((item) => (
           <NotificationCard key={item.id} item={item} />
         ))}
@@ -87,10 +110,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  emptyText: {
+    fontSize: 14,
+    color: '#9E9E9E',
+    marginBottom: SPACING.md,
   },
   scrollContent: {
     paddingHorizontal: SPACING.lg,

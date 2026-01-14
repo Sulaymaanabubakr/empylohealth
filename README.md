@@ -27,7 +27,7 @@ firebase deploy --only functions
 
 Update `.firebaserc` with your Firebase project id.
 
-## Seeding Demo Data
+## Seeding Initial Content
 
 Seed global resources/circles (local script):
 
@@ -36,12 +36,12 @@ cd backend
 npx ts-node scripts/runSeed.ts
 ```
 
-Seed user-scoped demo data (callable function):
+Seed resources (callable function):
 
 ```bash
 cd backend
 firebase functions:shell
-seedDemoData()
+seedResources()
 ```
 
 ## Technical Debt / Pending Rebuild

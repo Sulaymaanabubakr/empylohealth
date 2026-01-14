@@ -1,20 +1,55 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
+import Avatar from '../components/Avatar';
+import { circleService } from '../services/api/circleService';
+import { useAuth } from '../context/AuthContext';
 
 const SupportGroupDetailScreen = ({ navigation, route }) => {
-    const { group } = route.params;
+    const group = route.params?.group;
     const insets = useSafeAreaInsets();
-    const [isJoined, setIsJoined] = useState(false);
-    const imageSource = group.image
-        ? (typeof group.image === 'string' ? { uri: group.image } : group.image)
-        : { uri: 'https://via.placeholder.com/600x400' };
-    const tags = group.tags || (group.category ? [group.category] : []);
+    const { user } = useAuth();
+    const [isJoining, setIsJoining] = useState(false);
+    const [joinedOverride, setJoinedOverride] = useState(false);
+    const isJoined = useMemo(() => {
+        if (joinedOverride) return true;
+        if (!user?.uid) return false;
+        if (Array.isArray(group.members)) {
+            return group.members.includes(user.uid);
+        }
+        return false;
+    }, [group.members, joinedOverride, user?.uid]);
+    const tags = group?.tags || (group?.category ? [group.category] : []);
 
-    const handleConnectToggle = () => {
-        setIsJoined(!isJoined);
+    if (!group) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>Support group details are unavailable.</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    const handleConnect = async () => {
+        if (isJoined || !group.id || !user?.uid) return;
+        try {
+            setIsJoining(true);
+            await circleService.joinCircle(group.id);
+            setJoinedOverride(true);
+        } catch (error) {
+            console.error('Failed to join support group', error);
+        } finally {
+            setIsJoining(false);
+        }
     };
 
     return (
@@ -35,7 +70,7 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                 {/* Hero Section */}
                 <View style={styles.heroSection}>
                     <View style={styles.imageContainer}>
-                        <Image source={imageSource} style={styles.heroImage} />
+                        <Avatar uri={group.image} name={group.name} size={80} />
                     </View>
                     <View style={styles.titleContainer}>
                         <Text style={styles.heroTitle}>{group.name}</Text>
@@ -53,11 +88,12 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
 
                     <TouchableOpacity
                         style={[styles.connectButton, isJoined && styles.connectButtonJoined]}
-                        onPress={handleConnectToggle}
+                        onPress={handleConnect}
                         activeOpacity={0.8}
+                        disabled={isJoined || isJoining}
                     >
                         <Text style={[styles.connectButtonText, isJoined && styles.connectButtonTextJoined]}>
-                            {isJoined ? 'Joined!' : 'Connect me'}
+                            {isJoined ? 'Joined' : (isJoining ? 'Joining...' : 'Connect me')}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -66,7 +102,7 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>About this group</Text>
                     <Text style={styles.sectionText}>
-                        {group.description || "Lorem ipsum dolor sit amet, consectetur adipiscing elit."}
+                        {group.description || "No description available yet."}
                     </Text>
                 </View>
 
@@ -87,25 +123,19 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
 
                     <View style={styles.contactRow}>
                         <Ionicons name="location-outline" size={20} color="#757575" style={styles.contactIcon} />
-                        <Text style={styles.contactText}>{group.contact?.address || 'Location not available'}</Text>
+                        <Text style={styles.contactText}>{group.contact?.address || 'Not provided'}</Text>
                     </View>
 
                     <View style={styles.contactRow}>
                         <Ionicons name="call-outline" size={20} color="#757575" style={styles.contactIcon} />
-                        <Text style={styles.contactText}>{group.contact?.phone || '+00 000 000 000'}</Text>
+                        <Text style={styles.contactText}>{group.contact?.phone || 'Not provided'}</Text>
                     </View>
 
                     <View style={styles.contactRow}>
                         <Ionicons name="mail-outline" size={20} color="#757575" style={styles.contactIcon} />
-                        <Text style={styles.contactText}>{group.contact?.email || 'email@example.com'}</Text>
+                        <Text style={styles.contactText}>{group.contact?.email || 'Not provided'}</Text>
                     </View>
                 </View>
-
-                {/* Report Button */}
-                <TouchableOpacity style={styles.reportButton}>
-                    <Feather name="alert-circle" size={18} color={COLORS.primary} style={{ marginRight: 8 }} />
-                    <Text style={styles.reportButtonText}>Report group</Text>
-                </TouchableOpacity>
 
             </ScrollView>
         </SafeAreaView>
@@ -132,6 +162,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#F5F5F5',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    emptyState: {
+        padding: 24,
+        alignItems: 'center',
+    },
+    emptyStateText: {
+        fontSize: 14,
+        color: '#757575',
     },
     scrollContent: {
         paddingHorizontal: SPACING.lg,
@@ -241,30 +279,6 @@ const styles = StyleSheet.create({
         color: '#424242',
         flex: 1,
     },
-    reportButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        marginTop: 8,
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1,
-        borderColor: '#F0F0F0',
-        borderRadius: 30, // Pill shape like in screenshot? Or just plain text? Screenshot has a pill shape/card.
-        // Let's match the screenshot's 'Report group' look which is a white pill with text.
-        // Actually, screenshot shows "Report group" inside a white card/pill at the bottom.
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.03,
-        shadowRadius: 4,
-        elevation: 1,
-    },
-    reportButtonText: {
-        fontSize: 14,
-        color: COLORS.primary, // Using primary color for the text based on standard patterns, or red if danger. 
-        // Screenshot has it looking cyan/primary color.
-        fontWeight: '500',
-    }
 });
 
 export default SupportGroupDetailScreen;

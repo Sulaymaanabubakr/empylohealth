@@ -53,13 +53,7 @@ const SignUpScreen = ({ navigation, route }) => {
         setLoading(false);
 
         if (result.success) {
-            // Navigate to Verification (if we want to simulate that flow) 
-            // or directly to ProfileSetup or Dashboard.
-            // Given the existing flow likely expects verification, let's go to Verification 
-            // but pass the user info if needed. 
-            // HOWEVER, with standard Firebase Email/Pass, we are now logged in.
-            // Let's go to ProfileSetup to complete the profile (avatar, etc).
-            navigation.replace('ProfileSetup');
+            navigation.replace('Verification', { type });
         } else {
             showToast(result.error || "Registration failed", 'error');
         }

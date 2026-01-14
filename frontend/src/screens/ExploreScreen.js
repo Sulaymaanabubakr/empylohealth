@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
@@ -40,12 +40,17 @@ const ExploreScreen = ({ navigation }) => {
     }, []);
 
     const displayedActivities = activities.filter(item =>
-        activeTab === 'Self-development' ? item.category === 'Self-development' : item.category === 'Group'
+        activeTab === 'Self-development' ? item.category === 'Self-development' : item.category === 'Group activities'
     );
     // If empty (e.g. first run before seed), maybe show static fallback or specific empty state.
     // For now, assuming backend seed is run or will be run.
 
     const filters = ['Love', 'Hard work', 'Career', 'Courage', 'Relationships'];
+    const filteredAffirmations = affirmations.filter((item) => {
+        if (!activeFilter) return true;
+        const tags = item.tags || [];
+        return tags.includes(activeFilter);
+    });
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -94,30 +99,42 @@ const ExploreScreen = ({ navigation }) => {
                     <Text style={styles.seeAllText}>See all</Text>
                 </View>
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-                    {displayedActivities.map((item) => (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={[styles.activityCard, { backgroundColor: item.color }]}
-                            onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
-                        >
-                            <View style={styles.timeBadge}>
-                                <Text style={styles.timeText}>{item.time}</Text>
-                            </View>
-                            <Image
-                                source={typeof item.image === 'string' ? { uri: item.image } : item.image}
-                                style={styles.activityImage}
-                                resizeMode="contain"
-                            />
-                            <View style={styles.activityContent}>
-                                <Text style={styles.activityTitle}>{item.title}</Text>
-                                <Text style={[styles.activityTag, { color: item.tag === 'LEARN' ? '#EF6C00' : '#00695C' }]}>
-                                    {item.tag}
-                                </Text>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
+                {loading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color={COLORS.primary} />
+                    </View>
+                ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+                        {displayedActivities.map((item) => (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={[styles.activityCard, { backgroundColor: item.color || '#F3F4F6' }]}
+                                onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                            >
+                                <View style={styles.timeBadge}>
+                                    <Text style={styles.timeText}>{item.time}</Text>
+                                </View>
+                                {item.image ? (
+                                    <Image
+                                        source={{ uri: item.image }}
+                                        style={styles.activityImage}
+                                        resizeMode="contain"
+                                    />
+                                ) : null}
+                                <View style={styles.activityContent}>
+                                    <Text style={styles.activityTitle}>{item.title}</Text>
+                                    <Text style={[styles.activityTag, { color: item.tag === 'LEARN' ? '#EF6C00' : '#00695C' }]}>
+                                        {item.tag}
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                )}
+
+                {!loading && displayedActivities.length === 0 && (
+                    <Text style={styles.emptyStateText}>No activities yet.</Text>
+                )}
 
                 {/* Support Groups Preview (Only for Group activities tab) */}
                 {activeTab === 'Group activities' && (
@@ -172,16 +189,18 @@ const ExploreScreen = ({ navigation }) => {
                 </ScrollView>
 
                 <View style={styles.affirmationRow}>
-                    {affirmations.map((item) => (
+                    {filteredAffirmations.map((item) => (
                         <TouchableOpacity
                             key={item.id}
                             style={styles.affirmationCard}
                             onPress={() => navigation.navigate('Affirmations')}
                         >
-                            <Image source={{ uri: item.image }} style={styles.affirmationImage} />
+                            {item.image ? (
+                                <Image source={{ uri: item.image }} style={styles.affirmationImage} />
+                            ) : null}
                             <View style={styles.affirmationOverlay}>
                                 <View style={styles.affirmationHeader}>
-                                    <Text style={styles.affirmationDate}>{item.tag === 'Today' ? 'Today' : item.date}</Text>
+                                    <Text style={styles.affirmationDate}>{item.tag || item.date}</Text>
                                     <TouchableOpacity style={styles.expandButton}>
                                         <Ionicons name="resize" size={12} color="#FFF" />
                                     </TouchableOpacity>
@@ -191,6 +210,10 @@ const ExploreScreen = ({ navigation }) => {
                         </TouchableOpacity>
                     ))}
                 </View>
+
+                {!loading && filteredAffirmations.length === 0 && (
+                    <Text style={styles.emptyStateText}>No affirmations yet.</Text>
+                )}
 
             </ScrollView>
 
@@ -211,7 +234,7 @@ const ExploreScreen = ({ navigation }) => {
                         <Ionicons name="chatbubble-outline" size={26} color="#BDBDBD" />
                         <Text style={styles.navLabel}>Chat</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem}>
+                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
                         <Ionicons name="person-outline" size={26} color="#BDBDBD" />
                         <Text style={styles.navLabel}>Profile</Text>
                     </TouchableOpacity>
@@ -314,6 +337,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: SPACING.md,
+    },
+    loadingContainer: {
+        paddingVertical: 12,
+        alignItems: 'center',
     },
     sectionTitle: {
         fontSize: 20,
@@ -447,6 +474,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         lineHeight: 24,
+    },
+    emptyStateText: {
+        color: '#757575',
+        textAlign: 'center',
+        marginTop: 8,
     },
     groupCardPreview: {
         flexDirection: 'row',

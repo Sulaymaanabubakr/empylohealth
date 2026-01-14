@@ -14,6 +14,12 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET || ''
 });
 
+const requireAdmin = (context: functions.https.CallableContext) => {
+    if (!context.auth?.token?.admin) {
+        throw new functions.https.HttpsError('permission-denied', 'Admin privileges required.');
+    }
+};
+
 // ==========================================
 // MEDIA FUNCTIONS
 // ==========================================
@@ -26,6 +32,10 @@ export const generateUploadSignature = functions.https.onCall((data, context) =>
     // Ensure user is authenticated
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    if (!process.env.CLOUDINARY_API_SECRET || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_CLOUD_NAME) {
+        throw new functions.https.HttpsError('failed-precondition', 'Cloudinary is not configured.');
     }
 
     const timestamp = Math.round((new Date()).getTime() / 1000);
@@ -74,12 +84,23 @@ export const createCircle = functions.https.onCall(async (data, context) => {
             category: category || 'General',
             adminId: uid,
             members: [uid], // Creator is the first member
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            score: 85, // Default/Mock score for now
-            activityLevel: 'High' // Mock
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
         await circleRef.set(circleData);
+
+        const chatRef = db.collection('chats').doc();
+        await chatRef.set({
+            type: 'group',
+            name,
+            circleId: circleRef.id,
+            participants: [uid],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        await circleRef.update({ chatId: chatRef.id });
+
         console.log(`[Circles] Circle created: ${name} (${circleRef.id}) by ${uid}`);
 
         return { success: true, circleId: circleRef.id };
@@ -113,16 +134,105 @@ export const joinCircle = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('not-found', 'Circle not found.');
         }
 
-        // Add user to members array
-        await circleRef.update({
+        const circleData = circleDoc.data() || {};
+        const updates = {
             members: admin.firestore.FieldValue.arrayUnion(uid)
-        });
+        };
+        await circleRef.update(updates);
+
+        if (circleData.chatId) {
+            await db.collection('chats').doc(circleData.chatId).update({
+                participants: admin.firestore.FieldValue.arrayUnion(uid),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
 
         console.log(`[Circles] User ${uid} joined circle ${circleId}`);
         return { success: true };
     } catch (error) {
         console.error("Error joining circle:", error);
         throw new functions.https.HttpsError('internal', 'Unable to join circle.');
+    }
+});
+
+/**
+ * Leave an existing Circle
+ * Callable Function: 'leaveCircle'
+ */
+export const leaveCircle = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { circleId } = data;
+    const uid = context.auth.uid;
+
+    if (!circleId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Circle ID is required.');
+    }
+
+    try {
+        const circleRef = db.collection('circles').doc(circleId);
+        const circleDoc = await circleRef.get();
+
+        if (!circleDoc.exists) {
+            throw new functions.https.HttpsError('not-found', 'Circle not found.');
+        }
+
+        const circleData = circleDoc.data() || {};
+        await circleRef.update({
+            members: admin.firestore.FieldValue.arrayRemove(uid),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        if (circleData.chatId) {
+            await db.collection('chats').doc(circleData.chatId).update({
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        console.log(`[Circles] User ${uid} left circle ${circleId}`);
+        return { success: true };
+    } catch (error) {
+        console.error("Error leaving circle:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to leave circle.');
+    }
+});
+
+/**
+ * Leave an existing Circle
+ * Callable Function: 'leaveCircle'
+ */
+export const leaveCircle = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { circleId } = data;
+    const uid = context.auth.uid;
+
+    if (!circleId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Circle ID is required.');
+    }
+
+    try {
+        const circleRef = db.collection('circles').doc(circleId);
+        const circleDoc = await circleRef.get();
+
+        if (!circleDoc.exists) {
+            throw new functions.https.HttpsError('not-found', 'Circle not found.');
+        }
+
+        await circleRef.update({
+            members: admin.firestore.FieldValue.arrayRemove(uid)
+        });
+
+        console.log(`[Circles] User ${uid} left circle ${circleId}`);
+        return { success: true };
+    } catch (error) {
+        console.error("Error leaving circle:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to leave circle.');
     }
 });
 
@@ -143,6 +253,9 @@ export const createDirectChat = functions.https.onCall(async (data, context) => 
     const uid = context.auth.uid;
 
     if (!recipientId) throw new functions.https.HttpsError('invalid-argument', 'Recipient ID required.');
+    if (recipientId === uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'Recipient must be a different user.');
+    }
 
     try {
         // Check if chat already exists
@@ -200,12 +313,26 @@ export const sendMessage = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'Text messages require text.');
     }
 
+    const allowedTypes = ['text', 'image', 'video', 'system'];
+    if (!allowedTypes.includes(type)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid message type.');
+    }
+
+    if (type === 'system') {
+        throw new functions.https.HttpsError('permission-denied', 'System messages are not allowed from clients.');
+    }
+
     try {
         const chatRef = db.collection('chats').doc(chatId);
-
-        // simple validation: check if user is in participants (optional but good security)
-        // skipping detailed read for speed, assuming UI separates correctness. 
-        // Real app should read chatRef and check participants.
+        const chatDoc = await chatRef.get();
+        if (!chatDoc.exists) {
+            throw new functions.https.HttpsError('not-found', 'Chat not found.');
+        }
+        const chatData = chatDoc.data();
+        const participants = chatData?.participants || [];
+        if (!participants.includes(uid)) {
+            throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
+        }
 
         const messageData = {
             senderId: uid,
@@ -283,7 +410,7 @@ export const getUserStats = functions.https.onCall(async (data, context) => {
             .get();
 
         if (snapshot.empty) {
-            return { score: 79, label: 'Thriving' }; // Default for demo
+            return { score: null, label: 'No data' };
         }
 
         const latest = snapshot.docs[0].data();
@@ -308,12 +435,18 @@ export const getUserStats = functions.https.onCall(async (data, context) => {
 export const getKeyChallenges = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
-    // For now, return static or random challenges as we don't have a complex challenge engine yet
-    // In future: Analyze assessment answers
-    return [
-        { title: 'Sleep', level: 'Moderate', icon: 'weather-night', color: '#FF9800', bg: '#FFF3E0' },
-        { title: 'Work-Life Balance', level: 'High', icon: 'briefcase-clock-outline', color: '#F44336', bg: '#FFEBEE' }
-    ];
+    try {
+        const snapshot = await db.collection('challenges')
+            .where('status', '==', 'published')
+            .orderBy('priority', 'desc')
+            .limit(6)
+            .get();
+        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return items;
+    } catch (error) {
+        console.error("Error fetching challenges:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to fetch challenges.');
+    }
 });
 
 // ==========================================
@@ -327,27 +460,10 @@ export const getKeyChallenges = functions.https.onCall(async (data, context) => 
 export const updateSubscription = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
-    const { planId, status } = data; // planId: 'pro', 'enterprise'
-    const uid = context.auth.uid;
-
-    try {
-        // In a real app, verify payment signature/webhook here.
-        // For now, we trust the client (or this is called by a webhook).
-
-        await db.collection('users').doc(uid).update({
-            'subscription.plan': planId,
-            'subscription.status': status || 'active',
-            'subscription.updatedAt': admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        // Update Custom Claims if using Firebase Auth Claims for roles
-        await admin.auth().setCustomUserClaims(uid, { plan: planId });
-
-        return { success: true };
-    } catch (error) {
-        console.error("Error updating subscription:", error);
-        throw new functions.https.HttpsError('internal', 'Unable to update subscription.');
-    }
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Direct subscription updates are disabled. Use verified in-app purchase receipts.'
+    );
 });
 
 // ==========================================
@@ -369,6 +485,15 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
     try {
         let roomUrl = null;
         const DAILY_API_KEY = process.env.DAILY_API_KEY;
+        const chatRef = db.collection('chats').doc(chatId);
+        const chatDoc = await chatRef.get();
+        if (!chatDoc.exists) {
+            throw new functions.https.HttpsError('not-found', 'Chat not found.');
+        }
+        const participants = chatDoc.data()?.participants || [];
+        if (!participants.includes(uid)) {
+            throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
+        }
 
         // 1. Create Room via Daily.co API if Key exists
         if (DAILY_API_KEY) {
@@ -396,9 +521,7 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
         }
 
         if (!roomUrl) {
-            // Fallback for development/testing without key
-            console.log("No DAILY_API_KEY found or API failed. Using mock URL.");
-            roomUrl = `https://demo.daily.co/huddle-${chatId}`;
+            throw new functions.https.HttpsError('failed-precondition', 'Video service is not configured.');
         }
 
         const huddleRef = db.collection('huddles').doc();
@@ -440,6 +563,19 @@ export const updateHuddleState = functions.https.onCall(async (data, context) =>
 
     try {
         const huddleRef = db.collection('huddles').doc(huddleId);
+        const huddleDoc = await huddleRef.get();
+        if (!huddleDoc.exists) {
+            throw new functions.https.HttpsError('not-found', 'Huddle not found.');
+        }
+        const chatId = huddleDoc.data()?.chatId;
+        if (!chatId) {
+            throw new functions.https.HttpsError('failed-precondition', 'Huddle is missing chat reference.');
+        }
+        const chatDoc = await db.collection('chats').doc(chatId).get();
+        const participants = chatDoc.data()?.participants || [];
+        if (!participants.includes(uid)) {
+            throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
+        }
 
         if (action === 'join') {
             await huddleRef.update({
@@ -479,8 +615,11 @@ export const getExploreContent = functions.https.onCall(async (data, context) =>
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     try {
-        // Fetch recent/featured resources
-        const snapshot = await db.collection('resources').where('status', '==', 'published').limit(20).get();
+        const snapshot = await db.collection('resources')
+            .where('status', '==', 'published')
+            .orderBy('publishedAt', 'desc')
+            .limit(30)
+            .get();
         const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         return { items };
     } catch (error) {
@@ -496,13 +635,71 @@ export const getExploreContent = functions.https.onCall(async (data, context) =>
 export const getAffirmations = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
-    return {
-        items: [
-            { id: 'a1', text: 'I am grounded, calm, and capable.' },
-            { id: 'a2', text: 'I can take one step at a time.' },
-            { id: 'a3', text: 'My growth is steady and real.' }
-        ]
-    };
+    try {
+        const snapshot = await db.collection('affirmations')
+            .where('status', '==', 'published')
+            .orderBy('publishedAt', 'desc')
+            .limit(30)
+            .get();
+        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return { items };
+    } catch (error) {
+        console.error("Error fetching affirmations:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to fetch affirmations.');
+    }
+});
+
+// ==========================================
+// CONTACT (WEB) FUNCTIONS
+// ==========================================
+
+export const submitContactForm = functions.https.onRequest(async (req, res) => {
+    const allowedOrigins = (process.env.CONTACT_ALLOWED_ORIGINS || '*')
+        .split(',')
+        .map(origin => origin.trim())
+        .filter(Boolean);
+    const origin = req.headers.origin || '';
+
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        res.set('Access-Control-Allow-Origin', origin || '*');
+        res.set('Access-Control-Allow-Headers', 'Content-Type');
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    }
+
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+
+    try {
+        const { firstName, lastName, email, company, message } = req.body || {};
+        if (!firstName || !lastName || !email || !company || !message) {
+            res.status(400).json({ error: 'Missing required fields.' });
+            return;
+        }
+
+        await db.collection('contactMessages').add({
+            firstName: String(firstName).trim(),
+            lastName: String(lastName).trim(),
+            email: String(email).trim(),
+            company: String(company).trim(),
+            message: String(message).trim(),
+            status: 'new',
+            source: 'webapp',
+            userAgent: req.headers['user-agent'] || '',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('Error submitting contact form:', error);
+        res.status(500).json({ error: 'Unable to submit contact form.' });
+    }
 });
 
 /**
@@ -510,7 +707,7 @@ export const getAffirmations = functions.https.onCall(async (data, context) => {
  * Callable Function: 'seedResources'
  */
 export const seedResources = functions.https.onCall(async (data, context) => {
-    // SECURITY: In real app, check context.auth.token.admin == true
+    requireAdmin(context);
 
     const resources = [
         {
@@ -536,127 +733,53 @@ export const seedResources = functions.https.onCall(async (data, context) => {
     return { success: true, count: resources.length };
 });
 
-/**
- * Seed Demo Data for current user
- * Callable Function: 'seedDemoData'
- */
-export const seedDemoData = functions.https.onCall(async (data, context) => {
+// ==========================================
+// ACCOUNT MANAGEMENT
+// ==========================================
+
+export const deleteUserAccount = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-
     const uid = context.auth.uid;
-    const demoUserId = `demo_${uid.slice(0, 8)}`;
 
-    const demoUser = {
-        uid: demoUserId,
-        email: 'demo.user@empylo.com',
-        name: 'Demo User',
-        role: 'personal',
-        photoURL: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=crop&w=256&q=80',
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
+    try {
+        const batch = db.batch();
+        batch.delete(db.collection('users').doc(uid));
 
-    const resources = [
-        {
-            title: 'Sleep hygiene',
-            type: 'article',
-            tag: 'LEARN',
-            time: '12 Mins',
-            status: 'published',
-            category: 'Self-development',
-            image: 'https://img.freepik.com/free-vector/sleep-analysis-concept-illustration_114360-6395.jpg',
-            content: "Good sleep hygiene is typically defined as a set of behavioral and environmental recommendations..."
-        },
-        {
-            title: 'Mindfulness for Beginners',
-            type: 'video',
-            tag: 'WATCH',
-            time: '5 Mins',
-            status: 'published',
-            category: 'Wellness',
-            image: 'https://img.freepik.com/free-vector/meditation-concept-illustration_114360-2212.jpg',
-            mediaUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
-            content: "A short video introducing mindfulness techniques."
-        },
-        {
-            title: 'Stress Management 101',
-            type: 'article',
-            tag: 'LEARN',
-            time: '8 Mins',
-            status: 'published',
-            category: 'Mental Health',
-            image: 'https://img.freepik.com/free-vector/stress-concept-illustration_114360-2394.jpg',
-            content: "Learn how to manage stress effectively with these simple tips."
-        }
-    ];
-
-    const circles = [
-        {
-            name: 'Community Connect',
-            description: 'A community dedicated to connecting people from diverse backgrounds.',
-            category: 'Culture',
-            tags: ['Connect', 'Culture'],
-            image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?ixlib=rb-1.2.1&auto=format&fit=crop&w=640&q=80',
-            activityLevel: 'High'
-        },
-        {
-            name: 'Mindful Moments',
-            description: 'Practice mindfulness and meditation techniques to reduce stress.',
-            category: 'Mental health',
-            tags: ['Mental health'],
-            image: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?ixlib=rb-1.2.1&auto=format&fit=crop&w=640&q=80',
-            activityLevel: 'Medium'
-        }
-    ];
-
-    const batch = db.batch();
-
-    // Demo user doc
-    const demoUserRef = db.collection('users').doc(demoUserId);
-    batch.set(demoUserRef, demoUser, { merge: true });
-
-    // Resources
-    resources.forEach(res => {
-        const ref = db.collection('resources').doc();
-        batch.set(ref, res);
-    });
-
-    // Circles
-    circles.forEach(circle => {
-        const circleRef = db.collection('circles').doc();
-        batch.set(circleRef, {
-            id: circleRef.id,
-            name: circle.name,
-            description: circle.description,
-            category: circle.category,
-            tags: circle.tags,
-            image: circle.image,
-            adminId: uid,
-            members: [uid, demoUserId],
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            score: 75,
-            activityLevel: circle.activityLevel
+        const circlesSnap = await db.collection('circles').where('members', 'array-contains', uid).get();
+        circlesSnap.docs.forEach(doc => {
+            batch.update(doc.ref, { members: admin.firestore.FieldValue.arrayRemove(uid) });
         });
-    });
 
-    await batch.commit();
+        const chatsSnap = await db.collection('chats').where('participants', 'array-contains', uid).get();
+        chatsSnap.docs.forEach(doc => {
+            batch.update(doc.ref, { participants: admin.firestore.FieldValue.arrayRemove(uid) });
+        });
 
-    // Direct chat between current user and demo user
-    const chatRef = db.collection('chats').doc();
-    await chatRef.set({
-        type: 'direct',
-        participants: [uid, demoUserId],
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastMessage: 'Welcome to Empylo!',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+        await batch.commit();
 
-    await chatRef.collection('messages').add({
-        senderId: demoUserId,
-        text: 'Welcome to Empylo! Glad you are here.',
-        type: 'text',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        readBy: [demoUserId]
-    });
+        const assessmentsSnap = await db.collection('assessments').where('uid', '==', uid).get();
+        if (!assessmentsSnap.empty) {
+            const deleteBatches = [];
+            let currentBatch = db.batch();
+            let count = 0;
+            assessmentsSnap.docs.forEach((docSnap) => {
+                currentBatch.delete(docSnap.ref);
+                count += 1;
+                if (count === 400) {
+                    deleteBatches.push(currentBatch.commit());
+                    currentBatch = db.batch();
+                    count = 0;
+                }
+            });
+            deleteBatches.push(currentBatch.commit());
+            await Promise.all(deleteBatches);
+        }
 
-    return { success: true };
+        await admin.auth().deleteUser(uid);
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting user account:', error);
+        throw new functions.https.HttpsError('internal', 'Unable to delete account.');
+    }
 });

@@ -12,8 +12,7 @@ export const resourceService = {
             return result.data.items || [];
         } catch (error) {
             console.error("Error fetching explore content:", error);
-            // Fallback to empty or cached in real app
-            return [];
+            throw error;
         }
     },
 
@@ -27,7 +26,7 @@ export const resourceService = {
             return result.data.items || [];
         } catch (error) {
             console.log("Error fetching affirmations", error);
-            return []; // Return empty to handle gracefully
+            throw error;
         }
     },
 
@@ -37,19 +36,6 @@ export const resourceService = {
     seedResources: async () => {
         try {
             const seedFn = httpsCallable(functions, 'seedResources');
-            await seedFn();
-            return { success: true };
-        } catch (error) {
-            console.error(error);
-        }
-    },
-
-    /**
-     * Seed demo data for current user
-     */
-    seedDemoData: async () => {
-        try {
-            const seedFn = httpsCallable(functions, 'seedDemoData');
             await seedFn();
             return { success: true };
         } catch (error) {

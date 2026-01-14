@@ -1,30 +1,37 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TextInput, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Platform, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
+import { COLORS, SPACING, TYPOGRAPHY } from '../theme/theme';
 import Button from '../components/Button';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 
 import EmailIllustration from '../../assets/images/email_icon.svg';
+import { authService } from '../services/auth/authService';
+import { useAuth } from '../context/AuthContext';
 
 const VerificationScreen = ({ navigation, route }) => {
   const { type = 'personal' } = route.params || {};
-  const [code, setCode] = useState(['', '', '', '']);
-  const inputs = useRef([]);
+  const { user } = useAuth();
 
-  const handleCodeChange = (text, index) => {
-    const newCode = [...code];
-    newCode[index] = text;
-    setCode(newCode);
-
-    if (text && index < 3) {
-      inputs.current[index + 1].focus();
+  const handleVerify = async () => {
+    try {
+      const result = await authService.refreshEmailVerification();
+      if (result.verified) {
+        navigation.navigate(type === 'client' ? 'ProfileSetupClient' : 'ProfileSetup');
+        return;
+      }
+      Alert.alert('Not verified', 'Please verify your email using the link we sent.');
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Unable to verify email.');
     }
   };
 
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
-      inputs.current[index - 1].focus();
+  const handleResend = async () => {
+    try {
+      await authService.sendVerificationEmail();
+      Alert.alert('Email sent', 'Check your inbox for the verification link.');
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Unable to resend verification email.');
     }
   };
 
@@ -41,35 +48,20 @@ const VerificationScreen = ({ navigation, route }) => {
           <EmailIllustration width={120} height={120} />
         </View>
 
-        <View style={styles.codeContainer}>
-          {code.map((digit, index) => (
-            <TextInput
-              key={index}
-              ref={ref => (inputs.current[index] = ref)}
-              style={styles.codeInput}
-              value={digit}
-              onChangeText={text => handleCodeChange(text, index)}
-              onKeyPress={e => handleKeyPress(e, index)}
-              keyboardType="number-pad"
-              maxLength={1}
-            />
-          ))}
-        </View>
-
         <Text style={styles.infoText}>
-          We sent a four digit verification code to your email{"\n"}
-          <Text style={styles.emailText}>jane******@gmail.com</Text>
+          We sent a verification link to your email{"\n"}
+          <Text style={styles.emailText}>{user?.email || 'your email address'}</Text>
         </Text>
 
         <Button
           title="Verify"
-          onPress={() => navigation.navigate(type === 'client' ? 'ProfileSetupClient' : 'ProfileSetup')}
+          onPress={handleVerify}
           style={styles.verifyButton}
         />
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Didn't receive code? </Text>
-          <TouchableOpacity>
+          <Text style={styles.footerText}>Didn't receive the email? </Text>
+          <TouchableOpacity onPress={handleResend}>
             <Text style={styles.resendText}>Resend</Text>
           </TouchableOpacity>
         </View>
@@ -103,22 +95,6 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     marginBottom: SPACING.xl,
-  },
-  codeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.xl,
-  },
-  codeInput: {
-    width: 65,
-    height: 65,
-    backgroundColor: '#EAEAEA',
-    borderRadius: RADIUS.md,
-    textAlign: 'center',
-    fontSize: 24,
-    fontWeight: 'bold',
   },
   infoText: {
     ...TYPOGRAPHY.caption,

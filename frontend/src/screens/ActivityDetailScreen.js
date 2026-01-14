@@ -9,7 +9,17 @@ const { width } = Dimensions.get('window');
 const ActivityDetailScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
 
-    const { activity } = route.params;
+    const { activity } = route.params || {};
+    if (!activity) {
+        return (
+            <View style={styles.container}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <View style={styles.contentContainer}>
+                    <Text style={styles.sectionText}>Activity details are unavailable.</Text>
+                </View>
+            </View>
+        );
+    }
     const { headerColor = activity.color, isDarkText = false } = activity;
     const textColor = isDarkText ? '#1A1A1A' : '#FFFFFF';
     const badgeBg = isDarkText ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.25)';
@@ -46,13 +56,17 @@ const ActivityDetailScreen = ({ navigation, route }) => {
 
                 {/* Content Area */}
                 <View style={styles.contentContainer}>
-                    <View style={styles.imageContainer}>
-                        <Image
-                            source={{ uri: activity.image }}
-                            style={styles.illustration}
-                            resizeMode="contain"
-                        />
-                    </View>
+                    {activity.image ? (
+                    {activity.image ? (
+                        <View style={styles.imageContainer}>
+                            <Image
+                                source={{ uri: activity.image }}
+                                style={styles.illustration}
+                                resizeMode="contain"
+                            />
+                        </View>
+                    ) : null}
+                    ) : null}
 
                     <Text style={styles.sectionText}>
                         {activity.description}

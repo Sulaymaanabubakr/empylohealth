@@ -5,6 +5,14 @@ import {
     signOut,
     updateProfile,
     onAuthStateChanged,
+    sendPasswordResetEmail,
+    confirmPasswordReset,
+    sendEmailVerification,
+    reload,
+    getMultiFactorResolver,
+    PhoneAuthProvider,
+    PhoneMultiFactorGenerator,
+    TotpMultiFactorGenerator,
     GoogleAuthProvider,
     OAuthProvider,
     signInWithCredential
@@ -17,6 +25,7 @@ import * as Crypto from 'expo-crypto';
  * Service to handle all Authentication logic
  */
 export const authService = {
+    _pendingMfaResolver: null,
     /**
      * Initialize Google Sign In
      * @param {string} webClientId - From Firebase Console > Auth > Google > Web SDK config
@@ -36,6 +45,11 @@ export const authService = {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             return { success: true, user: userCredential.user };
         } catch (error) {
+            if (error.code === 'auth/multi-factor-auth-required') {
+                const resolver = getMultiFactorResolver(auth, error);
+                authService._pendingMfaResolver = resolver;
+                return { success: false, mfaRequired: true, hints: resolver.hints };
+            }
             throw error;
         }
     },
@@ -49,6 +63,7 @@ export const authService = {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
             await updateProfile(user, { displayName: name });
+            await sendEmailVerification(user);
             return { success: true, user };
         } catch (error) {
             throw error;
@@ -73,10 +88,88 @@ export const authService = {
     },
 
     /**
+     * Send password reset email
+     */
+    sendPasswordReset: async (email) => {
+        try {
+            await sendPasswordResetEmail(auth, email);
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    },
+
+    /**
+     * Confirm password reset using OOB code
+     */
+    confirmPasswordReset: async (oobCode, newPassword) => {
+        try {
+            await confirmPasswordReset(auth, oobCode, newPassword);
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    },
+
+    /**
+     * Refresh and check if email is verified
+     */
+    refreshEmailVerification: async () => {
+        if (!auth.currentUser) return { verified: false };
+        await reload(auth.currentUser);
+        return { verified: auth.currentUser.emailVerified };
+    },
+
+    sendVerificationEmail: async () => {
+        if (!auth.currentUser) {
+            throw new Error('No authenticated user.');
+        }
+        await sendEmailVerification(auth.currentUser);
+        return { success: true };
+    },
+
+    /**
      * Subscribe to auth state changes
      */
     onAuthStateChanged: (callback) => {
         return onAuthStateChanged(auth, callback);
+    },
+
+    getPendingMfaResolver: () => authService._pendingMfaResolver,
+    clearPendingMfaResolver: () => {
+        authService._pendingMfaResolver = null;
+    },
+
+    startSmsMfaSignIn: async (hint, recaptchaVerifier) => {
+        if (!authService._pendingMfaResolver) {
+            throw new Error('No pending MFA resolver.');
+        }
+        const phoneProvider = new PhoneAuthProvider(auth);
+        return phoneProvider.verifyPhoneNumber(
+            { multiFactorHint: hint, session: authService._pendingMfaResolver.session },
+            recaptchaVerifier
+        );
+    },
+
+    resolveSmsMfaSignIn: async (verificationId, code) => {
+        if (!authService._pendingMfaResolver) {
+            throw new Error('No pending MFA resolver.');
+        }
+        const credential = PhoneAuthProvider.credential(verificationId, code);
+        const assertion = PhoneMultiFactorGenerator.assertion(credential);
+        const result = await authService._pendingMfaResolver.resolveSignIn(assertion);
+        authService._pendingMfaResolver = null;
+        return result;
+    },
+
+    resolveTotpMfaSignIn: async (hint, code) => {
+        if (!authService._pendingMfaResolver) {
+            throw new Error('No pending MFA resolver.');
+        }
+        const assertion = TotpMultiFactorGenerator.assertionForSignIn(hint.uid, code);
+        const result = await authService._pendingMfaResolver.resolveSignIn(assertion);
+        authService._pendingMfaResolver = null;
+        return result;
     },
 
     /**

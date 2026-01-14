@@ -1,11 +1,38 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { authService } from '../services/auth/authService';
 
-const ResetPasswordScreen = ({ navigation }) => {
+const ResetPasswordScreen = ({ navigation, route }) => {
+    const { oobCode } = route.params || {};
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleReset = async () => {
+        if (!oobCode) {
+            Alert.alert('Missing code', 'Open the reset link from your email.');
+            return;
+        }
+        if (!password || password !== confirmPassword) {
+            Alert.alert('Password mismatch', 'Please enter matching passwords.');
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            await authService.confirmPasswordReset(oobCode, password);
+            Alert.alert('Success', 'Your password has been reset.');
+            navigation.navigate('SignIn');
+        } catch (error) {
+            Alert.alert('Error', error.message || 'Unable to reset password.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -24,6 +51,8 @@ const ResetPasswordScreen = ({ navigation }) => {
                     placeholder="Enter your password..."
                     secureTextEntry
                     icon={<MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.secondary} />}
+                    value={password}
+                    onChangeText={setPassword}
                 />
 
                 <Input
@@ -31,12 +60,15 @@ const ResetPasswordScreen = ({ navigation }) => {
                     placeholder="Confirm your password..."
                     secureTextEntry
                     icon={<MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.secondary} />}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
                 />
 
                 <Button
-                    title="Reset Password"
-                    onPress={() => navigation.navigate('SignIn')}
+                    title={isSubmitting ? "Resetting..." : "Reset Password"}
+                    onPress={handleReset}
                     style={styles.resetButton}
+                    disabled={isSubmitting}
                 />
             </ScrollView>
         </SafeAreaView>

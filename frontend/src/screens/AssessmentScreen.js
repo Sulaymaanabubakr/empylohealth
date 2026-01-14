@@ -6,10 +6,12 @@ import Button from '../components/Button';
 import { Ionicons } from '@expo/vector-icons';
 import EmojiFace from '../components/EmojiFace';
 import VisibleSlider from '../components/VisibleSlider';
+import { assessmentService } from '../services/api/assessmentService';
 
 const AssessmentScreen = ({ navigation }) => {
     // 0 = Default (Gray), 1 = Nope, 2 = Not sure, 3 = A little bit, 4 = Kind of, 5 = Absolutely
     const [sliderValue, setSliderValue] = useState(0);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const labels = {
         0: '',
@@ -18,6 +20,20 @@ const AssessmentScreen = ({ navigation }) => {
         3: 'A little bit',
         4: 'Kind of',
         5: 'Absolutely'
+    };
+
+    const handleContinue = async () => {
+        setIsSubmitting(true);
+        try {
+            const score = Math.round((sliderValue / 5) * 100);
+            const mood = labels[sliderValue] || '';
+            await assessmentService.submitAssessment('daily', score, {}, mood);
+            navigation.navigate('NineIndex');
+        } catch (error) {
+            console.error('Assessment submission failed', error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -51,9 +67,10 @@ const AssessmentScreen = ({ navigation }) => {
                     </View>
 
                     <Button
-                        title="Continue"
-                        onPress={() => navigation.navigate('NineIndex')}
+                        title={isSubmitting ? "Saving..." : "Continue"}
+                        onPress={handleContinue}
                         style={styles.continueButton}
+                        disabled={isSubmitting}
                     />
                 </View>
             </View>

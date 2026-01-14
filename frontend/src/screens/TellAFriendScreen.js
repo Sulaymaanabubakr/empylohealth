@@ -7,7 +7,7 @@ import Avatar from '../components/Avatar';
 
 const TellAFriendScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
-    const avatarUri = userData?.photoURL || user?.photoURL || 'https://via.placeholder.com/150';
+    const avatarUri = userData?.photoURL || user?.photoURL || '';
 
     const handleShare = async () => {
         try {

@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
 import { huddleService } from '../services/api/huddleService';
+import Avatar from '../components/Avatar';
 
 const ChatDetailScreen = ({ navigation, route }) => {
     const { chat } = route.params;
@@ -61,8 +62,6 @@ const ChatDetailScreen = ({ navigation, route }) => {
         }
     };
 
-    const safeAvatar = chat.avatar || 'https://via.placeholder.com/150';
-
     const renderMessage = ({ item }) => {
         const isMe = item.isMe;
         // Design: Incoming (Left) = Teal, Outgoing (Right) = Light
@@ -70,7 +69,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
             <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
                 {!isMe && (
                     // Optional: Show avatar next to message for group chats or other style
-                    <Image source={{ uri: safeAvatar }} style={styles.messageAvatar} />
+                    <Avatar uri={chat.avatar} name={chat.name} size={32} />
                 )}
                 <View style={[styles.messageBubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
                     <Text style={[styles.messageText, isMe ? styles.textMe : styles.textOther]}>
@@ -97,7 +96,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Image source={{ uri: safeAvatar }} style={styles.headerAvatar} />
+                <Avatar uri={chat.avatar} name={chat.name} size={40} />
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerName}>{chat.name}</Text>
                     <Text style={styles.headerStatus}>{chat.members ? `${chat.members} members` : (chat.isOnline ? 'Online' : 'Offline')}</Text>
@@ -132,9 +131,6 @@ const ChatDetailScreen = ({ navigation, route }) => {
                             onChangeText={setInputText}
                             multiline
                         />
-                        <TouchableOpacity style={styles.micButton}>
-                            <Feather name="mic" size={20} color={COLORS.primary} />
-                        </TouchableOpacity>
                     </View>
                     {inputText.trim().length > 0 && (
                         <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
@@ -267,9 +263,6 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: '#1A1A1A',
         maxHeight: 100,
-    },
-    micButton: {
-        marginLeft: 8,
     },
     sendButton: {
         width: 44,

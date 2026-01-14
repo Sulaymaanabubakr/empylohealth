@@ -8,6 +8,8 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
 import Avatar from '../components/Avatar';
+import { db } from '../services/firebaseConfig';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 const ClientProfileScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
@@ -24,15 +26,42 @@ const ClientProfileScreen = ({ navigation }) => {
         }
     }, [user]);
 
-    const safeAvatar = userData?.photoURL || user?.photoURL || 'https://via.placeholder.com/150';
+    const safeAvatar = userData?.photoURL || user?.photoURL || '';
     const displayName = userData?.name || user?.displayName || 'User';
     const displayEmail = userData?.email || user?.email || '';
     const displayRole = userData?.role || 'client';
 
-    const learningSessions = [];
-    const campaigns = [];
-    const completedLearningSessions = [];
-    const completedCampaigns = [];
+    const [learningSessions, setLearningSessions] = useState([]);
+    const [campaigns, setCampaigns] = useState([]);
+    const [completedLearningSessions, setCompletedLearningSessions] = useState([]);
+    const [completedCampaigns, setCompletedCampaigns] = useState([]);
+
+    useEffect(() => {
+        if (!user?.uid) return;
+        const fetchActivity = async () => {
+            try {
+                const [ongoingSessionsSnap, completedSessionsSnap, ongoingCampaignsSnap, completedCampaignsSnap] = await Promise.all([
+                    getDocs(query(collection(db, 'learningSessions'), where('uid', '==', user.uid), where('status', '==', 'ongoing'))),
+                    getDocs(query(collection(db, 'learningSessions'), where('uid', '==', user.uid), where('status', '==', 'completed'))),
+                    getDocs(query(collection(db, 'campaigns'), where('uid', '==', user.uid), where('status', '==', 'ongoing'))),
+                    getDocs(query(collection(db, 'campaigns'), where('uid', '==', user.uid), where('status', '==', 'completed'))),
+                ]);
+
+                setLearningSessions(ongoingSessionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                setCompletedLearningSessions(completedSessionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                setCampaigns(ongoingCampaignsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                setCompletedCampaigns(completedCampaignsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            } catch (error) {
+                console.error('Failed to load activity data', error);
+                setLearningSessions([]);
+                setCompletedLearningSessions([]);
+                setCampaigns([]);
+                setCompletedCampaigns([]);
+            }
+        };
+
+        fetchActivity();
+    }, [user?.uid]);
 
     const renderHeader = () => (
         <View style={styles.header}>
@@ -168,7 +197,15 @@ const ClientProfileScreen = ({ navigation }) => {
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.campaignList}>
                             {campaigns.map((camp) => (
                                 <View key={camp.id} style={styles.campaignCard}>
-                                    <Image source={{ uri: camp.image }} style={styles.campaignImage} />
+                                    {camp.image ? (
+                                        <Image source={{ uri: camp.image }} style={styles.campaignImage} />
+                                    ) : (
+                                        <View style={styles.campaignPlaceholder}>
+                                            <Text style={styles.campaignPlaceholderText}>
+                                                {(camp.title || 'CP').slice(0, 2).toUpperCase()}
+                                            </Text>
+                                        </View>
+                                    )}
                                     <View style={styles.campaignInfo}>
                                         <Text style={styles.campaignTitle}>{camp.title}</Text>
                                         <View style={styles.campaignMeta}>
@@ -212,7 +249,15 @@ const ClientProfileScreen = ({ navigation }) => {
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.campaignList}>
                             {completedCampaigns.map((camp) => (
                                 <View key={camp.id} style={styles.campaignCard}>
-                                    <Image source={{ uri: camp.image }} style={styles.campaignImage} />
+                                    {camp.image ? (
+                                        <Image source={{ uri: camp.image }} style={styles.campaignImage} />
+                                    ) : (
+                                        <View style={styles.campaignPlaceholder}>
+                                            <Text style={styles.campaignPlaceholderText}>
+                                                {(camp.title || 'CP').slice(0, 2).toUpperCase()}
+                                            </Text>
+                                        </View>
+                                    )}
                                     <View style={styles.campaignInfo}>
                                         <Text style={styles.campaignTitle}>{camp.title}</Text>
                                         <View style={styles.completedMeta}>
@@ -537,6 +582,19 @@ const styles = StyleSheet.create({
         width: '100%',
         height: 100,
         marginBottom: 8,
+    },
+    campaignPlaceholder: {
+        width: '100%',
+        height: 100,
+        marginBottom: 8,
+        backgroundColor: '#ECEFF1',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    campaignPlaceholderText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#90A4AE',
     },
     campaignInfo: {
         paddingHorizontal: 12,

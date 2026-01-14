@@ -35,7 +35,9 @@ const SignInScreen = ({ navigation }) => {
     const result = await login(email, password);
     setLoading(false);
 
-    if (result.success) {
+    if (result.mfaRequired) {
+      navigation.navigate('TwoFactorSignIn');
+    } else if (result.success) {
       // Navigation is handled by RootNavigator/App or we can manually navigate if needed
       // Typically the AuthProvider state change triggers a re-render in Navigation
       // But if standard stack, we might need to navigate.  

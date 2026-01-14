@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AssessmentModal from '../components/AssessmentModal';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
+import Avatar from '../components/Avatar';
 
 const { width } = Dimensions.get('window');
 
@@ -17,8 +18,11 @@ const CircularProgress = ({ score, label }) => {
     const strokeWidth = 14;
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
-    const progress = score / 100;
+    const normalizedScore = typeof score === 'number' ? score : 0;
+    const progress = normalizedScore / 100;
     const strokeDashoffset = circumference - progress * circumference;
+    const displayScore = typeof score === 'number' ? score : '--';
+    const displayLabel = label || 'No data';
 
     return (
         <View style={styles.circularProgressContainer}>
@@ -53,8 +57,8 @@ const CircularProgress = ({ score, label }) => {
                 </Svg>
             </View>
             <View style={styles.scoreTextContainer}>
-                <Text style={styles.scoreNumber}>{score}</Text>
-                <Text style={styles.scoreLabel}>{label}</Text>
+                <Text style={styles.scoreNumber}>{displayScore}</Text>
+                <Text style={styles.scoreLabel}>{displayLabel}</Text>
             </View>
         </View>
     );
@@ -131,14 +135,6 @@ const DashboardScreen = ({ navigation }) => {
         month: 'long'
     });
 
-    const timelineData = [
-        { name: 'Ade', status: 'red', position: 0.1 },
-        { name: 'Mary', status: 'yellow', position: 0.25 },
-        { name: 'Chioma', status: 'yellow', position: 0.5 },
-        { name: 'Jane', status: 'green', position: 0.8 },
-        { name: 'Mike', status: 'green', position: 0.95 },
-    ];
-
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar barStyle="dark-content" backgroundColor="#FAFAFA" />
@@ -168,9 +164,10 @@ const DashboardScreen = ({ navigation }) => {
                 {/* User Greeting */}
                 <View style={styles.greetingContainer}>
                     <View style={styles.avatarContainer}>
-                        <Image
-                            source={{ uri: userData?.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=687&q=80' }}
-                            style={styles.avatar}
+                        <Avatar
+                            uri={userData?.photoURL || user?.photoURL}
+                            name={userData?.name || user?.displayName || 'User'}
+                            size={60}
                         />
                         <View style={styles.onlineBadge} />
                     </View>
@@ -187,7 +184,10 @@ const DashboardScreen = ({ navigation }) => {
                         <Text style={styles.wellbeingDescription}>
                             Your score is looking great! Keep up the good work.
                         </Text>
-                        <TouchableOpacity style={styles.checkDetailsButton}>
+                        <TouchableOpacity
+                            style={styles.checkDetailsButton}
+                            onPress={() => navigation.navigate('Assessment')}
+                        >
                             <Text style={styles.checkDetailsText}>Check Details</Text>
                             <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
                         </TouchableOpacity>
@@ -198,7 +198,7 @@ const DashboardScreen = ({ navigation }) => {
                 {/* Circles Section */}
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Circles</Text>
-                    <TouchableOpacity style={styles.seeAllButton}>
+                    <TouchableOpacity style={styles.seeAllButton} onPress={() => navigation.navigate('SupportGroups')}>
                         <Text style={styles.seeAllText}>See All</Text>
                         <Ionicons name="chevron-forward" size={14} color="#FFA726" />
                     </TouchableOpacity>
@@ -224,39 +224,17 @@ const DashboardScreen = ({ navigation }) => {
                                     <Text style={styles.circleTitle}>{circle.name}</Text>
                                     <Text style={styles.circleMembers}>{circle.members?.length || 0} Members • {circle.category || 'General'}</Text>
                                 </View>
-                                <View style={styles.scoreBadge}>
-                                    <Text style={styles.scoreBadgeText}>57.5</Text>
-                                </View>
+                                {typeof circle.score === 'number' && (
+                                    <View style={styles.scoreBadge}>
+                                        <Text style={styles.scoreBadgeText}>{circle.score.toFixed(1)}</Text>
+                                    </View>
+                                )}
                             </View>
 
                             <Text style={styles.circleLabel}>Visual Timeline</Text>
-                            <View style={styles.timelineContainer}>
-                                <View style={styles.timelineLine}>
-                                    <ExpoLinearGradient
-                                        colors={['#FF5252', '#FFD740', '#69F0AE']}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 0 }}
-                                        style={{ flex: 1 }}
-                                    />
-                                </View>
-                                {timelineData.map((person, index) => (
-                                    <View
-                                        key={index}
-                                        style={[
-                                            styles.timelinePerson,
-                                            { left: `${person.position * 100}%`, transform: [{ translateX: -18 }] }
-                                        ]}
-                                    >
-                                        <View style={[styles.avatarBorder, { borderColor: person.status === 'red' ? '#FF5252' : person.status === 'yellow' ? '#FFD740' : '#69F0AE' }]}>
-                                            <Image
-                                                source={{ uri: `https://i.pravatar.cc/150?u=${person.name}` }}
-                                                style={styles.timelineAvatar}
-                                            />
-                                        </View>
-                                        <Text style={styles.timelineName}>{person.name}</Text>
-                                    </View>
-                                ))}
-                            </View>
+                            <Text style={styles.timelineEmptyText}>
+                                Timeline will appear after member check-ins.
+                            </Text>
                         </TouchableOpacity>
                     ))
                 )}
@@ -571,6 +549,12 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         letterSpacing: 1,
         marginBottom: 12,
+    },
+    timelineEmptyText: {
+        fontSize: 12,
+        color: '#9E9E9E',
+        fontWeight: '500',
+        marginBottom: 16,
     },
     timelineContainer: {
         height: 80,

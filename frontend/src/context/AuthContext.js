@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
     // Listen for auth state changes
     useEffect(() => {
         // Initialize Google Sign In
-        authService.init('607256726988-o9os734pbrr74vner4b542oe51t10rpj.apps.googleusercontent.com');
+        authService.init('433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com');
 
         const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
             setUser(currentUser);
@@ -77,9 +77,9 @@ export const AuthProvider = ({ children }) => {
     return (
         <AuthContext.Provider value={{ user, userData, loading, login, register, logout, loginWithGoogle, loginWithApple }}>
             {loading ? (
-                <View style={{ flex: 1, backgroundColor: '#009688', justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ flex: 1, backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center' }}>
                     <Image
-                        source={require('../../assets/images/logo_white.png')}
+                        source={require('../../assets/splash-icon.png')}
                         style={{ width: '60%', height: undefined, aspectRatio: 1, resizeMode: 'contain' }}
                     />
                 </View>

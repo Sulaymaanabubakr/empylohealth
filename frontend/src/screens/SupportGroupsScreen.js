@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, FlatList, Image, TouchableOpacity, ScrollView, StatusBar, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
+import Avatar from '../components/Avatar';
 
 import { circleService } from '../services/api/circleService';
 
@@ -38,7 +39,7 @@ const SupportGroupsScreen = ({ navigation }) => {
 
     const renderGroupCard = ({ item }) => (
         <View style={styles.groupCard}>
-            <Image source={{ uri: item.image || 'https://via.placeholder.com/150' }} style={styles.groupImage} />
+            <Avatar uri={item.image} name={item.name} size={52} style={{ marginRight: 16 }} />
             <View style={styles.groupInfo}>
                 <View style={styles.groupHeader}>
                     <Text style={styles.groupName}>{item.name}</Text>
@@ -46,7 +47,9 @@ const SupportGroupsScreen = ({ navigation }) => {
                 </View>
                 <View style={styles.groupMeta}>
                     <Ionicons name="people" size={14} color="#757575" />
-                    <Text style={styles.memberCount}>{item.members} members</Text>
+                    <Text style={styles.memberCount}>
+                        {Array.isArray(item.members) ? item.members.length : (item.members || 0)} members
+                    </Text>
                 </View>
                 <View style={styles.tagsContainer}>
                     {(item.tags || (item.category ? [item.category] : [])).map(tag => (
@@ -92,7 +95,7 @@ const SupportGroupsScreen = ({ navigation }) => {
 
             {/* Subheader */}
             <View style={styles.subHeader}>
-                <Text style={styles.showingText}>Showing support groups near you</Text>
+                <Text style={styles.showingText}>Showing support groups</Text>
             </View>
 
             {/* Filter Chips */}
@@ -235,12 +238,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 8,
         elevation: 2,
-    },
-    groupImage: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        marginRight: 16,
     },
     groupInfo: {
         flex: 1,

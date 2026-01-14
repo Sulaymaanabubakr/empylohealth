@@ -36,6 +36,36 @@ export const circleService = {
     },
 
     /**
+     * Leave a circle via Backend API
+     * @param {string} circleId 
+     */
+    leaveCircle: async (circleId) => {
+        try {
+            const leaveFn = httpsCallable(functions, 'leaveCircle');
+            const result = await leaveFn({ circleId });
+            return result.data;
+        } catch (error) {
+            console.error("Error leaving circle:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Leave a circle via Backend API
+     * @param {string} circleId
+     */
+    leaveCircle: async (circleId) => {
+        try {
+            const leaveFn = httpsCallable(functions, 'leaveCircle');
+            const result = await leaveFn({ circleId });
+            return result.data;
+        } catch (error) {
+            console.error("Error leaving circle:", error);
+            throw error;
+        }
+    },
+
+    /**
      * Get circles user is a member of (Real-time)
      * @param {string} uid 
      * @param {function} callback 

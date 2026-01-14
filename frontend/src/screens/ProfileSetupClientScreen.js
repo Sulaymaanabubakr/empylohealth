@@ -5,16 +5,17 @@ import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import Dropdown from '../components/Dropdown';
-import DatePicker from '../components/DatePicker';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-
-// Cloudinary configuration
-const CLOUDINARY_CLOUD_NAME = 'your_cloud_name'; // Replace with your Cloudinary cloud name
-const CLOUDINARY_UPLOAD_PRESET = 'your_upload_preset'; // Replace with your upload preset
+import { useAuth } from '../context/AuthContext';
+import { userService } from '../services/api/userService';
+import { mediaService } from '../services/api/mediaService';
 
 const ProfileSetupClientScreen = ({ navigation }) => {
     // Client setup logic only
+    const { user } = useAuth();
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [avatarUri, setAvatarUri] = useState('');
     const [uploading, setUploading] = useState(false);
 
@@ -49,7 +50,43 @@ const ProfileSetupClientScreen = ({ navigation }) => {
 
         if (!result.canceled && result.assets[0]) {
             setAvatarUri(result.assets[0].uri);
-            // uploadToCloudinary(result.assets[0].uri);
+        }
+    };
+
+    const handleSave = async () => {
+        if (!user?.uid) {
+            Alert.alert('Error', 'User not found. Please sign in again.');
+            return;
+        }
+        setUploading(true);
+        try {
+            let photoURL = avatarUri || '';
+            if (avatarUri) {
+                photoURL = await mediaService.uploadAsset(avatarUri, 'avatars');
+            }
+            const updateData = {
+                name: `${firstName} ${lastName}`.trim(),
+                role: 'client',
+                profileCompleted: true,
+                photoURL,
+                demographics: {
+                    ageRange,
+                    ethnicity,
+                    sexuality,
+                    disability,
+                    maritalStatus,
+                    department,
+                    jobRole
+                },
+                updatedAt: new Date()
+            };
+            await userService.updateUserDocument(user.uid, updateData);
+            navigation.navigate('Assessment');
+        } catch (error) {
+            console.error('Client profile setup failed', error);
+            Alert.alert('Error', 'Unable to save profile. Please try again.');
+        } finally {
+            setUploading(false);
         }
     };
 
@@ -77,10 +114,10 @@ const ProfileSetupClientScreen = ({ navigation }) => {
 
                 <View style={styles.row}>
                     <View style={{ flex: 1, marginRight: SPACING.md }}>
-                        <Input label="Name" placeholder="First name" />
+                        <Input label="Name" placeholder="First name" value={firstName} onChangeText={setFirstName} />
                     </View>
                     <View style={{ flex: 1 }}>
-                        <Input label="" placeholder="Last name" />
+                        <Input label="" placeholder="Last name" value={lastName} onChangeText={setLastName} />
                     </View>
                 </View>
 
@@ -141,9 +178,10 @@ const ProfileSetupClientScreen = ({ navigation }) => {
                 />
 
                 <Button
-                    title="Save & Continue"
-                    onPress={() => navigation.navigate('Assessment')}
+                    title={uploading ? 'Saving...' : 'Save & Continue'}
+                    onPress={handleSave}
                     style={styles.saveButton}
+                    disabled={uploading}
                 />
             </ScrollView>
         </SafeAreaView>

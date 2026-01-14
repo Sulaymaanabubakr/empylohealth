@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -10,29 +10,49 @@ import { PrimaryButton } from '../components/Buttons';
 import { Pill } from '../components/Pill';
 import { ListRow } from '../components/ListRow';
 import { theme } from '../theme/theme';
+import { useAuth } from '../context/AuthContext';
+import { assessmentService } from '../services/api/assessmentService';
+import { resourceService } from '../services/api/resourceService';
 
-const demoUser = {
-  name: 'Sulaymaan',
-  streak: '4-day streak',
-  focus: 'Balance & clarity',
-};
+export function HomeScreen({ navigation }) {
+  const { userData, user } = useAuth();
+  const [resources, setResources] = useState([]);
+  const [wellbeing, setWellbeing] = useState(null);
 
-const feedCards = [
-  {
-    id: '1',
-    title: 'Morning Reset',
-    subtitle: '3-min breathing + intention',
-    tone: theme.colors.accentSoft,
-  },
-  {
-    id: '2',
-    title: 'Focus Soundscape',
-    subtitle: '20-min deep work mix',
-    tone: theme.colors.lavender,
-  },
-];
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      try {
+        const [items, stats] = await Promise.all([
+          resourceService.getExploreContent(),
+          assessmentService.getWellbeingStats()
+        ]);
+        if (!isMounted) return;
+        setResources(items || []);
+        setWellbeing(stats || null);
+      } catch (error) {
+        if (!isMounted) return;
+        setResources([]);
+        setWellbeing(null);
+      }
+    };
+    load();
+    return () => { isMounted = false; };
+  }, []);
 
-export function HomeScreen() {
+  const heroTitle = `Hello, ${userData?.name?.split(' ')[0] || user?.displayName || 'there'}`;
+  const heroSubtitle = userData?.focus || 'Welcome back';
+  const streakLabel = userData?.streak ? `${userData.streak}-day streak` : null;
+
+  const feedCards = useMemo(() => {
+    return (resources || []).slice(0, 2).map((item, index) => ({
+      id: item.id || String(index),
+      title: item.title || item.name || 'Untitled',
+      subtitle: item.subtitle || item.description || '',
+      tone: item.color || (index % 2 === 0 ? theme.colors.accentSoft : theme.colors.lavender),
+      raw: item
+    }));
+  }, [resources]);
   return (
     <Screen
       hero={
@@ -41,18 +61,20 @@ export function HomeScreen() {
           style={styles.heroCard}
         >
           <AppBar
-            title={`Hello, ${demoUser.name}`}
-            subtitle={demoUser.focus}
-            right={<Pill label={demoUser.streak} />}
+            title={heroTitle}
+            subtitle={heroSubtitle}
+            right={streakLabel ? <Pill label={streakLabel} /> : null}
           />
           <View style={styles.heroStats}>
             <Card style={styles.statCard}>
               <Text style={styles.statTitle}>Mood today</Text>
-              <Text style={styles.statValue}>Calm</Text>
+              <Text style={styles.statValue}>{wellbeing?.label || '—'}</Text>
             </Card>
             <Card style={styles.statCard}>
               <Text style={styles.statTitle}>Focus</Text>
-              <Text style={styles.statValue}>8.2</Text>
+              <Text style={styles.statValue}>
+                {typeof wellbeing?.score === 'number' ? wellbeing.score.toFixed(1) : '—'}
+              </Text>
             </Card>
           </View>
         </LinearGradient>
@@ -61,16 +83,30 @@ export function HomeScreen() {
       <FadeInView delay={100}>
         <Text style={styles.sectionTitle}>Your next step</Text>
         <Card>
-          <Text style={styles.cardTitle}>Midday reset</Text>
-          <Text style={styles.cardCopy}>A 5-minute grounding session.</Text>
-          <PrimaryButton label="Start now" onPress={() => {}} />
+          <Text style={styles.cardTitle}>{feedCards[0]?.title || 'Pick a resource to begin'}</Text>
+          <Text style={styles.cardCopy}>{feedCards[0]?.subtitle || 'Explore content tailored for you.'}</Text>
+          <PrimaryButton
+            label={feedCards[0] ? 'Start now' : 'Explore'}
+            onPress={() => {
+              if (feedCards[0]?.raw) {
+                navigation.navigate('ActivityDetail', { activity: feedCards[0].raw });
+              } else {
+                navigation.navigate('Explore');
+              }
+            }}
+          />
         </Card>
       </FadeInView>
 
       <FadeInView delay={200}>
         <Text style={styles.sectionTitle}>Resources</Text>
         <View style={styles.rowGap}>
-          {feedCards.map((card) => (
+          {feedCards.length === 0 ? (
+            <Card style={styles.feedCard}>
+              <Text style={styles.cardTitle}>No resources yet</Text>
+              <Text style={styles.cardCopy}>Check back soon or explore to find new items.</Text>
+            </Card>
+          ) : feedCards.map((card) => (
             <Card key={card.id} style={[styles.feedCard, { backgroundColor: card.tone }]}>
               <Text style={styles.cardTitle}>{card.title}</Text>
               <Text style={styles.cardCopy}>{card.subtitle}</Text>
@@ -89,9 +125,10 @@ export function HomeScreen() {
           />
           <View style={styles.divider} />
           <ListRow
-            title="Create a focus block"
-            subtitle="Plan tomorrow's session"
+            title="Create a circle"
+            subtitle="Start a new support space"
             right={<Feather name="chevron-right" size={18} color={theme.colors.inkMuted} />}
+            onPress={() => navigation.navigate('CreateCircle')}
           />
         </Card>
       </FadeInView>

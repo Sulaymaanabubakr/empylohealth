@@ -8,18 +8,29 @@ import Dropdown from '../components/Dropdown';
 import DatePicker from '../components/DatePicker';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-
-// Cloudinary configuration
-const CLOUDINARY_CLOUD_NAME = 'your_cloud_name'; // Replace with your Cloudinary cloud name
-const CLOUDINARY_UPLOAD_PRESET = 'your_upload_preset'; // Replace with your upload preset
+import { useAuth } from '../context/AuthContext';
+import { userService } from '../services/api/userService';
+import { mediaService } from '../services/api/mediaService';
 
 const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
     const isPersonal = userType === 'personal';
+    const { user } = useAuth();
+    const [name, setName] = useState('');
     const [gender, setGender] = useState('');
     const [location, setLocation] = useState('');
     const [dateOfBirth, setDateOfBirth] = useState('');
     const [avatarUri, setAvatarUri] = useState('');
     const [uploading, setUploading] = useState(false);
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+
+    const [ageRange, setAgeRange] = useState('');
+    const [ethnicity, setEthnicity] = useState('');
+    const [sexuality, setSexuality] = useState('');
+    const [disability, setDisability] = useState('');
+    const [maritalStatus, setMaritalStatus] = useState('');
+    const [department, setDepartment] = useState('');
+    const [jobRole, setJobRole] = useState('');
 
     const genderOptions = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
     const locationOptions = [
@@ -57,41 +68,49 @@ const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
         if (!result.canceled && result.assets[0]) {
             const imageUri = result.assets[0].uri;
             setAvatarUri(imageUri);
-
-            // Upload to Cloudinary
-            uploadToCloudinary(imageUri);
         }
     };
 
-    const uploadToCloudinary = async (uri) => {
+    const handleSave = async () => {
+        if (!user?.uid) {
+            Alert.alert('Error', 'User not found. Please sign in again.');
+            return;
+        }
         setUploading(true);
-
         try {
-            const formData = new FormData();
-            formData.append('file', {
-                uri,
-                type: 'image/jpeg',
-                name: 'avatar.jpg',
-            });
-            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-            const response = await fetch(
-                `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-                {
-                    method: 'POST',
-                    body: formData,
-                }
-            );
-
-            const data = await response.json();
-
-            if (data.secure_url) {
-                console.log('Image uploaded to Cloudinary:', data.secure_url);
-                // You can save data.secure_url to your backend here
+            let photoURL = avatarUri || '';
+            if (avatarUri) {
+                photoURL = await mediaService.uploadAsset(avatarUri, 'avatars');
             }
+
+            const displayName = isPersonal ? name : `${firstName} ${lastName}`.trim();
+            const updateData = {
+                name: displayName,
+                dob: dateOfBirth,
+                gender,
+                location,
+                photoURL,
+                role: isPersonal ? 'personal' : 'client',
+                profileCompleted: true,
+                demographics: isPersonal
+                    ? null
+                    : {
+                        ageRange,
+                        ethnicity,
+                        sexuality,
+                        disability,
+                        maritalStatus,
+                        department,
+                        jobRole
+                    },
+                updatedAt: new Date()
+            };
+
+            await userService.updateUserDocument(user.uid, updateData);
+            navigation.navigate('Assessment');
         } catch (error) {
-            console.error('Cloudinary upload error:', error);
-            Alert.alert('Upload failed', 'Could not upload image. Please try again.');
+            console.error('Profile setup failed', error);
+            Alert.alert('Error', 'Unable to save profile. Please try again.');
         } finally {
             setUploading(false);
         }
@@ -122,7 +141,7 @@ const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
 
                 {isPersonal ? (
                     <>
-                        <Input label="Name" placeholder="Enter your name" />
+                        <Input label="Name" placeholder="Enter your name" value={name} onChangeText={setName} />
 
                         <DatePicker
                             label="Date of Birth"
@@ -152,29 +171,76 @@ const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
                     <>
                         <View style={styles.row}>
                             <View style={{ flex: 1, marginRight: SPACING.md }}>
-                                <Input label="Name" placeholder="First name" />
+                                <Input label="Name" placeholder="First name" value={firstName} onChangeText={setFirstName} />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Input label="" placeholder="Last name" />
+                                <Input label="" placeholder="Last name" value={lastName} onChangeText={setLastName} />
                             </View>
                         </View>
 
-                        {['Age range', 'Ethnicity', 'Sexuality', 'Disability', 'Marital status', 'Department', 'Job role'].map((item) => (
-                            <View key={item} style={styles.dropdownContainer}>
-                                <Text style={styles.label}>{item}</Text>
-                                <View style={styles.dropdown}>
-                                    <Text style={[styles.dropdownText, { marginLeft: 0 }]}>Select</Text>
-                                    <Feather name="chevron-down" size={20} color="black" />
-                                </View>
-                            </View>
-                        ))}
+                        <Dropdown
+                            label="Age range"
+                            value={ageRange}
+                            options={['18-24', '25-34', '35-44', '45-54', '55+']}
+                            onSelect={setAgeRange}
+                            icon={<MaterialCommunityIcons name="calendar-range" size={20} color={COLORS.secondary} />}
+                        />
+
+                        <Dropdown
+                            label="Ethnicity"
+                            value={ethnicity}
+                            options={['Asian', 'Black', 'Mixed', 'White', 'Other']}
+                            onSelect={setEthnicity}
+                            icon={<MaterialCommunityIcons name="account-group-outline" size={20} color={COLORS.secondary} />}
+                        />
+
+                        <Dropdown
+                            label="Sexuality"
+                            value={sexuality}
+                            options={['Heterosexual', 'Homosexual', 'Bisexual', 'Prefer not to say']}
+                            onSelect={setSexuality}
+                            icon={<MaterialCommunityIcons name="heart-outline" size={20} color={COLORS.secondary} />}
+                        />
+
+                        <Dropdown
+                            label="Disability"
+                            value={disability}
+                            options={['Yes', 'No', 'Prefer not to say']}
+                            onSelect={setDisability}
+                            icon={<MaterialCommunityIcons name="wheelchair-accessibility" size={20} color={COLORS.secondary} />}
+                        />
+
+                        <Dropdown
+                            label="Marital status"
+                            value={maritalStatus}
+                            options={['Single', 'Married', 'Divorced', 'Widowed']}
+                            onSelect={setMaritalStatus}
+                            icon={<MaterialCommunityIcons name="ring" size={20} color={COLORS.secondary} />}
+                        />
+
+                        <Dropdown
+                            label="Department"
+                            value={department}
+                            options={['Engineering', 'HR', 'Marketing', 'Sales', 'Product']}
+                            onSelect={setDepartment}
+                            icon={<MaterialCommunityIcons name="domain" size={20} color={COLORS.secondary} />}
+                        />
+
+                        <Dropdown
+                            label="Job role"
+                            value={jobRole}
+                            options={['Junior', 'Mid-Level', 'Senior', 'Lead', 'Manager']}
+                            onSelect={setJobRole}
+                            icon={<MaterialCommunityIcons name="briefcase-outline" size={20} color={COLORS.secondary} />}
+                        />
                     </>
                 )}
 
                 <Button
-                    title="Save & Continue"
-                    onPress={() => navigation.navigate('Assessment')}
+                    title={uploading ? 'Saving...' : 'Save & Continue'}
+                    onPress={handleSave}
                     style={styles.saveButton}
+                    disabled={uploading}
                 />
             </ScrollView>
         </SafeAreaView>

@@ -9,6 +9,7 @@ import ProfilePhotoModal from '../components/ProfilePhotoModal';
 import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
+import { authService } from '../services/auth/authService';
 
 const PersonalProfileScreen = ({ navigation }) => {
     // Modal States
@@ -30,13 +31,17 @@ const PersonalProfileScreen = ({ navigation }) => {
     // For other future confirmations like "Delete Account" or "Reset Notifications"
     // we can reuse the same modal or different states. For now implementing Logout.
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
         setIsLogoutVisible(false);
-        // Navigate to SignIn or perform logout logic
-        navigation.navigate('SignIn');
+        try {
+            await authService.logout();
+            navigation.navigate('SignIn');
+        } catch (error) {
+            console.error('Failed to sign out', error);
+        }
     };
 
-    const safeAvatar = userData?.photoURL || user?.photoURL || 'https://via.placeholder.com/150';
+    const safeAvatar = userData?.photoURL || user?.photoURL || '';
     const displayName = userData?.name || user?.displayName || 'User';
     const displayEmail = userData?.email || user?.email || '';
     const displayRole = userData?.role || 'personal';

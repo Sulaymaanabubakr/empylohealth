@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { useAuth } from '../context/AuthContext';
+import { userService } from '../services/api/userService';
+import { functions, auth } from '../services/firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
+import { multiFactor } from 'firebase/auth';
 
 const SecurityScreen = ({ navigation }) => {
+    const { user, userData } = useAuth();
     // State for toggles
     const [securityNotif, setSecurityNotif] = useState(true);
     const [twoFactor, setTwoFactor] = useState(true);
@@ -13,9 +19,40 @@ const SecurityScreen = ({ navigation }) => {
     const [isDeleteVisible, setIsDeleteVisible] = useState(false);
     const [isDeleteSuccessVisible, setIsDeleteSuccessVisible] = useState(false);
 
-    const handleDeleteAccount = () => {
-        setIsDeleteVisible(false);
-        setIsDeleteSuccessVisible(true);
+    useEffect(() => {
+        setSecurityNotif(userData?.settings?.securityNotifications ?? true);
+        setBiometrics(userData?.settings?.biometrics ?? false);
+        if (auth.currentUser) {
+            const enrolled = multiFactor(auth.currentUser).enrolledFactors;
+            setTwoFactor(enrolled.length > 0);
+        }
+    }, [userData]);
+
+    const persistSetting = async (field, value) => {
+        if (!user?.uid) return;
+        try {
+            await userService.updateUserDocument(user.uid, {
+                settings: {
+                    ...(userData?.settings || {}),
+                    [field]: value
+                }
+            });
+        } catch (error) {
+            console.error('Failed to update settings', error);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        if (!user?.uid) return;
+        try {
+            const deleteFn = httpsCallable(functions, 'deleteUserAccount');
+            await deleteFn();
+            setIsDeleteVisible(false);
+            setIsDeleteSuccessVisible(true);
+        } catch (error) {
+            console.error('Delete account failed', error);
+            Alert.alert('Error', error.message || 'Unable to delete account.');
+        }
     };
 
     const handleDeleteComplete = () => {
@@ -67,7 +104,10 @@ const SecurityScreen = ({ navigation }) => {
                     "Security Notifications",
                     "Get notified when your security code changes for a contact's phone in an end-to-end encrypted chat.",
                     securityNotif,
-                    setSecurityNotif,
+                    (value) => {
+                        setSecurityNotif(value);
+                        persistSetting('securityNotifications', value);
+                    },
                     "shield-checkmark-outline"
                 )}
 
@@ -76,7 +116,21 @@ const SecurityScreen = ({ navigation }) => {
                         "Two-Factor Authentication",
                         "Add an extra layer of security to your account.",
                         twoFactor,
-                        setTwoFactor,
+                        async (value) => {
+                            if (value) {
+                                navigation.navigate('TwoFactorSetup');
+                                return;
+                            }
+                            try {
+                                if (auth.currentUser) {
+                                    const enrolled = multiFactor(auth.currentUser).enrolledFactors;
+                                    await Promise.all(enrolled.map((factor) => multiFactor(auth.currentUser).unenroll(factor)));
+                                }
+                                setTwoFactor(false);
+                            } catch (error) {
+                                Alert.alert('Error', error.message || 'Unable to disable 2FA.');
+                            }
+                        },
                         "key-outline"
                     )}
                 </TouchableOpacity>
@@ -85,7 +139,10 @@ const SecurityScreen = ({ navigation }) => {
                     "Biometrics",
                     "Use Face ID or Fingerprint to securely unlock your app.",
                     biometrics,
-                    setBiometrics,
+                    (value) => {
+                        setBiometrics(value);
+                        persistSetting('biometrics', value);
+                    },
                     "finger-print-outline"
                 )}
 

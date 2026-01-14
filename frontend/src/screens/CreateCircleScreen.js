@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
 
@@ -77,22 +77,8 @@ const CreateCircleScreen = ({ navigation }) => {
                         multiline
                         maxLength={1000}
                     />
-                    <Text style={styles.charCount}>0/1000</Text>
+                    <Text style={styles.charCount}>{description.length}/1000</Text>
                 </View>
-
-                {/* Participants */}
-                <Text style={styles.sectionTitle}>Add Participants (0/5)</Text>
-
-                <TouchableOpacity style={styles.actionButtonOutline}>
-                    <Ionicons name="add" size={20} color="#009688" />
-                    <Text style={styles.actionButtonTextOutline}>Add Name or Number</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionButtonOutline}>
-                    <Feather name="share" size={18} color="#009688" />
-                    <Text style={styles.actionButtonTextOutline}>Share Invite Link</Text>
-                </TouchableOpacity>
-
 
             </ScrollView>
 

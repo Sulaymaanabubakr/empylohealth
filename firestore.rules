@@ -16,7 +16,7 @@ service cloud.firestore {
     // Circles
     match /circles/{circleId} {
       // Authenticated users can read circles
-      allow read: if true; // Temporary: Changed from isAuthenticated() to avoid permission errors if auth is delayed
+      allow read: if isAuthenticated();
       // Only backend (Admin SDK) creates/updates via functions
       allow write: if false; 
     }
@@ -40,8 +40,32 @@ service cloud.firestore {
     // Resources (Articles/Videos)
     match /resources/{resourceId} {
       // Everyone can read content
-      allow read: if true;
+      allow read: if isAuthenticated();
       // Only admin/backend writes
+      allow write: if false;
+    }
+
+    // Challenges
+    match /challenges/{challengeId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // Affirmations
+    match /affirmations/{affirmationId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // Contact Messages
+    match /contactMessages/{messageId} {
+      allow read: if isAuthenticated() && request.auth.token.admin == true;
+      allow write: if false;
+    }
+
+    // Subscription Plans
+    match /subscriptionPlans/{planId} {
+      allow read: if isAuthenticated();
       allow write: if false;
     }
 
@@ -51,10 +75,35 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Learning Sessions
+    match /learningSessions/{sessionId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Campaigns
+    match /campaigns/{campaignId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Subscription plans
+    match /subscriptionPlans/{planId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
     // Assessments
     match /assessments/{assessmentId} {
       // Users can read/write their own assessments
-      allow read, create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
     }
   }
 }

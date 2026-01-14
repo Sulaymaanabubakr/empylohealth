@@ -1,4 +1,5 @@
 import 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useState } from 'react';
 import Navigation from './src/Navigation';
 import { AuthProvider } from './src/context/AuthContext';
@@ -42,13 +43,15 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <ToastProvider>
-        <AuthProvider>
-          <Navigation />
-        </AuthProvider>
-      </ToastProvider>
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider style={{ flex: 1 }} onLayout={onLayoutRootView}>
+        <ToastProvider>
+          <AuthProvider>
+            <Navigation />
+          </AuthProvider>
+        </ToastProvider>
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

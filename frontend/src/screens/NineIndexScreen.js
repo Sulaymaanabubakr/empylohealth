@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Button from '../components/Button';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { assessmentService } from '../services/api/assessmentService';
 
 const NineIndexScreen = ({ navigation }) => {
     const questions = [
@@ -29,9 +30,43 @@ const NineIndexScreen = ({ navigation }) => {
     };
 
     const [answers, setAnswers] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleSelect = (qIndex, option) => {
         setAnswers({ ...answers, [qIndex]: option });
+    };
+
+    const allAnswered = questions.every((_, idx) => answers[idx]);
+
+    const handleSave = async () => {
+        if (!allAnswered || isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            const optionScore = {
+                "Not at all": 0,
+                "Rarely": 1,
+                "Sometimes": 2,
+                "Most times": 3,
+                "Always": 4
+            };
+            const total = questions.reduce((sum, question, idx) => {
+                const answer = answers[idx];
+                return sum + (optionScore[answer] ?? 0);
+            }, 0);
+            const maxScore = questions.length * 4;
+            const score = Math.round((total / maxScore) * 100);
+            const answerMap = questions.reduce((acc, question, idx) => {
+                acc[question] = answers[idx];
+                return acc;
+            }, {});
+
+            await assessmentService.submitAssessment('questionnaire', score, answerMap, '');
+            navigation.navigate('Dashboard');
+        } catch (error) {
+            console.error('Questionnaire submission failed', error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -75,9 +110,10 @@ const NineIndexScreen = ({ navigation }) => {
                 ))}
 
                 <Button
-                    title="Save"
-                    onPress={() => navigation.navigate('Dashboard')}
+                    title={isSubmitting ? "Saving..." : "Save"}
+                    onPress={handleSave}
                     style={styles.saveButton}
+                    disabled={!allAnswered || isSubmitting}
                 />
             </ScrollView>
         </SafeAreaView>

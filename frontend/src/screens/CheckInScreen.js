@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TextInput, View, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Screen } from '../components/Screen';
 import { FadeInView } from '../components/FadeInView';
@@ -7,6 +7,7 @@ import { AppBar } from '../components/AppBar';
 import { Card } from '../components/Card';
 import { PrimaryButton } from '../components/Buttons';
 import { theme } from '../theme/theme';
+import { assessmentService } from '../services/api/assessmentService';
 
 const emojis = [
   { id: 'e1', label: 'Calm', symbol: '😊' },
@@ -17,6 +18,24 @@ const emojis = [
 ];
 
 export function CheckInScreen() {
+  const [selectedMood, setSelectedMood] = useState('');
+  const [focusLevel, setFocusLevel] = useState(5);
+  const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const score = Math.round((focusLevel / 10) * 100);
+      await assessmentService.submitAssessment('daily', score, { focusLevel, notes }, selectedMood);
+    } catch (error) {
+      console.error('Check-in submission failed', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <Screen
       hero={
@@ -30,10 +49,14 @@ export function CheckInScreen() {
         <Text style={styles.sectionTitle}>Mood</Text>
         <View style={styles.emojiRow}>
           {emojis.map((emoji) => (
-            <View key={emoji.id} style={styles.emojiChip}>
+            <TouchableOpacity
+              key={emoji.id}
+              style={[styles.emojiChip, selectedMood === emoji.label && styles.emojiChipActive]}
+              onPress={() => setSelectedMood(emoji.label)}
+            >
               <Text style={styles.emojiSymbol}>{emoji.symbol}</Text>
               <Text style={styles.emojiLabel}>{emoji.label}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </FadeInView>
@@ -42,7 +65,13 @@ export function CheckInScreen() {
         <Text style={styles.sectionTitle}>Focus level</Text>
         <Card>
           <Text style={styles.cardCopy}>Move the slider to reflect your energy.</Text>
-          <Slider minimumValue={0} maximumValue={10} minimumTrackTintColor={theme.colors.brand} />
+          <Slider
+            minimumValue={0}
+            maximumValue={10}
+            value={focusLevel}
+            onValueChange={setFocusLevel}
+            minimumTrackTintColor={theme.colors.brand}
+          />
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderLabel}>Low</Text>
             <Text style={styles.sliderLabel}>High</Text>
@@ -58,9 +87,11 @@ export function CheckInScreen() {
             placeholderTextColor="#99A8A6"
             style={styles.textArea}
             multiline
+            value={notes}
+            onChangeText={setNotes}
           />
         </Card>
-        <PrimaryButton label="Save check-in" onPress={() => {}} />
+        <PrimaryButton label={isSubmitting ? 'Saving...' : 'Save check-in'} onPress={handleSubmit} disabled={isSubmitting} />
       </FadeInView>
     </Screen>
   );
@@ -94,6 +125,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '30%',
     gap: theme.space.xs,
+  },
+  emojiChipActive: {
+    borderWidth: 2,
+    borderColor: theme.colors.brand,
   },
   emojiSymbol: {
     fontSize: 24,

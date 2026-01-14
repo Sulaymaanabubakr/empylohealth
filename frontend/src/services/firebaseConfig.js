@@ -6,13 +6,13 @@ import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDEe2QhoNeM2fNFYLypMA6nEgepfBz5ZMs",
-    authDomain: "empylo-health.firebaseapp.com",
-    projectId: "empylo-health",
-    storageBucket: "empylo-health.firebasestorage.app",
-    messagingSenderId: "607256726988",
-    appId: "1:607256726988:web:a83be3162f30cad061a169",
-    measurementId: "G-1G5TPG07BC"
+    apiKey: "AIzaSyC_e9Du-QiK5t5sbuPl3BW7v6g_Bh-7oCU",
+    authDomain: "circles-app-by-empylo.firebaseapp.com",
+    projectId: "circles-app-by-empylo",
+    storageBucket: "circles-app-by-empylo.firebasestorage.app",
+    messagingSenderId: "433309283212",
+    appId: "1:433309283212:web:b94f75cbb30a0abb775ca9",
+    measurementId: "G-S3WCX4LZL6"
 };
 
 // Initialize Firebase

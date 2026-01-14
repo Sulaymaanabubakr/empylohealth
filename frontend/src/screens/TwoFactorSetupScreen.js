@@ -5,7 +5,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const TwoFactorSetupScreen = ({ navigation }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [selectedMethod, setSelectedMethod] = useState('sms'); // 'sms' or 'call'
+    const [selectedMethod, setSelectedMethod] = useState('sms'); // 'sms' | 'authApp'
 
     // UK Default Flag & Code
     const countryCode = "+44";
@@ -13,8 +13,10 @@ const TwoFactorSetupScreen = ({ navigation }) => {
     const flagEmoji = "🇬🇧";
 
     const handleNext = () => {
-        // Validation logic here
-        navigation.navigate('TwoFactorVerification', { phoneNumber: `${countryCode} ${phoneNumber}` });
+        navigation.navigate('TwoFactorVerification', {
+            phoneNumber: `${countryCode} ${phoneNumber}`,
+            method: selectedMethod
+        });
     };
 
     return (
@@ -68,17 +70,17 @@ const TwoFactorSetupScreen = ({ navigation }) => {
                     </View>
                 </TouchableOpacity>
 
-                {/* Option: Phone Call */}
+                {/* Option: Authenticator App */}
                 <TouchableOpacity
-                    style={[styles.optionCard, selectedMethod === 'call' && styles.selectedOption]}
-                    onPress={() => setSelectedMethod('call')}
+                    style={[styles.optionCard, selectedMethod === 'authApp' && styles.selectedOption]}
+                    onPress={() => setSelectedMethod('authApp')}
                 >
                     <View style={styles.optionIconContainer}>
-                        <MaterialCommunityIcons name="phone-outline" size={24} color="#009688" />
+                        <MaterialCommunityIcons name="shield-key-outline" size={24} color="#009688" />
                     </View>
                     <View style={styles.optionTextContainer}>
-                        <Text style={styles.optionTitle}>Phone Call</Text>
-                        <Text style={styles.optionDescription}>Receive code via call</Text>
+                        <Text style={styles.optionTitle}>Authenticator App</Text>
+                        <Text style={styles.optionDescription}>Use a code from your authenticator app</Text>
                     </View>
                 </TouchableOpacity>
 

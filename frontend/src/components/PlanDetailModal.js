@@ -8,13 +8,9 @@ const { width } = Dimensions.get('window');
 const PlanDetailModal = ({ visible, plan, onClose, onSubscribe }) => {
     if (!plan) return null;
 
-    const benefits = [
-        "Access to all learning modules",
-        "Unlimited circle creations",
-        "Advanced wellbeing analytics",
-        "Priority support",
-        "Exclusive monthly reports"
-    ];
+    const benefits = Array.isArray(plan.features) ? plan.features : [];
+    const priceLabel = plan.priceLabel || plan.price || '';
+    const periodLabel = plan.period ? `/${plan.period}` : '';
 
     return (
         <Modal
@@ -30,7 +26,7 @@ const PlanDetailModal = ({ visible, plan, onClose, onSubscribe }) => {
                         <View>
                             <Text style={styles.planName}>{plan.name}</Text>
                             <Text style={styles.planPrice}>
-                                {plan.price}<Text style={styles.period}>/month</Text>
+                                {priceLabel}<Text style={styles.period}>{periodLabel}</Text>
                             </Text>
                         </View>
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -39,7 +35,9 @@ const PlanDetailModal = ({ visible, plan, onClose, onSubscribe }) => {
                     </View>
 
                     <ScrollView style={styles.benefitsContainer}>
-                        {benefits.map((benefit, index) => (
+                        {benefits.length === 0 ? (
+                            <Text style={styles.benefitText}>No plan details available yet.</Text>
+                        ) : benefits.map((benefit, index) => (
                             <View key={index} style={styles.benefitItem}>
                                 <Ionicons name="checkmark-circle" size={20} color="#4DB6AC" />
                                 <Text style={styles.benefitText}>{benefit}</Text>

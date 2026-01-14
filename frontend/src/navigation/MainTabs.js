@@ -1,11 +1,10 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
-import { HomeScreen } from '../screens/HomeScreen';
-import { CheckInScreen } from '../screens/CheckInScreen';
-import { CommunityScreen } from '../screens/CommunityScreen';
-import { ChatScreen } from '../screens/ChatScreen';
-import { ProfileScreen } from '../screens/ProfileScreen';
+import DashboardScreen from '../screens/DashboardScreen';
+import ExploreScreen from '../screens/ExploreScreen';
+import ChatListScreen from '../screens/ChatListScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import { theme } from '../theme/theme';
 
 const Tabs = createBottomTabNavigator();
@@ -30,9 +29,8 @@ export function MainTabs() {
         },
         tabBarIcon: ({ color, size }) => {
           const icons = {
-            Home: 'home',
-            CheckIn: 'smile',
-            Community: 'users',
+            Dashboard: 'home',
+            Explore: 'compass',
             Chat: 'message-circle',
             Profile: 'user',
           };
@@ -40,10 +38,9 @@ export function MainTabs() {
         },
       })}
     >
-      <Tabs.Screen name="Home" component={HomeScreen} />
-      <Tabs.Screen name="CheckIn" component={CheckInScreen} options={{ title: 'Check-In' }} />
-      <Tabs.Screen name="Community" component={CommunityScreen} />
-      <Tabs.Screen name="Chat" component={ChatScreen} />
+      <Tabs.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Home' }} />
+      <Tabs.Screen name="Explore" component={ExploreScreen} />
+      <Tabs.Screen name="Chat" component={ChatListScreen} />
       <Tabs.Screen name="Profile" component={ProfileScreen} />
     </Tabs.Navigator>
   );

@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { useAuth } from '../context/AuthContext';
+import { userService } from '../services/api/userService';
 
 const NotificationsSettingsScreen = ({ navigation }) => {
+    const { user, userData } = useAuth();
     // State for toggles
     const [msgShow, setMsgShow] = useState(true);
     const [msgSound, setMsgSound] = useState(true);
@@ -17,6 +20,29 @@ const NotificationsSettingsScreen = ({ navigation }) => {
     const [isResetVisible, setIsResetVisible] = useState(false);
     const [isResetSuccessVisible, setIsResetSuccessVisible] = useState(false);
 
+    useEffect(() => {
+        const settings = userData?.settings || {};
+        setMsgShow(settings.msgShow ?? true);
+        setMsgSound(settings.msgSound ?? true);
+        setGroupShow(settings.groupShow ?? true);
+        setGroupSound(settings.groupSound ?? true);
+        setShowPreview(settings.showPreview ?? true);
+    }, [userData]);
+
+    const persistSetting = async (field, value) => {
+        if (!user?.uid) return;
+        try {
+            await userService.updateUserDocument(user.uid, {
+                settings: {
+                    ...(userData?.settings || {}),
+                    [field]: value
+                }
+            });
+        } catch (error) {
+            console.error('Failed to update notification settings', error);
+        }
+    };
+
     const handleReset = () => {
         setMsgShow(true);
         setMsgSound(true);
@@ -25,6 +51,11 @@ const NotificationsSettingsScreen = ({ navigation }) => {
         setShowPreview(true);
         setIsResetVisible(false);
         setIsResetSuccessVisible(true);
+        persistSetting('msgShow', true);
+        persistSetting('msgSound', true);
+        persistSetting('groupShow', true);
+        persistSetting('groupSound', true);
+        persistSetting('showPreview', true);
     };
 
     const renderToggleRow = (label, value, onValueChange, iconName, color = '#009688') => (
@@ -64,9 +95,15 @@ const NotificationsSettingsScreen = ({ navigation }) => {
                 <View style={styles.section}>
                     <Text style={styles.sectionHeader}>MESSAGE NOTIFICATIONS</Text>
                     <View style={styles.card}>
-                        {renderToggleRow("Show notifications", msgShow, setMsgShow, "notifications-outline")}
+                        {renderToggleRow("Show notifications", msgShow, (value) => {
+                            setMsgShow(value);
+                            persistSetting('msgShow', value);
+                        }, "notifications-outline")}
                         <View style={styles.divider} />
-                        {renderToggleRow("Sound", msgSound, setMsgSound, "musical-note-outline")}
+                        {renderToggleRow("Sound", msgSound, (value) => {
+                            setMsgSound(value);
+                            persistSetting('msgSound', value);
+                        }, "musical-note-outline")}
                     </View>
                 </View>
 
@@ -74,9 +111,15 @@ const NotificationsSettingsScreen = ({ navigation }) => {
                 <View style={styles.section}>
                     <Text style={styles.sectionHeader}>GROUP NOTIFICATIONS</Text>
                     <View style={styles.card}>
-                        {renderToggleRow("Show notifications", groupShow, setGroupShow, "people-outline")}
+                        {renderToggleRow("Show notifications", groupShow, (value) => {
+                            setGroupShow(value);
+                            persistSetting('groupShow', value);
+                        }, "people-outline")}
                         <View style={styles.divider} />
-                        {renderToggleRow("Sound", groupSound, setGroupSound, "volume-high-outline")}
+                        {renderToggleRow("Sound", groupSound, (value) => {
+                            setGroupSound(value);
+                            persistSetting('groupSound', value);
+                        }, "volume-high-outline")}
                     </View>
                 </View>
 
@@ -84,7 +127,10 @@ const NotificationsSettingsScreen = ({ navigation }) => {
                 <View style={styles.section}>
                     <Text style={styles.sectionHeader}>PREVIEW</Text>
                     <View style={styles.card}>
-                        {renderToggleRow("Show Preview", showPreview, setShowPreview, "eye-outline")}
+                        {renderToggleRow("Show Preview", showPreview, (value) => {
+                            setShowPreview(value);
+                            persistSetting('showPreview', value);
+                        }, "eye-outline")}
                     </View>
                     <Text style={styles.helperText}>
                         Preview message text inside new message notifications.

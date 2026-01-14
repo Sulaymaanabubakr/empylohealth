@@ -1,7 +1,8 @@
 import { FormEvent, useState } from 'react';
 
 const Contact = () => {
-  const [status, setStatus] = useState<'idle' | 'sent'>('idle');
+  const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -13,13 +14,30 @@ const Contact = () => {
     const company = String(data.get('company') || '');
     const message = String(data.get('message') || '');
 
-    const subject = encodeURIComponent(`Empylo Contact - ${firstName} ${lastName}`);
-    const body = encodeURIComponent(
-      `Name: ${firstName} ${lastName}\nEmail: ${email}\nCompany: ${company}\n\n${message}`
-    );
-    window.location.href = `mailto:hello@empylo.com?subject=${subject}&body=${body}`;
-    setStatus('sent');
-    form.reset();
+    const baseUrl = import.meta.env.VITE_FUNCTIONS_BASE_URL;
+    if (!baseUrl) {
+      setErrorMessage('Contact service is not configured.');
+      setStatus('error');
+      return;
+    }
+
+    fetch(`${baseUrl}/submitContactForm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstName, lastName, email, company, message })
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to submit contact form.');
+        }
+        setStatus('sent');
+        setErrorMessage('');
+        form.reset();
+      })
+      .catch((error) => {
+        setErrorMessage(error.message || 'Unable to submit form.');
+        setStatus('error');
+      });
   };
 
   return (
@@ -67,7 +85,10 @@ const Contact = () => {
           </form>
 
           {status === 'sent' && (
-            <p className="contact-success">Thanks! Your message is ready to send.</p>
+            <p className="contact-success">Thanks! We received your message.</p>
+          )}
+          {status === 'error' && (
+            <p className="contact-error">{errorMessage || 'Something went wrong. Try again.'}</p>
           )}
 
           <p className="contact-disclaimer">
@@ -199,6 +220,13 @@ const Contact = () => {
             margin-top: 16px;
             font-size: 0.95rem;
             color: #0F766E;
+            font-weight: 600;
+          }
+
+          .contact-error {
+            margin-top: 16px;
+            font-size: 0.95rem;
+            color: #B91C1C;
             font-weight: 600;
           }
           
