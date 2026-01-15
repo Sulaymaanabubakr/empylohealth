@@ -1,4 +1,4 @@
-package com.circlesapp.mobile
+package com.empylo.circlesapp
 
 import android.app.Application
 import android.content.res.Configuration

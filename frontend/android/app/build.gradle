@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.circlesapp.mobile'
+    namespace 'com.empylo.circlesapp'
     defaultConfig {
-        applicationId 'com.circlesapp.mobile'
+        applicationId 'com.empylo.circlesapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
