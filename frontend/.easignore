@@ -3,3 +3,10 @@ node_modules/
 npm-debug.log
 yarn-error.log
 .DS_Store
+
+# Android
+android/.gradle
+android/app/build
+android/build
+**/*.zip
+**/*.tar.gz
