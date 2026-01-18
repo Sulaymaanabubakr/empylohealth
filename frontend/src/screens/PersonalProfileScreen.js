@@ -58,9 +58,6 @@ const PersonalProfileScreen = ({ navigation }) => {
                 </View>
                 <Text style={styles.name}>{displayName}</Text>
                 <Text style={styles.email}>{displayEmail}</Text>
-                <Text style={[styles.roleBadge, { color: '#FFA000' }]}>
-                    {displayRole}
-                </Text>
             </View>
 
             <TouchableOpacity style={styles.qrButton}>

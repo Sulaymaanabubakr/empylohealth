@@ -19,8 +19,8 @@ import { MaterialCommunityIcons, AntDesign, FontAwesome } from '@expo/vector-ico
 
 const { width } = Dimensions.get('window');
 
-const SignUpScreen = ({ navigation, route }) => {
-    const { type = 'personal' } = route.params || {};
+const SignUpScreen = ({ navigation }) => {
+    // const { type = 'personal' } = route.params || {}; // Removed param usage
     const { register, loginWithGoogle, loginWithApple } = useAuth();
     const { showToast } = useToast();
 
@@ -48,12 +48,12 @@ const SignUpScreen = ({ navigation, route }) => {
         }
 
         setLoading(true);
-        // Call register from AuthContext
-        const result = await register(email, password, name, type);
+        // Call register from AuthContext - hardcoded 'personal'
+        const result = await register(email, password, name, 'personal');
         setLoading(false);
 
         if (result.success) {
-            navigation.replace('Verification', { type });
+            navigation.replace('Verification', { type: 'personal' });
         } else {
             showToast(result.error || "Registration failed", 'error');
         }

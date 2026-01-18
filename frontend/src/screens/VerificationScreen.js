@@ -10,14 +10,13 @@ import { authService } from '../services/auth/authService';
 import { useAuth } from '../context/AuthContext';
 
 const VerificationScreen = ({ navigation, route }) => {
-  const { type = 'personal' } = route.params || {};
   const { user } = useAuth();
 
   const handleVerify = async () => {
     try {
       const result = await authService.refreshEmailVerification();
       if (result.verified) {
-        navigation.navigate(type === 'client' ? 'ProfileSetupClient' : 'ProfileSetup');
+        navigation.navigate('ProfileSetup');
         return;
       }
       Alert.alert('Not verified', 'Please verify your email using the link we sent.');

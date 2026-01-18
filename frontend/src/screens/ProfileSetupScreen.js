@@ -12,8 +12,8 @@ import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
 
-const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
-    const isPersonal = userType === 'personal';
+const ProfileSetupScreen = ({ navigation }) => {
+    // const isPersonal = userType === 'personal'; // REMOVED
     const { user } = useAuth();
     const [name, setName] = useState('');
     const [gender, setGender] = useState('');
@@ -21,16 +21,10 @@ const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
     const [dateOfBirth, setDateOfBirth] = useState('');
     const [avatarUri, setAvatarUri] = useState('');
     const [uploading, setUploading] = useState(false);
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
+    // const [firstName, setFirstName] = useState(''); // REMOVED
+    // const [lastName, setLastName] = useState(''); // REMOVED
 
-    const [ageRange, setAgeRange] = useState('');
-    const [ethnicity, setEthnicity] = useState('');
-    const [sexuality, setSexuality] = useState('');
-    const [disability, setDisability] = useState('');
-    const [maritalStatus, setMaritalStatus] = useState('');
-    const [department, setDepartment] = useState('');
-    const [jobRole, setJobRole] = useState('');
+    // REMOVED client state variables (ageRange, ethnicity, etc.)
 
     const genderOptions = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
     const locationOptions = [
@@ -83,26 +77,16 @@ const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
                 photoURL = await mediaService.uploadAsset(avatarUri, 'avatars');
             }
 
-            const displayName = isPersonal ? name : `${firstName} ${lastName}`.trim();
+            const displayName = name; // Always use 'name'
             const updateData = {
                 name: displayName,
                 dob: dateOfBirth,
                 gender,
                 location,
                 photoURL,
-                role: isPersonal ? 'personal' : 'client',
+                role: 'personal', // Always personal
                 profileCompleted: true,
-                demographics: isPersonal
-                    ? null
-                    : {
-                        ageRange,
-                        ethnicity,
-                        sexuality,
-                        disability,
-                        maritalStatus,
-                        department,
-                        jobRole
-                    },
+                demographics: null, // Always null for personal
                 updatedAt: new Date()
             };
 
@@ -139,102 +123,31 @@ const ProfileSetupScreen = ({ navigation, userType = 'personal' }) => {
                     {uploading && <Text style={styles.uploadingText}>Uploading...</Text>}
                 </View>
 
-                {isPersonal ? (
-                    <>
-                        <Input label="Name" placeholder="Enter your name" value={name} onChangeText={setName} />
+                <Input label="Name" placeholder="Enter your name" value={name} onChangeText={setName} />
 
-                        <DatePicker
-                            label="Date of Birth"
-                            value={dateOfBirth}
-                            onSelect={setDateOfBirth}
-                            placeholder="mm.dd.yyyy"
-                            icon={<MaterialCommunityIcons name="calendar-outline" size={20} color={COLORS.secondary} />}
-                        />
+                <DatePicker
+                    label="Date of Birth"
+                    value={dateOfBirth}
+                    onSelect={setDateOfBirth}
+                    placeholder="mm.dd.yyyy"
+                    icon={<MaterialCommunityIcons name="calendar-outline" size={20} color={COLORS.secondary} />}
+                />
 
-                        <Dropdown
-                            label="Gender"
-                            value={gender}
-                            options={genderOptions}
-                            onSelect={setGender}
-                            icon={<MaterialCommunityIcons name="gender-male-female" size={20} color={COLORS.secondary} />}
-                        />
+                <Dropdown
+                    label="Gender"
+                    value={gender}
+                    options={genderOptions}
+                    onSelect={setGender}
+                    icon={<MaterialCommunityIcons name="gender-male-female" size={20} color={COLORS.secondary} />}
+                />
 
-                        <Dropdown
-                            label="Location"
-                            value={location}
-                            options={locationOptions}
-                            onSelect={setLocation}
-                            icon={<MaterialCommunityIcons name="map-marker-outline" size={20} color={COLORS.secondary} />}
-                        />
-                    </>
-                ) : (
-                    <>
-                        <View style={styles.row}>
-                            <View style={{ flex: 1, marginRight: SPACING.md }}>
-                                <Input label="Name" placeholder="First name" value={firstName} onChangeText={setFirstName} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Input label="" placeholder="Last name" value={lastName} onChangeText={setLastName} />
-                            </View>
-                        </View>
-
-                        <Dropdown
-                            label="Age range"
-                            value={ageRange}
-                            options={['18-24', '25-34', '35-44', '45-54', '55+']}
-                            onSelect={setAgeRange}
-                            icon={<MaterialCommunityIcons name="calendar-range" size={20} color={COLORS.secondary} />}
-                        />
-
-                        <Dropdown
-                            label="Ethnicity"
-                            value={ethnicity}
-                            options={['Asian', 'Black', 'Mixed', 'White', 'Other']}
-                            onSelect={setEthnicity}
-                            icon={<MaterialCommunityIcons name="account-group-outline" size={20} color={COLORS.secondary} />}
-                        />
-
-                        <Dropdown
-                            label="Sexuality"
-                            value={sexuality}
-                            options={['Heterosexual', 'Homosexual', 'Bisexual', 'Prefer not to say']}
-                            onSelect={setSexuality}
-                            icon={<MaterialCommunityIcons name="heart-outline" size={20} color={COLORS.secondary} />}
-                        />
-
-                        <Dropdown
-                            label="Disability"
-                            value={disability}
-                            options={['Yes', 'No', 'Prefer not to say']}
-                            onSelect={setDisability}
-                            icon={<MaterialCommunityIcons name="wheelchair-accessibility" size={20} color={COLORS.secondary} />}
-                        />
-
-                        <Dropdown
-                            label="Marital status"
-                            value={maritalStatus}
-                            options={['Single', 'Married', 'Divorced', 'Widowed']}
-                            onSelect={setMaritalStatus}
-                            icon={<MaterialCommunityIcons name="ring" size={20} color={COLORS.secondary} />}
-                        />
-
-                        <Dropdown
-                            label="Department"
-                            value={department}
-                            options={['Engineering', 'HR', 'Marketing', 'Sales', 'Product']}
-                            onSelect={setDepartment}
-                            icon={<MaterialCommunityIcons name="domain" size={20} color={COLORS.secondary} />}
-                        />
-
-                        <Dropdown
-                            label="Job role"
-                            value={jobRole}
-                            options={['Junior', 'Mid-Level', 'Senior', 'Lead', 'Manager']}
-                            onSelect={setJobRole}
-                            icon={<MaterialCommunityIcons name="briefcase-outline" size={20} color={COLORS.secondary} />}
-                        />
-                    </>
-                )}
+                <Dropdown
+                    label="Location"
+                    value={location}
+                    options={locationOptions}
+                    onSelect={setLocation}
+                    icon={<MaterialCommunityIcons name="map-marker-outline" size={20} color={COLORS.secondary} />}
+                />
 
                 <Button
                     title={uploading ? 'Saving...' : 'Save & Continue'}
