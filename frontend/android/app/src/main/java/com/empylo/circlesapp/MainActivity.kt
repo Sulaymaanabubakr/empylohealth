@@ -1,4 +1,4 @@
-package com.circlesapp.mobile
+package com.empylo.circlesapp
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
