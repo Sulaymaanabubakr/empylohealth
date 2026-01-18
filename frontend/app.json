@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.circlesapp.mobile",
+      "bundleIdentifier": "com.empylo.circlesapp",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
@@ -22,7 +22,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.circlesapp.mobile",
+      "package": "com.empylo.circlesapp",
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "navigationBar": {
