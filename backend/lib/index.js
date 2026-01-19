@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.getAffirmations = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.leaveCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
+exports.createEmployee = exports.deleteItem = exports.toggleUserStatus = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.deleteUserAccount = exports.submitContactForm = exports.getAffirmations = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.leaveCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Admin SDK once at entry point
 if (admin.apps.length === 0) {
@@ -42,6 +42,8 @@ if (admin.apps.length === 0) {
 // Import from consolidated files
 const generalTriggers = __importStar(require("./triggers/general"));
 const coreApi = __importStar(require("./api/core"));
+const adminApi = __importStar(require("./api/admin"));
+const userMgmtApi = __importStar(require("./api/usermanagement"));
 // Export functions
 // Triggers
 exports.onUserCreate = generalTriggers.onUserCreate;
@@ -63,4 +65,14 @@ exports.getExploreContent = coreApi.getExploreContent;
 exports.getAffirmations = coreApi.getAffirmations;
 exports.submitContactForm = coreApi.submitContactForm;
 exports.deleteUserAccount = coreApi.deleteUserAccount;
+// Admin API
+exports.getDashboardStats = adminApi.getDashboardStats;
+exports.getAllUsers = adminApi.getAllUsers;
+exports.getPendingContent = adminApi.getPendingContent;
+exports.getAllContent = adminApi.getAllContent;
+exports.updateContentStatus = adminApi.updateContentStatus;
+exports.toggleUserStatus = adminApi.toggleUserStatus;
+exports.deleteItem = adminApi.deleteItem;
+// User Management
+exports.createEmployee = userMgmtApi.createEmployee;
 //# sourceMappingURL=index.js.map

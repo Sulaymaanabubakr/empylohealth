@@ -8,6 +8,8 @@ if (admin.apps.length === 0) {
 // Import from consolidated files
 import * as generalTriggers from './triggers/general';
 import * as coreApi from './api/core';
+import * as adminApi from './api/admin';
+import * as userMgmtApi from './api/usermanagement';
 
 // Export functions
 // Triggers
@@ -32,3 +34,15 @@ export const getAffirmations = coreApi.getAffirmations;
 export const submitContactForm = coreApi.submitContactForm;
 
 export const deleteUserAccount = coreApi.deleteUserAccount;
+
+// Admin API
+export const getDashboardStats = adminApi.getDashboardStats;
+export const getAllUsers = adminApi.getAllUsers;
+export const getPendingContent = adminApi.getPendingContent;
+export const getAllContent = adminApi.getAllContent;
+export const updateContentStatus = adminApi.updateContentStatus;
+export const toggleUserStatus = adminApi.toggleUserStatus;
+export const deleteItem = adminApi.deleteItem;
+
+// User Management
+export const createEmployee = userMgmtApi.createEmployee;

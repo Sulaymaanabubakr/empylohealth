@@ -16,4 +16,12 @@ export declare const getExploreContent: import("firebase-functions/v1").HttpsFun
 export declare const getAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const submitContactForm: import("firebase-functions/v1").HttpsFunction;
 export declare const deleteUserAccount: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const getDashboardStats: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const getAllUsers: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const getPendingContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const getAllContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const updateContentStatus: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const toggleUserStatus: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const deleteItem: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const createEmployee: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 //# sourceMappingURL=index.d.ts.map

@@ -82,6 +82,7 @@ export const createCircle = functions.https.onCall(async (data, context) => {
             name,
             description: description || '',
             category: category || 'General',
+            status: 'active', // User request: create immediately
             adminId: uid,
             members: [uid], // Creator is the first member
             createdAt: admin.firestore.FieldValue.serverTimestamp()
