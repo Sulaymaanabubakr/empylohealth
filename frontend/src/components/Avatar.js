@@ -22,7 +22,7 @@ const Avatar = ({ uri, name, size = 56, style }) => {
   const initials = getInitials(name);
   const backgroundColor = getColor(name || initials);
 
-  if (uri) {
+  if (uri && typeof uri === 'string' && uri.trim().length > 0) {
     return <Image source={{ uri }} style={[styles.image, { width: size, height: size, borderRadius: size / 2 }, style]} />;
   }
 

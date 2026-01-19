@@ -5,14 +5,14 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SplashScreen from './screens/SplashScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import SignInScreen from './screens/SignInScreen';
-import SignUpSelectionScreen from './screens/SignUpSelectionScreen';
+
 import SignUpScreen from './screens/SignUpScreen';
 import VerificationScreen from './screens/VerificationScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 
 import ProfileSetupScreen from './screens/ProfileSetupScreen';
-import ProfileSetupClientScreen from './screens/ProfileSetupClientScreen';
+
 import AssessmentScreen from './screens/AssessmentScreen';
 import NineIndexScreen from './screens/NineIndexScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -52,6 +52,7 @@ export default function Navigation() {
             {user ? (
                 <Stack.Navigator initialRouteName="Dashboard" screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="Dashboard" component={DashboardScreen} />
+                    <Stack.Screen name="Verification" component={VerificationScreen} />
                     <Stack.Screen name="Notifications" component={NotificationsScreen} />
                     <Stack.Screen name="Explore" component={ExploreScreen} />
                     <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
@@ -80,14 +81,14 @@ export default function Navigation() {
                     <Stack.Screen name="Splash" component={SplashScreen} />
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     <Stack.Screen name="SignIn" component={SignInScreen} />
-                    <Stack.Screen name="SignUpSelection" component={SignUpSelectionScreen} />
+
                     <Stack.Screen name="SignUp" component={SignUpScreen} />
                     <Stack.Screen name="Verification" component={VerificationScreen} />
 
                     <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
                     <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
                     <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-                    <Stack.Screen name="ProfileSetupClient" component={ProfileSetupClientScreen} />
+
                 </Stack.Navigator>
             )}
         </NavigationContainer>

@@ -9,14 +9,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
 import { View, Platform } from 'react-native';
-import * as NavigationBar from 'expo-navigation-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
-
 
   const [fontsLoaded] = useFonts({
     SpaceGrotesk_400Regular,
@@ -26,6 +24,7 @@ export default function App() {
     DMSans_500Medium,
     DMSans_700Bold,
   });
+
 
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded) {
@@ -43,8 +42,8 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider style={{ flex: 1 }} onLayout={onLayoutRootView}>
+    <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <SafeAreaProvider>
         <ToastProvider>
           <AuthProvider>
             <Navigation />

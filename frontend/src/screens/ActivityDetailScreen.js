@@ -57,7 +57,6 @@ const ActivityDetailScreen = ({ navigation, route }) => {
                 {/* Content Area */}
                 <View style={styles.contentContainer}>
                     {activity.image ? (
-                    {activity.image ? (
                         <View style={styles.imageContainer}>
                             <Image
                                 source={{ uri: activity.image }}
