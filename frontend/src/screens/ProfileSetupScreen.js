@@ -112,9 +112,14 @@ const ProfileSetupScreen = ({ navigation }) => {
                 <View style={styles.avatarContainer}>
                     <TouchableOpacity style={styles.avatar} onPress={pickImage} disabled={uploading}>
                         {avatarUri ? (
-                            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                            <View style={styles.avatarWrapper}>
+                                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                            </View>
                         ) : (
-                            <MaterialCommunityIcons name="account" size={60} color="#E0E0E0" />
+                            <View style={styles.avatarWrapper}>
+                                <View style={[styles.avatarImage, { backgroundColor: '#E0E0E0' }]} />
+                                <MaterialCommunityIcons name="account" size={60} color="#999" style={styles.defaultAvatarIcon} />
+                            </View>
                         )}
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.editIcon} onPress={pickImage} disabled={uploading}>

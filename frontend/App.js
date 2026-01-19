@@ -6,8 +6,8 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/context/ToastContext';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
-import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
+import * as Font from 'expo-font';
+
 import { View, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -18,13 +18,13 @@ export default function App() {
   console.log('[PERF] App: Starting...');
   const fontLoadStart = Date.now();
 
-  const [fontsLoaded] = useFonts({
-    SpaceGrotesk_400Regular,
-    SpaceGrotesk_600SemiBold,
-    SpaceGrotesk_700Bold,
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_700Bold,
+  const [fontsLoaded] = Font.useFonts({
+    'SpaceGrotesk_400Regular': require('./assets/fonts/SpaceGrotesk_400Regular.ttf'),
+    'SpaceGrotesk_600SemiBold': require('./assets/fonts/SpaceGrotesk_600SemiBold.ttf'),
+    'SpaceGrotesk_700Bold': require('./assets/fonts/SpaceGrotesk_700Bold.ttf'),
+    'DMSans_400Regular': require('./assets/fonts/DMSans_400Regular.ttf'),
+    'DMSans_500Medium': require('./assets/fonts/DMSans_500Medium.ttf'),
+    'DMSans_700Bold': require('./assets/fonts/DMSans_700Bold.ttf'),
   });
 
   useEffect(() => {
@@ -34,20 +34,24 @@ export default function App() {
   }, [fontsLoaded]);
 
 
+  // Safety timeout to hide splash screen if fonts hang
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      console.log('[PERF] App: Forcing Splash Screen hide (timeout)');
+      await SplashScreen.hideAsync().catch(() => { });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded) {
-      // This tells the splash screen to hide immediately! If we call this after
-      // `setAppIsReady`, then we may see a blank screen while the app is
-      // loading its initial state and rendering its first pixels. So instead,
-      // we hide the splash screen once we know the root view has already
-      // performed layout.
-      await SplashScreen.hideAsync();
+      console.log('[PERF] App: Fonts loaded, hiding splash screen');
+      await SplashScreen.hideAsync().catch(() => { });
     }
   }, [fontsLoaded]);
 
-  if (!fontsLoaded) {
-    return null;
-  }
+  // Removed blocking check: if (!fontsLoaded) return null;
+  // This allows the app to continue initializing AuthContext immediately.
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>

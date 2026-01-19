@@ -17,7 +17,11 @@ const ProfilePhotoModal = ({ visible, onClose, currentImage, onUseAvatar, onTake
                 <View style={styles.modalView}>
                     <View style={styles.header}>
                         <View style={styles.imageContainer}>
-                            <Image source={{ uri: currentImage }} style={styles.profileImage} />
+                            {currentImage ? (
+                                <Image source={{ uri: currentImage }} style={styles.profileImage} />
+                            ) : (
+                                <View style={[styles.profileImage, { backgroundColor: '#E0E0E0' }]} />
+                            )}
                         </View>
                         <Text style={styles.title}>Edit Profile Picture</Text>
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>

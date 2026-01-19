@@ -65,7 +65,6 @@ const ActivityDetailScreen = ({ navigation, route }) => {
                             />
                         </View>
                     ) : null}
-                    ) : null}
 
                     <Text style={styles.sectionText}>
                         {activity.description}
