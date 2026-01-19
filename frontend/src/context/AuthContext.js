@@ -17,10 +17,15 @@ export const AuthProvider = ({ children }) => {
 
     // Listen for auth state changes
     useEffect(() => {
+        console.log('[PERF] AuthContext: Initializing...');
+        const initStartTime = Date.now();
+
         // Initialize Google Sign In
         authService.init('433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com');
 
         const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
+            console.log('[PERF] AuthContext: Auth state changed', currentUser ? 'Authenticated' : 'Not authenticated', `${Date.now() - initStartTime}ms`);
+
             // Cleanup previous user listener if it exists
             if (userUnsubscribeRef.current) {
                 userUnsubscribeRef.current();
@@ -28,36 +33,38 @@ export const AuthProvider = ({ children }) => {
             }
 
             setUser(currentUser);
+
+            // Set loading=false immediately to unblock UI rendering
+            setLoading(false);
+
             if (currentUser) {
-                // Subscribe to user document changes
+                // Subscribe to user document changes (background load)
                 const userRef = doc(db, 'users', currentUser.uid);
                 userUnsubscribeRef.current = onSnapshot(userRef, (doc) => {
+                    console.log('[PERF] AuthContext: User data loaded', `${Date.now() - initStartTime}ms`);
                     if (doc.exists()) {
                         setUserData(doc.data());
                     } else {
                         // If doc doesn't exist yet (very fresh account), use auth profile
                         setUserData({ email: currentUser.email, name: currentUser.displayName });
                     }
-                    setLoading(false); // Valid data loaded
                 }, (error) => {
                     console.error("AuthContext: User listener error", error);
                     // Fallback
                     setUserData({ email: currentUser.email, name: currentUser.displayName });
-                    setLoading(false);
                 });
             } else {
                 setUserData(null);
-                setLoading(false);
             }
         });
 
         // Safety timeout in case auth listener never fires (rare but possible offline/error)
         const safetyTimer = setTimeout(() => {
             setLoading((prev) => {
-                if (prev) console.warn("AuthContext: Loading timed out, forcing app entry.");
+                if (prev) console.warn("[PERF] AuthContext: Loading timed out, forcing app entry.");
                 return false;
             });
-        }, 5000); // 5 seconds max wait
+        }, 2000); // 2 seconds max wait (reduced from 5s)
 
         return () => {
             unsubscribe();

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,6 +11,8 @@ import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
 import { authService } from '../services/auth/authService';
+import { userService } from '../services/api/userService';
+import { mediaService } from '../services/api/mediaService';
 
 const PersonalProfileScreen = ({ navigation }) => {
     // Modal States
@@ -18,6 +21,7 @@ const PersonalProfileScreen = ({ navigation }) => {
     const [isLogoutVisible, setIsLogoutVisible] = useState(false);
     const [isEditPhotoVisible, setIsEditPhotoVisible] = useState(false);
     const [myCircles, setMyCircles] = useState([]);
+    const [uploading, setUploading] = useState(false);
 
     React.useEffect(() => {
         if (user?.uid) {
@@ -39,6 +43,84 @@ const PersonalProfileScreen = ({ navigation }) => {
         } catch (error) {
             console.error('Failed to sign out', error);
         }
+    };
+
+    const handleChoosePhoto = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Required', 'Please grant photo library access to upload a profile picture.');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                setUploading(true);
+                setIsEditPhotoVisible(false);
+                const uploadedUrl = await mediaService.uploadAsset(result.assets[0].uri, 'avatars');
+                await userService.updateUserDocument(user.uid, { photoURL: uploadedUrl });
+                setUploading(false);
+                Alert.alert('Success', 'Profile photo updated!');
+            }
+        } catch (error) {
+            setUploading(false);
+            console.error('Photo upload error:', error);
+            Alert.alert('Error', 'Failed to upload photo. Please try again.');
+        }
+    };
+
+    const handleTakePhoto = async () => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Required', 'Please grant camera access to take a profile picture.');
+                return;
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                setUploading(true);
+                setIsEditPhotoVisible(false);
+                const uploadedUrl = await mediaService.uploadAsset(result.assets[0].uri, 'avatars');
+                await userService.updateUserDocument(user.uid, { photoURL: uploadedUrl });
+                setUploading(false);
+                Alert.alert('Success', 'Profile photo updated!');
+            }
+        } catch (error) {
+            setUploading(false);
+            console.error('Camera error:', error);
+            Alert.alert('Error', 'Failed to take photo. Please try again.');
+        }
+    };
+
+    const handleDeletePhoto = async () => {
+        try {
+            setUploading(true);
+            setIsEditPhotoVisible(false);
+            await userService.updateUserDocument(user.uid, { photoURL: '' });
+            setUploading(false);
+            Alert.alert('Success', 'Profile photo removed.');
+        } catch (error) {
+            setUploading(false);
+            console.error('Delete photo error:', error);
+            Alert.alert('Error', 'Failed to delete photo.');
+        }
+    };
+
+    const handleUseAvatar = () => {
+        setIsEditPhotoVisible(false);
+        Alert.alert('Avatar', 'Avatar functionality coming soon!');
     };
 
     const safeAvatar = userData?.photoURL || user?.photoURL || '';
@@ -231,7 +313,18 @@ const PersonalProfileScreen = ({ navigation }) => {
                 visible={isEditPhotoVisible}
                 onClose={() => setIsEditPhotoVisible(false)}
                 currentImage={safeAvatar}
+                onUseAvatar={handleUseAvatar}
+                onTakePhoto={handleTakePhoto}
+                onChoosePhoto={handleChoosePhoto}
+                onDeletePhoto={handleDeletePhoto}
             />
+
+            {uploading && (
+                <View style={styles.uploadingOverlay}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.uploadingText}>Uploading...</Text>
+                </View>
+            )}
         </SafeAreaView>
     );
 };
@@ -501,6 +594,19 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 12,
         fontSize: 14,
+    },
+    uploadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 9999,
+    },
+    uploadingText: {
+        color: '#FFF',
+        marginTop: 12,
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
 

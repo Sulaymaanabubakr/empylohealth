@@ -4,7 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
-const ProfilePhotoModal = ({ visible, onClose, currentImage }) => {
+const ProfilePhotoModal = ({ visible, onClose, currentImage, onUseAvatar, onTakePhoto, onChoosePhoto, onDeletePhoto }) => {
     return (
         <Modal
             animationType="slide"
@@ -26,28 +26,28 @@ const ProfilePhotoModal = ({ visible, onClose, currentImage }) => {
                     </View>
 
                     <View style={styles.optionsContainer}>
-                        <TouchableOpacity style={styles.optionItem}>
+                        <TouchableOpacity style={styles.optionItem} onPress={onUseAvatar}>
                             <Text style={styles.optionText}>Use Avatar</Text>
                             <MaterialCommunityIcons name="face-man-profile" size={22} color="#424242" />
                         </TouchableOpacity>
 
                         <View style={styles.divider} />
 
-                        <TouchableOpacity style={styles.optionItem}>
+                        <TouchableOpacity style={styles.optionItem} onPress={onTakePhoto}>
                             <Text style={styles.optionText}>Take Photo</Text>
                             <Ionicons name="camera-outline" size={22} color="#424242" />
                         </TouchableOpacity>
 
                         <View style={styles.divider} />
 
-                        <TouchableOpacity style={styles.optionItem}>
+                        <TouchableOpacity style={styles.optionItem} onPress={onChoosePhoto}>
                             <Text style={styles.optionText}>Choose Photo</Text>
                             <Ionicons name="image-outline" size={22} color="#424242" />
                         </TouchableOpacity>
 
                         <View style={styles.divider} />
 
-                        <TouchableOpacity style={[styles.optionItem, styles.lastItem]}>
+                        <TouchableOpacity style={[styles.optionItem, styles.lastItem]} onPress={onDeletePhoto}>
                             <Text style={styles.optionText}>Delete Photo</Text>
                             <Ionicons name="trash-outline" size={22} color="#FF5252" />
                         </TouchableOpacity>

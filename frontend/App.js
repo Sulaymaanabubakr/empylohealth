@@ -15,6 +15,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
+  console.log('[PERF] App: Starting...');
+  const fontLoadStart = Date.now();
 
   const [fontsLoaded] = useFonts({
     SpaceGrotesk_400Regular,
@@ -24,6 +26,12 @@ export default function App() {
     DMSans_500Medium,
     DMSans_700Bold,
   });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      console.log('[PERF] App: Fonts loaded', `${Date.now() - fontLoadStart}ms`);
+    }
+  }, [fontsLoaded]);
 
 
   const onLayoutRootView = useCallback(async () => {

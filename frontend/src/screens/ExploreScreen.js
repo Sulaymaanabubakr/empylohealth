@@ -17,9 +17,12 @@ const ExploreScreen = ({ navigation }) => {
     const [affirmations, setAffirmations] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    const [error, setError] = useState(null);
+
     useEffect(() => {
         const loadContent = async () => {
             try {
+                setError(null);
                 console.log('ExploreScreen: fetching content...');
                 const [items, circles, affs] = await Promise.all([
                     resourceService.getExploreContent(),
@@ -31,7 +34,8 @@ const ExploreScreen = ({ navigation }) => {
                 setSupportGroups(circles);
                 setAffirmations(affs);
             } catch (err) {
-                console.log("Failed to load resources", err);
+                console.error("ExploreScreen Error:", err);
+                setError(err.message || "Failed to load content");
             } finally {
                 setLoading(false);
             }
@@ -99,7 +103,19 @@ const ExploreScreen = ({ navigation }) => {
                     <Text style={styles.seeAllText}>See all</Text>
                 </View>
 
-                {loading ? (
+                {error ? (
+                    <View style={styles.errorContainer}>
+                        <Ionicons name="alert-circle-outline" size={48} color={COLORS.error || '#FF5252'} />
+                        <Text style={styles.errorText}>{error}</Text>
+                        <TouchableOpacity style={styles.retryButton} onPress={() => {
+                            setLoading(true);
+                            setError(null);
+                            // Re-trigger effect? For now just manual reload via navigation or we need to extract loadContent
+                        }}>
+                            <Text style={styles.retryText}>Retry</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : loading ? (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="small" color={COLORS.primary} />
                     </View>
@@ -341,6 +357,24 @@ const styles = StyleSheet.create({
     loadingContainer: {
         paddingVertical: 12,
         alignItems: 'center',
+    },
+    errorContainer: {
+        padding: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    errorText: {
+        color: '#FF5252',
+        textAlign: 'center',
+        marginVertical: 10,
+        fontSize: 14,
+    },
+    retryButton: {
+        padding: 10,
+    },
+    retryText: {
+        color: COLORS.primary,
+        fontWeight: 'bold',
     },
     sectionTitle: {
         fontSize: 20,
