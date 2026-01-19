@@ -18,8 +18,8 @@ The Circles Health App helps users track and improve their mental, physical, and
 
 ## **Version 1 Objectives:**
 
-- Build the first version of the app with simple tracking and scoring.  
-- Help users form a habit and give them useful feedback.
+- Build the first version of the app with simple tracking, scoring, and community support.
+- Help users form a habit, connect with others, and receive useful feedback.
 
 # **3\. Stakeholders**
 
@@ -39,28 +39,34 @@ The Circles Health App helps users track and improve their mental, physical, and
 1. **Secure Login:**  
    - Users can log in safely with email, password, and a code sent to their device.  
 2. **Daily Check-Ins:**  
-   - Two quick questions about how you feel today (20% of your score).
+   - Two quick inputs: **Mood** (Emoji) and **Focus Level** (Slider). These contribute 20% to your wellbeing score.
 
 **3. Weekly Wellness Survey:**  
-- A weekly set of questions about your mind, body, and social life (80% of your score).
+- A detailed set of questions about your mind, body, and social life (80% of your score). Completed once a week for deeper insights.
 
 **4. Explore Page:**  
-- Daily positive messages and short health tips.
+- Daily positive messages, short health tips, and recommended activities.
 
 **5. Wellbeing Score:**  
 - A single score made from your Weekly Survey (80%) and Daily Check-ins (20%).
+
+**6. Circles (Support Groups):**
+- Users can join and view support groups (Circles) based on their interests.
+
+**7. Chat:**
+- Direct messaging and group chat functionality to connect with other users.
 
 # **5\. Roadmap**
 
 | Version | Key features | Target Timelines | Audience |
 | :---- | :---- | :---- | :---- |
-| Version 1 |  Structured data, daily check-ins, Explore page  | **Start: Month 1 End: Month 4**  | General users  |
+| Version 1 |  Structured data, daily check-ins, Explore page, Circles, Chat  | **Start: Month 1 End: Month 4**  | General users  |
 
 # **6\. Wellbeing Score Calculation**
 
 #### ***Version 1 Formula:***
 
-Wellbeing Score (Version 1)=(0.8×Questionnaire Score)+(0.2×Daily Check-In Average)
+Wellbeing Score (Version 1)=(0.8×Weekly Survey Score)+(0.2×Daily Check-In Average)
 
 # **7\. Process and Data Flow Diagrams**
 
@@ -129,7 +135,6 @@ This section outlines advanced features planned for future releases, including A
 - Support admin-level functionality for organizational users.
 
 ### **Version 3 Objectives:**
-- Enhance community engagement with forums, gamification, and wearable integrations.  
 - Provide predictive analytics for individual and organizational wellbeing trends.
 
 ## **Functional Requirements (Future)**
@@ -145,11 +150,9 @@ This section outlines advanced features planned for future releases, including A
    - Models relationships and provides advanced analytics for organizational users.
 
 ### **Version 3 (Enhanced Engagement):**
-1. **Community Features:**  
-   - User-created topics, forums, and gamification elements.
-2. **Wearable Integration:**  
+1. **Wearable Integration:**  
    - Sync data from devices like Fitbit and Apple Watch.
-3. **Predictive Analytics:**  
+2. **Predictive Analytics:**  
    - AI-driven predictions for individual risk levels and team trends.
 
 ## **Roadmap (Future)**
@@ -157,7 +160,7 @@ This section outlines advanced features planned for future releases, including A
 | Version | Key features | Target Timelines | Audience |
 | :---- | :---- | :---- | :---- |
 | Version 2 | AI-driven features, admin tools, graph database  | **Start: Month 5** **End: Month 10**  | Users & organizations  |
-| Version 3 | Community features, wearable integration, predictive analytics  | **Start: Month 11** **End: Month 18**  | Users & large-scale organisations  |
+| Version 3 | Wearable integration, predictive analytics  | **Start: Month 11** **End: Month 18**  | Users & large-scale organisations  |
 
 ### **Expanded Timeline: Version 2**
 **Duration:** 6 months (Month 5 - Month 10)
@@ -169,7 +172,7 @@ This section outlines advanced features planned for future releases, including A
 
 ### **Expanded Timeline: Version 3**
 **Duration:** 8 months (Month 11 - Month 18)
-- **Month 11-12:** Community Features (Forums, Gamification).
+- **Month 11-12:** Advanced Gamification.
 - **Month 13-14:** Wearable Integration (Fitbit/Apple Watch APIs).
 - **Month 15-16:** Predictive Analytics (AI models).
 - **Month 17:** Large-Scale Testing (Scalability/Stress tests).

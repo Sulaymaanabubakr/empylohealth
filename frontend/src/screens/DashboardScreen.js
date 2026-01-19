@@ -73,10 +73,11 @@ const DashboardScreen = ({ navigation }) => {
     const [wellbeing, setWellbeing] = useState({ score: 0, label: 'Loading...' });
     const [challenges, setChallenges] = useState([]);
     const [showAssessment, setShowAssessment] = useState(false);
+    const [assessmentType, setAssessmentType] = useState('daily'); // 'daily' or 'weekly'
 
     useEffect(() => {
         console.log('DashboardScreen mounted. User:', user?.email);
-        checkDailyAssessment();
+        checkAssessments();
         fetchDashboardData();
 
         if (user?.uid) {
@@ -101,25 +102,53 @@ const DashboardScreen = ({ navigation }) => {
         }
     };
 
-    const checkDailyAssessment = async () => {
+    const checkAssessments = async () => {
         try {
-            const lastDate = await AsyncStorage.getItem('lastAssessmentDate');
-            const today = new Date().toDateString();
+            const today = new Date();
+            const lastWeekly = await AsyncStorage.getItem('lastWeeklyAssessmentDate');
+            const lastDaily = await AsyncStorage.getItem('lastDailyCheckInDate');
 
-            if (lastDate !== today) {
+            // Check Weekly (every 7 days)
+            let weeklyDue = true;
+            if (lastWeekly) {
+                const lastWeeklyDate = new Date(lastWeekly);
+                const diffTime = Math.abs(today - lastWeeklyDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays < 7) weeklyDue = false;
+            }
+
+            if (weeklyDue) {
+                setAssessmentType('weekly');
+                setTimeout(() => setShowAssessment(true), 1500);
+                return;
+            }
+
+            // Check Daily (every day)
+            const todayStr = today.toDateString();
+            if (lastDaily !== todayStr) {
+                setAssessmentType('daily');
                 setTimeout(() => setShowAssessment(true), 1500);
             }
         } catch (error) {
-            console.error('Error checking assessment date:', error);
+            console.error('Error checking assessment dates:', error);
         }
     };
 
     const handleTakeAssessment = async () => {
         try {
-            const today = new Date().toDateString();
-            await AsyncStorage.setItem('lastAssessmentDate', today);
+            const today = new Date();
+            const todayStr = today.toDateString();
             setShowAssessment(false);
-            alert('Starting Assessment...');
+
+            if (assessmentType === 'weekly') {
+                await AsyncStorage.setItem('lastWeeklyAssessmentDate', today.toISOString()); // Store full ISO for 7-day calc
+                // Also mark daily as done for today so we don't double prompt
+                await AsyncStorage.setItem('lastDailyCheckInDate', todayStr);
+                navigation.navigate('Assessment'); // Navigate to Weekly Flow (AssessmentScreen -> NineIndex)
+            } else {
+                await AsyncStorage.setItem('lastDailyCheckInDate', todayStr);
+                navigation.navigate('CheckIn'); // Navigate to Daily Flow
+            }
         } catch (error) {
             console.error('Error saving assessment date:', error);
         }
@@ -272,6 +301,7 @@ const DashboardScreen = ({ navigation }) => {
 
             <AssessmentModal
                 visible={showAssessment}
+                type={assessmentType}
                 onClose={handleLater}
                 onTakeNow={handleTakeAssessment}
             />

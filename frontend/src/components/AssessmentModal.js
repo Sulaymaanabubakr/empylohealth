@@ -5,7 +5,11 @@ import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-const AssessmentModal = ({ visible, onClose, onTakeNow }) => {
+const AssessmentModal = ({ visible, onClose, onTakeNow, type = 'daily' }) => {
+    const isWeekly = type === 'weekly';
+    const title = isWeekly ? "It's time for your Weekly Reflection" : "Ready for your Daily Check-in?";
+    const subtitle = isWeekly ? "Takes about 2 minutes" : "Takes just 30 seconds";
+
     return (
         <Modal
             animationType="fade"
@@ -19,13 +23,12 @@ const AssessmentModal = ({ visible, onClose, onTakeNow }) => {
                         <Ionicons name="close" size={24} color="#1A1A1A" />
                     </TouchableOpacity>
 
-                    <Text style={styles.title}>Your Daily Assessment is available now</Text>
+                    <Text style={styles.title}>{title}</Text>
+                    <Text style={styles.subtitle}>{subtitle}</Text>
 
-                    {/* Placeholder Illustration - using a generic icon-like placeholder or specific asset if available. 
-                        For now, simulating the document icon with a View or simple Icon combo
-                    */}
+                    {/* Illustration */}
                     <View style={styles.illustrationContainer}>
-                        <Ionicons name="document-text" size={80} color="#E0F2F1" />
+                        <Ionicons name={isWeekly ? "journal" : "create"} size={80} color="#E0F2F1" />
                         <View style={styles.checkBadge}>
                             <Ionicons name="checkmark-circle" size={40} color="#4CAF50" />
                         </View>
