@@ -200,41 +200,7 @@ export const leaveCircle = functions.https.onCall(async (data, context) => {
     }
 });
 
-/**
- * Leave an existing Circle
- * Callable Function: 'leaveCircle'
- */
-export const leaveCircle = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    }
 
-    const { circleId } = data;
-    const uid = context.auth.uid;
-
-    if (!circleId) {
-        throw new functions.https.HttpsError('invalid-argument', 'Circle ID is required.');
-    }
-
-    try {
-        const circleRef = db.collection('circles').doc(circleId);
-        const circleDoc = await circleRef.get();
-
-        if (!circleDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Circle not found.');
-        }
-
-        await circleRef.update({
-            members: admin.firestore.FieldValue.arrayRemove(uid)
-        });
-
-        console.log(`[Circles] User ${uid} left circle ${circleId}`);
-        return { success: true };
-    } catch (error) {
-        console.error("Error leaving circle:", error);
-        throw new functions.https.HttpsError('internal', 'Unable to leave circle.');
-    }
-});
 
 // ==========================================
 // CHAT FUNCTIONS
@@ -413,8 +379,8 @@ export const getUserStats = functions.https.onCall(async (data, context) => {
             return { score: null, label: 'No data' };
         }
 
-        const latest = snapshot.docs[0].data();
-        const score = latest.score || 0;
+        const latest = snapshot.docs[0]?.data();
+        const score = latest?.score || 0;
         let label = 'Neutral';
         if (score >= 80) label = 'Thriving';
         else if (score >= 60) label = 'Doing Well';
@@ -702,36 +668,7 @@ export const submitContactForm = functions.https.onRequest(async (req, res) => {
     }
 });
 
-/**
- * Seed Default Resources (Admin/Dev helper)
- * Callable Function: 'seedResources'
- */
-export const seedResources = functions.https.onCall(async (data, context) => {
-    requireAdmin(context);
 
-    const resources = [
-        {
-            title: 'Sleep hygiene',
-            type: 'article',
-            tag: 'LEARN',
-            time: '12 Mins',
-            status: 'published',
-            category: 'Self-development',
-            image: 'https://img.freepik.com/free-vector/sleep-analysis-concept-illustration_114360-6395.jpg',
-            content: "Good sleep hygiene is typically defined as a set of behavioral and environmental recommendations..."
-        },
-        // ... more seed data
-    ];
-
-    const batch = db.batch();
-    resources.forEach(res => {
-        const ref = db.collection('resources').doc();
-        batch.set(ref, res);
-    });
-
-    await batch.commit();
-    return { success: true, count: resources.length };
-});
 
 // ==========================================
 // ACCOUNT MANAGEMENT

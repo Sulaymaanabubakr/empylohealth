@@ -30,5 +30,5 @@ export const updateHuddleState = coreApi.updateHuddleState;
 export const getExploreContent = coreApi.getExploreContent;
 export const getAffirmations = coreApi.getAffirmations;
 export const submitContactForm = coreApi.submitContactForm;
-export const seedResources = coreApi.seedResources;
+
 export const deleteUserAccount = coreApi.deleteUserAccount;

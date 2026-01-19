@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.seedDemoData = exports.seedResources = exports.getAffirmations = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.getAffirmations = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.leaveCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Admin SDK once at entry point
 if (admin.apps.length === 0) {
@@ -50,14 +50,17 @@ exports.onMessageCreate = generalTriggers.onMessageCreate;
 exports.generateUploadSignature = coreApi.generateUploadSignature;
 exports.createCircle = coreApi.createCircle;
 exports.joinCircle = coreApi.joinCircle;
+exports.leaveCircle = coreApi.leaveCircle;
 exports.createDirectChat = coreApi.createDirectChat;
 exports.sendMessage = coreApi.sendMessage;
 exports.submitAssessment = coreApi.submitAssessment;
+exports.getUserStats = coreApi.getUserStats;
+exports.getKeyChallenges = coreApi.getKeyChallenges;
 exports.updateSubscription = coreApi.updateSubscription;
 exports.startHuddle = coreApi.startHuddle;
 exports.updateHuddleState = coreApi.updateHuddleState;
 exports.getExploreContent = coreApi.getExploreContent;
 exports.getAffirmations = coreApi.getAffirmations;
-exports.seedResources = coreApi.seedResources;
-exports.seedDemoData = coreApi.seedDemoData;
+exports.submitContactForm = coreApi.submitContactForm;
+exports.deleteUserAccount = coreApi.deleteUserAccount;
 //# sourceMappingURL=index.js.map

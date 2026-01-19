@@ -15,6 +15,11 @@ export declare const createCircle: functions.HttpsFunction & functions.Runnable<
  */
 export declare const joinCircle: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Leave an existing Circle
+ * Callable Function: 'leaveCircle'
+ */
+export declare const leaveCircle: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Create or Get Direct Chat
  * Callable Function: 'createDirectChat'
  */
@@ -29,6 +34,16 @@ export declare const sendMessage: functions.HttpsFunction & functions.Runnable<a
  * Callable Function: 'submitAssessment'
  */
 export declare const submitAssessment: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get User Wellbeing Stats
+ * Callable Function: 'getUserStats'
+ */
+export declare const getUserStats: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Key Challenges
+ * Callable Function: 'getKeyChallenges'
+ */
+export declare const getKeyChallenges: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Update Subscription Plan
  * Callable Function: 'updateSubscription'
@@ -55,14 +70,6 @@ export declare const getExploreContent: functions.HttpsFunction & functions.Runn
  * Callable Function: 'getAffirmations'
  */
 export declare const getAffirmations: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Seed Default Resources (Admin/Dev helper)
- * Callable Function: 'seedResources'
- */
-export declare const seedResources: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Seed Demo Data for current user
- * Callable Function: 'seedDemoData'
- */
-export declare const seedDemoData: functions.HttpsFunction & functions.Runnable<any>;
+export declare const submitContactForm: functions.HttpsFunction;
+export declare const deleteUserAccount: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=core.d.ts.map
