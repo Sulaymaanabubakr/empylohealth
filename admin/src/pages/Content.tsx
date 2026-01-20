@@ -242,7 +242,7 @@ export const Content = () => {
                             { label: 'Total', value: stats.total, tone: 'bg-[var(--surface)]' },
                             { label: 'Scheduled', value: stats.scheduled, tone: 'bg-blue-50' },
                             { label: 'New', value: stats.fresh, tone: 'bg-emerald-50' },
-                            { label: 'In Queue', value: stats.total - stats.scheduled, tone: 'bg-amber-50' },
+                            { label: 'In Queue', value: stats.total - (stats.scheduled || 0), tone: 'bg-amber-50' },
                         ]
                         : [
                             { label: 'Total Items', value: stats.total, tone: 'bg-[var(--surface)]' },

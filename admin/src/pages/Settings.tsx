@@ -2,6 +2,7 @@ import { useState } from "react";
 import { User, Save, Loader2, Edit2, ShieldCheck, Palette, Mail } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { sendPasswordResetEmail, updateProfile } from "firebase/auth";
+import { auth } from "../lib/firebase";
 import clsx from "clsx";
 import { useTheme } from "../contexts/ThemeContext";
 
@@ -38,7 +39,7 @@ export const Settings = () => {
         setResetLoading(true);
         setMessage(null);
         try {
-            await sendPasswordResetEmail(user.auth, user.email);
+            await sendPasswordResetEmail(auth, user.email);
             setMessage({ type: "success", text: "Password reset email sent." });
         } catch (error) {
             console.error("Error sending reset email:", error);

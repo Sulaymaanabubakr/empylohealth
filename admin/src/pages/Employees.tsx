@@ -12,6 +12,7 @@ interface UserData {
     displayName: string;
     role: string;
     createdAt: string;
+    status?: string;
 }
 
 export const Employees = () => {
