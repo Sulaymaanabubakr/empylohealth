@@ -210,7 +210,6 @@ const PersonalProfileScreen = ({ navigation }) => {
             { icon: 'notifications-outline', label: 'Notifications', type: 'ionic' },
             { icon: 'person-outline', label: 'Personal Information', type: 'ionic' },
             { icon: 'lock-closed-outline', label: 'Security', type: 'ionic' },
-            { icon: 'repeat', label: 'Subscription Plan', type: 'ionic' },
             { icon: 'help-circle-outline', label: 'My Circles FAQ', type: 'ionic' },
             { icon: 'heart-outline', label: 'Tell a friend', type: 'ionic' },
         ];
@@ -231,9 +230,7 @@ const PersonalProfileScreen = ({ navigation }) => {
                             key={index}
                             style={styles.settingItem}
                             onPress={() => {
-                                if (item.label === 'Subscription Plan') {
-                                    navigation.navigate('Subscription');
-                                } else if (item.label === 'Notifications') {
+                                if (item.label === 'Notifications') {
                                     navigation.navigate('NotificationsSettings');
                                 } else if (item.label === 'Personal Information') {
                                     navigation.navigate('PersonalInformation');

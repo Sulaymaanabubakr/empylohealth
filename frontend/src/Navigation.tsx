@@ -29,7 +29,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import LearningSessionScreen from './screens/LearningSessionScreen';
 import CreateCircleScreen from './screens/CreateCircleScreen';
 import CircleDetailScreen from './screens/CircleDetailScreen';
-import SubscriptionScreen from './screens/SubscriptionScreen';
+// import SubscriptionScreen from './screens/SubscriptionScreen';
 import NotificationsSettingsScreen from './screens/NotificationsSettingsScreen';
 import PersonalInformationScreen from './screens/PersonalInformationScreen';
 import SecurityScreen from './screens/SecurityScreen';
@@ -66,7 +66,7 @@ export default function Navigation() {
                     <Stack.Screen name="LearningSession" component={LearningSessionScreen} />
                     <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
                     <Stack.Screen name="CircleDetail" component={CircleDetailScreen} />
-                    <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+                    {/* <Stack.Screen name="Subscription" component={SubscriptionScreen} /> */}
                     <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
                     <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />
                     <Stack.Screen name="Security" component={SecurityScreen} />

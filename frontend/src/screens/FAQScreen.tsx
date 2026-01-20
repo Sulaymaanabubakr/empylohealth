@@ -26,7 +26,7 @@ const FAQScreen = ({ navigation }) => {
         {
             id: 4,
             question: "Is My Circles app free to use?",
-            answer: "Usage is free for basic features. Pro features are available via subscription for Personal users."
+            answer: "Usage is free for basic features."
         },
         {
             id: 5,
