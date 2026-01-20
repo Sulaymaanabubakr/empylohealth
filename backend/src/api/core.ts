@@ -346,12 +346,57 @@ export const submitAssessment = functions.https.onCall(async (data, context) => 
             type: type || 'daily',
             score: score || 0,
             mood: mood || '', // For daily emoji check-ins
-            answers: answers || {}, // Map of questionId: answer
+            answers: answers || {}, // Map of questionId or QuestionText: answer
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
-        // Optional: Recalculate User's Wellbeing Score here and update user profile
-        // await db.collection('users').doc(uid).update({ wellbeingScore: ... })
+        // Theme Analysis Logic
+        if (type === 'questionnaire' && answers) {
+            // Define Theme Mapping (Simple Keyword Matching or by Index if stable)
+            // Questions:
+            // 0: "I've been feeling relaxed" -> Stress
+            // 1: "I've been feeling useful" -> Motivation
+            // 2: "I've been had energy to spare" -> Energy
+            // 3: "I've been feeling interested in other people" -> Social
+            // 4: "I've been thinking clearly" -> Focus
+
+            // Map scores: "Not at all"(0) to "Always"(4). 
+            // Low score on "Relaxed" means High Warning on "Stress".
+
+            const optionScore: Record<string, number> = {
+                "Not at all": 1, // Bad state (Problematic)
+                "Rarely": 2,
+                "Sometimes": 3,
+                "Most times": 4,
+                "Always": 5      // Good state
+            };
+
+            const themes: Record<string, number> = {
+                'Stress': 5,
+                'Motivation': 5,
+                'Energy': 5,
+                'Social Connection': 5,
+                'Focus': 5
+            };
+
+            Object.entries(answers).forEach(([question, answer]) => {
+                const val = optionScore[String(answer)] || 3;
+                if (question.includes('relaxed')) themes['Stress'] = val;
+                if (question.includes('useful')) themes['Motivation'] = val;
+                if (question.includes('energy')) themes['Energy'] = val;
+                if (question.includes('interested')) themes['Social Connection'] = val;
+                if (question.includes('thinking')) themes['Focus'] = val;
+            });
+
+            // Update User Stats
+            await db.collection('users').doc(uid).set({
+                stats: {
+                    lastAssessmentDate: admin.firestore.FieldValue.serverTimestamp(),
+                    themes,
+                    overallScore: score
+                }
+            }, { merge: true });
+        }
 
         return { success: true };
     } catch (error) {
@@ -369,7 +414,21 @@ export const getUserStats = functions.https.onCall(async (data, context) => {
     const uid = context.auth.uid;
 
     try {
-        // Fetch latest assessment
+        // Fetch from user profile first for aggregated stats
+        const userDoc = await db.collection('users').doc(uid).get();
+        const stats = userDoc.data()?.stats;
+
+        if (stats) {
+            const score = stats.overallScore || 0;
+            let label = 'Neutral';
+            if (score >= 80) label = 'Thriving';
+            else if (score >= 60) label = 'Doing Well';
+            else if (score >= 40) label = 'Okay';
+            else label = 'Struggling';
+            return { score, label };
+        }
+
+        // Fallback to latest assessment query if no aggregated stats
         const snapshot = await db.collection('assessments')
             .where('uid', '==', uid)
             .orderBy('createdAt', 'desc')
@@ -401,18 +460,105 @@ export const getUserStats = functions.https.onCall(async (data, context) => {
  */
 export const getKeyChallenges = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
 
     try {
-        const snapshot = await db.collection('challenges')
-            .where('status', '==', 'published')
-            .orderBy('priority', 'desc')
-            .limit(6)
-            .get();
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return items;
+        // 1. Get User's weakest themes
+        const userDoc = await db.collection('users').doc(uid).get();
+        const themes = userDoc.data()?.stats?.themes || {};
+
+        // Find themes with score <= 2 (1 or 2 means "Not at all" or "Rarely" positive)
+        const weakThemes = Object.entries(themes)
+            .filter(([_, score]) => (score as number) <= 2)
+            .map(([theme]) => theme);
+
+        // 2. Fetch Challenges matching these themes
+        let query: FirebaseFirestore.Query = db.collection('challenges').where('status', '==', 'published');
+
+        // If we have specific weak themes, prioritize them or filter by them.
+        // For simplicity, if we have weak themes, we filter by them. 
+        // Note: 'in' query supports max 10 items.
+
+        let items: any[] = [];
+        if (weakThemes.length > 0) {
+            try {
+                const snapshot = await query.where('category', 'in', weakThemes).limit(6).get();
+                items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            } catch (e) {
+                // Fallback if index missing or error
+                console.log("Error querying challenges by theme", e);
+            }
+        }
+
+        // If no items found (or no weak themes), fill with general high priority challenges
+        if (items.length === 0) {
+            const snapshot = await db.collection('challenges')
+                .where('status', '==', 'published')
+                .orderBy('priority', 'desc')
+                .limit(4)
+                .get();
+            items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+
+        // Add context for the UI (why is this shown?)
+        return items.map(item => ({
+            ...item,
+            reason: weakThemes.includes(item.category) ? `Based on your ${item.category} score` : 'Recommended for everyone'
+        }));
+
     } catch (error) {
         console.error("Error fetching challenges:", error);
         throw new functions.https.HttpsError('internal', 'Unable to fetch challenges.');
+    }
+});
+
+/**
+ * Get Recommended Content
+ * Callable Function: 'getRecommendedContent'
+ */
+export const getRecommendedContent = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+
+    try {
+        // 1. Get User's weakest themes
+        const userDoc = await db.collection('users').doc(uid).get();
+        const themes = userDoc.data()?.stats?.themes || {};
+        const weakThemes = Object.entries(themes)
+            .filter(([_, score]) => (score as number) <= 3) // <= 3 includes "Sometimes"
+            .map(([theme]) => theme);
+
+        let items: any[] = [];
+
+        if (weakThemes.length > 0) {
+            const snapshot = await db.collection('resources')
+                .where('status', '==', 'published')
+                .where('tags', 'array-contains-any', weakThemes) // Ensure resources have 'tags' array
+                .limit(10)
+                .get();
+            items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+
+        // Fill with generic if empty
+        if (items.length < 5) {
+            const snapshot = await db.collection('resources')
+                .where('status', '==', 'published')
+                .orderBy('publishedAt', 'desc')
+                .limit(10 - items.length)
+                .get();
+            const genericItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            // Deduplicate
+            const existingIds = new Set(items.map(i => i.id));
+            genericItems.forEach(i => {
+                if (!existingIds.has(i.id)) items.push(i);
+            });
+        }
+
+        return { items };
+    } catch (error) {
+        console.error("Error fetching recommended content:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to fetch recommendations.');
     }
 });
 

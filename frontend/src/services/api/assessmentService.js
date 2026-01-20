@@ -48,5 +48,19 @@ export const assessmentService = {
             console.log("Error fetching challenges", error);
             throw error;
         }
+    },
+
+    /**
+     * Get Recommended Content matching user themes
+     */
+    getRecommendedContent: async () => {
+        try {
+            const getFn = httpsCallable(functions, 'getRecommendedContent');
+            const result = await getFn();
+            return result.data.items || [];
+        } catch (error) {
+            console.log("Error fetching recommendations", error);
+            throw error; // or return empty array
+        }
     }
 };

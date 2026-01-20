@@ -30,6 +30,7 @@ export const updateSubscription = coreApi.updateSubscription;
 export const startHuddle = coreApi.startHuddle;
 export const updateHuddleState = coreApi.updateHuddleState;
 export const getExploreContent = coreApi.getExploreContent;
+export const getRecommendedContent = coreApi.getRecommendedContent;
 export const getAffirmations = coreApi.getAffirmations;
 export const submitContactForm = coreApi.submitContactForm;
 

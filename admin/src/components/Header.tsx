@@ -1,8 +1,10 @@
-import { Search, Bell, Menu } from 'lucide-react';
+import { Search, Bell, Menu, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 export const Header = () => {
     const { user } = useAuth();
+    const { theme, toggleTheme } = useTheme();
 
     return (
         <header className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-8 sticky top-0 z-40">
@@ -26,6 +28,13 @@ export const Header = () => {
 
             {/* Right Actions */}
             <div className="flex items-center gap-4">
+                <button
+                    onClick={toggleTheme}
+                    className="p-2 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-full transition-colors"
+                >
+                    {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                </button>
+
                 <button className="relative p-2 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-full transition-colors">
                     <Bell size={20} />
                     <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>

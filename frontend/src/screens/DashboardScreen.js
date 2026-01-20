@@ -72,6 +72,7 @@ const DashboardScreen = ({ navigation }) => {
     const [circles, setCircles] = useState([]);
     const [wellbeing, setWellbeing] = useState({ score: 0, label: 'Loading...' });
     const [challenges, setChallenges] = useState([]);
+    const [recommendations, setRecommendations] = useState([]);
     const [showAssessment, setShowAssessment] = useState(false);
     const [assessmentType, setAssessmentType] = useState('daily'); // 'daily' or 'weekly'
 
@@ -91,12 +92,14 @@ const DashboardScreen = ({ navigation }) => {
 
     const fetchDashboardData = async () => {
         try {
-            const [stats, challs] = await Promise.all([
+            const [stats, challs, recs] = await Promise.all([
                 assessmentService.getWellbeingStats(),
-                assessmentService.getKeyChallenges()
+                assessmentService.getKeyChallenges(),
+                assessmentService.getRecommendedContent()
             ]);
             setWellbeing(stats);
             setChallenges(challs);
+            setRecommendations(recs);
         } catch (err) {
             console.log("Error fetching dashboard data", err);
         }
@@ -296,6 +299,39 @@ const DashboardScreen = ({ navigation }) => {
                         </View>
                     </View>
                 )}
+
+                {/* Recommended Activities */}
+                <View style={[styles.sectionHeader, { marginTop: 10 }]}>
+                    <Text style={styles.sectionTitle}>Recommended For You</Text>
+                </View>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 30 }}>
+                    {recommendations.length > 0 ? (
+                        recommendations.map((item, index) => (
+                            <TouchableOpacity
+                                key={item.id || index}
+                                style={styles.recommendationCard}
+                                onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                            >
+                                <View style={[styles.recommendationImageContainer, { backgroundColor: item.color || '#E0F7FA' }]}>
+                                    {item.image ? (
+                                        <Image source={{ uri: item.image }} style={styles.recommendationImage} resizeMode="contain" />
+                                    ) : (
+                                        <MaterialCommunityIcons name="feather" size={32} color={COLORS.primary} />
+                                    )}
+                                </View>
+                                <View style={styles.recommendationContent}>
+                                    <Text style={styles.recommendationTitle} numberOfLines={2}>{item.title}</Text>
+                                    <Text style={styles.recommendationTag}>{item.tag || item.category || 'Activity'}</Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))
+                    ) : (
+                        <View style={styles.emptyRecommendation}>
+                            <Text style={styles.emptyText}>Complete a check-in to get recommendations!</Text>
+                        </View>
+                    )}
+                </ScrollView>
 
             </ScrollView>
 
@@ -725,6 +761,57 @@ const styles = StyleSheet.create({
         color: '#BDBDBD',
         fontWeight: '600',
     },
+    recommendationCard: {
+        width: 200,
+        backgroundColor: '#FFF',
+        borderRadius: 24,
+        marginRight: 16,
+        padding: 12,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#FAFAFA',
+    },
+    recommendationImageContainer: {
+        height: 100,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+        overflow: 'hidden',
+    },
+    recommendationImage: {
+        width: '100%',
+        height: '100%',
+    },
+    recommendationContent: {
+        paddingHorizontal: 4,
+        paddingBottom: 4,
+    },
+    recommendationTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#212121',
+        marginBottom: 4,
+        height: 40, // Fixed height for 2 lines
+    },
+    recommendationTag: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: COLORS.primary,
+        textTransform: 'uppercase',
+    },
+    emptyRecommendation: {
+        padding: 20,
+        width: width - 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#F5F5F5',
+        borderRadius: 20,
+    }
 });
 
 export default DashboardScreen;
