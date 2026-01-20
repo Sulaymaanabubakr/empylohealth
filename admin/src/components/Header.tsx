@@ -1,16 +1,29 @@
+import { useState } from 'react';
 import { Search, Bell, Menu, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useNavigate } from 'react-router-dom';
 
-export const Header = () => {
+interface HeaderProps {
+    onToggleSidebar: () => void;
+}
+
+export const Header = ({ onToggleSidebar }: HeaderProps) => {
     const { user } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const [query, setQuery] = useState('');
+    const navigate = useNavigate();
+
+    const handleSearch = () => {
+        if (!query.trim()) return;
+        navigate(`/content?query=${encodeURIComponent(query.trim())}`);
+    };
 
     return (
-        <header className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-8 sticky top-0 z-40">
+        <header className="h-20 bg-surface border-b border-border flex items-center justify-between px-8 sticky top-0 z-40">
             {/* Mobile Toggle & Search */}
             <div className="flex items-center flex-1">
-                <button className="md:hidden mr-4 text-gray-500">
+                <button onClick={onToggleSidebar} className="md:hidden mr-4 text-gray-500">
                     <Menu size={24} />
                 </button>
 
@@ -21,6 +34,11 @@ export const Header = () => {
                     <input
                         type="text"
                         placeholder="Search resources, users, or circles..."
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSearch();
+                        }}
                         className="pl-10 pr-4 py-2.5 w-full bg-gray-50 border-none rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all outline-none"
                     />
                 </div>

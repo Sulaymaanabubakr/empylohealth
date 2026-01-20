@@ -220,3 +220,112 @@ export const deleteItem = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('internal', 'Unable to delete item.');
     }
 });
+
+/**
+ * Get Admin Affirmations
+ */
+export const getAdminAffirmations = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { limit = 50, startAfterId } = data || {};
+
+    try {
+        let query = db.collection('affirmations').orderBy('createdAt', 'desc').limit(limit);
+
+        if (startAfterId) {
+            const lastDoc = await db.collection('affirmations').doc(startAfterId).get();
+            if (lastDoc.exists) {
+                query = query.startAfter(lastDoc);
+            }
+        }
+
+        const snapshot = await query.get();
+        const items = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate().toISOString()
+        }));
+
+        return { items, lastId: items.length > 0 ? items[items.length - 1]?.id : null };
+    } catch (error) {
+        console.error("Error fetching affirmations:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to fetch affirmations.');
+    }
+});
+
+/**
+ * Create Admin Affirmation
+ */
+export const createAffirmation = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { content, scheduledDate } = data || {};
+
+    if (!content) {
+        throw new functions.https.HttpsError('invalid-argument', 'Affirmation content is required.');
+    }
+
+    try {
+        const ref = await db.collection('affirmations').add({
+            content,
+            scheduledDate: scheduledDate || null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdBy: context.auth!.uid,
+            isNew: true
+        });
+
+        return { success: true, id: ref.id };
+    } catch (error) {
+        console.error("Error creating affirmation:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to create affirmation.');
+    }
+});
+
+/**
+ * Delete Admin Affirmation
+ */
+export const deleteAffirmation = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { id } = data || {};
+
+    if (!id) {
+        throw new functions.https.HttpsError('invalid-argument', 'Affirmation id is required.');
+    }
+
+    try {
+        await db.collection('affirmations').doc(id).delete();
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting affirmation:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to delete affirmation.');
+    }
+});
+
+/**
+ * Get Transactions (Admin)
+ */
+export const getTransactions = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { limit = 50, startAfterId } = data || {};
+
+    try {
+        let query = db.collection('transactions').orderBy('createdAt', 'desc').limit(limit);
+
+        if (startAfterId) {
+            const lastDoc = await db.collection('transactions').doc(startAfterId).get();
+            if (lastDoc.exists) {
+                query = query.startAfter(lastDoc);
+            }
+        }
+
+        const snapshot = await query.get();
+        const items = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate().toISOString()
+        }));
+
+        return { items, lastId: items.length > 0 ? items[items.length - 1]?.id : null };
+    } catch (error) {
+        console.error("Error fetching transactions:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to fetch transactions.');
+    }
+});

@@ -8,6 +8,28 @@ import { DashboardCard } from '../components/DashboardCard';
 export const Dashboard = () => {
     const [stats, setStats] = useState({ users: 0, circles: 0, resources: 0, pending: 0, storage: '0 GB' });
 
+    const handleDownloadReport = () => {
+        const rows = [
+            ['Total Users', stats.users],
+            ['Active Circles', stats.circles],
+            ['Resources', stats.resources],
+            ['Pending Review', stats.pending],
+            ['Storage Used', stats.storage]
+        ];
+        const csv = [['Metric', 'Value'], ...rows]
+            .map((row) => row.map(String).map((value) => `"${value.replace(/"/g, '""')}"`).join(','))
+            .join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'dashboard-report.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -43,7 +65,10 @@ export const Dashboard = () => {
                     <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Overview</h2>
                     <p className="text-gray-500 text-sm mt-1">Here's what's happening with your community today.</p>
                 </div>
-                <button className="bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-gray-200">
+                <button
+                    onClick={handleDownloadReport}
+                    className="bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-gray-200"
+                >
                     Download Report
                 </button>
             </div>

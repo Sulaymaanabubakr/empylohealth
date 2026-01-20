@@ -44,6 +44,10 @@ export const getAllContent = adminApi.getAllContent;
 export const updateContentStatus = adminApi.updateContentStatus;
 export const toggleUserStatus = adminApi.toggleUserStatus;
 export const deleteItem = adminApi.deleteItem;
+export const getAdminAffirmations = adminApi.getAdminAffirmations;
+export const createAffirmation = adminApi.createAffirmation;
+export const deleteAffirmation = adminApi.deleteAffirmation;
+export const getTransactions = adminApi.getTransactions;
 
 // User Management
 export const createEmployee = userMgmtApi.createEmployee;

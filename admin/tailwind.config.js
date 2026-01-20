@@ -8,24 +8,24 @@ export default {
     theme: {
         extend: {
             colors: {
-                background: '#F8F9FA', // Light Grayish White
-                surface: '#FFFFFF',    // Pure White
-                primary: '#00A99D',    // Empylo Turquoise
-                secondary: '#FFB347',  // Empylo Orange
-                dark: '#191919',       // Empylo Black
+                background: 'var(--bg)',
+                surface: 'var(--surface)',
+                primary: 'var(--primary)',
+                secondary: 'var(--secondary)',
+                dark: 'var(--ink)',
 
                 // Semantic aliases
                 text: {
-                    DEFAULT: '#191919',
-                    muted: '#6C757D',
+                    DEFAULT: 'var(--ink)',
+                    muted: 'var(--muted)',
                     inverted: '#FFFFFF'
                 },
-                border: '#E9ECEF',
+                border: 'var(--border)',
 
                 // Accents
                 accent: {
-                    purple: '#A5A7F4',
-                    blue: '#D8DEE8'
+                    purple: 'var(--accent-purple)',
+                    blue: 'var(--accent-blue)'
                 },
 
                 danger: '#DC3545',
@@ -33,7 +33,8 @@ export default {
                 warning: '#FFC107',
             },
             fontFamily: {
-                sans: ['Inter', 'sans-serif'], // Or Space Grotesk if available
+                sans: ['Space Grotesk', 'sans-serif'],
+                display: ['DM Serif Display', 'serif']
             }
         },
     },
