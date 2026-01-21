@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/$USER/public_html
+    - /bin/cp -R web/landing/dist/* $DEPLOYPATH
+    - /bin/cp -R web/admin/dist/* $DEPLOYPATH/admin
