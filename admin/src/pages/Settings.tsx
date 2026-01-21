@@ -1,34 +1,32 @@
 import { useState } from "react";
-import { User, Save, Loader2, Edit2, ShieldCheck, Palette, Mail } from "lucide-react";
+import { User, Save, Loader2, Edit2, ShieldCheck, Mail } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { sendPasswordResetEmail, updateProfile } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import clsx from "clsx";
-import { useTheme } from "../contexts/ThemeContext";
+import { useNotification } from "../contexts/NotificationContext";
 
 export const Settings = () => {
     const { user } = useAuth();
-    const { theme, toggleTheme } = useTheme();
+    const { showNotification } = useNotification();
     const [isEditing, setIsEditing] = useState(false);
     const [loading, setLoading] = useState(false);
     const [resetLoading, setResetLoading] = useState(false);
     const [fullName, setFullName] = useState(user?.displayName || "");
-    const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
     const handleSave = async () => {
         if (!user) return;
         setLoading(true);
-        setMessage(null);
 
         try {
             await updateProfile(user, {
                 displayName: fullName,
             });
-            setMessage({ type: "success", text: "Profile updated successfully!" });
+            showNotification('success', "Profile updated successfully!");
             setIsEditing(false);
         } catch (error) {
             console.error("Error updating profile:", error);
-            setMessage({ type: "error", text: "Failed to update profile." });
+            showNotification('error', "Failed to update profile.");
         } finally {
             setLoading(false);
         }
@@ -37,16 +35,19 @@ export const Settings = () => {
     const handlePasswordReset = async () => {
         if (!user?.email) return;
         setResetLoading(true);
-        setMessage(null);
         try {
             await sendPasswordResetEmail(auth, user.email);
-            setMessage({ type: "success", text: "Password reset email sent." });
+            showNotification('success', "Password reset email sent.");
         } catch (error) {
             console.error("Error sending reset email:", error);
-            setMessage({ type: "error", text: "Failed to send reset email." });
+            showNotification('error', "Failed to send reset email.");
         } finally {
             setResetLoading(false);
         }
+    };
+
+    const handlePhotoClick = () => {
+        showNotification('info', "Photo upload will be available in the next update.");
     };
 
     return (
@@ -55,17 +56,6 @@ export const Settings = () => {
                 <h2 className="text-3xl font-display text-gray-900 dark:text-gray-100">Settings</h2>
                 <p className="text-gray-500 text-sm mt-1 dark:text-gray-400">Manage your account, access, and preferences.</p>
             </div>
-
-            {message && (
-                <div
-                    className={clsx(
-                        "p-3 rounded-lg text-sm font-medium",
-                        message.type === "success" ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
-                    )}
-                >
-                    {message.text}
-                </div>
-            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 bg-surface rounded-2xl border border-border shadow-sm overflow-hidden dark:bg-dark dark:border-gray-800">
@@ -94,8 +84,11 @@ export const Settings = () => {
                                 )}
                             </div>
                             <div>
-                                <button disabled className="text-sm font-medium text-gray-400 cursor-not-allowed">
-                                    Change Photo (Coming Soon)
+                                <button
+                                    onClick={handlePhotoClick}
+                                    className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                                >
+                                    Change Photo
                                 </button>
                             </div>
                         </div>
@@ -132,7 +125,6 @@ export const Settings = () => {
                                 onClick={() => {
                                     setIsEditing(false);
                                     setFullName(user?.displayName || "");
-                                    setMessage(null);
                                 }}
                                 className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700"
                                 disabled={loading}
@@ -167,15 +159,7 @@ export const Settings = () => {
                             <span className="text-sm text-gray-600 dark:text-gray-300">Primary Email</span>
                             <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{user?.email || '—'}</span>
                         </div>
-                        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3 flex items-center justify-between">
-                            <span className="text-sm text-gray-600 dark:text-gray-300">Theme</span>
-                            <button
-                                onClick={toggleTheme}
-                                className="text-sm font-semibold text-primary hover:text-[#008f85] transition-colors"
-                            >
-                                {theme === 'dark' ? 'Dark' : 'Light'}
-                            </button>
-                        </div>
+
                     </div>
                     <div className="border-t border-border dark:border-gray-800 pt-4">
                         <button
@@ -191,26 +175,6 @@ export const Settings = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-surface rounded-2xl border border-border shadow-sm p-6 dark:bg-dark dark:border-gray-800">
-                    <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-semibold">
-                        <Palette size={18} className="text-primary" />
-                        Preferences
-                    </div>
-                    <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">Personalize how the admin portal feels.</p>
-                    <div className="mt-4 flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3">
-                        <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Interface Theme</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Switch between light and dark styles.</p>
-                        </div>
-                        <button
-                            onClick={toggleTheme}
-                            className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium"
-                        >
-                            {theme === 'dark' ? 'Use Light' : 'Use Dark'}
-                        </button>
-                    </div>
-                </div>
-
                 <div className="bg-surface rounded-2xl border border-border shadow-sm p-6 dark:bg-dark dark:border-gray-800">
                     <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-semibold">
                         <ShieldCheck size={18} className="text-primary" />

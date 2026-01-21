@@ -1,6 +1,7 @@
 // TypeScript conversion in progress
-import { functions } from '../firebaseConfig';
+import { functions, db, auth } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
+import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 
 export const assessmentService = {
     /**
@@ -62,6 +63,54 @@ export const assessmentService = {
         } catch (error) {
             console.log("Error fetching recommendations", error);
             throw error; // or return empty array
+        }
+    },
+    /**
+     * Get Assessment History directly from Firestore
+     * @param {number} limitCount Number of records to fetch
+     */
+    getAssessmentHistory: async (limitCount = 7) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return [];
+
+            const q = query(
+                collection(db, 'assessments'),
+                where('uid', '==', user.uid),
+                orderBy('createdAt', 'desc'),
+                limit(limitCount)
+            );
+
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt) // Handle Firestore Timestamp
+            }));
+        } catch (error) {
+            console.error("Error fetching assessment history:", error);
+            return [];
+        }
+    },
+
+    /**
+     * Get Dynamic Assessment Questions
+     */
+    getQuestions: async () => {
+        try {
+            const q = query(
+                collection(db, 'assessment_questions'),
+                where('isActive', '==', true),
+                orderBy('order', 'asc')
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error("Error fetching questions:", error);
+            return [];
         }
     }
 };

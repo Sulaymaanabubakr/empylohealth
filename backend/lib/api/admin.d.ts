@@ -27,4 +27,36 @@ export declare const toggleUserStatus: functions.HttpsFunction & functions.Runna
  * Delete Item (User, Circle, Resource)
  */
 export declare const deleteItem: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Admin Affirmations
+ */
+export declare const getAdminAffirmations: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Create Admin Affirmation
+ */
+export declare const createAffirmation: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Delete Admin Affirmation
+ */
+export declare const deleteAffirmation: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Transactions (Admin)
+ */
+export declare const getTransactions: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Reports (Moderation)
+ */
+export declare const getReports: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Resolve Report
+ */
+export declare const resolveReport: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Support Tickets
+ */
+export declare const getSupportTickets: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Update Ticket Status
+ */
+export declare const updateTicketStatus: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=admin.d.ts.map

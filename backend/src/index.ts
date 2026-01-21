@@ -26,6 +26,7 @@ export const sendMessage = coreApi.sendMessage;
 export const submitAssessment = coreApi.submitAssessment;
 export const getUserStats = coreApi.getUserStats;
 export const getKeyChallenges = coreApi.getKeyChallenges;
+export const seedAssessmentQuestions = coreApi.seedAssessmentQuestions;
 export const updateSubscription = coreApi.updateSubscription;
 export const startHuddle = coreApi.startHuddle;
 export const updateHuddleState = coreApi.updateHuddleState;
@@ -48,6 +49,10 @@ export const getAdminAffirmations = adminApi.getAdminAffirmations;
 export const createAffirmation = adminApi.createAffirmation;
 export const deleteAffirmation = adminApi.deleteAffirmation;
 export const getTransactions = adminApi.getTransactions;
+export const getReports = adminApi.getReports;
+export const resolveReport = adminApi.resolveReport;
+export const getSupportTickets = adminApi.getSupportTickets;
+export const updateTicketStatus = adminApi.updateTicketStatus;
 
 // User Management
 export const createEmployee = userMgmtApi.createEmployee;

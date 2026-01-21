@@ -6,6 +6,7 @@ import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
 import Avatar from '../components/Avatar';
+import BottomNavigation from '../components/BottomNavigation';
 
 const ChatListScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
@@ -93,33 +94,8 @@ const ChatListScreen = ({ navigation }) => {
                 showsVerticalScrollIndicator={false}
             />
 
-            {/* Bottom Navigation Placeholder (To be replaced with actual component if needed, or rely on Tab Navigator if used) */}
-            {/* Since we are in a Stack, we might want to replicate the bottom nav or assume this screen is part of a tab structure. 
-                For now, we'll leave it as a full screen or add the visual bottom nav if requested. 
-                The screenshot implies it's a main tab screen. 
-            */}
-            <View style={[styles.bottomNavContainer, { paddingBottom: insets.bottom }]}>
-                <View style={styles.bottomNav}>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Dashboard')}>
-                        <Ionicons name="home-outline" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Home</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Explore')}>
-                        <Feather name="compass" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Explore</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem}>
-                        <View style={styles.activeNavIcon}>
-                            <Ionicons name="chatbubble" size={24} color={COLORS.primary} />
-                        </View>
-                        <Text style={[styles.navLabel, { color: COLORS.primary, fontWeight: '700' }]}>Chat</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-                        <Ionicons name="person-outline" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Profile</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+            {/* Bottom Navigation */}
+            <BottomNavigation navigation={navigation} activeTab="Chat" />
         </SafeAreaView>
     );
 };

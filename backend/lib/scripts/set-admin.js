@@ -58,7 +58,7 @@ const grantAdminAccess = async (email) => {
 const main = async () => {
     const admins = [
         'sulaymaanabubakr@gmail.com',
-        'Gcmusariri@gmail.com'
+        'gcmusariri@gmail.com'
     ];
     console.log('Granting admin privileges...');
     for (const email of admins) {

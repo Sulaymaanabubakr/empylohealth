@@ -52,10 +52,14 @@ export const getDashboardStats = functions.https.onCall(async (data, context) =>
  */
 export const getAllUsers = functions.https.onCall(async (data, context) => {
     requireAdmin(context);
-    const { limit = 20, startAfterId } = data;
+    const { limit = 20, startAfterId, roles } = data; // roles: string[]
 
     try {
         let query = db.collection('users').orderBy('createdAt', 'desc').limit(limit);
+
+        if (roles && Array.isArray(roles) && roles.length > 0) {
+            query = db.collection('users').where('role', 'in', roles).orderBy('createdAt', 'desc').limit(limit);
+        }
 
         if (startAfterId) {
             const lastDoc = await db.collection('users').doc(startAfterId).get();
@@ -327,5 +331,135 @@ export const getTransactions = functions.https.onCall(async (data, context) => {
     } catch (error) {
         console.error("Error fetching transactions:", error);
         throw new functions.https.HttpsError('internal', 'Unable to fetch transactions.');
+    }
+});
+
+/**
+ * Get Reports (Moderation)
+ */
+export const getReports = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { limit = 50, startAfterId, status } = data; // status: 'pending' | 'resolved'
+
+    try {
+        let query = db.collection('reports').orderBy('createdAt', 'desc').limit(limit);
+
+        if (status) {
+            query = db.collection('reports').where('status', '==', status).orderBy('createdAt', 'desc').limit(limit);
+        }
+
+        if (startAfterId) {
+            const lastDoc = await db.collection('reports').doc(startAfterId).get();
+            if (lastDoc.exists) query = query.startAfter(lastDoc);
+        }
+
+        const snapshot = await query.get();
+        const items = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate().toISOString()
+        }));
+
+        return { items, lastId: items.length > 0 ? items[items.length - 1]?.id : null };
+    } catch (error) {
+        console.error("Error fetching reports:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to fetch reports.');
+    }
+});
+
+/**
+ * Resolve Report
+ */
+export const resolveReport = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { reportId, action, notes } = data;
+    // action: 'dismiss' | 'warning' | 'suspend_user' | 'delete_content'
+
+    if (!reportId || !action) throw new functions.https.HttpsError('invalid-argument', 'Missing fields');
+
+    try {
+        const reportRef = db.collection('reports').doc(reportId);
+        const reportDoc = await reportRef.get();
+        const reportData = reportDoc.data();
+
+        const batch = db.batch();
+
+        // 1. Update Report Status
+        batch.update(reportRef, {
+            status: 'resolved',
+            resolutionAction: action,
+            resolutionNotes: notes || '',
+            resolvedBy: context.auth!.uid,
+            resolvedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // 2. Perform Action
+        if (action === 'suspend_user' && reportData?.reportedUserId) {
+            const userRef = db.collection('users').doc(reportData.reportedUserId);
+            batch.update(userRef, { status: 'suspended' });
+            await auth.updateUser(reportData.reportedUserId, { disabled: true });
+        } else if (action === 'delete_content' && reportData?.contentId && reportData?.contentType) {
+            const contentRef = db.collection(reportData.contentType).doc(reportData.contentId);
+            batch.delete(contentRef);
+        }
+
+        await batch.commit();
+        return { success: true };
+    } catch (error) {
+        console.error("Report resolution failed", error);
+        throw new functions.https.HttpsError('internal', 'Resolution failed');
+    }
+});
+
+/**
+ * Get Support Tickets
+ */
+export const getSupportTickets = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { limit = 50, startAfterId, status } = data;
+
+    try {
+        let query = db.collection('support_tickets').orderBy('createdAt', 'desc').limit(limit);
+
+        if (status) {
+            query = db.collection('support_tickets').where('status', '==', status).orderBy('createdAt', 'desc').limit(limit);
+        }
+
+        if (startAfterId) {
+            const lastDoc = await db.collection('support_tickets').doc(startAfterId).get();
+            if (lastDoc.exists) query = query.startAfter(lastDoc);
+        }
+
+        const snapshot = await query.get();
+        const items = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate().toISOString()
+        }));
+
+        return { items, lastId: items.length > 0 ? items[items.length - 1]?.id : null };
+    } catch (error) {
+        console.error("Error fetching tickets:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to fetch tickets.');
+    }
+});
+
+/**
+ * Update Ticket Status
+ */
+export const updateTicketStatus = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { ticketId, status, reply } = data; // status: 'open' | 'resolved' | 'pending'
+
+    try {
+        await db.collection('support_tickets').doc(ticketId).update({
+            status,
+            lastReply: reply || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedBy: context.auth!.uid
+        });
+        return { success: true };
+    } catch (error) {
+        throw new functions.https.HttpsError('internal', 'Update failed');
     }
 });

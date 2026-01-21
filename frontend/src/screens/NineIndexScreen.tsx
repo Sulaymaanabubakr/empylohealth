@@ -7,13 +7,37 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { assessmentService } from '../services/api/assessmentService';
 
 const NineIndexScreen = ({ navigation }) => {
-    const questions = [
+    const defaultQuestions = [
         "I've been feeling relaxed",
         "I've been feeling useful",
         "I've been had energy to spare",
         "I've been feeling interested in other people",
         "I've been thinking clearly"
     ];
+
+    const [dbQuestions, setDbQuestions] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [answers, setAnswers] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        loadQuestions();
+    }, []);
+
+    const loadQuestions = async () => {
+        try {
+            const data = await assessmentService.getQuestions();
+            if (data && data.length > 0) {
+                setDbQuestions(data);
+            }
+        } catch (error) {
+            console.error("Failed to load questions", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const questions = dbQuestions.length > 0 ? dbQuestions.map(q => q.text) : defaultQuestions;
 
     const options = ["Not at all", "Rarely", "Sometimes", "Most times", "Always"];
 
@@ -28,9 +52,6 @@ const NineIndexScreen = ({ navigation }) => {
         };
         return emojiMap[option] || "emoticon-outline";
     };
-
-    const [answers, setAnswers] = useState({});
-    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleSelect = (qIndex, option) => {
         setAnswers({ ...answers, [qIndex]: option });

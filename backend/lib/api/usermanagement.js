@@ -44,7 +44,7 @@ const db = admin.firestore();
 // Super Admins allowed to create employees
 const SUPER_ADMINS = [
     'sulaymaanabubakr@gmail.com',
-    'Gcmusariri@gmail.com'
+    'gcmusariri@gmail.com'
 ];
 /**
  * Create Employee Account

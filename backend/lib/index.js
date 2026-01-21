@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createEmployee = exports.deleteItem = exports.toggleUserStatus = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.deleteUserAccount = exports.submitContactForm = exports.getAffirmations = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.leaveCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
+exports.createEmployee = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.deleteUserAccount = exports.submitContactForm = exports.getAffirmations = exports.getRecommendedContent = exports.getExploreContent = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.seedAssessmentQuestions = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.leaveCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Admin SDK once at entry point
 if (admin.apps.length === 0) {
@@ -58,10 +58,12 @@ exports.sendMessage = coreApi.sendMessage;
 exports.submitAssessment = coreApi.submitAssessment;
 exports.getUserStats = coreApi.getUserStats;
 exports.getKeyChallenges = coreApi.getKeyChallenges;
+exports.seedAssessmentQuestions = coreApi.seedAssessmentQuestions;
 exports.updateSubscription = coreApi.updateSubscription;
 exports.startHuddle = coreApi.startHuddle;
 exports.updateHuddleState = coreApi.updateHuddleState;
 exports.getExploreContent = coreApi.getExploreContent;
+exports.getRecommendedContent = coreApi.getRecommendedContent;
 exports.getAffirmations = coreApi.getAffirmations;
 exports.submitContactForm = coreApi.submitContactForm;
 exports.deleteUserAccount = coreApi.deleteUserAccount;
@@ -73,6 +75,14 @@ exports.getAllContent = adminApi.getAllContent;
 exports.updateContentStatus = adminApi.updateContentStatus;
 exports.toggleUserStatus = adminApi.toggleUserStatus;
 exports.deleteItem = adminApi.deleteItem;
+exports.getAdminAffirmations = adminApi.getAdminAffirmations;
+exports.createAffirmation = adminApi.createAffirmation;
+exports.deleteAffirmation = adminApi.deleteAffirmation;
+exports.getTransactions = adminApi.getTransactions;
+exports.getReports = adminApi.getReports;
+exports.resolveReport = adminApi.resolveReport;
+exports.getSupportTickets = adminApi.getSupportTickets;
+exports.updateTicketStatus = adminApi.updateTicketStatus;
 // User Management
 exports.createEmployee = userMgmtApi.createEmployee;
 //# sourceMappingURL=index.js.map

@@ -4,6 +4,8 @@ import { Plus, Search, Shield, Mail, User as UserIcon, Ban, CheckCircle, Trash2 
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
 import clsx from 'clsx';
+import { useNotification } from '../contexts/NotificationContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 
 interface UserData {
@@ -17,12 +19,22 @@ interface UserData {
 
 export const Employees = () => {
     // const { isAdmin } = useAuth();
+    const { showNotification } = useNotification();
     const [employees, setEmployees] = useState<UserData[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    // const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null); // Replaced by global notification
     const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+
+    // Confirm Dialog State
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmConfig, setConfirmConfig] = useState<{
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        type: 'danger' | 'warning' | 'info';
+    }>({ title: '', message: '', onConfirm: () => { }, type: 'danger' });
 
     // Form State
     const [formData, setFormData] = useState({
@@ -33,20 +45,18 @@ export const Employees = () => {
     });
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
 
     const fetchEmployees = async () => {
         setLoading(true);
         try {
-            // Re-using getAllUsers but technically we should filter for admins/employees
-            // For now, we list all users, assuming this list is what admins manage
             const getAllUsers = httpsCallable(functions, 'getAllUsers');
-            const result = await getAllUsers({ limit: 50 });
+            // Filter for employees only
+            const result = await getAllUsers({ limit: 100, roles: ['admin', 'editor', 'viewer'] });
             const data = result.data as any;
             setEmployees(data.users || []);
         } catch (err) {
             console.error("Failed to fetch employees", err);
-            setMessage({ type: 'error', text: 'Failed to fetch employees.' });
+            showNotification('error', 'Failed to fetch employees.');
         } finally {
             setLoading(false);
         }
@@ -60,19 +70,14 @@ export const Employees = () => {
         e.preventDefault();
         setCreating(true);
         setError('');
-        setSuccess('');
-        setMessage(null);
 
         try {
             const createEmployee = httpsCallable(functions, 'createEmployee');
             await createEmployee(formData);
-            setSuccess('Employee created successfully!');
+            showNotification('success', 'Employee created successfully!');
             setFormData({ displayName: '', email: '', password: '', role: 'editor' });
-            setTimeout(() => {
-                setIsModalOpen(false);
-                setSuccess('');
-                fetchEmployees(); // Refresh list
-            }, 1000);
+            setIsModalOpen(false);
+            fetchEmployees();
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Failed to create employee.');
@@ -81,39 +86,56 @@ export const Employees = () => {
         }
     };
 
+    const confirmAction = (title: string, message: string, action: () => void, type: 'danger' | 'warning' = 'danger') => {
+        setConfirmConfig({ title, message, onConfirm: action, type });
+        setConfirmOpen(true);
+    };
+
     const handleToggleStatus = async (id: string, currentStatus: string) => {
         const nextStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
-        if (!confirm(`Are you sure you want to ${nextStatus === 'suspended' ? 'suspend' : 'activate'} this user?`)) return;
-        setActionLoading((prev) => ({ ...prev, [id]: true }));
-        setMessage(null);
-        try {
-            const toggleStatus = httpsCallable(functions, 'toggleUserStatus');
-            await toggleStatus({ uid: id, status: nextStatus });
-            await fetchEmployees();
-            setMessage({ type: 'success', text: `User ${nextStatus}.` });
-        } catch (err) {
-            console.error("Failed to update user", err);
-            setMessage({ type: 'error', text: 'Failed to update user.' });
-        } finally {
-            setActionLoading((prev) => ({ ...prev, [id]: false }));
-        }
+
+        confirmAction(
+            nextStatus === 'suspended' ? 'Suspend Employee?' : 'Activate Employee?',
+            `Are you sure you want to ${nextStatus === 'suspended' ? 'suspend' : 'activate'} this account? They ${nextStatus === 'suspended' ? 'will not' : 'will'} be able to access the admin panel.`,
+            async () => {
+                setConfirmOpen(false);
+                setActionLoading((prev) => ({ ...prev, [id]: true }));
+                try {
+                    const toggleStatus = httpsCallable(functions, 'toggleUserStatus');
+                    await toggleStatus({ uid: id, status: nextStatus });
+                    await fetchEmployees();
+                    showNotification('success', `User ${nextStatus}.`);
+                } catch (err) {
+                    console.error("Failed to update user", err);
+                    showNotification('error', 'Failed to update user status.');
+                } finally {
+                    setActionLoading((prev) => ({ ...prev, [id]: false }));
+                }
+            },
+            nextStatus === 'suspended' ? 'warning' : 'info' as any
+        );
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Delete this user? This cannot be undone.")) return;
-        setActionLoading((prev) => ({ ...prev, [id]: true }));
-        setMessage(null);
-        try {
-            const del = httpsCallable(functions, 'deleteItem');
-            await del({ collection: 'users', id });
-            await fetchEmployees();
-            setMessage({ type: 'success', text: 'User deleted.' });
-        } catch (err) {
-            console.error("Failed to delete user", err);
-            setMessage({ type: 'error', text: 'Failed to delete user.' });
-        } finally {
-            setActionLoading((prev) => ({ ...prev, [id]: false }));
-        }
+        confirmAction(
+            'Delete Employee?',
+            'This action cannot be undone. The account will be permanently removed.',
+            async () => {
+                setConfirmOpen(false);
+                setActionLoading((prev) => ({ ...prev, [id]: true }));
+                try {
+                    const del = httpsCallable(functions, 'deleteItem');
+                    await del({ collection: 'users', id });
+                    await fetchEmployees();
+                    showNotification('success', 'User deleted successfully.');
+                } catch (err) {
+                    console.error("Failed to delete user", err);
+                    showNotification('error', 'Failed to delete user.');
+                } finally {
+                    setActionLoading((prev) => ({ ...prev, [id]: false }));
+                }
+            }
+        );
     };
 
     const filteredEmployees = useMemo(() => {
@@ -150,11 +172,7 @@ export const Employees = () => {
                 </button>
             </div>
 
-            {message && (
-                <div className={message.type === 'success' ? "p-3 rounded-lg text-sm font-medium bg-green-50 text-green-700" : "p-3 rounded-lg text-sm font-medium bg-red-50 text-red-700"}>
-                    {message.text}
-                </div>
-            )}
+
 
             {/* Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -324,7 +342,7 @@ export const Employees = () => {
 
                             <form onSubmit={handleCreate} className="p-6 space-y-4">
                                 {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{error}</div>}
-                                {success && <div className="text-green-500 text-sm bg-green-50 p-3 rounded-lg">{success}</div>}
+
 
                                 <div>
                                     <label className="text-sm font-medium text-gray-700 mb-1 block">Full Name</label>
@@ -392,6 +410,15 @@ export const Employees = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <ConfirmDialog
+                isOpen={confirmOpen}
+                onClose={() => setConfirmOpen(false)}
+                onConfirm={confirmConfig.onConfirm}
+                title={confirmConfig.title}
+                message={confirmConfig.message}
+                type={confirmConfig.type}
+            />
         </div>
     );
 };

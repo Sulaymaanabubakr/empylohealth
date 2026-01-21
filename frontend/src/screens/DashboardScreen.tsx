@@ -10,6 +10,7 @@ import AssessmentModal from '../components/AssessmentModal';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
 import Avatar from '../components/Avatar';
+import BottomNavigation from '../components/BottomNavigation';
 
 const { width } = Dimensions.get('window');
 
@@ -168,7 +169,7 @@ const DashboardScreen = ({ navigation }) => {
     });
 
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
             <StatusBar barStyle="dark-content" backgroundColor="#FAFAFA" />
 
             {/* Header */}
@@ -218,7 +219,7 @@ const DashboardScreen = ({ navigation }) => {
                         </Text>
                         <TouchableOpacity
                             style={styles.checkDetailsButton}
-                            onPress={() => navigation.navigate('Assessment')}
+                            onPress={() => navigation.navigate('Stats')}
                         >
                             <Text style={styles.checkDetailsText}>Check Details</Text>
                             <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
@@ -343,28 +344,7 @@ const DashboardScreen = ({ navigation }) => {
             />
 
             {/* Bottom Navigation */}
-            <View style={[styles.bottomNavContainer, { paddingBottom: insets.bottom }]}>
-                <View style={styles.bottomNav}>
-                    <TouchableOpacity style={styles.navItem}>
-                        <View style={[styles.activeNavIcon, { backgroundColor: '#E0F2F1' }]}>
-                            <Ionicons name="home" size={24} color={COLORS.primary} />
-                        </View>
-                        <Text style={[styles.navLabel, { color: COLORS.primary, fontWeight: '700' }]}>Home</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Explore')}>
-                        <Feather name="compass" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Explore</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ChatList')}>
-                        <Ionicons name="chatbubble-outline" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Chat</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-                        <Ionicons name="person-outline" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Profile</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+            <BottomNavigation navigation={navigation} activeTab="Home" />
         </SafeAreaView>
     );
 };
@@ -727,7 +707,7 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         paddingHorizontal: 20,
-        paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+        // paddingBottom removed - using insets.bottom from inline style
         backgroundColor: 'transparent',
         zIndex: 100, // Ensure it sits on top of ScrollView
     },

@@ -13,6 +13,7 @@ import { circleService } from '../services/api/circleService';
 import { authService } from '../services/auth/authService';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
+import BottomNavigation from '../components/BottomNavigation';
 
 const PersonalProfileScreen = ({ navigation }) => {
     // Modal States
@@ -273,30 +274,8 @@ const PersonalProfileScreen = ({ navigation }) => {
                 {activeTab === 'Account' && renderAccount()}
             </ScrollView>
 
-            {/* Bottom Nav Placeholder */}
-            {/* ... (Existing Bottom Nav code) ... */}
-            <View style={styles.bottomNavContainer}>
-                <View style={styles.bottomNav}>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Dashboard')}>
-                        <Ionicons name="home-outline" size={24} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Home</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Explore')}>
-                        <Feather name="compass" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Explore</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ChatList')}>
-                        <Ionicons name="chatbubble-outline" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Chat</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem}>
-                        <View style={[styles.activeNavIcon, { backgroundColor: '#E0F2F1' }]}>
-                            <Ionicons name="person" size={24} color={COLORS.primary} />
-                        </View>
-                        <Text style={[styles.navLabel, { color: COLORS.primary, fontWeight: '700' }]}>Profile</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+            {/* Bottom Navigation */}
+            <BottomNavigation navigation={navigation} activeTab="Profile" />
 
             {/* Modals */}
             <ConfirmationModal

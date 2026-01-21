@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Search, Bell, Menu, Sun, Moon } from 'lucide-react';
+import { Search, Bell, Menu } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
+
 import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
@@ -10,7 +10,6 @@ interface HeaderProps {
 
 export const Header = ({ onToggleSidebar }: HeaderProps) => {
     const { user } = useAuth();
-    const { theme, toggleTheme } = useTheme();
     const [query, setQuery] = useState('');
     const navigate = useNavigate();
 
@@ -46,12 +45,7 @@ export const Header = ({ onToggleSidebar }: HeaderProps) => {
 
             {/* Right Actions */}
             <div className="flex items-center gap-4">
-                <button
-                    onClick={toggleTheme}
-                    className="p-2 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-full transition-colors"
-                >
-                    {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                </button>
+
 
                 <button className="relative p-2 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-full transition-colors">
                     <Bell size={20} />

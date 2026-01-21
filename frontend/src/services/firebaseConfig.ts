@@ -34,6 +34,13 @@ if (Platform.OS === 'web') {
 }
 
 const db: Firestore = getFirestore(app);
-const functions: Functions = getFunctions(app);
+const functions: Functions = getFunctions(app, 'us-central1');
+
+console.log('Firebase Initialized:', {
+    appId: app.options.appId,
+    projectId: app.options.projectId,
+    functionsRegion: functions.region,
+    functionsCustomDomain: functions.customDomain
+});
 
 export { auth, db, functions, app };

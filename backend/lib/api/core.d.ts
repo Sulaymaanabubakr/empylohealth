@@ -35,6 +35,11 @@ export declare const sendMessage: functions.HttpsFunction & functions.Runnable<a
  */
 export declare const submitAssessment: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Seed Assessment Questions (Admin Utility)
+ * Callable Function: 'seedAssessmentQuestions'
+ */
+export declare const seedAssessmentQuestions: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Get User Wellbeing Stats
  * Callable Function: 'getUserStats'
  */
@@ -44,6 +49,11 @@ export declare const getUserStats: functions.HttpsFunction & functions.Runnable<
  * Callable Function: 'getKeyChallenges'
  */
 export declare const getKeyChallenges: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Recommended Content
+ * Callable Function: 'getRecommendedContent'
+ */
+export declare const getRecommendedContent: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Update Subscription Plan
  * Callable Function: 'updateSubscription'
@@ -72,4 +82,52 @@ export declare const getExploreContent: functions.HttpsFunction & functions.Runn
 export declare const getAffirmations: functions.HttpsFunction & functions.Runnable<any>;
 export declare const submitContactForm: functions.HttpsFunction;
 export declare const deleteUserAccount: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Dashboard Stats
+ */
+export declare const getDashboardStats: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get All Content (Admin)
+ * data: { type: 'circles'|'resources'|'affirmations', limit: number }
+ */
+export declare const getAllContent: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Update Content Status
+ * data: { collection: string, docId: string, status: string }
+ */
+export declare const updateContentStatus: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Delete Item (Admin)
+ * data: { collection: string, id: string }
+ */
+export declare const deleteItem: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Admin Affirmations
+ */
+export declare const getAdminAffirmations: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Create Affirmation
+ */
+export declare const createAffirmation: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Delete Affirmation
+ */
+export declare const deleteAffirmation: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get Transactions
+ * (Currently mocks data or fetches from a future 'transactions' collection)
+ */
+export declare const getTransactions: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Get All Users (Admin)
+ */
+export declare const getAllUsers: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Create Employee (Admin)
+ */
+export declare const createEmployee: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Toggle User Status
+ */
+export declare const toggleUserStatus: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=core.d.ts.map

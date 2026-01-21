@@ -15,6 +15,7 @@ import ProfileSetupScreen from './screens/ProfileSetupScreen';
 
 import AssessmentScreen from './screens/AssessmentScreen';
 import NineIndexScreen from './screens/NineIndexScreen';
+import StatsScreen from './screens/StatsScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ExploreScreen from './screens/ExploreScreen';
@@ -75,6 +76,7 @@ export default function Navigation() {
                     <Stack.Screen name="FAQ" component={FAQScreen} />
                     <Stack.Screen name="Assessment" component={AssessmentScreen} />
                     <Stack.Screen name="NineIndex" component={NineIndexScreen} />
+                    <Stack.Screen name="Stats" component={StatsScreen} />
                 </Stack.Navigator>
             ) : (
                 <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>

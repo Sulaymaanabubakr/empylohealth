@@ -5,6 +5,7 @@ import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
 import { resourceService } from '../services/api/resourceService';
+import BottomNavigation from '../components/BottomNavigation';
 
 const { width } = Dimensions.get('window');
 
@@ -234,28 +235,7 @@ const ExploreScreen = ({ navigation }) => {
             </ScrollView>
 
             {/* Bottom Navigation */}
-            <View style={[styles.bottomNavContainer, { paddingBottom: insets.bottom }]}>
-                <View style={styles.bottomNav}>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Dashboard')}>
-                        <Ionicons name="home-outline" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Home</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem}>
-                        <View style={[styles.activeNavIcon, { backgroundColor: '#E0F2F1' }]}>
-                            <Feather name="compass" size={24} color={COLORS.primary} />
-                        </View>
-                        <Text style={[styles.navLabel, { color: COLORS.primary, fontWeight: '700' }]}>Explore</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ChatList')}>
-                        <Ionicons name="chatbubble-outline" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Chat</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-                        <Ionicons name="person-outline" size={26} color="#BDBDBD" />
-                        <Text style={styles.navLabel}>Profile</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+            <BottomNavigation navigation={navigation} activeTab="Explore" />
         </SafeAreaView>
     );
 };
