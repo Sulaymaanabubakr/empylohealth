@@ -205,7 +205,7 @@ const DashboardScreen = ({ navigation }) => {
                         <View style={styles.onlineBadge} />
                     </View>
                     <View style={styles.greetingText}>
-                        <Text style={styles.greeting}>Hi, {userData?.name?.split(' ')[0] || 'Friend'}!</Text>
+                        <Text style={styles.greeting}>Hi, {(userData?.name || user?.displayName || 'Friend').split(' ')[0]}!</Text>
                         <Text style={styles.subGreeting}>How're you feeling today?</Text>
                     </View>
                 </View>
@@ -219,9 +219,17 @@ const DashboardScreen = ({ navigation }) => {
                         </Text>
                         <TouchableOpacity
                             style={styles.checkDetailsButton}
-                            onPress={() => navigation.navigate('Stats')}
+                            onPress={() => {
+                                if (wellbeing.score > 0) {
+                                    navigation.navigate('Stats');
+                                } else {
+                                    navigation.navigate('Assessment');
+                                }
+                            }}
                         >
-                            <Text style={styles.checkDetailsText}>Check Details</Text>
+                            <Text style={styles.checkDetailsText}>
+                                {wellbeing.score > 0 ? "Check Details" : "Take Assessment"}
+                            </Text>
                             <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
                         </TouchableOpacity>
                     </View>

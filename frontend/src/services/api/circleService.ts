@@ -1,7 +1,7 @@
 // TypeScript conversion in progress
 import { functions, db } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import { collection, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 
 export const circleService = {
     /**
@@ -10,10 +10,10 @@ export const circleService = {
      * @param {string} description 
      * @param {string} category 
      */
-    createCircle: async (name, description, category) => {
+    createCircle: async (name: string, description: string, category: string, type: string, image: string) => {
         try {
             const createFn = httpsCallable(functions, 'createCircle');
-            const result = await createFn({ name, description, category });
+            const result = await createFn({ name, description, category, type, image });
             return result.data; // { success: true, circleId: '...' }
         } catch (error) {
             console.error("Error creating circle:", error);
@@ -51,20 +51,6 @@ export const circleService = {
         }
     },
 
-    /**
-     * Leave a circle via Backend API
-     * @param {string} circleId
-     */
-    leaveCircle: async (circleId) => {
-        try {
-            const leaveFn = httpsCallable(functions, 'leaveCircle');
-            const result = await leaveFn({ circleId });
-            return result.data;
-        } catch (error) {
-            console.error("Error leaving circle:", error);
-            throw error;
-        }
-    },
 
     /**
      * Get circles user is a member of (Real-time)
@@ -98,6 +84,129 @@ export const circleService = {
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         } catch (error) {
             console.error("Error fetching circles:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get a single circle by ID
+     * @param {string} circleId
+     */
+    /**
+     * Manage member status (Promote, Demote, Kick, Ban)
+     */
+    manageMember: async (circleId: string, targetUid: string, action: string) => {
+        try {
+            const manageFn = httpsCallable(functions, 'manageMember');
+            const result = await manageFn({ circleId, targetUid, action });
+            return result.data;
+        } catch (error) {
+            console.error("Error managing member:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Handle join request (Accept/Reject)
+     */
+    handleJoinRequest: async (circleId: string, targetUid: string, action: 'accept' | 'reject') => {
+        try {
+            const fn = httpsCallable(functions, 'handleJoinRequest');
+            await fn({ circleId, targetUid, action });
+            return { success: true };
+        } catch (error) {
+            console.error("Error handling request:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Submit a report for a circle member or content
+     */
+    submitReport: async (circleId: string, targetId: string, targetType: 'member' | 'message' | 'huddle', reason: string, description?: string) => {
+        try {
+            const fn = httpsCallable(functions, 'submitReport');
+            const result = await fn({ circleId, targetId, targetType, reason, description });
+            return result.data;
+        } catch (error) {
+            console.error("Error submitting report:", error);
+            throw error;
+        }
+    },
+
+    scheduleHuddle: async (circleId: string, title: string, scheduledAt: Date) => {
+        try {
+            const fn = httpsCallable(functions, 'scheduleHuddle');
+            const result = await fn({ circleId, title, scheduledAt: scheduledAt.toISOString() });
+            return result.data;
+        } catch (error) {
+            console.error("Error scheduling huddle:", error);
+            throw error;
+        }
+    },
+
+    deleteScheduledHuddle: async (circleId: string, eventId: string) => {
+        try {
+            const fn = httpsCallable(functions, 'deleteScheduledHuddle');
+            await fn({ circleId, eventId });
+            return { success: true };
+        } catch (error) {
+            console.error("Error deleting scheduled huddle:", error);
+            throw error;
+        }
+    },
+
+    subscribeToScheduledHuddles: (circleId: string, callback: (events: any[]) => void) => {
+        const q = query(
+            collection(db, 'circles', circleId, 'scheduledHuddles'),
+            orderBy('scheduledAt', 'asc')
+        );
+        return onSnapshot(q, (snapshot) => {
+            const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Filter out past events client-side or use a where clause if needed
+            // For now, returning all, UI can filter
+            callback(events);
+        });
+    },
+
+    /**
+     * Subscribe to my member status in a specific circle (Real-time Role)
+     */
+    subscribeToCircleMember: (circleId: string, uid: string, callback: (member: any) => void) => {
+        const docRef = doc(db, 'circles', circleId, 'members', uid);
+        return onSnapshot(docRef, (doc) => {
+            if (doc.exists()) {
+                callback(doc.data());
+            } else {
+                callback(null);
+            }
+        });
+    },
+
+    /**
+     * Submit a report for a circle member or content
+     */
+    submitReport: async (circleId: string, targetId: string, targetType: string, reason: string, description?: string) => {
+        try {
+            const submitFn = httpsCallable(functions, 'submitReport');
+            const result = await submitFn({ circleId, targetId, targetType, reason, description });
+            return result.data;
+        } catch (error) {
+            console.error("Error submitting report:", error);
+            throw error;
+        }
+    },
+
+    getCircleById: async (circleId) => {
+        try {
+            const docRef = doc(db, 'circles', circleId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                return { id: docSnap.id, ...docSnap.data() };
+            }
+            return null;
+        } catch (error) {
+            console.error("Error fetching circle by ID:", error);
             throw error;
         }
     }

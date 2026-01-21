@@ -1,34 +1,42 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import Avatar from '../components/Avatar';
-
 import { circleService } from '../services/api/circleService';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
 const FILTERS = ['All', 'Connect', 'Culture', 'Enablement', 'Green Activities', 'Mental health', 'Physical health'];
 
-const SupportGroupsScreen = ({ navigation }) => {
-    const insets = useSafeAreaInsets();
+const SupportGroupsScreen = () => {
+    const navigation = useNavigation();
+    constinsets = useSafeAreaInsets();
     const [activeFilter, setActiveFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [groups, setGroups] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const loadGroups = async () => {
-            try {
-                const circles = await circleService.getAllCircles();
-                setGroups(circles);
-            } catch (error) {
-                console.error('Failed to load support groups', error);
-                setGroups([]);
-            }
-        };
-        loadGroups();
-    }, []);
+    useFocusEffect(
+        React.useCallback(() => {
+            const loadGroups = async () => {
+                try {
+                    // Only show loading on initial load or if empty
+                    if (groups.length === 0) setLoading(true);
+                    const circles = await circleService.getAllCircles();
+                    setGroups(circles);
+                } catch (error) {
+                    console.error('Failed to load support groups', error);
+                    setGroups([]);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            loadGroups();
+        }, [])
+    );
 
     const filteredGroups = groups.filter(group => {
         const matchesSearch = (group.name || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -38,76 +46,91 @@ const SupportGroupsScreen = ({ navigation }) => {
     });
 
     const renderGroupCard = ({ item }) => (
-        <View style={styles.groupCard}>
-            <Avatar uri={item.image} name={item.name} size={52} style={{ marginRight: 16 }} />
-            <View style={styles.groupInfo}>
-                <View style={styles.groupHeader}>
-                    <Text style={styles.groupName}>{item.name}</Text>
-                    {item.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 4 }} />}
+        <TouchableOpacity
+            style={styles.groupCard}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('CircleDetail', { circle: item })}
+        >
+            <View style={styles.cardHeader}>
+                <View style={[styles.iconContainer, { backgroundColor: item.color || '#E0F2F1' }]}>
+                    <Text style={{ fontSize: 24 }}>{item.icon || '👥'}</Text>
                 </View>
-                <View style={styles.groupMeta}>
-                    <Ionicons name="people" size={14} color="#757575" />
-                    <Text style={styles.memberCount}>
+                <View style={styles.cardHeaderText}>
+                    <Text style={styles.groupName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.groupCategory}>{item.category || 'General'}</Text>
+                </View>
+                {item.verified && (
+                    <MaterialIcons name="verified" size={20} color={COLORS.primary} />
+                )}
+            </View>
+
+            <Text style={styles.groupDescription} numberOfLines={2}>
+                {item.description || "Join this circle to connect with others and share experiences."}
+            </Text>
+
+            <View style={styles.cardFooter}>
+                <View style={styles.memberInfo}>
+                    <View style={styles.avatarPile}>
+                        {/* Placeholder avatars since we don't have member images easily here */}
+                        <View style={[styles.miniAvatar, { backgroundColor: '#FFCC80', zIndex: 3 }]} />
+                        <View style={[styles.miniAvatar, { backgroundColor: '#90CAF9', zIndex: 2, marginLeft: -10 }]} />
+                        <View style={[styles.miniAvatar, { backgroundColor: '#A5D6A7', zIndex: 1, marginLeft: -10 }]} />
+                    </View>
+                    <Text style={styles.memberCountText}>
                         {Array.isArray(item.members) ? item.members.length : (item.members || 0)} members
                     </Text>
                 </View>
-                <View style={styles.tagsContainer}>
-                    {(item.tags || (item.category ? [item.category] : [])).map(tag => (
-                        <View key={tag} style={styles.tagBadge}>
-                            <Text style={styles.tagText}>{tag}</Text>
-                        </View>
-                    ))}
+
+                <View style={styles.joinButton}>
+                    <Text style={styles.joinButtonText}>View</Text>
                 </View>
             </View>
-            <TouchableOpacity
-                style={styles.viewButton}
-                onPress={() => navigation.navigate('SupportGroupDetail', { group: item })}
-            >
-                <Text style={styles.viewButtonText}>VIEW</Text>
-            </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
     );
 
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
 
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+                    <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Support Groups</Text>
-                <View style={{ width: 44 }} />
+                <Text style={styles.headerTitle}>Circles</Text>
+                <View style={{ width: 40 }} />
             </View>
 
-            {/* Search */}
-            <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color="#9E9E9E" style={styles.searchIcon} />
-                <TextInput
-                    placeholder="Search..."
-                    placeholderTextColor="#9E9E9E"
-                    style={styles.searchInput}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                />
+            {/* Search Bar */}
+            <View style={styles.searchWrapper}>
+                <View style={styles.searchContainer}>
+                    <Ionicons name="search-outline" size={20} color="#9E9E9E" />
+                    <TextInput
+                        placeholder="Search circles..."
+                        placeholderTextColor="#9E9E9E"
+                        style={styles.searchInput}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
             </View>
 
-            {/* Subheader */}
-            <View style={styles.subHeader}>
-                <Text style={styles.showingText}>Showing support groups</Text>
-            </View>
-
-            {/* Filter Chips */}
-            <View style={styles.filtersContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+            {/* Filters */}
+            <View style={styles.filterContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent}>
                     {FILTERS.map((filter) => (
                         <TouchableOpacity
                             key={filter}
-                            style={[styles.filterChip, activeFilter === filter && styles.activeFilterChip]}
+                            style={[
+                                styles.filterChip,
+                                activeFilter === filter && styles.activeFilterChip
+                            ]}
                             onPress={() => setActiveFilter(filter)}
                         >
-                            <Text style={[styles.filterText, activeFilter === filter && styles.activeFilterText]}>{filter}</Text>
+                            <Text style={[
+                                styles.filterText,
+                                activeFilter === filter && styles.activeFilterText
+                            ]}>{filter}</Text>
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
@@ -118,15 +141,26 @@ const SupportGroupsScreen = ({ navigation }) => {
                 data={filteredGroups}
                 renderItem={renderGroupCard}
                 keyExtractor={item => item.id}
-                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+                contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
                 ListEmptyComponent={() => (
-                    <Text style={styles.emptyStateText}>No support groups found.</Text>
-                )}
-                ListFooterComponent={() => (
-                    filteredGroups.length > 0 ? <Text style={styles.loadMoreText}>load more...</Text> : null
+                    <View style={styles.emptyState}>
+                        <Ionicons name="people-outline" size={64} color="#E0E0E0" />
+                        <Text style={styles.emptyStateText}>No circles found.</Text>
+                        <Text style={styles.emptyStateSubText}>Try adjusting your search or create a new one!</Text>
+                    </View>
                 )}
             />
+
+            {/* Floating Action Button */}
+            <TouchableOpacity
+                style={styles.fab}
+                onPress={() => navigation.navigate('CreateCircle')}
+                activeOpacity={0.8}
+            >
+                <Ionicons name="add" size={32} color="#FFF" />
+            </TouchableOpacity>
+
         </SafeAreaView>
     );
 };
@@ -134,174 +168,212 @@ const SupportGroupsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F9FAFB', // Light grey background
+        backgroundColor: '#F8F9FA',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: SPACING.lg,
-        paddingTop: SPACING.sm, // Added padding
-        // marginTop: -12, // Removed negative margin
-        paddingBottom: SPACING.sm,
-        backgroundColor: '#FFFFFF',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingTop: 10,
+        paddingBottom: 10,
     },
     backButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: '#F5F5F5',
+        backgroundColor: '#FFFFFF',
         justifyContent: 'center',
         alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     headerTitle: {
-        flex: 1,
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: '700',
         color: '#1A1A1A',
-        textAlign: 'center',
+    },
+    searchWrapper: {
+        paddingHorizontal: 20,
+        marginBottom: 16,
     },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#FFFFFF',
-        borderRadius: 25,
-        marginHorizontal: SPACING.lg,
-        marginTop: SPACING.xs,
-        marginBottom: SPACING.sm,
-        paddingHorizontal: SPACING.md,
-        height: 48,
-        shadowColor: '#000',
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        height: 50,
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 5,
+        shadowOpacity: 0.03,
+        shadowRadius: 8,
         elevation: 2,
-    },
-    searchIcon: {
-        marginRight: SPACING.sm,
     },
     searchInput: {
         flex: 1,
-        fontSize: 15,
+        marginLeft: 12,
+        fontSize: 16,
         color: '#1A1A1A',
-        height: '100%',
     },
-    subHeader: {
-        paddingHorizontal: SPACING.lg,
-        paddingTop: SPACING.xs,
-    },
-    showingText: {
-        fontSize: 13,
-        color: '#757575',
-    },
-    filtersContainer: {
-        marginTop: SPACING.sm,
-        marginBottom: SPACING.sm,
+    filterContainer: {
+        marginBottom: 16,
         height: 40,
     },
-    filterScroll: {
-        paddingHorizontal: SPACING.lg,
-        alignItems: 'center',
+    filterContent: {
+        paddingHorizontal: 20,
     },
     filterChip: {
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 20,
         backgroundColor: '#FFFFFF',
-        marginRight: 10,
+        marginRight: 8,
         borderWidth: 1,
-        borderColor: '#EEEEEE',
+        borderColor: '#E0E0E0',
     },
     activeFilterChip: {
         backgroundColor: COLORS.primary,
         borderColor: COLORS.primary,
     },
     filterText: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '500',
         color: '#757575',
     },
     activeFilterText: {
         color: '#FFFFFF',
+        fontWeight: '600',
     },
     listContent: {
-        paddingHorizontal: SPACING.lg,
+        paddingHorizontal: 20,
+        paddingBottom: 100, // Space for FAB
     },
     groupCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        padding: 20,
+        marginBottom: 16,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#F5F5F5',
+    },
+    cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 16,
         marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
     },
-    groupInfo: {
+    iconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    cardHeaderText: {
         flex: 1,
     },
-    groupHeader: {
+    groupName: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1A1A1A',
+        marginBottom: 2,
+    },
+    groupCategory: {
+        fontSize: 12,
+        color: COLORS.primary,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+    },
+    groupDescription: {
+        fontSize: 14,
+        color: '#616161',
+        lineHeight: 20,
+        marginBottom: 16,
+    },
+    cardFooter: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 4,
+        justifyContent: 'space-between',
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#F5F5F5',
     },
-    groupName: {
-        fontSize: 16,
+    memberInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    avatarPile: {
+        flexDirection: 'row',
+        marginRight: 8,
+    },
+    miniAvatar: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#FFFFFF',
+    },
+    memberCountText: {
+        fontSize: 13,
+        color: '#757575',
+        fontWeight: '500',
+        marginLeft: 6,
+    },
+    joinButton: {
+        backgroundColor: '#F0F2F5',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+    },
+    joinButtonText: {
+        fontSize: 13,
         fontWeight: '600',
         color: '#1A1A1A',
     },
-    groupMeta: {
-        flexDirection: 'row',
+    fab: {
+        position: 'absolute',
+        bottom: 30,
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: COLORS.primary,
+        justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 8,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 8,
+        zIndex: 100,
     },
-    memberCount: {
-        fontSize: 12,
-        color: '#757575',
-        marginLeft: 4,
-    },
-    tagsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    tagBadge: {
-        backgroundColor: '#F5F5F5',
-        borderRadius: 4,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        marginRight: 6,
-    },
-    tagText: {
-        fontSize: 10,
-        color: '#616161',
-    },
-    viewButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: COLORS.primary,
-        marginLeft: 8,
-    },
-    viewButtonText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: COLORS.primary,
-    },
-    loadMoreText: {
-        textAlign: 'center',
-        color: '#9E9E9E',
-        marginVertical: 20,
-        fontSize: 12,
+    emptyState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
     },
     emptyStateText: {
-        textAlign: 'center',
+        fontSize: 18,
+        fontWeight: '600',
         color: '#9E9E9E',
-        marginTop: 24,
-        fontSize: 13,
+        marginTop: 16,
     },
+    emptyStateSubText: {
+        fontSize: 14,
+        color: '#BDBDBD',
+        marginTop: 8,
+    }
 });
 
 export default SupportGroupsScreen;

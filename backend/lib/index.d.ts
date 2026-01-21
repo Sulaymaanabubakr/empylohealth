@@ -4,6 +4,13 @@ export declare const generateUploadSignature: import("firebase-functions/v1").Ht
 export declare const createCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const joinCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const leaveCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const manageMember: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const handleJoinRequest: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const submitReport: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const startHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const updateHuddleState: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const scheduleHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const deleteScheduledHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const createDirectChat: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const sendMessage: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const submitAssessment: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
@@ -11,8 +18,6 @@ export declare const getUserStats: import("firebase-functions/v1").HttpsFunction
 export declare const getKeyChallenges: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const seedAssessmentQuestions: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateSubscription: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
-export declare const startHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
-export declare const updateHuddleState: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getExploreContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getRecommendedContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

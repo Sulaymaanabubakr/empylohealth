@@ -157,13 +157,13 @@ const ExploreScreen = ({ navigation }) => {
                 {activeTab === 'Group activities' && (
                     <View style={{ marginTop: 24 }}>
                         <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Support Groups</Text>
+                            <Text style={styles.sectionTitle}>Circles</Text>
                             <TouchableOpacity onPress={() => navigation.navigate('SupportGroups')}>
                                 <Text style={styles.seeAllText}>See all</Text>
                             </TouchableOpacity>
                         </View>
                         <View style={{ paddingHorizontal: SPACING.lg }}>
-                            <Text style={{ color: '#757575', marginBottom: 12 }}>Showing support groups near you</Text>
+                            <Text style={{ color: '#757575', marginBottom: 12 }}>Showing circles near you</Text>
                             {supportGroups.slice(0, 3).map((group) => (
                                 <View key={group.id} style={styles.groupCardPreview}>
                                     <Image
@@ -179,7 +179,7 @@ const ExploreScreen = ({ navigation }) => {
                                     </View>
                                     <TouchableOpacity
                                         style={styles.viewButtonPreview}
-                                        onPress={() => navigation.navigate('SupportGroupDetail', { group })}
+                                        onPress={() => navigation.navigate('CircleDetail', { circle: group })}
                                     >
                                         <Text style={styles.viewButtonTextPreview}>VIEW</Text>
                                     </TouchableOpacity>

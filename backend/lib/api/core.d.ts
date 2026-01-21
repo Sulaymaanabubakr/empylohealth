@@ -8,7 +8,15 @@ export declare const generateUploadSignature: functions.HttpsFunction & function
  * Create a new Circle
  * Callable Function: 'createCircle'
  */
+/**
+ * Create a new Circle
+ * Callable Function: 'createCircle'
+ */
 export declare const createCircle: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Join an existing Circle
+ * Callable Function: 'joinCircle'
+ */
 /**
  * Join an existing Circle
  * Callable Function: 'joinCircle'
@@ -18,7 +26,21 @@ export declare const joinCircle: functions.HttpsFunction & functions.Runnable<an
  * Leave an existing Circle
  * Callable Function: 'leaveCircle'
  */
+/**
+ * Leave an existing Circle
+ * Callable Function: 'leaveCircle'
+ */
 export declare const leaveCircle: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Manage Member (Promote/Demote/Kick/Ban)
+ * Callable Function: 'manageMember'
+ */
+export declare const manageMember: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Handle Join Request (Accept/Reject)
+ * Callable Function: 'handleJoinRequest'
+ */
+export declare const handleJoinRequest: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Create or Get Direct Chat
  * Callable Function: 'createDirectChat'
@@ -63,12 +85,30 @@ export declare const updateSubscription: functions.HttpsFunction & functions.Run
  * Start a Huddle (Video Call Session)
  * Callable Function: 'startHuddle'
  */
+/**
+ * Start a Huddle (Video Call Session)
+ * Callable Function: 'startHuddle'
+ */
 export declare const startHuddle: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Join/Leave Huddle
  * Callable Function: 'updateHuddleState'
  */
 export declare const updateHuddleState: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Schedule a Huddle
+ * Callable Function: 'scheduleHuddle'
+ */
+export declare const scheduleHuddle: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Delete a Scheduled Huddle
+ * Callable Function: 'deleteScheduledHuddle'
+ */
+export declare const deleteScheduledHuddle: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Submit a Report (Circle Context)
+ */
+export declare const submitReport: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Get Explore Content
  * Callable Function: 'getExploreContent'

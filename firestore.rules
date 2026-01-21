@@ -9,8 +9,10 @@ service cloud.firestore {
 
     // specific user doc
     match /users/{userId} {
-      // Users can read/write their own profile
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      // Allow anyone authenticated to read basic profile info (needed for Member lists)
+      allow read: if isAuthenticated();
+      // Users can write their own profile
+      allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // Circles
@@ -19,6 +21,37 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       // Only backend (Admin SDK) creates/updates via functions
       allow write: if false; 
+
+      // Subcollections
+      match /members/{memberId} {
+         // Anyone can read members (needed for listing members in UI)
+         allow read: if isAuthenticated();
+         allow write: if false;
+      }
+      
+      match /requests/{userId} {
+         // User can see their own request
+         // Admins/Mods can see all requests
+         allow read: if isAuthenticated() && (
+             request.auth.uid == userId || 
+             get(/databases/$(database)/documents/circles/$(circleId)/members/$(request.auth.uid)).data.role in ['admin', 'creator', 'moderator']
+         );
+         allow write: if false;
+      }
+
+      match /reports/{reportId} {
+         // Only Admins/Mods can see reports
+         allow read: if isAuthenticated() && 
+             get(/databases/$(database)/documents/circles/$(circleId)/members/$(request.auth.uid)).data.role in ['admin', 'creator', 'moderator'];
+         allow write: if false;
+      }
+
+      match /scheduledHuddles/{eventId} {
+         // All authenticated users can read scheduled huddles
+         allow read: if isAuthenticated();
+         // Only admins/backend write
+         allow write: if false;
+      }
     }
 
     // Chats

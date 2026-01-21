@@ -239,6 +239,7 @@ export type RootStackParamList = {
     LearningSession: { sessionId: string };
     CreateCircle: undefined;
     Huddle: { huddleId: string };
+    CircleSettings: { circleId: string };
 };
 
 export type MainTabParamList = {

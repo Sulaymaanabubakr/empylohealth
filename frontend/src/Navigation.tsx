@@ -18,11 +18,12 @@ import NineIndexScreen from './screens/NineIndexScreen';
 import StatsScreen from './screens/StatsScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
+import { CheckInScreen } from './screens/CheckInScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import ActivityDetailScreen from './screens/ActivityDetailScreen';
 import AffirmationsScreen from './screens/AffirmationsScreen';
 import SupportGroupsScreen from './screens/SupportGroupsScreen';
-import SupportGroupDetailScreen from './screens/SupportGroupDetailScreen';
+// import SupportGroupDetailScreen from './screens/SupportGroupDetailScreen';
 import ChatListScreen from './screens/ChatListScreen';
 import ChatDetailScreen from './screens/ChatDetailScreen';
 import HuddleScreen from './screens/HuddleScreen';
@@ -55,11 +56,12 @@ export default function Navigation() {
                     <Stack.Screen name="Dashboard" component={DashboardScreen} />
                     <Stack.Screen name="Verification" component={VerificationScreen} />
                     <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                    <Stack.Screen name="CheckIn" component={CheckInScreen} />
                     <Stack.Screen name="Explore" component={ExploreScreen} />
                     <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
                     <Stack.Screen name="Affirmations" component={AffirmationsScreen} />
                     <Stack.Screen name="SupportGroups" component={SupportGroupsScreen} />
-                    <Stack.Screen name="SupportGroupDetail" component={SupportGroupDetailScreen} />
+                    {/* <Stack.Screen name="SupportGroupDetail" component={SupportGroupDetailScreen} /> */}
                     <Stack.Screen name="ChatList" component={ChatListScreen} />
                     <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
                     <Stack.Screen name="Huddle" component={HuddleScreen} options={{ presentation: 'modal' }} />
@@ -67,6 +69,7 @@ export default function Navigation() {
                     <Stack.Screen name="LearningSession" component={LearningSessionScreen} />
                     <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
                     <Stack.Screen name="CircleDetail" component={CircleDetailScreen} />
+                    <Stack.Screen name="CircleSettings" component={require('./screens/CircleSettingsScreen').default} />
                     {/* <Stack.Screen name="Subscription" component={SubscriptionScreen} /> */}
                     <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
                     <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />

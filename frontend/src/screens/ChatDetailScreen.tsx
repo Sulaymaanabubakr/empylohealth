@@ -6,6 +6,7 @@ import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
 import { huddleService } from '../services/api/huddleService';
+import { circleService } from '../services/api/circleService';
 import Avatar from '../components/Avatar';
 
 const ChatDetailScreen = ({ navigation, route }) => {
@@ -62,27 +63,63 @@ const ChatDetailScreen = ({ navigation, route }) => {
         }
     };
 
+    const handleMessageLongPress = (message) => {
+        if (!chat.circleId) return; // Only allow reporting in circles context for now
+
+        Alert.alert(
+            "Report Message",
+            "Does this message violate community guidelines?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Report",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const { circleService } = require('../services/api/circleService'); // Late require to avoid cycle if any
+                            // In real app better to import at top, but ensure no cycle.
+                            // Assuming chatService and circleService are independent enough.
+                            await circleService.submitReport(
+                                chat.circleId,
+                                message.id,
+                                'message',
+                                'Inappropriate Content', // Default reason for quick action
+                                message.text
+                            );
+                            Alert.alert("Report Sent", "Exellence. Start packing, we've initiated a review."); // Keeping it light or serious? standard.
+                            // "Thank you. We have received your report."
+                        } catch (error) {
+                            Alert.alert("Error", "Could not submit report.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const renderMessage = ({ item }) => {
         const isMe = item.isMe;
         // Design: Incoming (Left) = Teal, Outgoing (Right) = Light
         return (
             <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
                 {!isMe && (
-                    // Optional: Show avatar next to message for group chats or other style
                     <Avatar uri={chat.avatar} name={chat.name} size={32} />
                 )}
-                <View style={[styles.messageBubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
+                <TouchableOpacity
+                    onLongPress={() => !isMe && handleMessageLongPress(item)}
+                    activeOpacity={0.9} // Slight feedback but keep bubble look
+                    style={[styles.messageBubble, isMe ? styles.bubbleMe : styles.bubbleOther]}
+                >
                     <Text style={[styles.messageText, isMe ? styles.textMe : styles.textOther]}>
                         {item.text}
                     </Text>
                     <View style={styles.messageFooter}>
-                        {/* Checkmark for 'Me' messages - usually colored if bubble is light, white if bubble dark */}
                         {isMe && <Ionicons name="checkmark-done" size={14} color={COLORS.primary} style={{ marginRight: 4 }} />}
                         <Text style={[styles.messageTime, isMe ? { color: '#9E9E9E' } : { color: 'rgba(255,255,255,0.8)' }]}>
                             {item.time}
                         </Text>
                     </View>
-                </View>
+                </TouchableOpacity>
             </View>
         );
     };
