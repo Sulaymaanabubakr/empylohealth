@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import logo from '../assets/logo_turquoise.png';
@@ -9,6 +9,7 @@ import logo from '../assets/logo_turquoise.png';
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -18,9 +19,25 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Click outside to close menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
   const navLinks = [
     { name: 'Home', path: '/' },
-    { name: 'Features', path: '/features' },
+    { name: 'Features', path: '/#features' },
     { name: 'About', path: '/about' },
     { name: 'Contact', path: '/contact' },
   ];
@@ -55,28 +72,30 @@ const Navbar = () => {
         </div>
 
         {/* Mobile Toggle */}
-        <button className="navbar-toggle" onClick={() => setIsOpen(!isOpen)}>
-          {isOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="mobile-menu-wrapper" ref={menuRef}>
+          <button className="navbar-toggle" onClick={() => setIsOpen(!isOpen)}>
+            {isOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
 
-        {/* Mobile Menu */}
-        {isOpen && (
-          <div className="navbar-mobile">
-            {navLinks.map((link) => (
-              <NavLink
-                key={link.name}
-                to={link.path}
-                className="mobile-link"
-                onClick={() => setIsOpen(false)}
-              >
-                {link.name}
-              </NavLink>
-            ))}
-            <Link to="/download" className="btn btn-primary mobile-btn" onClick={() => setIsOpen(false)}>
-              Download App
-            </Link>
-          </div>
-        )}
+          {/* Mobile Menu Card */}
+          {isOpen && (
+            <div className="navbar-mobile card-style">
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.name}
+                  to={link.path}
+                  className="mobile-link"
+                  onClick={() => setIsOpen(false)}
+                >
+                  {link.name}
+                </NavLink>
+              ))}
+              <Link to="/download" className="btn btn-primary mobile-btn" onClick={() => setIsOpen(false)}>
+                Download App
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
 
       <style>{`
@@ -102,7 +121,8 @@ const Navbar = () => {
           display: flex;
           align-items: center;
           /* Logo on left, Button on right, Links centered via auto margins */
-          justify-content: space-between; 
+          justify-content: space-between;
+          position: relative; /* Context for mobile menu absolute pos */ 
         }
 
         .navbar-logo {
@@ -112,7 +132,7 @@ const Navbar = () => {
         }
 
         .logo-img {
-          height: 36px; /* Reduced from 48px */
+          height: 28px; /* Reduced from 36px */
           width: auto;
         }
 
@@ -171,17 +191,31 @@ const Navbar = () => {
 
         /* Mobile */
         .navbar-mobile {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          right: 0;
-          background: white;
-          padding: 1.5rem;
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          box-shadow: var(--shadow-lg);
-          border-bottom: 1px solid rgba(0,0,0,0.05);
+          /* Default hidden logic handled by React conditional */
+        }
+
+        .card-style {
+            position: absolute;
+            top: 150%; /* Just below the toggle button */
+            right: 0;
+            background: white;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-radius: 20px;
+            border: 1px solid rgba(0,0,0,0.05);
+            min-width: 220px;
+            text-align: center;
+            z-index: 1001;
+            /* Animation */
+            animation: slideDown 0.2s ease-out;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .mobile-link {
@@ -189,6 +223,7 @@ const Navbar = () => {
           font-weight: 600;
           color: var(--color-text);
           padding: 0.5rem 0;
+          display: block;
         }
         
         .mobile-link.active {
@@ -198,15 +233,24 @@ const Navbar = () => {
         .mobile-btn {
             text-align: center;
             margin-top: 0.5rem;
+            width: 100%;
+        }
+
+        /* Mobile Menu Wrapper - Hidden on Desktop */
+        .mobile-menu-wrapper {
+            display: none;
         }
 
         @media (max-width: 900px) {
-           .logo-img { height: 36px; }
+           .logo-img { height: 24px; }
         }
 
         @media (max-width: 768px) {
           .hidden-mobile {
             display: none;
+          }
+          .mobile-menu-wrapper {
+            display: block;
           }
           .navbar-toggle {
             display: block;

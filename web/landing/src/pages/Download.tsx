@@ -1,4 +1,5 @@
-import { Apple, Smartphone } from 'lucide-react';
+import appStoreBadge from '../assets/app-store-badge.svg';
+import googlePlayBadge from '../assets/google-play-badge.svg';
 
 const Download = () => {
     return (
@@ -11,21 +12,12 @@ const Download = () => {
                     </p>
 
                     <div className="store-buttons">
-                        <button className="store-btn">
-                            <Apple size={28} />
-                            <div className="btn-text">
-                                <span className="small">Download on the</span>
-                                <span className="large">App Store</span>
-                            </div>
-                        </button>
-
-                        <button className="store-btn">
-                            <Smartphone size={28} /> {/* Using generic smartphone icon as placeholder for Play Store if generic */}
-                            <div className="btn-text">
-                                <span className="small">GET IT ON</span>
-                                <span className="large">Google Play</span>
-                            </div>
-                        </button>
+                        <a href="https://apps.apple.com" target="_blank" rel="noopener noreferrer" className="store-link">
+                            <img src={appStoreBadge} alt="Download on the App Store" className="store-badge" />
+                        </a>
+                        <a href="https://play.google.com" target="_blank" rel="noopener noreferrer" className="store-link">
+                            <img src={googlePlayBadge} alt="Get it on Google Play" className="store-badge" />
+                        </a>
                     </div>
 
                     <div className="qr-section glass-panel">
@@ -67,47 +59,27 @@ const Download = () => {
                 
                 .store-buttons {
                     display: flex;
-                    gap: 20px;
+                    gap: 24px;
                     justify-content: center;
                     margin-bottom: 60px;
                     flex-wrap: wrap;
-                }
-                
-                .store-btn {
-                    display: flex;
                     align-items: center;
-                    gap: 12px;
-                    background: var(--color-secondary);
-                    color: white;
-                    border: none;
-                    padding: 12px 24px;
-                    border-radius: 12px;
-                    cursor: pointer;
-                    transition: transform 0.2s, box-shadow 0.2s;
-                    min-width: 180px;
                 }
                 
-                .store-btn:hover {
+                .store-link {
+                    display: inline-block;
+                    transition: transform 0.2s, opacity 0.2s;
+                }
+                
+                .store-link:hover {
                     transform: translateY(-3px);
-                    box-shadow: 0 10px 20px rgba(0,0,0,0.15);
-                }
-                
-                .btn-text {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: flex-start;
-                    line-height: 1.2;
-                }
-                
-                .btn-text .small {
-                    font-size: 0.75rem;
-                    font-weight: 500;
                     opacity: 0.9;
                 }
                 
-                .btn-text .large {
-                    font-size: 1.2rem;
-                    font-weight: 700;
+                .store-badge {
+                    height: 60px;
+                    width: auto;
+                    display: block;
                 }
                 
                 .qr-section {
@@ -142,7 +114,7 @@ const Download = () => {
 
                 @media (max-width: 768px) {
                     .download-content h1 { font-size: 2.5rem; }
-                    .store-buttons { flex-direction: column; align-items: center; }
+                    .store-buttons { flex-direction: column; gap: 16px; }
                 }
             `}</style>
         </div>

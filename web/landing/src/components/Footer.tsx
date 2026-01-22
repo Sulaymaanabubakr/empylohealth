@@ -162,6 +162,7 @@ const Footer = () => {
                         grid-template-columns: 1fr;
                         text-align: center;
                     }
+                    .footer-logo { justify-content: center; }
                     .brand-tagline { margin: 0 auto 2rem; }
                     .social-icons { justify-content: center; }
                     .contact-item { justify-content: center; }

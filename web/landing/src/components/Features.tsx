@@ -35,7 +35,7 @@ const Features = () => {
     ];
 
     return (
-        <section className="features-section">
+        <section className="features-section" id="features">
             <div className="container">
                 <div className="section-header">
                     <span className="pill-label">Our Features</span>
@@ -140,10 +140,15 @@ const Features = () => {
                 @media (max-width: 768px) {
                     .features-grid {
                         grid-template-columns: 1fr 1fr;
-                        gap: 16px;
+                        gap: 12px;
                     }
                     .feature-card {
-                        padding: 20px;
+                        padding: 20px 16px;
+                        text-align: center;
+                    }
+                    .icon-wrapper {
+                        margin-left: auto;
+                        margin-right: auto;
                     }
                     .section-header h2 {
                         font-size: 2rem;

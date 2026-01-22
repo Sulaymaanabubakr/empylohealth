@@ -157,8 +157,14 @@ const Contact = () => {
                 }
                 
                 @media (max-width: 768px) {
-                    .contact-wrapper { grid-template-columns: 1fr; gap: 40px; }
+                    .contact-wrapper {
+                        grid-template-columns: 1fr;
+                        gap: 40px;
+                        text-align: center;
+                    }
                     .contact-bg { height: 100%; border-bottom-left-radius: 0; }
+                    .detail-item { justify-content: center; }
+                    .contact-lead { margin-left: auto; margin-right: auto; }
                 }
             `}</style>
         </div>

@@ -141,6 +141,8 @@ const AboutUs = () => {
                 
                 @media (max-width: 768px) {
                     .about-hero h1 { font-size: 2.5rem; }
+                    .value-card { text-align: center; }
+                    .value-icon { margin-left: auto; margin-right: auto; display: block; }
                 }
             `}</style>
         </div>

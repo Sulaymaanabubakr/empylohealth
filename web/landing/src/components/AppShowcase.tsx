@@ -180,7 +180,8 @@ const AppShowcase = () => {
                         text-align: center;
                     }
                     .showcase-card {
-                        text-align: left;
+                        flex-direction: column;
+                        text-align: center;
                         align-items: center;
                     }
                     .showcase-cards {

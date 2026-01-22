@@ -13,7 +13,7 @@ const Hero = () => {
                 <div className="hero-content">
                     <div className="badge-pill">
                         <span className="badge-dot"></span>
-                        <span>Circles Health App Client</span>
+                        <span>Circles Health App</span>
                     </div>
 
                     <h1 className="hero-title">
