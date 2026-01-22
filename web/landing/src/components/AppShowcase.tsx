@@ -15,7 +15,7 @@ const AppShowcase = () => {
                         </p>
 
                         <div className="showcase-cards">
-                            <div className="feature-card">
+                            <div className="showcase-card">
                                 <div className="icon-box">
                                     <Smile size={24} />
                                 </div>
@@ -25,7 +25,7 @@ const AppShowcase = () => {
                                 </div>
                             </div>
 
-                            <div className="feature-card">
+                            <div className="showcase-card">
                                 <div className="icon-box">
                                     <Users size={24} />
                                 </div>
@@ -35,7 +35,7 @@ const AppShowcase = () => {
                                 </div>
                             </div>
 
-                            <div className="feature-card">
+                            <div className="showcase-card">
                                 <div className="icon-box">
                                     <BookOpen size={24} />
                                 </div>
@@ -94,7 +94,7 @@ const AppShowcase = () => {
                     gap: 20px;
                 }
                 
-                .feature-card {
+                .showcase-card {
                     display: flex;
                     align-items: flex-start;
                     gap: 20px;
@@ -107,12 +107,12 @@ const AppShowcase = () => {
                     border: 1px solid rgba(255, 255, 255, 0.5);
                 }
 
-                .feature-card:hover {
+                .showcase-card:hover {
                     transform: translateY(-5px);
                     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
                     background: white;
                 }
-                
+
                 .icon-box {
                     background: white;
                     color: var(--color-primary);
@@ -179,7 +179,7 @@ const AppShowcase = () => {
                         grid-template-columns: 1fr;
                         text-align: center;
                     }
-                    .feature-card {
+                    .showcase-card {
                         text-align: left;
                         align-items: center;
                     }

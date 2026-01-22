@@ -136,6 +136,19 @@ const Features = () => {
                     color: var(--color-text-light);
                     line-height: 1.6;
                 }
+
+                @media (max-width: 768px) {
+                    .features-grid {
+                        grid-template-columns: 1fr 1fr;
+                        gap: 16px;
+                    }
+                    .feature-card {
+                        padding: 20px;
+                    }
+                    .section-header h2 {
+                        font-size: 2rem;
+                    }
+                }
             `}</style>
         </section>
     );
