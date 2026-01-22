@@ -120,12 +120,13 @@ const Contact = () => {
 
           .contact-header h2 {
             margin-bottom: 16px;
-            font-size: 3rem;
+            font-size: 2.25rem; /* Reduced from 3rem */
             color: #111;
+            font-weight: 700;
           }
           
           .contact-subheader {
-             font-size: 1.25rem;
+             font-size: 1.1rem; /* Reduced from 1.25rem */
              color: #666;
           }
   
