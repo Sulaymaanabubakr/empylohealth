@@ -1,4 +1,5 @@
 import { FaLinkedinIn, FaInstagram, FaFacebookF, FaTwitter } from 'react-icons/fa';
+import { Link } from 'react-router-dom';
 import logo from '../assets/logo.png';
 
 const Footer = () => {
@@ -15,11 +16,10 @@ const Footer = () => {
         <div className="footer-links-group">
           <h4>Company</h4>
           <ul>
-            <li>Home</li>
-            <li>About Us</li>
-            <li>Services</li>
-            <li>Contact Us</li>
-            <li>Careers</li>
+            <li><Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>Home</Link></li>
+            <li><Link to="/about" style={{ color: 'inherit', textDecoration: 'none' }}>About Us</Link></li>
+            <li><Link to="/features" style={{ color: 'inherit', textDecoration: 'none' }}>Services</Link></li>
+            <li><Link to="/contact" style={{ color: 'inherit', textDecoration: 'none' }}>Contact Us</Link></li>
           </ul>
         </div>
 
@@ -47,9 +47,9 @@ const Footer = () => {
 
       <div className="footer-bottom container">
         <div className="legal-links">
-          <span>Privacy Policy</span>
-          <span>Terms of Use</span>
-          <span>Data Processing Agreement</span>
+          <span><Link to="/privacy-policy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy Policy</Link></span>
+          <span><Link to="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms of Use</Link></span>
+          <span><Link to="/delete-account" style={{ color: 'inherit', textDecoration: 'none' }}>Delete Account</Link></span>
         </div>
         <p className="copyright-text">© Copyright Empylo 2026. All rights reserved</p>
       </div>

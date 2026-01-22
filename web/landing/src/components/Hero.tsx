@@ -1,5 +1,5 @@
 import topBg from '../assets/top-bg.png';
-import heroImg from '../assets/longscroll-browser.png';
+import heroImg from '../assets/iphone-mockup-2.png'; // Switched to mobile mockup
 import vectorBg from '../assets/vector-logo.png';
 
 const Hero = () => {
@@ -11,10 +11,10 @@ const Hero = () => {
 
       <div className="container hero-container">
         <div className="hero-content">
-          <p className="hero-subtitle">CIRCLES HEALTH APP CLIENT</p>
+          <p className="hero-subtitle">YOUR PERSONAL WELLNESS COMPANION</p>
           <h1 className="hero-title">
-            Stronger <span className="highlight">Connections</span>,<br />
-            Better Health
+            Find Your <span className="highlight">Circle</span>,<br />
+            Find Your Peace
           </h1>
           <p className="hero-description">
             Sign up to champion a workplace that values mental health. Together,

@@ -1,42 +1,42 @@
-import { FaDatabase, FaLock, FaExclamationTriangle, FaDesktop, FaUsers, FaChartLine } from 'react-icons/fa';
-import adminImg from '../assets/admin-overview.png';
+import { FaHeart, FaUsers, FaShieldAlt, FaBookOpen, FaSmile, FaUserMd } from 'react-icons/fa';
+import appScreen from '../assets/app-screen-1.png';
 
 const Features = () => {
   const featuresList = [
     {
-      title: "Data-Driven Decisions",
-      description: "Interactive dashboards facilitate easy monitoring of campaigns with clear recommendations.",
-      icon: <FaDatabase />,
-      color: "#F5A623" // Yellow/Orange
-    },
-    {
-      title: "2FA and Data Security",
-      description: "Intuitive and secure login with two-factor authentication (2FA) and robust encryption.",
-      icon: <FaLock />,
-      color: "#F5A623"
-    },
-    {
-      title: "Error Handling",
-      description: "Comprehensive handling to prevent crashes, including smart retry logic for operational errors.",
-      icon: <FaExclamationTriangle />,
-      color: "#F5A623"
-    },
-    {
-      title: "Interactive Dashboard",
-      description: "Visually appealing dashboards for monitoring campaign progress, analytics, and insights.",
-      icon: <FaDesktop />,
-      color: "#F5A623"
-    },
-    {
-      title: "Role Based Features",
-      description: "Distinct interfaces and permissions for super-admins, admins, and regular users.",
+      title: "Supportive Communities",
+      description: "Join Circles that resonate with your journey. Share, listen, and grow together.",
       icon: <FaUsers />,
       color: "#F5A623"
     },
     {
-      title: "Campaign Management",
-      description: "Easily add colleagues, create audiences, and design targeted surveys.",
-      icon: <FaChartLine />,
+      title: "Daily Mood Tracking",
+      description: "Check in with yourself daily. Visualize your emotional trends and gain self-awareness.",
+      icon: <FaSmile />,
+      color: "#F5A623"
+    },
+    {
+      title: "Private & Secure",
+      description: "Your data and conversations are encrypted. A safe space to be vulnerable.",
+      icon: <FaShieldAlt />,
+      color: "#F5A623"
+    },
+    {
+      title: "Wellness Resources",
+      description: "Access a library of curated articles, affirmations, and exercises.",
+      icon: <FaBookOpen />,
+      color: "#F5A623"
+    },
+    {
+      title: "Professional Support",
+      description: "Connect with certified therapists and counselors when you need extra help.",
+      icon: <FaUserMd />,
+      color: "#F5A623"
+    },
+    {
+      title: "Holistic Health",
+      description: "Tools designed to improve your mental, emotional, and social well-being.",
+      icon: <FaHeart />,
       color: "#F5A623"
     }
   ];
@@ -45,8 +45,8 @@ const Features = () => {
     <section className="features-section">
       <div className="container">
         <div className="features-header">
-          <h2>Some Key Features Our App Offers</h2>
-          <p className="features-subheader">We provide a comprehensive suite of tools to manage workplace health.</p>
+          <h2>Holistic Wellness in Your Pocket</h2>
+          <p className="features-subheader">Everything you need to nurture your mental health, all in one premium app.</p>
         </div>
 
         <div className="features-grid">
@@ -65,15 +65,11 @@ const Features = () => {
             ))}
           </div>
 
-          {/* Center Image - Laptop Mockup */}
+          {/* Center Image - Mobile App */}
           <div className="features-center-img">
-            <div className="laptop-mockup-container">
-              <div className="laptop-frame">
-                <div className="laptop-screen">
-                  <img src={adminImg} alt="Admin Dashboard" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-              </div>
-              <div className="laptop-base"></div>
+            <div className="app-mockup-container">
+              <img src={appScreen} alt="Circles App" className="app-screen-img" />
+              <div className="app-glow"></div>
             </div>
           </div>
 
@@ -123,7 +119,7 @@ const Features = () => {
 
         .features-grid {
           display: grid;
-          grid-template-columns: 1fr 1.2fr 1fr;
+          grid-template-columns: 1fr 0.8fr 1fr;
           gap: 40px;
           align-items: center;
         }
@@ -143,6 +139,8 @@ const Features = () => {
           align-items: flex-start;
           transition: all 0.3s ease;
           border: 1px solid rgba(0,0,0,0.03);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.01);
+          min-height: 140px; /* Ensure uniform height perception */
         }
         
         .feature-card:hover {
@@ -153,153 +151,85 @@ const Features = () => {
 
         .feature-icon-wrapper {
           font-size: 1.5rem;
-          background: #FEF3C7; /* Soft amber bg matching color */
-          width: 64px;
-          height: 64px;
+          background: #FEF3C7;
+          width: 56px;
+          height: 56px;
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 16px; /* Squircle */
+          border-radius: 16px;
           flex-shrink: 0;
         }
 
         .feature-text h3 {
-          font-size: 1.25rem;
-          margin-bottom: 8px;
+          font-size: 1.15rem;
+          margin-bottom: 6px;
           color: #1E293B;
           font-weight: 700;
-          line-height: 1.2;
         }
 
         .feature-text p {
           font-size: 0.95rem;
           color: #475569;
-          line-height: 1.6;
+          line-height: 1.5;
         }
 
-        /* Laptop css mockup */
-        .laptop-mockup-container {
+        .features-center-img {
            display: flex;
-           flex-direction: column;
-           align-items: center;
-           width: 100%;
-           padding: 40px;
+           justify-content: center;
+           position: relative;
         }
         
-        .laptop-frame {
-           width: 100%;
-           aspect-ratio: 16/10;
-           background: #1E293B;
-           border-radius: 16px 16px 0 0;
-           padding: 12px;
+        .app-mockup-container {
            position: relative;
-           box-shadow: 0 30px 60px rgba(0,0,0,0.25);
+           width: 280px;
+           border-radius: 40px;
            z-index: 10;
         }
-        .laptop-screen {
-           width: 100%;
-           height: 100%;
-           background: #fff;
-           border-radius: 4px;
-           overflow: hidden;
+        
+        .app-screen-img {
+            width: 100%;
+            height: auto;
+            border-radius: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border: 8px solid white;
         }
         
-        .laptop-base {
-           width: 120%;
-           height: 16px;
-           background: #CBD5E1;
-           border-radius: 0 0 16px 16px;
-           position: relative;
-           box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-           margin-top: -1px; /* seamless join */
+        .app-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 80%;
+            background: radial-gradient(circle, rgba(13, 148, 136, 0.2) 0%, rgba(0,0,0,0) 70%);
+            z-index: -1;
+            filter: blur(40px);
         }
 
-        /* Tablet adjustments (iPad Pro / Horizontal Tablet) */
         @media (max-width: 1024px) {
           .features-grid {
-            /* Restore grid layout for tablet, don't stack yet */
             grid-template-columns: 1fr 1fr; 
-            gap: 40px;
-            align-items: start; /* Align to top */
+            gap: 30px;
+            align-items: start;
           }
            .features-center-img {
-             /* Place image in the generic flow or hide? 
-                Let's put it as the last item or first full width?
-                Better: Spans both columns at the bottom or top.
-             */
              grid-column: 1 / -1; 
-             width: 60%;
              margin: 40px auto 0;
-             order: 10; /* Move to bottom */
-           }
-           .feature-card {
-             flex-direction: column; /* Stack icon/text inside card */
-             text-align: center;
-             align-items: center;
-             height: 100%; /* Uniform height */
+             order: 10;
            }
            .features-column {
-               display: contents; /* Flatten struct to use main grid */
+               display: contents; 
            }
         }
 
-        /* Mobile adjustments */
         @media (max-width: 768px) {
-          .features-section {
-              padding: 60px 0;
-          }
-          .features-header {
-              margin-bottom: 40px;
-              padding: 0 20px;
-          }
-          .features-header h2 {
-              font-size: 2rem;
-          }
-          
-          .features-grid {
-             grid-template-columns: 1fr 1fr; /* Compact 2-column */
-             gap: 12px;
-             align-items: stretch;
-          }
-          
-          .features-center-img {
-             grid-column: 1 / -1;
-             width: 100%;
-             margin-bottom: 24px;
-             order: -1;
-          }
-          
-          .features-column {
-              display: contents; /* Flatten validation */
-          }
-
-          .feature-card {
-             flex-direction: column;
-             padding: 16px;
-             gap: 12px;
-             border-radius: 16px;
-             align-items: center;
-             text-align: center;
-             height: 100%;
-          }
-          
-          .feature-icon-wrapper {
-              width: 48px;
-              height: 48px;
-              font-size: 1.25rem;
-              border-radius: 12px;
-          }
-          
-          .feature-text h3 {
-              font-size: 0.9rem;
-              margin-bottom: 4px;
-              line-height: 1.2;
-          }
-          
-          .feature-text p {
-              font-size: 0.75rem;
-              line-height: 1.35;
-          }
+          .features-section { padding: 60px 0; }
+          .features-header { padding: 0 20px; margin-bottom: 40px; }
+          .features-header h2 { font-size: 2rem; }
+          .features-grid { grid-template-columns: 1fr; gap: 16px; }
+          .features-center-img { width: 100%; margin-bottom: 32px; order: -1; }
+          .feature-card { flex-direction: row; text-align: left; }
         }
       `}</style>
     </section>

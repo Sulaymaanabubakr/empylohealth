@@ -44,18 +44,18 @@ const Navbar = () => {
         {/* Desktop Menu */}
         <ul className={`nav-links ${isOpen ? 'active' : ''}`} ref={menuRef}>
           <li><Link to="/" onClick={() => setIsOpen(false)}>Home</Link></li>
+          <li><Link to="/about" onClick={() => setIsOpen(false)}>About</Link></li>
           <li><Link to="/features" onClick={() => setIsOpen(false)}>Features</Link></li>
-          <li><Link to="/pricing" onClick={() => setIsOpen(false)}>Pricing</Link></li>
-          <li><Link to="/contact" onClick={() => setIsOpen(false)}>Contact Us</Link></li>
+          <li><Link to="/contact" onClick={() => setIsOpen(false)}>Contact Support</Link></li>
 
           {/* Mobile Only Button in Menu */}
           <li className="mobile-btn">
-            <button className="btn btn-primary">Get Started</button>
+            <button className="btn btn-primary">Download App</button>
           </li>
         </ul>
 
         {/* Desktop Button */}
-        <button className="btn btn-primary desktop-btn">Get Started</button>
+        <button className="btn btn-primary desktop-btn">Download App</button>
       </div>
 
       <style>{`
