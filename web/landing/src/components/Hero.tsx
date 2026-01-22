@@ -15,16 +15,16 @@ const Hero = () => {
 
       <div className="container hero-container">
         <div className="hero-content">
-          <p className="hero-subtitle">Your Personal Wellness Companion</p>
+          <p className="hero-subtitle">Circles Health App Client</p>
           <h1 className="hero-title">
-            Find Your <span className="highlight">Circle</span>,<br />
-            Find Your Peace
+            Stronger <span className="highlight">Connections</span>,<br />
+            Better Health
           </h1>
           <p className="hero-description">
-            Join a supportive community dedicated to mental wellness.
-            Track your mood, access professional resources, and connect with others who understand.
+            Sign up to champion a workplace that values mental health, and
+            together, let's create a nurturing environment where your employees can thrive.
           </p>
-          <Link to="/features" className="btn btn-primary btn-lg">Download App</Link>
+          <Link to="/features" className="btn btn-primary btn-lg">Get Started</Link>
         </div>
 
         <div className="hero-image">
