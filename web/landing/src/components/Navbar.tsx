@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import logo from '../assets/logo_turquoise.png';
 
@@ -10,6 +10,7 @@ const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -42,6 +43,21 @@ const Navbar = () => {
     { name: 'Contact', path: '/contact' },
   ];
 
+  const getLinkClass = (path: string, isMobile = false) => {
+    const baseClass = isMobile ? 'mobile-link' : 'nav-link';
+    let isActive = false;
+
+    if (path === '/') {
+      isActive = location.pathname === '/' && location.hash === '';
+    } else if (path === '/#features') {
+      isActive = location.hash === '#features';
+    } else {
+      isActive = location.pathname === path;
+    }
+
+    return `${baseClass} ${isActive ? 'active' : ''}`;
+  };
+
   return (
     <nav className={`navbar ${scrolled ? 'scrolled' : ''}`}>
       <div className="container navbar-container">
@@ -55,13 +71,13 @@ const Navbar = () => {
         <div className="navbar-center hidden-mobile">
           <div className="nav-links">
             {navLinks.map((link) => (
-              <NavLink
+              <Link
                 key={link.name}
                 to={link.path}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                className={getLinkClass(link.path)}
               >
                 {link.name}
-              </NavLink>
+              </Link>
             ))}
           </div>
         </div>
@@ -81,14 +97,14 @@ const Navbar = () => {
           {isOpen && (
             <div className="navbar-mobile card-style">
               {navLinks.map((link) => (
-                <NavLink
+                <Link
                   key={link.name}
                   to={link.path}
-                  className="mobile-link"
+                  className={getLinkClass(link.path, true)}
                   onClick={() => setIsOpen(false)}
                 >
                   {link.name}
-                </NavLink>
+                </Link>
               ))}
               <Link to="/download" className="btn btn-primary mobile-btn" onClick={() => setIsOpen(false)}>
                 Download App
@@ -163,6 +179,7 @@ const Navbar = () => {
           color: var(--color-text-light);
           position: relative;
           font-size: 1rem;
+          text-decoration: none; /* Ensure no underline default */
         }
 
         .nav-link:hover, .nav-link.active {
@@ -224,6 +241,7 @@ const Navbar = () => {
           color: var(--color-text);
           padding: 0.5rem 0;
           display: block;
+          text-decoration: none;
         }
         
         .mobile-link.active {
