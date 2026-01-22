@@ -1,4 +1,5 @@
-import { Apple, Smartphone } from 'lucide-react';
+import appStoreBadge from '../assets/app-store-badge.svg';
+import googlePlayBadge from '../assets/google-play-badge.svg';
 // import { Link } from 'react-router-dom'; // Unused
 
 const CallToAction = () => {
@@ -13,21 +14,12 @@ const CallToAction = () => {
                         </p>
                         <h3 className="cta-subhead">Get Started Now</h3>
                         <div className="cta-buttons store-buttons">
-                            <button className="store-btn-white">
-                                <Apple size={24} />
-                                <div className="btn-text">
-                                    <span className="small">Download on the</span>
-                                    <span className="large">App Store</span>
-                                </div>
-                            </button>
-
-                            <button className="store-btn-white">
-                                <Smartphone size={24} />
-                                <div className="btn-text">
-                                    <span className="small">GET IT ON</span>
-                                    <span className="large">Google Play</span>
-                                </div>
-                            </button>
+                            <a href="https://apps.apple.com" target="_blank" rel="noopener noreferrer" className="store-link">
+                                <img src={appStoreBadge} alt="Download on the App Store" className="store-badge" />
+                            </a>
+                            <a href="https://play.google.com" target="_blank" rel="noopener noreferrer" className="store-link">
+                                <img src={googlePlayBadge} alt="Get it on Google Play" className="store-badge" />
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -92,19 +84,6 @@ const CallToAction = () => {
                     margin-bottom: 32px;
                 }
                 
-                .btn-white {
-                    background: white;
-                    color: var(--color-primary-dark);
-                    font-weight: 700;
-                    padding: 1rem 2.5rem;
-                }
-                
-                .btn-white:hover {
-                    background: #F0FDF4;
-                    transform: translateY(-2px);
-                    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-                }
-                
                 .cta-subhead {
                     font-size: 1.25rem;
                     font-weight: 700;
@@ -117,40 +96,27 @@ const CallToAction = () => {
                     gap: 16px;
                     justify-content: center;
                     flex-wrap: wrap;
-                }
-                
-                .store-btn-white {
-                    display: flex;
                     align-items: center;
-                    gap: 10px;
-                    background: black;
-                    color: white;
-                    border: 1px solid rgba(255,255,255,0.2);
-                    padding: 8px 16px;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    min-width: 160px;
-                    text-align: left;
                 }
                 
-                .store-btn-white:hover {
-                    background: #1a1a1a;
-                    transform: translateY(-2px);
-                    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-                    border-color: rgba(255,255,255,0.4);
+                .store-link {
+                    display: inline-block;
+                    transition: transform 0.2s, opacity 0.2s;
+                }
+                
+                .store-link:hover {
+                    transform: translateY(-3px);
+                    opacity: 0.9;
+                }
+                
+                .store-badge {
+                    height: 48px; /* Slightly smaller than download page to fit card */
+                    width: auto;
+                    display: block;
+                    border: 1px solid rgba(255, 255, 255, 0.4);
+                    border-radius: 8px;
                 }
 
-                .btn-text {
-                    display: flex;
-                    flex-direction: column;
-                    line-height: 1.1;
-                    color: white;
-                }
-                
-                .btn-text .small { font-size: 0.6rem; font-weight: 500; text-transform: none; opacity: 1; }
-                .btn-text .large { font-size: 1.1rem; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-                
                 @media (max-width: 768px) {
                     .cta-card { padding: 60px 24px; }
                     .cta-content h2 { font-size: 2rem; }

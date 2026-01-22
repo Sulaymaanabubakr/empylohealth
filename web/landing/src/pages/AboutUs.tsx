@@ -61,7 +61,7 @@ const AboutUs = () => {
 
             <style>{`
                 .about-hero {
-                    padding: 180px 0 100px;
+                    padding: 100px 0 80px;
                     text-align: center;
                     background: #F8FAFC;
                 }

@@ -52,7 +52,7 @@ const Contact = () => {
 
             <style>{`
                 .contact-page {
-                    padding: 160px 0 100px;
+                    padding: 100px 0 80px;
                     min-height: 100vh;
                     position: relative;
                 }

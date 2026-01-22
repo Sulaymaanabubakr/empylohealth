@@ -38,7 +38,7 @@ const DeleteAccount = () => {
                 </div>
             </div>
             <style>{`
-                .legal-page { padding: 160px 0 100px; }
+                .legal-page { padding: 100px 0 80px; }
                 .legal-page h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 8px; }
                 .last-updated { color: #64748B; margin-bottom: 40px; }
                 .legal-content { max-width: 800px; }
@@ -67,6 +67,15 @@ const DeleteAccount = () => {
                     padding: 16px;
                     border-radius: 12px;
                     margin-top: 32px;
+                }
+
+                @media (max-width: 768px) {
+                    .legal-page h1 { text-align: center; font-size: 2rem; }
+                    .last-updated { text-align: center; }
+                    .legal-content { text-align: center; }
+                    .deletion-steps { text-align: center; }
+                    ol { text-align: left; display: inline-block; padding-left: 20px; }
+                    .warning-box { text-align: center; }
                 }
         `}</style>
         </div>

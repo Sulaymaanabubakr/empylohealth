@@ -33,7 +33,7 @@ const Download = () => {
             <style>{`
                 .download-page {
                     min-height: 100vh;
-                    padding-top: 140px;
+                    padding-top: 100px;
                     background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
                     display: flex;
                     align-items: center;
@@ -77,9 +77,11 @@ const Download = () => {
                 }
                 
                 .store-badge {
-                    height: 60px;
+                    height: 48px;
                     width: auto;
                     display: block;
+                    border: 1px solid rgba(255, 255, 255, 0.4);
+                    border-radius: 8px;
                 }
                 
                 .qr-section {

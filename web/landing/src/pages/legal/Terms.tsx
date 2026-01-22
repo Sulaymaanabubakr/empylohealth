@@ -24,12 +24,19 @@ const Terms = () => {
                 </div>
             </div>
             <style>{`
-                .legal-page { padding: 160px 0 100px; }
+                .legal-page { padding: 100px 0 80px; }
                 .legal-page h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 8px; }
                 .last-updated { color: #64748B; margin-bottom: 40px; }
                 .legal-content { max-width: 800px; }
                 .legal-content h2 { margin-top: 32px; margin-bottom: 16px; font-size: 1.5rem; font-weight: 700; color: #1E293B; }
                 .legal-content p { line-height: 1.7; color: #475569; margin-bottom: 16px; }
+
+                @media (max-width: 768px) {
+                    .legal-page h1 { text-align: center; font-size: 2rem; }
+                    .last-updated { text-align: center; }
+                    .legal-content { text-align: center; }
+                    .legal-content h2 { text-align: center; }
+                }
         `}</style>
         </div>
     );
