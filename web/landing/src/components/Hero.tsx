@@ -1,17 +1,20 @@
 import topBg from '../assets/top-bg.png';
-import heroImg from '../assets/iphone-mockup-2.png'; // Switched to mobile mockup
+import heroImg from '../assets/iphone-mockup-2.png';
 import vectorBg from '../assets/vector-logo.png';
 
 const Hero = () => {
   return (
     <section className="hero">
-      {/* Abstract Background Blobs */}
+      {/* Background Gradient/Pattern */}
+      <div className="hero-bg-accent"></div>
+
+      {/* Abstract Blobs for depth */}
       <div className="blob blob-1"></div>
       <div className="blob blob-2"></div>
 
       <div className="container hero-container">
         <div className="hero-content">
-          <p className="hero-subtitle">YOUR PERSONAL WELLNESS COMPANION</p>
+          <p className="hero-subtitle">Your Personal Wellness Companion</p>
           <h1 className="hero-title">
             Find Your <span className="highlight">Circle</span>,<br />
             Find Your Peace

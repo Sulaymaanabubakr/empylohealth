@@ -424,7 +424,7 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
         .main-content {
           flex: 1;
         }
-      `})]}),md="/assets/iphone-mockup-2-DIM5un3K.png",bm="/assets/vector-logo-c5qGGyK3.png",Jm=()=>u.jsxs("section",{className:"hero",children:[u.jsx("div",{className:"blob blob-1"}),u.jsx("div",{className:"blob blob-2"}),u.jsxs("div",{className:"container hero-container",children:[u.jsxs("div",{className:"hero-content",children:[u.jsx("p",{className:"hero-subtitle",children:"YOUR PERSONAL WELLNESS COMPANION"}),u.jsxs("h1",{className:"hero-title",children:["Find Your ",u.jsx("span",{className:"highlight",children:"Circle"}),",",u.jsx("br",{}),"Find Your Peace"]}),u.jsx("p",{className:"hero-description",children:"Sign up to champion a workplace that values mental health. Together, let's create a nurturing environment where your employees can thrive."}),u.jsx("button",{className:"btn btn-primary btn-lg",children:"Get Started"})]}),u.jsxs("div",{className:"hero-image",children:[u.jsx("img",{src:bm,alt:"",className:"hero-vector-bg"}),u.jsx("div",{className:"img-container-skew",children:u.jsx("img",{src:md,alt:"Dashboard Mockup",className:"hero-mockup-img"})})]})]}),u.jsx("style",{children:`
+      `})]}),md="/assets/iphone-mockup-2-DIM5un3K.png",bm="/assets/vector-logo-c5qGGyK3.png",Jm=()=>u.jsxs("section",{className:"hero",children:[u.jsx("div",{className:"hero-bg-accent"}),u.jsx("div",{className:"blob blob-1"}),u.jsx("div",{className:"blob blob-2"}),u.jsxs("div",{className:"container hero-container",children:[u.jsxs("div",{className:"hero-content",children:[u.jsx("p",{className:"hero-subtitle",children:"Your Personal Wellness Companion"}),u.jsxs("h1",{className:"hero-title",children:["Find Your ",u.jsx("span",{className:"highlight",children:"Circle"}),",",u.jsx("br",{}),"Find Your Peace"]}),u.jsx("p",{className:"hero-description",children:"Sign up to champion a workplace that values mental health. Together, let's create a nurturing environment where your employees can thrive."}),u.jsx("button",{className:"btn btn-primary btn-lg",children:"Get Started"})]}),u.jsxs("div",{className:"hero-image",children:[u.jsx("img",{src:bm,alt:"",className:"hero-vector-bg"}),u.jsx("div",{className:"img-container-skew",children:u.jsx("img",{src:md,alt:"Dashboard Mockup",className:"hero-mockup-img"})})]})]}),u.jsx("style",{children:`
         .hero {
           padding: 120px 0 160px;
           position: relative;
@@ -624,146 +624,112 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
               filter: drop-shadow(0 5px 15px rgba(0,0,0,0.1));
           }
         }
-      `})]}),Zm="/assets/app-screen-1--Bda22Nw.png",Fs=()=>{const e=[{title:"Supportive Communities",description:"Join Circles that resonate with your journey. Share, listen, and grow together.",icon:u.jsx(Ym,{}),color:"#F5A623"},{title:"Daily Mood Tracking",description:"Check in with yourself daily. Visualize your emotional trends and gain self-awareness.",icon:u.jsx(Wm,{}),color:"#F5A623"},{title:"Private & Secure",description:"Your data and conversations are encrypted. A safe space to be vulnerable.",icon:u.jsx(Hm,{}),color:"#F5A623"},{title:"Wellness Resources",description:"Access a library of curated articles, affirmations, and exercises.",icon:u.jsx(Am,{}),color:"#F5A623"},{title:"Professional Support",description:"Connect with certified therapists and counselors when you need extra help.",icon:u.jsx(Qm,{}),color:"#F5A623"},{title:"Holistic Health",description:"Tools designed to improve your mental, emotional, and social well-being.",icon:u.jsx(Bm,{}),color:"#F5A623"}];return u.jsxs("section",{className:"features-section",children:[u.jsxs("div",{className:"container",children:[u.jsxs("div",{className:"features-header",children:[u.jsx("h2",{children:"Holistic Wellness in Your Pocket"}),u.jsx("p",{className:"features-subheader",children:"Everything you need to nurture your mental health, all in one premium app."})]}),u.jsxs("div",{className:"features-grid",children:[u.jsx("div",{className:"features-column",children:e.slice(0,3).map((t,n)=>u.jsxs("div",{className:"feature-card",children:[u.jsx("div",{className:"feature-icon-wrapper",style:{color:t.color},children:t.icon}),u.jsxs("div",{className:"feature-text",children:[u.jsx("h3",{children:t.title}),u.jsx("p",{children:t.description})]})]},n))}),u.jsx("div",{className:"features-center-img",children:u.jsxs("div",{className:"app-mockup-container",children:[u.jsx("img",{src:Zm,alt:"Circles App",className:"app-screen-img"}),u.jsx("div",{className:"app-glow"})]})}),u.jsx("div",{className:"features-column",children:e.slice(3,6).map((t,n)=>u.jsxs("div",{className:"feature-card",children:[u.jsx("div",{className:"feature-icon-wrapper",style:{color:t.color},children:t.icon}),u.jsxs("div",{className:"feature-text",children:[u.jsx("h3",{children:t.title}),u.jsx("p",{children:t.description})]})]},n))})]})]}),u.jsx("style",{children:`
+      `})]}),Fs=()=>{const e=[{title:"Supportive Communities",description:"Join Circles that resonate with your journey. Share, listen, and grow together.",icon:u.jsx(Ym,{}),color:"#F5A623"},{title:"Daily Mood Tracking",description:"Check in with yourself daily. Visualize your emotional trends and gain self-awareness.",icon:u.jsx(Wm,{}),color:"#F5A623"},{title:"Private & Secure",description:"Your data and conversations are encrypted. A safe space to be vulnerable.",icon:u.jsx(Hm,{}),color:"#F5A623"},{title:"Wellness Resources",description:"Access a library of curated articles, affirmations, and exercises.",icon:u.jsx(Am,{}),color:"#F5A623"},{title:"Professional Support",description:"Connect with certified therapists and counselors when you need extra help.",icon:u.jsx(Qm,{}),color:"#F5A623"},{title:"Holistic Health",description:"Tools designed to improve your mental, emotional, and social well-being.",icon:u.jsx(Bm,{}),color:"#F5A623"}];return u.jsxs("section",{className:"features-section",children:[u.jsxs("div",{className:"container",children:[u.jsxs("div",{className:"features-header",children:[u.jsx("h2",{children:"Holistic Wellness in Your Pocket"}),u.jsx("p",{className:"features-subheader",children:"Everything you need to nurture your mental health, all in one premium app."})]}),u.jsx("div",{className:"features-grid",children:e.map((t,n)=>u.jsxs("div",{className:"feature-card",children:[u.jsx("div",{className:"feature-icon-wrapper",style:{color:t.color},children:t.icon}),u.jsxs("div",{className:"feature-text",children:[u.jsx("h3",{children:t.title}),u.jsx("p",{children:t.description})]})]},n))})]}),u.jsx("style",{children:`
         .features-section {
-          padding: 120px 0;
-          background-color: #F8FAFC;
+          padding: 80px 0;
+          background-color: white; /* Clean white bg */
           position: relative;
         }
 
         .features-header {
           text-align: center;
-          margin-bottom: 80px;
-          max-width: 700px;
+          margin-bottom: 60px;
+          max-width: 600px;
           margin-left: auto;
           margin-right: auto;
         }
         
         .features-header h2 {
-          font-size: 3rem;
+          font-size: 2.25rem;
           color: #0F172A;
-          margin-bottom: 16px;
+          margin-bottom: 12px;
           font-weight: 700;
         }
         
         .features-subheader {
-          font-size: 1.25rem;
+          font-size: 1.1rem;
           color: #64748B;
         }
 
+        /* 3 Columns Desktop, 2 Columns Mobile */
         .features-grid {
           display: grid;
-          grid-template-columns: 1fr 0.8fr 1fr;
-          gap: 40px;
-          align-items: center;
-        }
-        
-        .features-column {
-          display: flex;
-          flex-direction: column;
-          gap: 32px;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 24px;
         }
 
         .feature-card {
-          background: white;
-          padding: 24px;
-          border-radius: 20px;
+          background: #F8FAFC; /* Light gray card bg */
+          padding: 20px;
+          border-radius: 16px;
           display: flex;
-          gap: 20px;
+          flex-direction: column;
+          gap: 16px;
           align-items: flex-start;
           transition: all 0.3s ease;
-          border: 1px solid rgba(0,0,0,0.03);
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.01);
-          min-height: 140px; /* Ensure uniform height perception */
+          border: 1px solid transparent;
         }
         
         .feature-card:hover {
-           transform: translateY(-5px);
-           box-shadow: 0 20px 40px rgba(0,0,0,0.06);
+           background: white;
+           transform: translateY(-4px);
+           box-shadow: 0 10px 25px rgba(0,0,0,0.05);
            border-color: rgba(15, 118, 110, 0.1);
         }
 
         .feature-icon-wrapper {
-          font-size: 1.5rem;
-          background: #FEF3C7;
-          width: 56px;
-          height: 56px;
+          font-size: 1.25rem;
+          background: white;
+          width: 48px;
+          height: 48px;
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 16px;
+          border-radius: 12px;
           flex-shrink: 0;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.03);
         }
 
         .feature-text h3 {
-          font-size: 1.15rem;
-          margin-bottom: 6px;
+          font-size: 1rem; /* Compact title */
+          margin-bottom: 4px;
           color: #1E293B;
           font-weight: 700;
         }
 
         .feature-text p {
-          font-size: 0.95rem;
-          color: #475569;
+          font-size: 0.875rem; /* Compact text */
+          color: #64748B;
           line-height: 1.5;
         }
 
-        .features-center-img {
-           display: flex;
-           justify-content: center;
-           position: relative;
-        }
-        
-        .app-mockup-container {
-           position: relative;
-           width: 280px;
-           border-radius: 40px;
-           z-index: 10;
-        }
-        
-        .app-screen-img {
-            width: 100%;
-            height: auto;
-            border-radius: 40px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-            border: 8px solid white;
-        }
-        
-        .app-glow {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100%;
-            height: 80%;
-            background: radial-gradient(circle, rgba(13, 148, 136, 0.2) 0%, rgba(0,0,0,0) 70%);
-            z-index: -1;
-            filter: blur(40px);
-        }
-
+        /* Tablet */
         @media (max-width: 1024px) {
           .features-grid {
-            grid-template-columns: 1fr 1fr; 
-            gap: 30px;
-            align-items: start;
+            grid-template-columns: repeat(2, 1fr);
           }
-           .features-center-img {
-             grid-column: 1 / -1; 
-             margin: 40px auto 0;
-             order: 10;
-           }
-           .features-column {
-               display: contents; 
-           }
         }
 
+        /* Mobile - Force 2 Columns */
         @media (max-width: 768px) {
-          .features-section { padding: 60px 0; }
-          .features-header { padding: 0 20px; margin-bottom: 40px; }
-          .features-header h2 { font-size: 2rem; }
-          .features-grid { grid-template-columns: 1fr; gap: 16px; }
-          .features-center-img { width: 100%; margin-bottom: 32px; order: -1; }
-          .feature-card { flex-direction: row; text-align: left; }
+          .features-section { padding: 50px 0; }
+          .features-header { padding: 0 20px; margin-bottom: 32px; }
+          .features-header h2 { font-size: 1.75rem; }
+          
+          .features-grid { 
+             grid-template-columns: 1fr 1fr; /* TWO COLUMNS */
+             gap: 12px;
+          }
+          
+          .feature-card { 
+             padding: 16px; /* Tighter padding */
+             gap: 12px;
+             align-items: center; /* Center align for mobile grid look */
+             text-align: center;
+          }
+          
+          .feature-text h3 { font-size: 0.9rem; }
+          .feature-text p { font-size: 0.75rem; line-height: 1.3; }
         }
       `})]})},gd=()=>{const[e,t]=v.useState("idle"),[n,r]=v.useState(""),l=o=>{o.preventDefault();const i=o.currentTarget,a=new FormData(i);String(a.get("firstName")||""),String(a.get("lastName")||""),String(a.get("email")||""),String(a.get("company")||""),String(a.get("message")||"");{r("Contact service is not configured."),t("error");return}};return u.jsxs("section",{className:"contact-section",children:[u.jsxs("div",{className:"container contact-container",children:[u.jsxs("div",{className:"contact-header",children:[u.jsx("h2",{children:"Get in Touch"}),u.jsx("p",{className:"contact-subheader",children:"Have questions? We'd love to hear from you."})]}),u.jsxs("div",{className:"contact-card glass-panel",children:[u.jsx("div",{className:"contact-icon-top",children:u.jsx("span",{children:"📞"})}),u.jsxs("form",{className:"contact-form",onSubmit:l,children:[u.jsxs("div",{className:"form-row",children:[u.jsxs("div",{className:"form-group",children:[u.jsx("label",{children:"First name*"}),u.jsx("input",{type:"text",name:"firstName",placeholder:"Jane",required:!0})]}),u.jsxs("div",{className:"form-group",children:[u.jsx("label",{children:"Last name*"}),u.jsx("input",{type:"text",name:"lastName",placeholder:"Doe",required:!0})]})]}),u.jsxs("div",{className:"form-group",children:[u.jsx("label",{children:"Email*"}),u.jsx("input",{type:"email",name:"email",placeholder:"jane@company.com",required:!0})]}),u.jsxs("div",{className:"form-group",children:[u.jsx("label",{children:"Company name*"}),u.jsx("input",{type:"text",name:"company",placeholder:"Company Inc.",required:!0})]}),u.jsxs("div",{className:"form-group",children:[u.jsx("label",{children:"Message*"}),u.jsx("textarea",{name:"message",rows:5,placeholder:"Tell us a bit about your team...",required:!0})]}),u.jsx("button",{type:"submit",className:"btn btn-primary btn-block",children:"Send Message"})]}),e==="sent"&&u.jsx("p",{className:"contact-success",children:"Thanks! We received your message."}),e==="error"&&u.jsx("p",{className:"contact-error",children:n||"Something went wrong. Try again."}),u.jsx("p",{className:"contact-disclaimer",children:"By submitting this form, you agree to our privacy policy and terms of service."})]})]}),u.jsx("style",{children:`
           .contact-section {
@@ -906,7 +872,7 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
                   padding: 24px;
               }
           }
-        `})]})},qm="/assets/iphone-mockup-1-BFy3mLL9.png",eg="/assets/google-play-badge-DEqdKz_R.png",tg="/assets/app-store-badge-C0sREJ0J.png",ng=()=>u.jsxs("section",{className:"download-section",children:[u.jsxs("div",{className:"container download-container",children:[u.jsxs("div",{className:"download-content",children:[u.jsxs("h2",{className:"download-title",children:["Download The ",u.jsx("br",{}),"Circles Health App by Empylo"]}),u.jsx("p",{className:"download-desc",children:"Circles Health App by Empylo provides a unique data-powered approach to combat loneliness and improve mental and physical health. Join now to experience meaningful connections like never before."}),u.jsxs("div",{className:"app-buttons",children:[u.jsx("a",{href:"#",className:"store-link",children:u.jsx("img",{src:eg,alt:"Get it on Google Play",className:"store-img"})}),u.jsx("a",{href:"#",className:"store-link",children:u.jsx("img",{src:tg,alt:"Download on the App Store",className:"store-img"})})]})]}),u.jsxs("div",{className:"download-image",children:[u.jsx("img",{src:md,alt:"App Mockup Desktop",className:"mockup-desktop"}),u.jsx("img",{src:qm,alt:"App Mockup Mobile",className:"mockup-mobile"})]})]}),u.jsx("style",{children:`
+        `})]})},Zm="/assets/iphone-mockup-1-BFy3mLL9.png",qm="/assets/google-play-badge-DEqdKz_R.png",eg="/assets/app-store-badge-C0sREJ0J.png",tg=()=>u.jsxs("section",{className:"download-section",children:[u.jsxs("div",{className:"container download-container",children:[u.jsxs("div",{className:"download-content",children:[u.jsxs("h2",{className:"download-title",children:["Download The ",u.jsx("br",{}),"Circles Health App by Empylo"]}),u.jsx("p",{className:"download-desc",children:"Circles Health App by Empylo provides a unique data-powered approach to combat loneliness and improve mental and physical health. Join now to experience meaningful connections like never before."}),u.jsxs("div",{className:"app-buttons",children:[u.jsx("a",{href:"#",className:"store-link",children:u.jsx("img",{src:qm,alt:"Get it on Google Play",className:"store-img"})}),u.jsx("a",{href:"#",className:"store-link",children:u.jsx("img",{src:eg,alt:"Download on the App Store",className:"store-img"})})]})]}),u.jsxs("div",{className:"download-image",children:[u.jsx("img",{src:md,alt:"App Mockup Desktop",className:"mockup-desktop"}),u.jsx("img",{src:Zm,alt:"App Mockup Mobile",className:"mockup-mobile"})]})]}),u.jsx("style",{children:`
         .download-section {
           background: #CCFBF1; /* Light Pastel Teal matching screenshot */
           padding: 100px 0;
@@ -1036,7 +1002,7 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
                 margin: 0 auto;
             }
         }
-      `})]}),rg=()=>u.jsxs("div",{className:"legal-page",children:[u.jsxs("div",{className:"container",children:[u.jsx("h1",{children:"Privacy Policy"}),u.jsx("p",{className:"last-updated",children:"Last Updated: January 1, 2026"}),u.jsxs("section",{children:[u.jsx("h2",{children:"1. Introduction"}),u.jsx("p",{children:'Welcome to Circles Health ("Empylo", "we", "our", or "us"). We are committed to protecting your privacy and ensuring the security of your personal information. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application ("Circles App") and website.'})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"2. Information We Collect"}),u.jsx("h3",{children:"2.1 Personal Information"}),u.jsx("p",{children:"We may collect personal information that you voluntarily provide to us when you register for the App, expressed interest in obtaining information about us or our products and services, when you participate in activities on the App (such as posting in forums or entering competitions, contests or giveaways) or otherwise when you contact us."}),u.jsx("h3",{children:"2.2 Health and Mood Data"}),u.jsx("p",{children:"The App allows you to track your mood and wellness. This data is stored securely and is used to provide you with personal insights. We do not sell your health data to third parties."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"3. How We Use Your Information"}),u.jsx("p",{children:"We use the information we collect or receive:"}),u.jsxs("ul",{children:[u.jsx("li",{children:"To facilitate account creation and logon process."}),u.jsx("li",{children:"To send you administrative information."}),u.jsx("li",{children:"To fulfill and manage your orders."}),u.jsx("li",{children:"To post testimonials."}),u.jsx("li",{children:"To deliver and facilitate delivery of services to the user."}),u.jsx("li",{children:"To respond to user inquiries/offer support to users."})]})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"4. Data Security"}),u.jsx("p",{children:"We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable, and no method of data transmission can be guaranteed against any interception or other type of misuse."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"5. Contact Us"}),u.jsx("p",{children:"If you have questions or comments about this policy, you may email us at support@empylo.com."})]})]}),u.jsx("style",{children:`
+      `})]}),ng=()=>u.jsxs("div",{className:"legal-page",children:[u.jsxs("div",{className:"container",children:[u.jsx("h1",{children:"Privacy Policy"}),u.jsx("p",{className:"last-updated",children:"Last Updated: January 1, 2026"}),u.jsxs("section",{children:[u.jsx("h2",{children:"1. Introduction"}),u.jsx("p",{children:'Welcome to Circles Health ("Empylo", "we", "our", or "us"). We are committed to protecting your privacy and ensuring the security of your personal information. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application ("Circles App") and website.'})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"2. Information We Collect"}),u.jsx("h3",{children:"2.1 Personal Information"}),u.jsx("p",{children:"We may collect personal information that you voluntarily provide to us when you register for the App, expressed interest in obtaining information about us or our products and services, when you participate in activities on the App (such as posting in forums or entering competitions, contests or giveaways) or otherwise when you contact us."}),u.jsx("h3",{children:"2.2 Health and Mood Data"}),u.jsx("p",{children:"The App allows you to track your mood and wellness. This data is stored securely and is used to provide you with personal insights. We do not sell your health data to third parties."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"3. How We Use Your Information"}),u.jsx("p",{children:"We use the information we collect or receive:"}),u.jsxs("ul",{children:[u.jsx("li",{children:"To facilitate account creation and logon process."}),u.jsx("li",{children:"To send you administrative information."}),u.jsx("li",{children:"To fulfill and manage your orders."}),u.jsx("li",{children:"To post testimonials."}),u.jsx("li",{children:"To deliver and facilitate delivery of services to the user."}),u.jsx("li",{children:"To respond to user inquiries/offer support to users."})]})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"4. Data Security"}),u.jsx("p",{children:"We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable, and no method of data transmission can be guaranteed against any interception or other type of misuse."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"5. Contact Us"}),u.jsx("p",{children:"If you have questions or comments about this policy, you may email us at support@empylo.com."})]})]}),u.jsx("style",{children:`
         .legal-page {
           padding: 120px 0;
           background-color: #F8FAFC; 
@@ -1095,7 +1061,7 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
           margin-bottom: 8px;
           line-height: 1.6;
         }
-      `})]}),lg=()=>u.jsxs("div",{className:"legal-page",children:[u.jsxs("div",{className:"container",children:[u.jsx("h1",{children:"Terms of Service"}),u.jsx("p",{className:"last-updated",children:"Last Updated: January 1, 2026"}),u.jsxs("section",{children:[u.jsx("h2",{children:"1. Agreement to Terms"}),u.jsx("p",{children:'These Terms of Service constitute a legally binding agreement made between you, whether personally or on behalf of an entity (“you”) and Empylo ("we," “us” or “our”), concerning your access to and use of the Circles Health mobile application as well as any other media form, media channel, mobile website or mobile application related, linked, or otherwise connected thereto (collectively, the “Site”).'})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"2. Intellectual Property Rights"}),u.jsx("p",{children:"Unless otherwise indicated, the Site and the App are our proprietary property and all source code, databases, functionality, software, website designs, audio, video, text, photographs, and graphics on the Site (collectively, the “Content”) and the trademarks, service marks, and logos contained therein (the “Marks”) are owned or controlled by us or licensed to us, and are protected by copyright and trademark laws."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"3. User Representations"}),u.jsx("p",{children:"By using the Site, you represent and warrant that: (1) all registration information you submit will be true, accurate, current, and complete; (2) you will maintain the accuracy of such information and promptly update such registration information as necessary; (3) you have the legal capacity and you agree to comply with these Terms of Service."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"4. Community Guidelines"}),u.jsx("p",{children:"Circles Health is a safe space. We do not tolerate harassment, hate speech, or any form of abuse. We reserve the right to suspend or terminate accounts that violate our community standards."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"5. Contact Us"}),u.jsx("p",{children:"In order to resolve a complaint regarding the Site or to receive further information regarding use of the Site, please contact us at support@empylo.com."})]})]}),u.jsx("style",{children:`
+      `})]}),rg=()=>u.jsxs("div",{className:"legal-page",children:[u.jsxs("div",{className:"container",children:[u.jsx("h1",{children:"Terms of Service"}),u.jsx("p",{className:"last-updated",children:"Last Updated: January 1, 2026"}),u.jsxs("section",{children:[u.jsx("h2",{children:"1. Agreement to Terms"}),u.jsx("p",{children:'These Terms of Service constitute a legally binding agreement made between you, whether personally or on behalf of an entity (“you”) and Empylo ("we," “us” or “our”), concerning your access to and use of the Circles Health mobile application as well as any other media form, media channel, mobile website or mobile application related, linked, or otherwise connected thereto (collectively, the “Site”).'})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"2. Intellectual Property Rights"}),u.jsx("p",{children:"Unless otherwise indicated, the Site and the App are our proprietary property and all source code, databases, functionality, software, website designs, audio, video, text, photographs, and graphics on the Site (collectively, the “Content”) and the trademarks, service marks, and logos contained therein (the “Marks”) are owned or controlled by us or licensed to us, and are protected by copyright and trademark laws."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"3. User Representations"}),u.jsx("p",{children:"By using the Site, you represent and warrant that: (1) all registration information you submit will be true, accurate, current, and complete; (2) you will maintain the accuracy of such information and promptly update such registration information as necessary; (3) you have the legal capacity and you agree to comply with these Terms of Service."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"4. Community Guidelines"}),u.jsx("p",{children:"Circles Health is a safe space. We do not tolerate harassment, hate speech, or any form of abuse. We reserve the right to suspend or terminate accounts that violate our community standards."})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"5. Contact Us"}),u.jsx("p",{children:"In order to resolve a complaint regarding the Site or to receive further information regarding use of the Site, please contact us at support@empylo.com."})]})]}),u.jsx("style",{children:`
         .legal-page {
           padding: 120px 0;
           background-color: #F8FAFC; 
@@ -1135,7 +1101,7 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
           line-height: 1.7;
           margin-bottom: 16px;
         }
-      `})]}),og=()=>u.jsxs("div",{className:"legal-page",children:[u.jsxs("div",{className:"container",children:[u.jsx("h1",{children:"Request Account Deletion"}),u.jsx("p",{className:"last-updated",children:"We respect your right to be forgotten."}),u.jsxs("section",{children:[u.jsx("h2",{children:"How to Delete Your Account"}),u.jsx("p",{children:"You can delete your account and all associated data directly within the Circles App."}),u.jsxs("ol",{children:[u.jsxs("li",{children:["Open the ",u.jsx("strong",{children:"Circles App"})," on your mobile device."]}),u.jsxs("li",{children:["Go to ",u.jsx("strong",{children:"Settings"})," (accessible from your Profile)."]}),u.jsxs("li",{children:["Select ",u.jsx("strong",{children:"Account Settings"}),"."]}),u.jsxs("li",{children:["Tap on ",u.jsx("strong",{children:"Delete Account"})," at the bottom of the screen."]}),u.jsx("li",{children:"Confirm your choice. This action is irreversible."})]})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"Manual Request"}),u.jsx("p",{children:"If you no longer have access to the app, you may request account deletion by emailing our support team. Please include your registered email address so we can verify your identity."}),u.jsx("a",{href:"mailto:support@empylo.com",className:"btn btn-primary",children:"Email Support to Delete Account"})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"What Happens to Your Data?"}),u.jsx("p",{children:"When you delete your account:"}),u.jsxs("ul",{children:[u.jsx("li",{children:"Your profile and personal information will be permanently removed."}),u.jsx("li",{children:"Your mood logs and private journal entries will be deleted."}),u.jsx("li",{children:"Your community posts may remain but will be anonymized."})]})]})]}),u.jsx("style",{children:`
+      `})]}),lg=()=>u.jsxs("div",{className:"legal-page",children:[u.jsxs("div",{className:"container",children:[u.jsx("h1",{children:"Request Account Deletion"}),u.jsx("p",{className:"last-updated",children:"We respect your right to be forgotten."}),u.jsxs("section",{children:[u.jsx("h2",{children:"How to Delete Your Account"}),u.jsx("p",{children:"You can delete your account and all associated data directly within the Circles App."}),u.jsxs("ol",{children:[u.jsxs("li",{children:["Open the ",u.jsx("strong",{children:"Circles App"})," on your mobile device."]}),u.jsxs("li",{children:["Go to ",u.jsx("strong",{children:"Settings"})," (accessible from your Profile)."]}),u.jsxs("li",{children:["Select ",u.jsx("strong",{children:"Account Settings"}),"."]}),u.jsxs("li",{children:["Tap on ",u.jsx("strong",{children:"Delete Account"})," at the bottom of the screen."]}),u.jsx("li",{children:"Confirm your choice. This action is irreversible."})]})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"Manual Request"}),u.jsx("p",{children:"If you no longer have access to the app, you may request account deletion by emailing our support team. Please include your registered email address so we can verify your identity."}),u.jsx("a",{href:"mailto:support@empylo.com",className:"btn btn-primary",children:"Email Support to Delete Account"})]}),u.jsxs("section",{children:[u.jsx("h2",{children:"What Happens to Your Data?"}),u.jsx("p",{children:"When you delete your account:"}),u.jsxs("ul",{children:[u.jsx("li",{children:"Your profile and personal information will be permanently removed."}),u.jsx("li",{children:"Your mood logs and private journal entries will be deleted."}),u.jsx("li",{children:"Your community posts may remain but will be anonymized."})]})]})]}),u.jsx("style",{children:`
         .legal-page {
           padding: 120px 0;
           background-color: #F8FAFC; 
@@ -1191,7 +1157,7 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
             display: inline-block;
             margin-top: 16px;
         }
-      `})]}),ig=()=>u.jsxs("div",{className:"about-page",children:[u.jsx("section",{className:"about-hero",children:u.jsx("div",{className:"container",children:u.jsxs("div",{className:"hero-content",children:[u.jsxs("h1",{children:["We Are Democratizing ",u.jsx("br",{})," ",u.jsx("span",{className:"highlight",children:"Mental Health Support"})]}),u.jsx("p",{children:"At Empylo, we believe that mental wellness is a fundamental human right. Our mission is to build a world where everyone has a circle of support, accessible anytime, anywhere."})]})})}),u.jsx("section",{className:"story-section container",children:u.jsxs("div",{className:"story-grid",children:[u.jsxs("div",{className:"story-text",children:[u.jsx("h2",{children:"Our Story"}),u.jsx("p",{children:"Empylo was born from a simple observation: while the world is more connected than ever, people feel increasingly isolated in their struggles. Traditional therapy is often expensive or inaccessible, and social media can sometimes exacerbate feelings of inadequacy."}),u.jsx("p",{children:"We set out to create a third space—a digital sanctuary that combines the warmth of human connection with the precision of clinically-backed tools. Circles Health App is the result of years of research, design, and listening to stories of resilience."})]}),u.jsx("div",{className:"story-visual",children:u.jsx("div",{className:"visual-block"})})]})}),u.jsx("section",{className:"values-section",children:u.jsxs("div",{className:"container",children:[u.jsx("h2",{children:"Our Core Values"}),u.jsxs("div",{className:"values-grid",children:[u.jsxs("div",{className:"value-card",children:[u.jsx("h3",{children:"Empathy First"}),u.jsx("p",{children:"We design with the heart. Every feature is built to validate feelings and foster understanding."})]}),u.jsxs("div",{className:"value-card",children:[u.jsx("h3",{children:"Radical Privacy"}),u.jsx("p",{children:"Your data is sacred. We enforce the strictest security standards because trust is our currency."})]}),u.jsxs("div",{className:"value-card",children:[u.jsx("h3",{children:"Community Power"}),u.jsx("p",{children:"Healing happens together. We empower users to lift each other up through shared experiences."})]}),u.jsxs("div",{className:"value-card",children:[u.jsx("h3",{children:"Innovation"}),u.jsx("p",{children:"We leverage technology not to replace human connection, but to enhance and scale it."})]})]})]})}),u.jsx("style",{children:`
+      `})]}),og=()=>u.jsxs("div",{className:"about-page",children:[u.jsx("section",{className:"about-hero",children:u.jsx("div",{className:"container",children:u.jsxs("div",{className:"hero-content",children:[u.jsxs("h1",{children:["We Are Democratizing ",u.jsx("br",{})," ",u.jsx("span",{className:"highlight",children:"Mental Health Support"})]}),u.jsx("p",{children:"At Empylo, we believe that mental wellness is a fundamental human right. Our mission is to build a world where everyone has a circle of support, accessible anytime, anywhere."})]})})}),u.jsx("section",{className:"story-section container",children:u.jsxs("div",{className:"story-grid",children:[u.jsxs("div",{className:"story-text",children:[u.jsx("h2",{children:"Our Story"}),u.jsx("p",{children:"Empylo was born from a simple observation: while the world is more connected than ever, people feel increasingly isolated in their struggles. Traditional therapy is often expensive or inaccessible, and social media can sometimes exacerbate feelings of inadequacy."}),u.jsx("p",{children:"We set out to create a third space—a digital sanctuary that combines the warmth of human connection with the precision of clinically-backed tools. Circles Health App is the result of years of research, design, and listening to stories of resilience."})]}),u.jsx("div",{className:"story-visual",children:u.jsx("div",{className:"visual-block"})})]})}),u.jsx("section",{className:"values-section",children:u.jsxs("div",{className:"container",children:[u.jsx("h2",{children:"Our Core Values"}),u.jsxs("div",{className:"values-grid",children:[u.jsxs("div",{className:"value-card",children:[u.jsx("h3",{children:"Empathy First"}),u.jsx("p",{children:"We design with the heart. Every feature is built to validate feelings and foster understanding."})]}),u.jsxs("div",{className:"value-card",children:[u.jsx("h3",{children:"Radical Privacy"}),u.jsx("p",{children:"Your data is sacred. We enforce the strictest security standards because trust is our currency."})]}),u.jsxs("div",{className:"value-card",children:[u.jsx("h3",{children:"Community Power"}),u.jsx("p",{children:"Healing happens together. We empower users to lift each other up through shared experiences."})]}),u.jsxs("div",{className:"value-card",children:[u.jsx("h3",{children:"Innovation"}),u.jsx("p",{children:"We leverage technology not to replace human connection, but to enhance and scale it."})]})]})]})}),u.jsx("style",{children:`
         .about-page {
           background-color: #FAFAFA;
         }
@@ -1309,7 +1275,7 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
           .story-grid { grid-template-columns: 1fr; gap: 40px; }
           .visual-block { height: 250px; }
         }
-      `})]}),ag=()=>u.jsxs("div",{className:"contact-page",children:[u.jsx(gd,{}),u.jsx("section",{className:"contact-details container",children:u.jsxs("div",{className:"details-grid",children:[u.jsxs("div",{className:"detail-item",children:[u.jsx("div",{className:"icon",children:u.jsx(Um,{})}),u.jsx("h3",{children:"Email Support"}),u.jsx("p",{children:"For general inquiries and support:"}),u.jsx("a",{href:"mailto:support@empylo.com",children:"support@empylo.com"})]}),u.jsxs("div",{className:"detail-item",children:[u.jsx("div",{className:"icon",children:u.jsx($m,{})}),u.jsx("h3",{children:"Office"}),u.jsx("p",{children:"Global Headquarters"}),u.jsx("span",{children:"London, United Kingdom"})]})]})}),u.jsx("style",{children:`
+      `})]}),ig=()=>u.jsxs("div",{className:"contact-page",children:[u.jsx(gd,{}),u.jsx("section",{className:"contact-details container",children:u.jsxs("div",{className:"details-grid",children:[u.jsxs("div",{className:"detail-item",children:[u.jsx("div",{className:"icon",children:u.jsx(Um,{})}),u.jsx("h3",{children:"Email Support"}),u.jsx("p",{children:"For general inquiries and support:"}),u.jsx("a",{href:"mailto:support@empylo.com",children:"support@empylo.com"})]}),u.jsxs("div",{className:"detail-item",children:[u.jsx("div",{className:"icon",children:u.jsx($m,{})}),u.jsx("h3",{children:"Office"}),u.jsx("p",{children:"Global Headquarters"}),u.jsx("span",{children:"London, United Kingdom"})]})]})}),u.jsx("style",{children:`
         .contact-page {
           background: #F8FAFC;
         }
@@ -1363,4 +1329,4 @@ Please change the parent <Route path="${p}"> to <Route path="${p==="/"?"*":`${p}
                 grid-template-columns: 1fr;
             }
         }
-      `})]});function sg(){return u.jsx(gm,{children:u.jsx(Yh,{children:u.jsxs(Ye,{path:"/",element:u.jsx(Xm,{}),children:[u.jsx(Ye,{index:!0,element:u.jsxs(u.Fragment,{children:[u.jsx(Jm,{}),u.jsx(Fs,{}),u.jsx(ng,{}),u.jsx(gd,{})]})}),u.jsx(Ye,{path:"features",element:u.jsx(Fs,{})}),u.jsx(Ye,{path:"about",element:u.jsx(ig,{})}),u.jsx(Ye,{path:"contact",element:u.jsx(ag,{})}),u.jsx(Ye,{path:"privacy-policy",element:u.jsx(rg,{})}),u.jsx(Ye,{path:"terms",element:u.jsx(lg,{})}),u.jsx(Ye,{path:"delete-account",element:u.jsx(og,{})})]})})})}ko.createRoot(document.getElementById("root")).render(u.jsx(ft.StrictMode,{children:u.jsx(sg,{})}));
+      `})]});function ag(){return u.jsx(gm,{children:u.jsx(Yh,{children:u.jsxs(Ye,{path:"/",element:u.jsx(Xm,{}),children:[u.jsx(Ye,{index:!0,element:u.jsxs(u.Fragment,{children:[u.jsx(Jm,{}),u.jsx(Fs,{}),u.jsx(tg,{}),u.jsx(gd,{})]})}),u.jsx(Ye,{path:"features",element:u.jsx(Fs,{})}),u.jsx(Ye,{path:"about",element:u.jsx(og,{})}),u.jsx(Ye,{path:"contact",element:u.jsx(ig,{})}),u.jsx(Ye,{path:"privacy-policy",element:u.jsx(ng,{})}),u.jsx(Ye,{path:"terms",element:u.jsx(rg,{})}),u.jsx(Ye,{path:"delete-account",element:u.jsx(lg,{})})]})})})}ko.createRoot(document.getElementById("root")).render(u.jsx(ft.StrictMode,{children:u.jsx(ag,{})}));

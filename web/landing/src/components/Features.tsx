@@ -1,5 +1,4 @@
 import { FaHeart, FaUsers, FaShieldAlt, FaBookOpen, FaSmile, FaUserMd } from 'react-icons/fa';
-import appScreen from '../assets/app-screen-1.png';
 
 const Features = () => {
   const featuresList = [
@@ -49,187 +48,128 @@ const Features = () => {
           <p className="features-subheader">Everything you need to nurture your mental health, all in one premium app.</p>
         </div>
 
+        {/* Unified Grid - No Center Image */}
         <div className="features-grid">
-          {/* Left Column */}
-          <div className="features-column">
-            {featuresList.slice(0, 3).map((f, i) => (
-              <div key={i} className="feature-card">
-                <div className="feature-icon-wrapper" style={{ color: f.color }}>
-                  {f.icon}
-                </div>
-                <div className="feature-text">
-                  <h3>{f.title}</h3>
-                  <p>{f.description}</p>
-                </div>
+          {featuresList.map((f, i) => (
+            <div key={i} className="feature-card">
+              <div className="feature-icon-wrapper" style={{ color: f.color }}>
+                {f.icon}
               </div>
-            ))}
-          </div>
-
-          {/* Center Image - Mobile App */}
-          <div className="features-center-img">
-            <div className="app-mockup-container">
-              <img src={appScreen} alt="Circles App" className="app-screen-img" />
-              <div className="app-glow"></div>
+              <div className="feature-text">
+                <h3>{f.title}</h3>
+                <p>{f.description}</p>
+              </div>
             </div>
-          </div>
-
-          {/* Right Column */}
-          <div className="features-column">
-            {featuresList.slice(3, 6).map((f, i) => (
-              <div key={i} className="feature-card">
-                <div className="feature-icon-wrapper" style={{ color: f.color }}>
-                  {f.icon}
-                </div>
-                <div className="feature-text">
-                  <h3>{f.title}</h3>
-                  <p>{f.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
 
       <style>{`
         .features-section {
-          padding: 120px 0;
-          background-color: #F8FAFC;
+          padding: 80px 0;
+          background-color: white; /* Clean white bg */
           position: relative;
         }
 
         .features-header {
           text-align: center;
-          margin-bottom: 80px;
-          max-width: 700px;
+          margin-bottom: 60px;
+          max-width: 600px;
           margin-left: auto;
           margin-right: auto;
         }
         
         .features-header h2 {
-          font-size: 3rem;
+          font-size: 2.25rem;
           color: #0F172A;
-          margin-bottom: 16px;
+          margin-bottom: 12px;
           font-weight: 700;
         }
         
         .features-subheader {
-          font-size: 1.25rem;
+          font-size: 1.1rem;
           color: #64748B;
         }
 
+        /* 3 Columns Desktop, 2 Columns Mobile */
         .features-grid {
           display: grid;
-          grid-template-columns: 1fr 0.8fr 1fr;
-          gap: 40px;
-          align-items: center;
-        }
-        
-        .features-column {
-          display: flex;
-          flex-direction: column;
-          gap: 32px;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 24px;
         }
 
         .feature-card {
-          background: white;
-          padding: 24px;
-          border-radius: 20px;
+          background: #F8FAFC; /* Light gray card bg */
+          padding: 20px;
+          border-radius: 16px;
           display: flex;
-          gap: 20px;
+          flex-direction: column;
+          gap: 16px;
           align-items: flex-start;
           transition: all 0.3s ease;
-          border: 1px solid rgba(0,0,0,0.03);
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.01);
-          min-height: 140px; /* Ensure uniform height perception */
+          border: 1px solid transparent;
         }
         
         .feature-card:hover {
-           transform: translateY(-5px);
-           box-shadow: 0 20px 40px rgba(0,0,0,0.06);
+           background: white;
+           transform: translateY(-4px);
+           box-shadow: 0 10px 25px rgba(0,0,0,0.05);
            border-color: rgba(15, 118, 110, 0.1);
         }
 
         .feature-icon-wrapper {
-          font-size: 1.5rem;
-          background: #FEF3C7;
-          width: 56px;
-          height: 56px;
+          font-size: 1.25rem;
+          background: white;
+          width: 48px;
+          height: 48px;
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 16px;
+          border-radius: 12px;
           flex-shrink: 0;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.03);
         }
 
         .feature-text h3 {
-          font-size: 1.15rem;
-          margin-bottom: 6px;
+          font-size: 1rem; /* Compact title */
+          margin-bottom: 4px;
           color: #1E293B;
           font-weight: 700;
         }
 
         .feature-text p {
-          font-size: 0.95rem;
-          color: #475569;
+          font-size: 0.875rem; /* Compact text */
+          color: #64748B;
           line-height: 1.5;
         }
 
-        .features-center-img {
-           display: flex;
-           justify-content: center;
-           position: relative;
-        }
-        
-        .app-mockup-container {
-           position: relative;
-           width: 280px;
-           border-radius: 40px;
-           z-index: 10;
-        }
-        
-        .app-screen-img {
-            width: 100%;
-            height: auto;
-            border-radius: 40px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-            border: 8px solid white;
-        }
-        
-        .app-glow {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100%;
-            height: 80%;
-            background: radial-gradient(circle, rgba(13, 148, 136, 0.2) 0%, rgba(0,0,0,0) 70%);
-            z-index: -1;
-            filter: blur(40px);
-        }
-
+        /* Tablet */
         @media (max-width: 1024px) {
           .features-grid {
-            grid-template-columns: 1fr 1fr; 
-            gap: 30px;
-            align-items: start;
+            grid-template-columns: repeat(2, 1fr);
           }
-           .features-center-img {
-             grid-column: 1 / -1; 
-             margin: 40px auto 0;
-             order: 10;
-           }
-           .features-column {
-               display: contents; 
-           }
         }
 
+        /* Mobile - Force 2 Columns */
         @media (max-width: 768px) {
-          .features-section { padding: 60px 0; }
-          .features-header { padding: 0 20px; margin-bottom: 40px; }
-          .features-header h2 { font-size: 2rem; }
-          .features-grid { grid-template-columns: 1fr; gap: 16px; }
-          .features-center-img { width: 100%; margin-bottom: 32px; order: -1; }
-          .feature-card { flex-direction: row; text-align: left; }
+          .features-section { padding: 50px 0; }
+          .features-header { padding: 0 20px; margin-bottom: 32px; }
+          .features-header h2 { font-size: 1.75rem; }
+          
+          .features-grid { 
+             grid-template-columns: 1fr 1fr; /* TWO COLUMNS */
+             gap: 12px;
+          }
+          
+          .feature-card { 
+             padding: 16px; /* Tighter padding */
+             gap: 12px;
+             align-items: center; /* Center align for mobile grid look */
+             text-align: center;
+          }
+          
+          .feature-text h3 { font-size: 0.9rem; }
+          .feature-text p { font-size: 0.75rem; line-height: 1.3; }
         }
       `}</style>
     </section>
