@@ -1,26 +1,19 @@
-import { Outlet } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import Navbar from './Navbar';
 import Footer from './Footer';
 
-const Layout = () => {
+interface LayoutProps {
+    children: ReactNode;
+}
+
+const Layout = ({ children }: LayoutProps) => {
     return (
-        <div className="layout">
+        <div className="layout-wrapper">
             <Navbar />
             <main className="main-content">
-                <Outlet />
+                {children}
             </main>
             <Footer />
-
-            <style>{`
-        .layout {
-          display: flex;
-          flex-direction: column;
-          min-height: 100vh;
-        }
-        .main-content {
-          flex: 1;
-        }
-      `}</style>
         </div>
     );
 };

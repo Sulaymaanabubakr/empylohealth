@@ -1,226 +1,300 @@
-import topBg from '../assets/top-bg.png';
-import heroImg from '../assets/iphone-mockup-2.png';
-import vectorBg from '../assets/vector-logo.png';
-import { Link } from 'react-router-dom';
+import { ArrowRight, CheckCircle } from 'lucide-react';
+// import { Link } from 'react-router-dom'; // Unused
+import heroMockup from '../assets/iphone-mockup-2.png'; // Using existing asset
+// import appStoreBadge from '../assets/app-store-badge.png';
+// import googlePlayBadge from '../assets/google-play-badge.png';
 
 const Hero = () => {
-  return (
-    <section className="hero">
-      {/* Background Gradient/Pattern */}
-      <div className="hero-bg-accent"></div>
+    return (
+        <section className="hero">
+            <div className="hero-bg-glow"></div>
 
-      {/* Abstract Blobs for depth */}
-      <div className="blob blob-1"></div>
-      <div className="blob blob-2"></div>
+            <div className="container hero-container">
+                <div className="hero-content">
+                    <div className="badge-pill">
+                        <span className="badge-dot"></span>
+                        <span>Circles Health App Client</span>
+                    </div>
 
-      <div className="container hero-container">
-        <div className="hero-content">
-          <p className="hero-subtitle">Circles Health App Client</p>
-          <h1 className="hero-title">
-            Stronger <span className="highlight">Connections</span>,<br />
-            Better Health
-          </h1>
-          <p className="hero-description">
-            Sign up to champion a workplace that values mental health, and
-            together, let's create a nurturing environment where your employees can thrive.
-          </p>
-          <Link to="/features" className="btn btn-primary btn-lg">Get Started</Link>
-        </div>
+                    <h1 className="hero-title">
+                        Stronger <span className="highlight">Connections</span>,<br />
+                        Better Health
+                    </h1>
 
-        <div className="hero-image">
-          {/* Vector Background */}
-          <img src={vectorBg} alt="" className="hero-vector-bg" />
+                    <p className="hero-description">
+                        Sign up to champion a workplace that values mental health, and
+                        together, let's create a nurturing environment where your employees can thrive.
+                    </p>
 
-          {/* Real Mockup Image - Desktop/Tablet Only */}
-          {/* On mobile, the entire .hero-image is hidden via CSS */}
-          <div className="img-container-mobile">
-            <img src={heroImg} alt="App Interface" className="hero-mockup-img" />
-          </div>
-        </div>
-      </div>
+                    <div className="hero-actions">
+                        <a href="#download" className="btn btn-primary btn-lg">
+                            Get Started <ArrowRight size={20} />
+                        </a>
+                    </div>
 
-      <style>{`
-        .hero {
-          padding: 80px 0 100px;
-          position: relative;
-          overflow: hidden;
-          background: #FAFAFA;
-        }
+                    <div className="trust-indicators">
+                        <div className="trust-item">
+                            <CheckCircle size={16} className="text-emerald" />
+                            <span>Certified Therapists</span>
+                        </div>
+                        <div className="trust-item">
+                            <CheckCircle size={16} className="text-emerald" />
+                            <span>Secure & Private</span>
+                        </div>
+                    </div>
+                </div>
 
-        .hero-bg-accent {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 100%;
-            background: radial-gradient(circle at 10% 20%, rgba(15, 118, 110, 0.03) 0%, transparent 40%);
-            z-index: 0;
-        }
+                <div className="hero-visual">
+                    <div className="visual-circle"></div>
+                    <img src={heroMockup} alt="Empylo App Interface" className="visual-mockup" />
 
-        .blob {
-          position: absolute;
-          border-radius: 50%;
-          filter: blur(80px);
-          opacity: 0.5;
-          z-index: 0;
-        }
-        .blob-1 {
-          width: 500px;
-          height: 500px;
-          background: rgba(204, 251, 241, 0.6); /* Teal light */
-          top: -150px;
-          right: -100px;
-        }
-        .blob-2 {
-          width: 400px;
-          height: 400px;
-          background: rgba(254, 226, 226, 0.5); /* Soft red/pink */
-          bottom: -50px;
-          left: -100px;
-        }
+                    {/* Floating Cards (Yustam Style) */}
+                    <div className="floating-card card-1 glass-panel">
+                        <span className="emoji">😊</span>
+                        <div>
+                            <p className="fc-title">Daily Mood</p>
+                            <p className="fc-val">Feeling Great!</p>
+                        </div>
+                    </div>
 
-        .hero-container {
-          display: grid;
-          grid-template-columns: 1.1fr 1fr;
-          gap: 60px;
-          align-items: center;
-          position: relative;
-          z-index: 10;
-        }
+                    <div className="floating-card card-2 glass-panel">
+                        <span className="emoji">👥</span>
+                        <div>
+                            <p className="fc-title">Community</p>
+                            <p className="fc-val">12 New Members</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        .hero-subtitle {
-          font-weight: 700;
-          color: var(--color-primary);
-          margin-bottom: 16px;
-          font-size: 0.8rem;
-          letter-spacing: 1.5px;
-          text-transform: uppercase;
-        }
+            <style>{`
+                .hero {
+                    padding: 100px 0 80px; /* Top padding accounts for fixed navbar */
+                    position: relative;
+                    overflow: hidden;
+                    min-height: 90vh; /* Full screen feel */
+                    display: flex;
+                    align-items: center;
+                }
+            
+                .hero-bg-glow {
+                    position: absolute;
+                    top: -20%;
+                    right: -10%;
+                    width: 50vw;
+                    height: 50vw;
+                    background: radial-gradient(circle, rgba(0, 169, 157, 0.15) 0%, rgba(255,255,255,0) 70%);
+                    filter: blur(60px);
+                    z-index: -1;
+                }
 
-        .hero-title {
-          font-size: 3.5rem; /* Refined size */
-          line-height: 1.15;
-          font-weight: 800;
-          margin-bottom: 24px;
-          color: #111827;
-          letter-spacing: -1px;
-        }
+                .hero-container {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 4rem;
+                    align-items: center;
+                }
+            
+                .hero-content {
+                    max-width: 600px;
+                }
+            
+                .badge-pill {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 6px 16px;
+                    background: var(--color-primary-bg);
+                    color: var(--color-primary-dark);
+                    border-radius: 99px;
+                    font-weight: 600;
+                    font-size: 0.875rem;
+                    margin-bottom: 24px;
+                    border: 1px solid rgba(0, 169, 157, 0.2);
+                }
+            
+                .badge-dot {
+                    width: 8px;
+                    height: 8px;
+                    background: var(--color-primary);
+                    border-radius: 50%;
+                    animation: pulse 2s infinite;
+                }
+            
+                @keyframes pulse {
+                    0% { box-shadow: 0 0 0 0 rgba(0, 169, 157, 0.4); }
+                    70% { box-shadow: 0 0 0 6px rgba(0, 169, 157, 0); }
+                    100% { box-shadow: 0 0 0 0 rgba(0, 169, 157, 0); }
+                }
+            
+                .hero-title {
+                    font-size: 4rem; /* Big impact */
+                    line-height: 1.1;
+                    font-weight: 800;
+                    color: var(--color-secondary);
+                    margin-bottom: 24px;
+                    letter-spacing: -0.02em;
+                }
+            
+                .highlight {
+                    color: var(--color-primary);
+                    position: relative;
+                    z-index: 0;
+                }
+            
+                .highlight::after {
+                    content: '';
+                    position: absolute;
+                    bottom: 10px;
+                    left: -4px;
+                    right: -4px;
+                    height: 12px;
+                    background: var(--color-primary-bg);
+                    z-index: -1;
+                    transform: rotate(-1deg);
+                }
+            
+                .hero-description {
+                    font-size: 1.25rem;
+                    color: var(--color-text-light);
+                    margin-bottom: 40px;
+                    line-height: 1.6;
+                }
+            
+                .hero-actions {
+                    display: flex;
+                    gap: 16px;
+                    margin-bottom: 32px;
+                }
+            
+                .btn-lg {
+                    padding: 1rem 2rem;
+                    font-size: 1.125rem;
+                    gap: 8px;
+                }
+            
+                .trust-indicators {
+                    display: flex;
+                    gap: 24px;
+                    font-size: 0.9rem;
+                    color: var(--color-text-light);
+                    font-weight: 500;
+                }
 
-        .hero-title .highlight {
-          color: var(--color-accent);
-          position: relative;
-        }
-        
-        .hero-title .highlight::after {
-            content: '';
-            position: absolute;
-            bottom: 6px;
-            left: 0;
-            width: 100%;
-            height: 10px;
-            background: rgba(245, 158, 11, 0.15);
-            z-index: -1;
-            transform: rotate(-1deg);
-        }
+                .store-buttons-small {
+                    display: flex;
+                    gap: 12px;
+                }
 
-        .hero-description {
-          font-size: 1.1rem;
-          color: #4B5563;
-          margin-bottom: 32px;
-          max-width: 500px;
-          line-height: 1.6;
-        }
+                .store-btn-tiny {
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 12px;
+                    border: 1px solid rgba(0,0,0,0.1);
+                    background: white;
+                    color: var(--color-secondary);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
 
-        .btn-lg {
-            display: inline-block;
-            padding: 1rem 2.5rem;
-            font-size: 1.05rem;
-            box-shadow: 0 8px 20px rgba(15, 118, 110, 0.2);
-            text-decoration: none;
-        }
+                .store-btn-tiny:hover {
+                    border-color: var(--color-primary);
+                    color: var(--color-primary);
+                    transform: translateY(-2px);
+                }
+            
+                .trust-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+            
+                .text-emerald { color: var(--color-primary); }
+            
+                /* Visual Right Side */
+                .hero-visual {
+                    position: relative;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                }
+            
+                .visual-circle {
+                    position: absolute;
+                    width: 90%;
+                    padding-bottom: 90%; /* Aspect ratio 1:1 */
+                    background: var(--color-primary-bg);
+                    border-radius: 50%;
+                    z-index: -1;
+                }
+            
+                .visual-mockup {
+                    width: 80%;
+                    max-width: 380px;
+                    height: auto;
+                    filter: drop-shadow(0 25px 50px rgba(0,0,0,0.15));
+                    transition: transform 0.3s ease;
+                }
+            
+                .visual-mockup:hover {
+                    transform: scale(1.02);
+                }
+            
+                /* Floating Elements */
+                .floating-card {
+                    position: absolute;
+                    padding: 16px;
+                    border-radius: 16px;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+                    animation: float 6s ease-in-out infinite;
+                    z-index: 2;
+                }
+            
+                .card-1 {
+                    top: 20%;
+                    left: 0;
+                    animation-delay: 0s;
+                }
+            
+                .card-2 {
+                    bottom: 20%;
+                    right: 5%;
+                    animation-delay: 2s;
+                }
+            
+                @keyframes float {
+                    0% { transform: translateY(0px); }
+                    50% { transform: translateY(-20px); }
+                    100% { transform: translateY(0px); }
+                }
+            
+                .emoji { font-size: 1.5rem; }
+                .fc-title { font-size: 0.75rem; color: var(--color-text-light); }
+                .fc-val { font-size: 0.9rem; font-weight: 700; color: var(--color-secondary); }
 
-        .hero-image {
-          position: relative;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-
-        .hero-vector-bg {
-           position: absolute;
-           z-index: -1;
-           width: 120%; 
-           max-width: none;
-           opacity: 0.6;
-        }
-
-        .img-container-mobile {
-          width: 70%;
-          max-width: 300px;
-          transform: rotate(-3deg);
-          transition: transform 0.5s ease;
-        }
-        
-        .img-container-mobile:hover {
-           transform: rotate(0deg) scale(1.02);
-        }
-        
-        .hero-mockup-img {
-            width: 100%;
-            height: auto;
-            display: block;
-            filter: drop-shadow(0 20px 40px rgba(0,0,0,0.15));
-        }
-
-        /* Tablet adjustments */
-        @media (max-width: 1024px) {
-          .hero-title { font-size: 3rem; }
-          .hero-container {
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-          }
-        }
-
-        /* Mobile adjustments */
-        @media (max-width: 768px) {
-          .hero { padding: 60px 0 80px; }
-          .hero-container {
-            grid-template-columns: 1fr;
-            text-align: center;
-            gap: 0;
-          }
-
-          /* HIDE MOCKUP ON MOBILE - STRICTLY ENFORCED */
-          .hero-image {
-              display: none !important; 
-          }
-
-          .hero-subtitle { 
-              margin: 0 auto 12px; 
-              font-size: 0.75rem;
-          }
-          
-          .hero-title { 
-              font-size: 2.25rem;
-              margin-bottom: 16px;
-              line-height: 1.2;
-          }
-          
-          .hero-description { 
-              margin: 0 auto 24px; 
-              font-size: 1rem;
-              padding: 0 10px;
-          }
-          
-          .hero-content {
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-          }
-        }
-      `}</style>
-    </section>
-  );
+                @media (max-width: 1024px) {
+                    .hero-container { grid-template-columns: 1fr; text-align: center; }
+                    .hero-content { margin: 0 auto; }
+                    .hero-actions { justify-content: center; }
+                    .trust-indicators { justify-content: center; }
+                    .visual-mockup { width: 60%; }
+                    .hero { padding-top: 120px; }
+                }
+            
+                @media (max-width: 768px) {
+                    .hero-title { font-size: 2.5rem; }
+                    .floating-card { display: none; } /* Hide floaters on mobile */
+                    .visual-mockup { width: 80%; }
+                }
+            `}</style>
+        </section>
+    );
 };
 
 export default Hero;

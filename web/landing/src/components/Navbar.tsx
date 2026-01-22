@@ -1,213 +1,222 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { FaBars, FaTimes } from 'react-icons/fa';
-import logo from '../assets/logo.png';
+import { useState, useEffect } from 'react';
+import { NavLink, Link } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
+import logo from '../assets/logo_turquoise.png';
+
+// Make sure logo path matches where you copied it. 
+// If it was in src/assets/logo.png, then '../assets/logo.png' is correct from src/components
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef<HTMLUListElement>(null);
-  const toggleRef = useRef<HTMLDivElement>(null);
-
-  const toggleMenu = () => setIsOpen(!isOpen);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        isOpen &&
-        menuRef.current &&
-        !menuRef.current.contains(event.target as Node) &&
-        toggleRef.current &&
-        !toggleRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
     };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
+  const navLinks = [
+    { name: 'Home', path: '/' },
+    { name: 'Features', path: '/features' },
+    { name: 'About', path: '/about' },
+    { name: 'Contact', path: '/contact' },
+  ];
 
   return (
-    <nav className="navbar">
-      <div className="container nav-container">
-        <Link to="/" className="logo-link">
-          <img src={logo} alt="Empylo Logo" className="logo-img" />
+    <nav className={`navbar ${scrolled ? 'scrolled' : ''}`}>
+      <div className="container navbar-container">
+        <Link to="/" className="navbar-logo">
+          <img src={logo} alt="Empylo" className="logo-img" />
+          {/* Text removed as per request */}
         </Link>
 
-        {/* Mobile Menu Toggle */}
-        <div className="mobile-toggle" onClick={toggleMenu} ref={toggleRef}>
-          {isOpen ? <FaTimes /> : <FaBars />}
+        {/* Desktop Menu */}
+        {/* Center Navigation */}
+        <div className="navbar-center hidden-mobile">
+          <div className="nav-links">
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.name}
+                to={link.path}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                {link.name}
+              </NavLink>
+            ))}
+          </div>
         </div>
 
-        {/* Desktop Menu */}
-        <ul className={`nav-links ${isOpen ? 'active' : ''}`} ref={menuRef}>
-          <li><Link to="/" onClick={() => setIsOpen(false)}>Home</Link></li>
-          <li><Link to="/about" onClick={() => setIsOpen(false)}>About</Link></li>
-          <li><Link to="/features" onClick={() => setIsOpen(false)}>Features</Link></li>
-          <li><Link to="/contact" onClick={() => setIsOpen(false)}>Contact Support</Link></li>
+        {/* Right Side Button */}
+        <div className="navbar-right hidden-mobile">
+          <Link to="/download" className="btn btn-primary">Download App</Link>
+        </div>
 
-          {/* Mobile Only Button in Menu */}
-          <li className="mobile-btn">
-            <button className="btn btn-primary">Download App</button>
-          </li>
-        </ul>
+        {/* Mobile Toggle */}
+        <button className="navbar-toggle" onClick={() => setIsOpen(!isOpen)}>
+          {isOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
 
-        {/* Desktop Button */}
-        <button className="btn btn-primary desktop-btn">Download App</button>
+        {/* Mobile Menu */}
+        {isOpen && (
+          <div className="navbar-mobile">
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.name}
+                to={link.path}
+                className="mobile-link"
+                onClick={() => setIsOpen(false)}
+              >
+                {link.name}
+              </NavLink>
+            ))}
+            <Link to="/download" className="btn btn-primary mobile-btn" onClick={() => setIsOpen(false)}>
+              Download App
+            </Link>
+          </div>
+        )}
       </div>
 
       <style>{`
         .navbar {
-          height: 80px; /* Reduced height */
-          display: flex;
-          align-items: center;
-          position: sticky;
+          position: fixed;
           top: 0;
+          left: 0;
+          right: 0;
           z-index: 1000;
           transition: all 0.3s ease;
-          
-          /* Glass Effect - White */
-          background: rgba(255, 255, 255, 0.9);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border-bottom: 1px solid rgba(0,0,0,0.05);
+          background: transparent;
+          padding: 1.25rem 0;
         }
-        
-        .nav-container {
+
+        .navbar.scrolled {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          box-shadow: var(--shadow-sm);
+          padding: 1rem 0;
+        }
+
+        .navbar-container {
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          width: 100%;
+          /* Logo on left, Button on right, Links centered via auto margins */
+          justify-content: space-between; 
+        }
+
+        .navbar-logo {
+          display: flex;
+          align-items: center;
+          /* Removed text, just logo */
         }
 
         .logo-img {
-          height: 40px; /* Adjusted size relative to new height */
+          height: 36px; /* Reduced from 48px */
           width: auto;
-          display: block;
-          /* Filter to match Primary Turquoise #00a99d */
-          filter: invert(48%) sepia(89%) saturate(2476%) hue-rotate(130deg) brightness(92%) contrast(101%);
+        }
+
+        /* Desktop */
+        /* Desktop Layout */
+        .hidden-mobile {
+            display: block;
+        }
+
+        .navbar-center {
+             position: absolute;
+             left: 50%;
+             transform: translateX(-50%);
+        }
+        
+        .navbar-right {
+            display: flex;
+            align-items: center;
         }
 
         .nav-links {
           display: flex;
-          gap: 50px;
+          gap: 2.5rem;
         }
 
-        .nav-links a {
-          font-family: var(--font-body);
-          font-weight: 600;
-          color: var(--color-secondary);
+        .nav-link {
+          font-weight: 500;
+          color: var(--color-text-light);
+          position: relative;
           font-size: 1rem;
-          transition: color 0.2s;
-          opacity: 0.8;
         }
 
-        .nav-links a:hover {
+        .nav-link:hover, .nav-link.active {
           color: var(--color-primary);
-          opacity: 1;
+        }
+        
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            background: var(--color-primary);
+            border-radius: 50%;
         }
 
-        .mobile-toggle {
-            display: none;
-            font-size: 1.5rem;
-            cursor: pointer;
+        .navbar-toggle {
+          display: none;
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--color-text);
+        }
+
+        /* Mobile */
+        .navbar-mobile {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          background: white;
+          padding: 1.5rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          box-shadow: var(--shadow-lg);
+          border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .mobile-link {
+          font-size: 1.1rem;
+          font-weight: 600;
+          color: var(--color-text);
+          padding: 0.5rem 0;
+        }
+        
+        .mobile-link.active {
             color: var(--color-primary);
         }
-        
+
         .mobile-btn {
-            display: none;
-        }
-        
-        .desktop-btn {
-            display: inline-flex;
-        }
-
-        @media (max-width: 1024px) {
-           .logo-img {
-               height: 32px; /* Reduced for Tablet */
-           }
-        }
-
-        @media (max-width: 960px) {
-          .mobile-toggle {
-              display: block;
-              z-index: 1001;
-          }
-          
-          .desktop-btn {
-              display: none;
-          }
-          
-          .mobile-btn {
-              display: block;
-              margin-top: 10px;
-              width: 100%;
-          }
-          
-          .mobile-btn button {
-              width: 100%;
-          }
-
-          .nav-links {
-            /* Compact Card Dropdown for Mobile */
-            position: absolute;
-            top: 70px; /* Below navbar */
-            right: 20px;
-            width: 250px; /* Fixed small width */
-            height: auto;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            border: 1px solid rgba(0,0,0,0.05);
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
             text-align: center;
-            gap: 16px;
-            padding: 24px;
-            
-            /* Hidden State */
-            transform: translateY(-10px);
-            opacity: 0;
-            pointer-events: none;
-            transition: all 0.2s ease-in-out;
-            z-index: 999;
-          }
-          
-          .nav-links.active {
-              transform: translateY(0);
-              opacity: 1;
-              pointer-events: auto;
-          }
-          
-          .nav-links li {
-              width: 100%;
-          }
-          
-          .nav-links a {
-              font-size: 1.05rem; /* Normal size */
-              color: var(--color-secondary);
-              display: block;
-              padding: 4px 0;
-          }
-          
-          .nav-links a:hover {
-              color: var(--color-primary);
-          }
+            margin-top: 0.5rem;
         }
-        
+
+        @media (max-width: 900px) {
+           .logo-img { height: 36px; }
+        }
+
         @media (max-width: 768px) {
-            .logo-img {
-                height: 28px; /* Further reduced for Mobile */
-            }
-            .navbar {
-                height: 64px; /* Slightly tighter navbar height on mobile */
-            }
+          .hidden-mobile {
+            display: none;
+          }
+          .navbar-toggle {
+            display: block;
+          }
+          .navbar-logo {
+             margin-right: auto;
+          }
         }
       `}</style>
-    </nav>
+    </nav >
   );
 };
 
