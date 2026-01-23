@@ -1,7 +1,7 @@
 // TypeScript conversion in progress
 import { functions, db } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import { collection, query, where, getDocs, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 
 export const circleService = {
     /**
@@ -17,6 +17,22 @@ export const circleService = {
             return result.data; // { success: true, circleId: '...' }
         } catch (error) {
             console.error("Error creating circle:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Update circle details
+     * @param {string} circleId
+     * @param {object} data
+     */
+    updateCircle: async (circleId: string, data: { name?: string, description?: string, type?: string, image?: string, settings?: any }) => {
+        try {
+            const updateFn = httpsCallable(functions, 'updateCircle');
+            await updateFn({ circleId, ...data });
+            return { success: true };
+        } catch (error) {
+            console.error("Error updating circle:", error);
             throw error;
         }
     },
@@ -123,6 +139,20 @@ export const circleService = {
     /**
      * Submit a report for a circle member or content
      */
+    resolveCircleReport: async (circleId: string, reportId: string, action: string, resolutionNote: string) => {
+        try {
+            const fn = httpsCallable(functions, 'resolveCircleReport');
+            const result = await fn({ circleId, reportId, action, resolutionNote });
+            return result.data;
+        } catch (error) {
+            console.error("Error resolving report:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Submit a report for a circle member or content
+     */
     submitReport: async (circleId: string, targetId: string, targetType: 'member' | 'message' | 'huddle', reason: string, description?: string) => {
         try {
             const fn = httpsCallable(functions, 'submitReport');
@@ -183,19 +213,7 @@ export const circleService = {
         });
     },
 
-    /**
-     * Submit a report for a circle member or content
-     */
-    submitReport: async (circleId: string, targetId: string, targetType: string, reason: string, description?: string) => {
-        try {
-            const submitFn = httpsCallable(functions, 'submitReport');
-            const result = await submitFn({ circleId, targetId, targetType, reason, description });
-            return result.data;
-        } catch (error) {
-            console.error("Error submitting report:", error);
-            throw error;
-        }
-    },
+
 
     getCircleById: async (circleId) => {
         try {

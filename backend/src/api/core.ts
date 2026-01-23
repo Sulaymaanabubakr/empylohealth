@@ -139,6 +139,55 @@ export const createCircle = functions.https.onCall(async (data, context) => {
 });
 
 /**
+ * Update Circle Details (Creator/Admin Only)
+ * Callable Function: 'updateCircle'
+ */
+export const updateCircle = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+
+    const { circleId, name, description, type, settings } = data;
+    const uid = context.auth.uid;
+
+    if (!circleId) throw new functions.https.HttpsError('invalid-argument', 'Circle ID required.');
+
+    try {
+        const circleRef = db.collection('circles').doc(circleId);
+
+        // 1. Permission Check
+        const memberRef = circleRef.collection('members').doc(uid);
+        const memberDoc = await memberRef.get();
+        if (!memberDoc.exists) throw new functions.https.HttpsError('permission-denied', 'Not a member.');
+
+        const role = memberDoc.data()?.role;
+        if (!['creator', 'admin'].includes(role)) {
+            throw new functions.https.HttpsError('permission-denied', 'Admin privileges required.');
+        }
+
+        // 2. Prepare Update Data
+        const updates: any = {
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+        if (name) updates.name = name;
+        if (description !== undefined) updates.description = description;
+        if (type) {
+            updates.type = type; // 'public' | 'private'
+            updates['joinSettings.requiresApproval'] = (type === 'private');
+        }
+        if (settings) {
+            // merge settings (e.g. allowMemberHuddles)
+            updates.settings = settings;
+        }
+
+        await circleRef.update(updates);
+
+        return { success: true };
+    } catch (error) {
+        console.error("Error updating circle:", error);
+        throw new functions.https.HttpsError('internal', 'Unable to update circle.');
+    }
+});
+
+/**
  * Join an existing Circle
  * Callable Function: 'joinCircle'
  */
@@ -970,8 +1019,16 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
             const role = memberDoc.data()?.role;
 
             // Allow Creators, Admins, Moderators
+            // Allow Creators, Admins, Moderators
             if (!['creator', 'admin', 'moderator'].includes(role)) {
-                throw new functions.https.HttpsError('permission-denied', 'Only Admins and Moderators can start a huddle.');
+                // Check if circle settings allow members to start huddles
+                // We need to fetch circle settings if not admin/mod
+                const circleDoc = await db.collection('circles').doc(circleId).get();
+                const settings = circleDoc.data()?.settings || {};
+
+                if (!settings.allowMemberHuddles) {
+                    throw new functions.https.HttpsError('permission-denied', 'Only Admins and Moderators can start a huddle.');
+                }
             }
         }
 
@@ -1182,6 +1239,91 @@ export const submitReport = functions.https.onCall(async (data, context) => {
     } catch (error) {
         console.error("Error submitting report:", error);
         throw new functions.https.HttpsError('internal', 'Report submission failed.');
+    }
+});
+
+/**
+ * Resolve Circle Report (Admin/Mod Only)
+ * Callable Function: 'resolveCircleReport'
+ */
+export const resolveCircleReport = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in.');
+
+    const { circleId, reportId, action, resolutionNote } = data;
+    // action: 'dismiss' | 'warn' | 'ban' | 'delete_content'
+    const uid = context.auth.uid;
+
+    try {
+        const circleRef = db.collection('circles').doc(circleId);
+
+        // 1. Permission Check
+        const memberRef = circleRef.collection('members').doc(uid);
+        const memberDoc = await memberRef.get();
+        const role = memberDoc.data()?.role;
+
+        if (!['creator', 'admin', 'moderator'].includes(role)) {
+            throw new functions.https.HttpsError('permission-denied', 'Moderator privileges required.');
+        }
+
+        const reportRef = circleRef.collection('reports').doc(reportId);
+        const reportDoc = await reportRef.get();
+        if (!reportDoc.exists) throw new functions.https.HttpsError('not-found', 'Report not found.');
+
+        const reportData = reportDoc.data();
+        const targetId = reportData?.targetId;
+        const targetType = reportData?.targetType; // 'member', 'message'
+
+        const batch = db.batch();
+
+        const circleReportDoc = await circleRef.get();
+        const circleData = circleReportDoc.data();
+
+        // 2. Perform Action
+        if (action === 'ban' && targetType === 'member') {
+            // Admin Check: Mod cannot ban Admin.
+            if (role === 'moderator') {
+                const targetMember = await circleRef.collection('members').doc(targetId).get();
+                if (['admin', 'creator'].includes(targetMember.data()?.role)) {
+                    throw new functions.https.HttpsError('permission-denied', 'Moderators cannot ban Admins.');
+                }
+            }
+
+            batch.update(circleRef.collection('members').doc(targetId), { status: 'banned', role: 'member' });
+            batch.update(circleRef, {
+                members: admin.firestore.FieldValue.arrayRemove(targetId),
+                memberCount: admin.firestore.FieldValue.increment(-1)
+            });
+            // Remove from chat
+            if (circleData?.chatId) {
+                batch.update(db.collection('chats').doc(circleData.chatId), {
+                    participants: admin.firestore.FieldValue.arrayRemove(targetId)
+                });
+            }
+        } else if (action === 'delete_content' && targetType === 'message') {
+            if (circleData?.chatId) {
+                // Delete the message from the chat
+                const messageRef = db.collection('chats').doc(circleData.chatId).collection('messages').doc(targetId);
+                batch.delete(messageRef);
+                // Optional: Add a "Tombstone" message or system note?
+                // For now, hard delete is sufficient for moderation.
+            }
+        }
+
+        // 3. Update Report Status
+        batch.update(reportRef, {
+            status: 'resolved',
+            resolution: action,
+            resolutionNote: resolutionNote || '',
+            resolvedBy: uid,
+            resolvedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        await batch.commit();
+        return { success: true };
+
+    } catch (error) {
+        console.error("Error resolving report:", error);
+        throw new functions.https.HttpsError('internal', 'Resolution failed.');
     }
 });
 

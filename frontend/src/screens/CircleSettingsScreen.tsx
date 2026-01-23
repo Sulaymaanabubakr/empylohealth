@@ -8,9 +8,10 @@ import { doc, collection, query, where, onSnapshot, orderBy } from 'firebase/fir
 import { db } from '../services/firebaseConfig';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
+import { userService } from '../services/api/userService';
 
 // Components for different tabs
-const GeneralSettings = ({ circle, onUpdate }) => (
+const GeneralSettings = ({ circle, onEdit, canEdit }) => (
     <View style={styles.tabContent}>
         <Text style={styles.sectionTitle}>General Information</Text>
         <View style={styles.infoCard}>
@@ -20,13 +21,20 @@ const GeneralSettings = ({ circle, onUpdate }) => (
             </View>
             <View style={styles.divider} />
             <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Description</Text>
+                <Text style={[styles.infoValue, { fontSize: 13, color: '#666' }]}>{circle.description}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Accessibility</Text>
                 <Text style={styles.infoValue}>{circle.type === 'private' ? 'Private' : 'Public'}</Text>
             </View>
         </View>
-        <TouchableOpacity style={styles.updateButton} onPress={() => Alert.alert('Coming Soon', 'Edit circle details feature in progress.')}>
-            <Text style={styles.updateButtonText}>Edit Details</Text>
-        </TouchableOpacity>
+        {canEdit && (
+            <TouchableOpacity style={styles.updateButton} onPress={onEdit}>
+                <Text style={styles.updateButtonText}>Edit Details</Text>
+            </TouchableOpacity>
+        )}
     </View>
 );
 
@@ -56,18 +64,44 @@ const RequestItem = ({ request, onAccept, onReject, processingId }) => {
     );
 };
 
-const MemberItem = ({ member, currentUserUid, onManage }) => (
-    <View style={styles.listItem}>
-        <Avatar uri={member.image} name={member.name} size={48} />
-        <View style={styles.listItemContent}>
-            <Text style={styles.itemTitle}>{member.name} {member.uid === currentUserUid && '(You)'}</Text>
-            <Text style={styles.itemSubtitle}>{member.role.charAt(0).toUpperCase() + member.role.slice(1)}</Text>
+const MemberItem = ({ member, currentUserUid, onManage, currentMemberRole }) => {
+    // Helper to get badge color
+    const getRoleBadge = (role) => {
+        switch (role) {
+            case 'creator': return { bg: '#FFD700', text: '#000', label: '👑 Creator' }; // Gold
+            case 'admin': return { bg: '#E0E0E0', text: '#333', label: '🛡️ Admin' }; // Grey/Shield
+            case 'moderator': return { bg: '#E3F2FD', text: '#1976D2', label: '👮 Mod' }; // Blue
+            default: return null;
+        }
+    };
+    const badge = getRoleBadge(member.role);
+
+    // Permission check for showing the "Manage" button
+    // Show ellipsis for everyone except self (Admin gets manage, Member gets report)
+    const showOptions = member.uid !== currentUserUid;
+
+    return (
+        <View style={styles.listItem}>
+            <Avatar uri={member.image} name={member.name} size={48} />
+            <View style={styles.listItemContent}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.itemTitle}>{member.name} {member.uid === currentUserUid && '(You)'}</Text>
+                    {badge && (
+                        <View style={{ marginLeft: 8, backgroundColor: badge.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: badge.text }}>{badge.label}</Text>
+                        </View>
+                    )}
+                </View>
+                <Text style={styles.itemSubtitle}>{member.email || 'Member'}</Text>
+            </View>
+            {showOptions && (
+                <TouchableOpacity onPress={() => onManage(member)} style={styles.moreBtn}>
+                    <Ionicons name="ellipsis-vertical" size={20} color="#757575" />
+                </TouchableOpacity>
+            )}
         </View>
-        <TouchableOpacity onPress={() => onManage(member)} style={styles.moreBtn}>
-            <Ionicons name="ellipsis-vertical" size={20} color="#757575" />
-        </TouchableOpacity>
-    </View>
-);
+    );
+};
 
 const TabButton = ({ title, active, onPress, badge, alert }) => (
     <TouchableOpacity
@@ -95,12 +129,57 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [reports, setReports] = useState([]);
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
+
     const [processingId, setProcessingId] = useState(null);
+
+    // Derived Role State
+    const myMemberRec = members.find(m => m.uid === user.uid);
+    const myRole = myMemberRec?.role || 'member'; // 'creator', 'admin', 'moderator', 'member'
+    const isAdminOrCreator = ['creator', 'admin'].includes(myRole);
+    const isModOrAbove = ['creator', 'admin', 'moderator'].includes(myRole);
+
+    // Report Modal State
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [reportTarget, setReportTarget] = useState(null); // { uid, name, type (member) }
+    const [reportReason, setReportReason] = useState('');
+    const [reportDesc, setReportDesc] = useState('');
 
     // Schedule Event State
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [eventTitle, setEventTitle] = useState('');
     const [eventDate, setEventDate] = useState(new Date());
+
+    // Edit Circle State
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editName, setEditName] = useState('');
+    const [editDesc, setEditDesc] = useState('');
+
+    const openEditModal = () => {
+        setEditName(circle.name);
+        setEditDesc(circle.description || '');
+        setShowEditModal(true);
+    };
+
+    const handleUpdateCircle = async () => {
+        if (!editName.trim()) {
+            Alert.alert("Error", "Name cannot be empty");
+            return;
+        }
+        setLoading(true);
+        try {
+            await circleService.updateCircle(circleId, {
+                name: editName.trim(),
+                description: editDesc.trim()
+            });
+            setCircle({ ...circle, name: editName.trim(), description: editDesc.trim() });
+            setShowEditModal(false);
+            Alert.alert("Success", "Circle updated successfully.");
+        } catch (error) {
+            Alert.alert("Error", "Failed to update circle.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // Initial Fetch
     useEffect(() => {
@@ -148,32 +227,60 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         };
     }, [circleId]);
 
-    // Enrich Members with User Data
+    // Enrich Members and Requests with User Data
     const [enrichedMembers, setEnrichedMembers] = useState([]);
+    const [enrichedRequests, setEnrichedRequests] = useState([]);
+
     useEffect(() => {
         const fetchProfiles = async () => {
-            // Only fetch if members changed
-            const enriched = await Promise.all(members.map(async (m) => {
-                // For speed, could stick simple, but let's try to get cached profile
-                //  ... fetch logic similar to Detail screen
-                // Simplified for now: use display name if stored, or fetch
-                // We stored very little in member doc. It's better to store displayName in member doc for listing speed.
-                // But assuming we didn't, we fetch.
-                return { ...m, name: 'Member', image: null };
-            }));
-            setEnrichedMembers(enriched);
+            // Enrich Members
+            if (members.length > 0) {
+                try {
+                    const enrichedM = await Promise.all(members.map(async (m) => {
+                        if (m.uid) {
+                            const userDoc = await userService.getUserDocument(m.uid);
+                            return {
+                                ...m,
+                                name: userDoc?.name || userDoc?.displayName || 'Unknown Member',
+                                image: userDoc?.photoURL || null,
+                                email: userDoc?.email || ''
+                            };
+                        }
+                        return { ...m, name: 'Unknown', image: null };
+                    }));
+                    setEnrichedMembers(enrichedM);
+                } catch (error) {
+                    console.error("Failed to enrich members", error);
+                    setEnrichedMembers(members);
+                }
+            } else {
+                setEnrichedMembers([]);
+            }
+
+            // Enrich Requests
+            if (requests.length > 0) {
+                try {
+                    const enrichedR = await Promise.all(requests.map(async (r) => {
+                        if (r.uid) {
+                            const userDoc = await userService.getUserDocument(r.uid);
+                            return {
+                                ...r,
+                                displayName: userDoc?.name || userDoc?.displayName || r.displayName || 'Unknown',
+                                photoURL: userDoc?.photoURL || r.photoURL || null,
+                            };
+                        }
+                        return r;
+                    }));
+                    setEnrichedRequests(enrichedR);
+                } catch (error) {
+                    setEnrichedRequests(requests);
+                }
+            } else {
+                setEnrichedRequests([]);
+            }
         };
-        // fetchProfiles();
-        // For This implementation, I'll rely on the fact that I should probably store displayName in the member record during join!
-        // Re-visiting backend approach: Storing simplified profile in member doc is standard NoSQL best practice.
-        // I will assume for now we list what we have, and maybe fetch specific user on click or lazily.
-        // Actually, let's use the 'cached' approach from DetailScreen logic if possible, or just raw IDs for MVP if time tight.
-        // Better: Fetch user doc for each.
-        if (members.length > 0) {
-            // Note: This is read-heavy.
-            setEnrichedMembers(members);
-        }
-    }, [members]);
+        fetchProfiles();
+    }, [members, requests]);
 
 
     const handleAcceptRequest = async (req) => {
@@ -199,16 +306,83 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         }
     };
 
-    const handleManageMember = (member) => {
+    const handleManageMember = async (member) => {
+        // Determine available actions based on target's role and my role
+        // Uses top-level myRole
+
+
+        const options = [{ text: 'Cancel', style: 'cancel' }];
+
+        // ADMIN/CREATOR ACTIONS
+        if (myRole === 'creator' || (myRole === 'admin' && member.role !== 'admin')) {
+            if (member.role === 'member') {
+                options.push({ text: 'Promote to Moderator', onPress: () => performMemberAction(member, 'promote_mod') });
+                options.push({ text: 'Promote to Admin', onPress: () => performMemberAction(member, 'promote_admin') });
+            } else if (member.role === 'moderator') {
+                options.push({ text: 'Promote to Admin', onPress: () => performMemberAction(member, 'promote_admin') });
+                options.push({ text: 'Demote to Member', onPress: () => performMemberAction(member, 'demote') });
+            } else if (member.role === 'admin' && myRole === 'creator') {
+                options.push({ text: 'Demote to Moderator', onPress: () => performMemberAction(member, 'promote_mod') });
+                options.push({ text: 'Demote to Member', onPress: () => performMemberAction(member, 'demote') });
+            }
+            // Kick/Ban
+            options.push({ text: 'Kick User', onPress: () => performMemberAction(member, 'kick'), style: 'destructive' });
+            options.push({ text: 'Ban User', onPress: () => performMemberAction(member, 'ban'), style: 'destructive' });
+        } else {
+            // REGULAR MEMBER ACTIONS (Report)
+            options.push({
+                text: 'Report User',
+                onPress: () => {
+                    setReportTarget({ uid: member.uid, name: member.name, type: 'member' });
+                    setShowReportModal(true);
+                },
+                style: 'destructive'
+            });
+        }
+
         Alert.alert(
-            'Manage Member',
-            `Actions for ${member.uid}`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Promote to Moderator', onPress: () => circleService.manageMember(circleId, member.uid, 'promote_mod') },
-                { text: 'Kick User', onPress: () => circleService.manageMember(circleId, member.uid, 'kick'), style: 'destructive' },
-            ]
+            'Options',
+            `Actions for ${member.name}`,
+            options
         );
+    };
+
+    const handleSubmitReport = async () => {
+        if (!reportReason) {
+            Alert.alert("Required", "Please provide a reason.");
+            return;
+        }
+        setLoading(true);
+        try {
+            await circleService.submitReport(
+                circleId,
+                reportTarget.uid,
+                reportTarget.type,
+                reportReason,
+                reportDesc
+            );
+            Alert.alert("Reported", "Thank you. Administrators will review this.");
+            setShowReportModal(false);
+            setReportReason('');
+            setReportDesc('');
+        } catch (error) {
+            Alert.alert("Error", "Failed to submit report.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const performMemberAction = async (member, action) => {
+        setLoading(true);
+        try {
+            await circleService.manageMember(circleId, member.uid, action);
+            Alert.alert("Success", "Member updated.");
+            // List updates automatically via onSnapshot
+        } catch (error) {
+            Alert.alert("Error", "Action failed.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleScheduleEvent = async () => {
@@ -252,14 +426,18 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         );
     };
 
-    const MembersTab = () => (
-        <View style={styles.tabContent}>
-            <Text style={styles.sectionTitle}>Members ({members.length})</Text>
-            {enrichedMembers.map(mem => (
-                <MemberItem key={mem.uid} member={mem} currentUserUid={user.uid} onManage={handleManageMember} />
-            ))}
-        </View>
-    );
+    const MembersTab = () => {
+        // Uses top-level myRole
+
+        return (
+            <View style={styles.tabContent}>
+                <Text style={styles.sectionTitle}>Members ({members.length})</Text>
+                {enrichedMembers.map(mem => (
+                    <MemberItem key={mem.uid} member={mem} currentUserUid={user.uid} onManage={handleManageMember} currentMemberRole={myRole} />
+                ))}
+            </View>
+        );
+    };
 
     const RequestsTab = () => (
         <View style={styles.tabContent}>
@@ -267,7 +445,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             {requests.length === 0 ? (
                 <Text style={styles.emptyText}>No pending requests.</Text>
             ) : (
-                requests.map(req => (
+                enrichedRequests.map(req => (
                     <RequestItem key={req.uid} request={req}
                         onAccept={handleAcceptRequest} onReject={handleRejectRequest}
                         processingId={processingId}
@@ -276,6 +454,31 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             )}
         </View>
     );
+
+    const handleResolveReport = async (report, action) => {
+        Alert.alert(
+            "Confirm Action",
+            `Are you sure you want to ${action} this report?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Confirm",
+                    style: action === 'ban' ? 'destructive' : 'default',
+                    onPress: async () => {
+                        setLoading(true);
+                        try {
+                            await circleService.resolveCircleReport(circleId, report.id, action, `Action taken by ${user.uid}`);
+                            Alert.alert("Success", "Report resolved.");
+                        } catch (error) {
+                            Alert.alert("Error", "Failed to resolve report.");
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
 
     const ReportsTab = () => (
         <View style={styles.tabContent}>
@@ -288,8 +491,21 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         <View style={styles.listItemContent}>
                             <Text style={styles.itemTitle}>{rep.reason}</Text>
                             <Text style={styles.itemSubtitle}>{rep.description}</Text>
-                            <Text style={{ fontSize: 12, color: '#9E9E9E', marginTop: 4 }}>Status: {rep.status}</Text>
+                            <Text style={{ fontSize: 12, color: '#9E9E9E', marginTop: 4 }}>
+                                Target: {rep.targetType} ({rep.targetId})
+                            </Text>
+                            <Text style={{ fontSize: 12, color: '#9E9E9E' }}>Status: {rep.status}</Text>
                         </View>
+                        {rep.status === 'pending' && (
+                            <View style={{ gap: 8 }}>
+                                <TouchableOpacity onPress={() => handleResolveReport(rep, 'dismiss')} style={[styles.smBtn, { backgroundColor: '#E0E0E0', width: 'auto', paddingHorizontal: 12 }]}>
+                                    <Text style={{ fontSize: 12, fontWeight: '600' }}>Dismiss</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => handleResolveReport(rep, 'ban')} style={[styles.smBtn, { backgroundColor: '#FFEBEE', width: 'auto', paddingHorizontal: 12 }]}>
+                                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#D32F2F' }}>Ban</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </View>
                 ))
             )}
@@ -343,20 +559,39 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         <SafeAreaView style={styles.container} edges={['top']}>
             {renderHeader()}
 
+            {/* Role Indicator Banner */}
+            <View style={{ backgroundColor: '#E3F2FD', paddingVertical: 8, alignItems: 'center' }}>
+                <Text style={{ color: '#1565C0', fontWeight: '600', fontSize: 12 }}>
+                    You are viewing this Circle as: {myRole.toUpperCase()}
+                </Text>
+            </View>
+
             {/* Custom Tab Bar */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar}>
-                <TabButton title="General" active={activeTab === 'General'} onPress={() => setActiveTab('General')} />
-                <TabButton title="Members" active={activeTab === 'Members'} onPress={() => setActiveTab('Members')} />
-                <TabButton title="Requests" active={activeTab === 'Requests'} onPress={() => setActiveTab('Requests')} badge={requests.length} />
-                <TabButton title="Events" active={activeTab === 'Events'} onPress={() => setActiveTab('Events')} />
-                <TabButton title="Reports" active={activeTab === 'Reports'} onPress={() => setActiveTab('Reports')} badge={reports.length} alert />
-            </ScrollView>
+            <View>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.tabBar}
+                    style={{ flexGrow: 0 }}
+                >
+                    <TabButton title="General" active={activeTab === 'General'} onPress={() => setActiveTab('General')} />
+                    <TabButton title="Members" active={activeTab === 'Members'} onPress={() => setActiveTab('Members')} />
+                    <TabButton title="Events" active={activeTab === 'Events'} onPress={() => setActiveTab('Events')} />
+
+                    {isAdminOrCreator && (
+                        <TabButton title="Requests" active={activeTab === 'Requests'} onPress={() => setActiveTab('Requests')} badge={requests.length} />
+                    )}
+                    {isModOrAbove && (
+                        <TabButton title="Reports" active={activeTab === 'Reports'} onPress={() => setActiveTab('Reports')} badge={reports.length} alert />
+                    )}
+                </ScrollView>
+            </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                {activeTab === 'General' && <GeneralSettings circle={circle} />}
+                {activeTab === 'General' && <GeneralSettings circle={circle} onEdit={openEditModal} canEdit={isAdminOrCreator} />}
                 {activeTab === 'Members' && <MembersTab />}
-                {activeTab === 'Requests' && <RequestsTab />}
-                {activeTab === 'Reports' && <ReportsTab />}
+                {activeTab === 'Requests' && isAdminOrCreator && <RequestsTab />}
+                {activeTab === 'Reports' && isModOrAbove && <ReportsTab />}
                 {activeTab === 'Events' && <EventsTab />}
             </ScrollView>
 
@@ -387,6 +622,76 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                             </TouchableOpacity>
                             <TouchableOpacity onPress={handleScheduleEvent} style={styles.modalConfirm}>
                                 <Text style={styles.modalConfirmText}>{loading ? 'Saving...' : 'Schedule'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal visible={showEditModal} animationType="fade" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Edit Circle Details</Text>
+
+                        <Text style={styles.label}>Name</Text>
+                        <TextInput
+                            style={styles.input}
+                            value={editName}
+                            onChangeText={setEditName}
+                            placeholder="Circle Name"
+                        />
+
+                        <Text style={styles.label}>Description</Text>
+                        <TextInput
+                            style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+                            value={editDesc}
+                            onChangeText={setEditDesc}
+                            placeholder="Description"
+                            multiline
+                        />
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity onPress={() => setShowEditModal(false)} style={styles.modalCancel}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={handleUpdateCircle} style={styles.modalConfirm}>
+                                <Text style={styles.modalConfirmText}>Save Changes</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Report Modal */}
+            <Modal visible={showReportModal} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Report Member</Text>
+                        <Text style={{ marginBottom: 16, color: '#666' }}>Reporting {reportTarget?.name}</Text>
+
+                        <Text style={styles.label}>Reason</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="e.g. Harassment, Spam"
+                            value={reportReason}
+                            onChangeText={setReportReason}
+                        />
+
+                        <Text style={styles.label}>Description (Optional)</Text>
+                        <TextInput
+                            style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                            placeholder="Details..."
+                            value={reportDesc}
+                            onChangeText={setReportDesc}
+                            multiline
+                        />
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity onPress={() => setShowReportModal(false)} style={styles.modalCancel}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={handleSubmitReport} style={[styles.modalConfirm, { backgroundColor: '#D32F2F' }]}>
+                                <Text style={styles.modalConfirmText}>Submit Report</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -424,7 +729,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         marginRight: 8,
         borderRadius: 20,
-        backgroundColor: '#F5F5F5'
+        backgroundColor: '#F5F5F5',
+        height: 40, // Explicit height to prevent stretching
     },
     activeTab: {
         backgroundColor: '#E0F2F1', // Light version of primary

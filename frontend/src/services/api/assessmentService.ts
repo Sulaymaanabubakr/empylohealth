@@ -39,6 +39,43 @@ export const assessmentService = {
     },
 
     /**
+     * Subscribe to User Wellbeing Stats (Real-time)
+     * @param {string} uid
+     * @param {function} callback
+     */
+    subscribeToWellbeingStats: (uid, callback) => {
+        if (!uid) return () => { };
+
+        // Listen to the user document where wellbeingScore is stored
+        // Note: The 'label' logic here is client-side approximation or stored in user doc
+        // Ideally, 'stats' should be a subcollection or field on user doc.
+        const userRef = doc(db, 'users', uid);
+        return onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const score = data.wellbeingScore || 0;
+                // Simple client-side catch for label if not in DB
+                let label = 'Neutral';
+                if (score >= 80) label = 'Thriving';
+                else if (score >= 60) label = 'Doing Well';
+                else if (score >= 40) label = 'Okay';
+                else if (score >= 20) label = 'Struggling';
+                else label = 'Needs Attention';
+
+                callback({
+                    score: score,
+                    label: data.wellbeingLabel || label,
+                    streak: data.streak || 0
+                });
+            } else {
+                callback(null);
+            }
+        }, (error) => {
+            console.error("Error subscribing to wellbeing stats:", error);
+        });
+    },
+
+    /**
      * Get Key Challenges
      */
     getKeyChallenges: async () => {

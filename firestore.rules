@@ -52,6 +52,12 @@ service cloud.firestore {
          // Only admins/backend write
          allow write: if false;
       }
+
+      match /messages/{messageId} {
+         // All authenticated users can read circle messages (needed for analysis)
+         allow read: if isAuthenticated();
+         allow write: if false;
+      }
     }
 
     // Chats

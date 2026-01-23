@@ -9,8 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AssessmentModal from '../components/AssessmentModal';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
+import { db } from '../services/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import BottomNavigation from '../components/BottomNavigation';
+import { assessmentService } from '../services/api/assessmentService';
 
 const { width } = Dimensions.get('window');
 
@@ -65,7 +68,7 @@ const CircularProgress = ({ score, label }) => {
     );
 };
 
-import { assessmentService } from '../services/api/assessmentService';
+
 
 const DashboardScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
@@ -76,6 +79,7 @@ const DashboardScreen = ({ navigation }) => {
     const [recommendations, setRecommendations] = useState([]);
     const [showAssessment, setShowAssessment] = useState(false);
     const [assessmentType, setAssessmentType] = useState('daily'); // 'daily' or 'weekly'
+    const [memberProfiles, setMemberProfiles] = useState({});
 
     useEffect(() => {
         console.log('DashboardScreen mounted. User:', user?.email);
@@ -85,7 +89,20 @@ const DashboardScreen = ({ navigation }) => {
         if (user?.uid) {
             const unsubscribe = circleService.subscribeToMyCircles(user.uid, (data) => {
                 console.log('Fetched circles:', data.length);
-                setCircles(data);
+                // Sort by most engaged (updatedAt or lastMessageAt)
+                const sorted = (data || []).sort((a, b) => {
+                    const timeA = a.updatedAt?.toMillis?.() || 0;
+                    const timeB = b.updatedAt?.toMillis?.() || 0;
+                    return timeB - timeA;
+                });
+                // Only keep the top circle
+                const topCircle = sorted.slice(0, 1);
+                setCircles(topCircle);
+
+                // Fetch member profiles for the top circle
+                if (topCircle.length > 0 && topCircle[0].members) {
+                    loadMemberProfiles(topCircle[0]);
+                }
             });
             return () => unsubscribe();
         }
@@ -160,6 +177,60 @@ const DashboardScreen = ({ navigation }) => {
 
     const handleLater = () => {
         setShowAssessment(false);
+    };
+
+    const loadMemberProfiles = async (circle) => {
+        if (!circle.members || circle.members.length === 0) return;
+
+        try {
+            const profiles = {};
+            // Load up to 5 member profiles for timeline visualization
+            const memberIds = circle.members.slice(0, 5);
+
+            for (const memberId of memberIds) {
+                const memberDoc = await getDoc(doc(db, 'users', memberId));
+                if (memberDoc.exists()) {
+                    const data = memberDoc.data();
+                    profiles[memberId] = {
+                        name: data.name || data.displayName || 'Member',
+                        photoURL: data.photoURL || '',
+                        wellbeingScore: data.wellbeingScore || 0
+                    };
+                }
+            }
+            setMemberProfiles(profiles);
+        } catch (error) {
+            console.error('Error loading member profiles:', error);
+        }
+    };
+
+    /**
+     * Calculates a dynamic "Health Score" for the circle based on members and activity.
+     */
+    const calculateCircleRating = (circle: any) => {
+        if (circle.score) return circle.score; // Use backend score if available
+
+        let score = 4.2; // Strong baseline because all circles are supportive
+
+        // Member count impact (More members = more trusted)
+        const memberCount = circle.members?.length || 0;
+        if (memberCount > 50) score += 0.4;
+        else if (memberCount > 20) score += 0.3;
+        else if (memberCount > 10) score += 0.2;
+        else if (memberCount > 2) score += 0.1;
+
+        // Activity Bonus (Recency of updates)
+        // Check both updatedAt and any lastMessageAt if it exists
+        const lastUpdate = circle.updatedAt?.toMillis?.() || circle.lastMessageAt?.toMillis?.() || 0;
+
+        if (lastUpdate > 0) {
+            const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
+            if (hoursSinceUpdate < 24) score += 0.4; // Updated today
+            else if (hoursSinceUpdate < 72) score += 0.2; // Updated recently
+            else if (hoursSinceUpdate < 168) score += 0.1; // Updated this week
+        }
+
+        return Math.min(score, 5.0).toFixed(1); // Cap at 5.0
     };
 
     const currentDate = new Date().toLocaleDateString('en-GB', {
@@ -258,24 +329,72 @@ const DashboardScreen = ({ navigation }) => {
                         <TouchableOpacity
                             key={circle.id}
                             style={styles.circleCard}
-                            onPress={() => navigation.navigate('CircleDetail', { circle })}
+                            disabled={true} // Disable card click, using buttons instead
                         >
                             <View style={styles.circleHeader}>
                                 <View>
                                     <Text style={styles.circleTitle}>{circle.name}</Text>
-                                    <Text style={styles.circleMembers}>{circle.members?.length || 0} Members • {circle.category || 'General'}</Text>
+                                    <Text style={styles.circleMembers}>{circle.members?.length || 0} Members • High Activity</Text>
                                 </View>
-                                {typeof circle.score === 'number' && (
-                                    <View style={styles.scoreBadge}>
-                                        <Text style={styles.scoreBadgeText}>{circle.score.toFixed(1)}</Text>
-                                    </View>
-                                )}
+                                {/* Rating Badge */}
+                                <View style={styles.scoreBadge}>
+                                    <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
+                                    <Text style={styles.scoreBadgeText}>{calculateCircleRating(circle)}</Text>
+                                </View>
                             </View>
 
-                            <Text style={styles.circleLabel}>Visual Timeline</Text>
-                            <Text style={styles.timelineEmptyText}>
-                                Timeline will appear after member check-ins.
-                            </Text>
+                            {/* Premium Member Stack */}
+                            {circle.members && circle.members.length > 0 && Object.keys(memberProfiles).length > 0 ? (
+                                <View style={styles.memberStackContainer}>
+                                    <View style={styles.avatarStack}>
+                                        {circle.members.slice(0, 5).map((memberId, index) => {
+                                            const profile = memberProfiles[memberId];
+                                            if (!profile) return null;
+
+                                            return (
+                                                <View
+                                                    key={memberId}
+                                                    style={[
+                                                        styles.memberAvatarContainer,
+                                                        {
+                                                            zIndex: 10 - index,
+                                                            marginLeft: index === 0 ? 0 : -18
+                                                        }
+                                                    ]}
+                                                >
+                                                    <Avatar
+                                                        uri={profile.photoURL}
+                                                        name={profile.name}
+                                                        size={42}
+                                                    />
+                                                </View>
+                                            );
+                                        })}
+                                        {circle.members.length > 5 && (
+                                            <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -18 }]}>
+                                                <Text style={styles.moreMembersText}>+{circle.members.length - 5}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={styles.stackInfoContainer}>
+                                        <Text style={styles.stackInfoText}>
+                                            <Text style={styles.highlightText}>{circle.members.length} members</Text> are active
+                                        </Text>
+                                        <View style={styles.activeIndicator} />
+                                    </View>
+                                </View>
+                            ) : (
+                                <Text style={styles.timelineEmptyText}>
+                                    Join the conversation with your circle members.
+                                </Text>
+                            )}
+
+                            <TouchableOpacity
+                                style={styles.viewCircleButton}
+                                onPress={() => navigation.navigate('CircleAnalysis', { circle })}
+                            >
+                                <Text style={styles.viewCircleButtonText}>View Circle Analysis</Text>
+                            </TouchableOpacity>
                         </TouchableOpacity>
                     ))
                 )}
@@ -585,90 +704,117 @@ const styles = StyleSheet.create({
         color: '#757575',
         fontWeight: '500',
     },
-    scoreBadge: {
-        backgroundColor: '#E8F5E9',
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 12,
-    },
-    scoreBadgeText: {
-        color: '#2E7D32',
-        fontWeight: '800',
-        fontSize: 16,
+    circleMembers: {
+        fontSize: 14,
+        color: '#757575',
+        fontWeight: '500',
     },
     circleLabel: {
         fontSize: 12,
         textTransform: 'uppercase',
         color: '#9E9E9E',
         fontWeight: '700',
-        letterSpacing: 1,
-        marginBottom: 12,
+        letterSpacing: 2.5,
+        marginBottom: 16,
     },
     timelineEmptyText: {
-        fontSize: 12,
+        fontSize: 13,
         color: '#9E9E9E',
         fontWeight: '500',
         marginBottom: 16,
+        fontStyle: 'italic',
     },
-    timelineContainer: {
-        height: 80,
-        justifyContent: 'center',
-        marginBottom: 24,
-        width: '100%',
-        position: 'relative',
-        marginTop: 10,
+    memberStackContainer: {
+        marginBottom: 20,
+        marginTop: 12,
+        alignItems: 'center', // Center vertically within container (if row) or horizontally (if col)
+        width: '100%',     // Ensure full width for centering
     },
-    timelineLine: {
-        height: 14, // Thicker line
-        borderRadius: 7,
-        overflow: 'hidden',
-        width: '100%',
-        position: 'absolute',
-        top: 13, // Vertically centered with avatars
-    },
-    timelinePerson: {
-        position: 'absolute',
+    avatarStack: {
+        flexDirection: 'row',
         alignItems: 'center',
-        top: 0,
-        width: 40,
+        justifyContent: 'center', // Center content horizontally
+        marginBottom: 12,
+        // Removed paddingLeft to ensure true center
     },
-    avatarBorder: {
-        borderWidth: 2,
-        borderRadius: 20,
-        padding: 2,
-        backgroundColor: '#FFF',
-        marginBottom: 6,
-        elevation: 4,
+    memberAvatarContainer: {
+        borderWidth: 3,
+        borderColor: '#FFF',
+        borderRadius: 24,
+        elevation: 6,
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
     },
-    timelineAvatar: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+    moreMembersBadge: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: '#F5F5F5',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: '#FFF',
     },
-    timelineName: {
+    moreMembersText: {
         fontSize: 12,
-        color: '#616161',
         fontWeight: '700',
-        width: 60,
-        textAlign: 'center',
+        color: '#757575',
+    },
+    stackInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center', // Center the text row
+    },
+    stackInfoText: {
+        fontSize: 14,
+        color: '#757575',
+        fontWeight: '500',
+        marginRight: 6,
+    },
+    highlightText: {
+        color: '#212121',
+        fontWeight: '700',
+    },
+    activeIndicator: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#00E676',
     },
     viewCircleButton: {
         backgroundColor: COLORS.primary,
-        borderRadius: 24,
-        paddingVertical: 18,
+        alignSelf: 'center',
+        width: '100%',
+        borderRadius: 20,
+        paddingVertical: 12,
         alignItems: 'center',
         shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 16,
-        elevation: 8,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
+        marginTop: 4,
+    },
+    scoreBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#E8F5E9',
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#C8E6C9',
+    },
+    scoreBadgeText: {
+        color: '#2E7D32',
+        fontWeight: '800',
+        fontSize: 14,
     },
     viewCircleButtonText: {
         color: COLORS.white,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '700',
     },
     challengeRow: {

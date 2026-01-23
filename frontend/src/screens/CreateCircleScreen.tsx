@@ -44,7 +44,7 @@ const CreateCircleScreen = ({ navigation }) => {
             // NOTE: In a production app, upload 'image' to Firebase Storage here and get URL.
             // For now, passing the URI/Base64. If passing large base64 strings to callable functions, be careful of limits.
             // We'll pass the image URI/Data.
-            const result = await circleService.createCircle(name, description, category, accessType, image);
+            const result = await circleService.createCircle(name, description, category, accessType.toLowerCase(), image);
 
             if (result?.circleId) {
                 const newCircle = await circleService.getCircleById(result.circleId);

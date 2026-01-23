@@ -45,7 +45,7 @@ const SignInScreen = ({ navigation }) => {
       // Ideally, the root navigator switches stacks. 
       // Based on Navigation.js, all screens are in one stack. 
       // So we should navigate to Dashboard.
-      navigation.replace('Dashboard');
+      // Navigation is handled by RootNavigator/App automatically when user state changes.
     } else {
       showToast(result.error || "Login failed", 'error');
     }
@@ -97,13 +97,11 @@ const SignInScreen = ({ navigation }) => {
           <View style={styles.socialContainer}>
             <TouchableOpacity style={styles.socialIcon} onPress={async () => {
               const res = await loginWithGoogle();
-              if (res.success) navigation.replace('Dashboard');
             }}>
               <AntDesign name="google" size={24} color="black" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.socialIcon} onPress={async () => {
               const res = await loginWithApple();
-              if (res.success) navigation.replace('Dashboard');
             }}>
               <FontAwesome name="apple" size={24} color="black" />
             </TouchableOpacity>

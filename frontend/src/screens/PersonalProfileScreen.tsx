@@ -178,30 +178,42 @@ const PersonalProfileScreen = ({ navigation }) => {
                     You haven't joined any circles yet.
                 </Text>
             ) : (
-                myCircles.map((circle) => (
-                    <View key={circle.id} style={styles.circleCard}>
-                        <View style={styles.circleHeader}>
-                            <View>
-                                <Text style={styles.circleTitle}>{circle.name}</Text>
-                                <Text style={styles.circleSubtitle}>Category: {circle.category}</Text>
-                                <Text style={styles.circleMembers}>Members: {circle.members?.length || 0}</Text>
-                            </View>
-                        </View>
-
-                        {/* 
-                           Visual timeline/avatars removed for now as we don't have member details synced 
-                           in the circle object yet (fetching them would require more sub-queries).
-                           Keeping it simple for Phase 2.
-                        */}
-
+                <View style={styles.gridContainer}>
+                    {myCircles.map((circle) => (
                         <TouchableOpacity
-                            style={styles.viewButton}
+                            key={circle.id}
+                            style={styles.gridCard}
                             onPress={() => navigation.navigate('CircleDetail', { circle })}
                         >
-                            <Text style={styles.viewButtonText}>View Circle</Text>
+                            {/* Circle Image or Gradient Placeholder */}
+                            <View style={styles.cardImageContainer}>
+                                {circle.image ? (
+                                    <Avatar uri={circle.image} size={null} style={styles.cardImage} />
+                                ) : (
+                                    <LinearGradient
+                                        colors={[COLORS.primary, '#00C9B1']} // Example gradient
+                                        style={styles.cardPlaceholder}
+                                    />
+                                )}
+                                <View style={styles.cardTypeBadge}>
+                                    <Text style={styles.cardTypeText}>
+                                        {circle.type === 'private' ? 'Private' : 'Public'}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.cardContent}>
+                                <Text style={styles.gridTitle} numberOfLines={1}>{circle.name}</Text>
+                                <Text style={styles.gridSubtitle} numberOfLines={1}>{circle.category || 'General'}</Text>
+
+                                <View style={styles.gridFooter}>
+                                    <Ionicons name="people" size={12} color="#757575" />
+                                    <Text style={styles.gridMembers}>{circle.members?.length || 0} Members</Text>
+                                </View>
+                            </View>
                         </TouchableOpacity>
-                    </View>
-                ))
+                    ))}
+                </View>
             )}
         </View>
     );
@@ -479,6 +491,77 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontWeight: '600',
         fontSize: 14,
+    },
+    // Grid Styles
+    gridContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        marginTop: 10,
+    },
+    gridCard: {
+        width: '48%',
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        marginBottom: 16,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        overflow: 'hidden',
+    },
+    cardImageContainer: {
+        height: 100,
+        backgroundColor: '#F0F0F0',
+        position: 'relative',
+    },
+    cardImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
+    },
+    cardPlaceholder: {
+        width: '100%',
+        height: '100%',
+    },
+    cardTypeBadge: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    cardTypeText: {
+        color: '#FFF',
+        fontSize: 10,
+        fontWeight: '700',
+        textTransform: 'capitalize',
+    },
+    cardContent: {
+        padding: 12,
+    },
+    gridTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#333',
+        marginBottom: 4,
+    },
+    gridSubtitle: {
+        fontSize: 12,
+        color: '#757575',
+        marginBottom: 8,
+    },
+    gridFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    gridMembers: {
+        fontSize: 11,
+        color: '#9E9E9E',
+        marginLeft: 4,
     },
     bottomNavContainer: {
         position: 'absolute',

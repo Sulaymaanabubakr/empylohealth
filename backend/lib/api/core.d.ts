@@ -14,6 +14,11 @@ export declare const generateUploadSignature: functions.HttpsFunction & function
  */
 export declare const createCircle: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Update Circle Details (Creator/Admin Only)
+ * Callable Function: 'updateCircle'
+ */
+export declare const updateCircle: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Join an existing Circle
  * Callable Function: 'joinCircle'
  */
@@ -109,6 +114,11 @@ export declare const deleteScheduledHuddle: functions.HttpsFunction & functions.
  * Submit a Report (Circle Context)
  */
 export declare const submitReport: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Resolve Circle Report (Admin/Mod Only)
+ * Callable Function: 'resolveCircleReport'
+ */
+export declare const resolveCircleReport: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Get Explore Content
  * Callable Function: 'getExploreContent'

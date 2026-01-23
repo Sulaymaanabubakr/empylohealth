@@ -13,32 +13,60 @@ import { theme } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { assessmentService } from '../services/api/assessmentService';
 import { resourceService } from '../services/api/resourceService';
+import { circleService } from '../services/api/circleService';
 
 export function HomeScreen({ navigation }) {
   const { userData, user } = useAuth();
   const [resources, setResources] = useState([]);
   const [wellbeing, setWellbeing] = useState(null);
+  const [myCircles, setMyCircles] = useState([]);
 
   useEffect(() => {
     let isMounted = true;
-    const load = async () => {
+
+    // 1. Initial Load of Resources (Static for now, could be realtime later)
+    const loadResources = async () => {
       try {
-        const [items, stats] = await Promise.all([
-          resourceService.getExploreContent(),
-          assessmentService.getWellbeingStats()
-        ]);
-        if (!isMounted) return;
-        setResources(items || []);
-        setWellbeing(stats || null);
+        const items = await resourceService.getExploreContent();
+        if (isMounted) setResources(items || []);
       } catch (error) {
-        if (!isMounted) return;
-        setResources([]);
-        setWellbeing(null);
+        if (isMounted) setResources([]);
       }
     };
-    load();
-    return () => { isMounted = false; };
-  }, []);
+    loadResources();
+
+    // 2. Realtime Wellbeing Stats
+    let unsubscribeStats = () => { };
+    // 3. Realtime Circles
+    let unsubscribeCircles = () => { };
+
+    if (user?.uid) {
+      unsubscribeStats = assessmentService.subscribeToWellbeingStats(user.uid, (stats) => {
+        if (isMounted && stats) {
+          setWellbeing(stats);
+        }
+      });
+
+      // Subscribe to circles for the "Most Engaged" widget
+      unsubscribeCircles = circleService.subscribeToMyCircles(user.uid, (circles) => {
+        if (isMounted) {
+          // Sort by last activity if available (e.g. updatedAt), else default
+          const sorted = (circles || []).sort((a, b) => {
+            const timeA = a.updatedAt?.toMillis?.() || 0;
+            const timeB = b.updatedAt?.toMillis?.() || 0;
+            return timeB - timeA;
+          });
+          setMyCircles(sorted);
+        }
+      });
+    }
+
+    return () => {
+      isMounted = false;
+      unsubscribeStats();
+      unsubscribeCircles();
+    };
+  }, [user?.uid]);
 
   const heroTitle = `Hello, ${userData?.name?.split(' ')[0] || user?.displayName || 'there'}`;
   const heroSubtitle = userData?.focus || 'Welcome back';
@@ -80,6 +108,41 @@ export function HomeScreen({ navigation }) {
         </LinearGradient>
       }
     >
+      {/* 1. MOST ENGAGED CIRCLE WIDGET (Top priority, 1 item only) */}
+      {myCircles[0] && (
+        <FadeInView delay={50}>
+          <Text style={styles.sectionTitle}>Your Circle</Text>
+          <Card>
+            <ListRow
+              title={myCircles[0].name}
+              subtitle={myCircles[0].activeHuddle ? "Huddle in progress • Join now" : "Tap to open chat"}
+              icon={<View style={{
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: theme.colors.primary,
+                alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{myCircles[0].name.slice(0, 2).toUpperCase()}</Text>
+              </View>}
+              right={<Feather name="message-circle" size={20} color={theme.colors.primary} />}
+              onPress={() => {
+                // Direct Navigation to Chat Interface per user request
+                if (myCircles[0].chatId) {
+                  navigation.navigate('ChatDetail', {
+                    chat: {
+                      id: myCircles[0].chatId,
+                      name: myCircles[0].name,
+                      isGroup: true,
+                      circleId: myCircles[0].id
+                    }
+                  });
+                } else {
+                  navigation.navigate('CircleDetail', { circle: myCircles[0] });
+                }
+              }}
+            />
+          </Card>
+        </FadeInView>
+      )}
       <FadeInView delay={100}>
         <Text style={styles.sectionTitle}>Your next step</Text>
         <Card>

@@ -13,7 +13,7 @@ const FILTERS = ['All', 'Connect', 'Culture', 'Enablement', 'Green Activities', 
 
 const SupportGroupsScreen = () => {
     const navigation = useNavigation();
-    constinsets = useSafeAreaInsets();
+    const insets = useSafeAreaInsets();
     const [activeFilter, setActiveFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [groups, setGroups] = useState([]);

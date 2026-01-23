@@ -6,7 +6,7 @@ import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const firebaseConfig = {
-    apiKey: "AIzaSyC_e9Du-QiK5t5sbuPl3BW7v6g_Bh-7oCU",
+    apiKey: "AIzaSyDVaL0blWgX0_jJQe6TVogePIdD9GqQ_Zk",
     authDomain: "circles-app-by-empylo.firebaseapp.com",
     projectId: "circles-app-by-empylo",
     storageBucket: "circles-app-by-empylo.firebasestorage.app",
@@ -30,6 +30,11 @@ if (Platform.OS === 'web') {
     } catch (error) {
         // If already initialized (fast refresh), reuse existing instance.
         auth = getAuth(app);
+        console.log('[Firebase] Auth already initialized, reusing instance. Setting persistence for safety.');
+        // Ensure persistence is set even on fallback
+        setPersistence(auth, getReactNativePersistence(ReactNativeAsyncStorage))
+            .then(() => console.log('[Firebase] Persistence set manually on fallback'))
+            .catch((e) => console.error('[Firebase] Failed to set persistence on fallback', e));
     }
 }
 

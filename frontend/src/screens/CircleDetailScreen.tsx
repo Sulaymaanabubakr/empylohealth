@@ -302,8 +302,11 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                         }
 
                                         // START NEW HUDDLE (Admins/Mods Only)
-                                        if (!['creator', 'admin', 'moderator'].includes(role)) {
-                                            Alert.alert('Permission Denied', 'Only Admins and Moderators can start a new huddle.');
+                                        // START NEW HUDDLE
+                                        // Permission Logic: Creator/Admin/Mod OR specific setting
+                                        const allowMemberHuddles = circle.settings?.allowMemberHuddles;
+                                        if (!['creator', 'admin', 'moderator'].includes(role) && !allowMemberHuddles) {
+                                            Alert.alert('Permission Denied', 'Starting huddles is restricted to Admins and Moderators.');
                                             return;
                                         }
 
