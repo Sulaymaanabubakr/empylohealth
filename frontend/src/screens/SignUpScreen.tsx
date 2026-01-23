@@ -53,7 +53,7 @@ const SignUpScreen = ({ navigation }) => {
         setLoading(false);
 
         if (result.success) {
-            navigation.replace('Verification', { type: 'personal' });
+            navigation.replace('ProfileSetup');
         } else {
             showToast(result.error || "Registration failed", 'error');
         }

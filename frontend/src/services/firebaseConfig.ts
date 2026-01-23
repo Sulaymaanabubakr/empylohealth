@@ -1,5 +1,5 @@
 import { initializeApp, FirebaseApp } from "firebase/app";
-import { getAuth, initializeAuth, getReactNativePersistence, setPersistence, browserLocalPersistence, Auth } from "firebase/auth";
+import { getAuth, initializeAuth, setPersistence, browserLocalPersistence, Auth, getReactNativePersistence } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
 import { getFunctions, Functions } from 'firebase/functions';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,14 +25,14 @@ if (Platform.OS === 'web') {
 } else {
     try {
         auth = initializeAuth(app, {
-            persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+            persistence: (getReactNativePersistence as any)(ReactNativeAsyncStorage)
         });
     } catch (error) {
         // If already initialized (fast refresh), reuse existing instance.
         auth = getAuth(app);
         console.log('[Firebase] Auth already initialized, reusing instance. Setting persistence for safety.');
         // Ensure persistence is set even on fallback
-        setPersistence(auth, getReactNativePersistence(ReactNativeAsyncStorage))
+        setPersistence(auth, (getReactNativePersistence as any)(ReactNativeAsyncStorage))
             .then(() => console.log('[Firebase] Persistence set manually on fallback'))
             .catch((e) => console.error('[Firebase] Failed to set persistence on fallback', e));
     }

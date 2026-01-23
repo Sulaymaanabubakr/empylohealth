@@ -19,7 +19,8 @@ import {
     User,
     UserCredential,
     MultiFactorResolver,
-    MultiFactorInfo
+    MultiFactorInfo,
+    multiFactor,
 } from 'firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -93,6 +94,15 @@ export const authService = {
     },
 
     /**
+     * Update Firebase Auth profile
+     */
+    updateAuthProfile: async (displayName?: string, photoURL?: string): Promise<void> => {
+        const user = auth.currentUser;
+        if (!user) throw new Error('No authenticated user.');
+        await updateProfile(user, { displayName, photoURL });
+    },
+
+    /**
      * Logout the current user
      */
     logout: async (): Promise<SuccessResponse> => {
@@ -137,8 +147,13 @@ export const authService = {
      * Refresh and check if email is verified
      */
     refreshEmailVerification: async (): Promise<VerificationResponse> => {
-        if (!auth.currentUser) return { verified: false };
+        if (!auth.currentUser) {
+            console.log('[AuthService] No current user for verification refresh');
+            return { verified: false };
+        }
+        console.log('[AuthService] Refreshing email verification for:', auth.currentUser.email);
         await reload(auth.currentUser);
+        console.log('[AuthService] Email verified status after reload:', auth.currentUser.emailVerified);
         return { verified: auth.currentUser.emailVerified };
     },
 
@@ -156,6 +171,8 @@ export const authService = {
     onAuthStateChanged: (callback: (user: User | null) => void) => {
         return onAuthStateChanged(auth, callback);
     },
+
+    getCurrentUser: (): User | null => auth.currentUser,
 
     getPendingMfaResolver: (): MultiFactorResolver | null => authService._pendingMfaResolver,
     clearPendingMfaResolver: (): void => {
@@ -195,13 +212,55 @@ export const authService = {
     },
 
     /**
+     * Start MFA enrollment with Phone Number
+     */
+    startPhoneMfaEnrollment: async (phoneNumber: string, recaptchaVerifier: any): Promise<string> => {
+        const user = auth.currentUser;
+        if (!user) throw new Error('No authenticated user.');
+
+        const session = await multiFactor(user).getSession();
+        const phoneProvider = new PhoneAuthProvider(auth);
+        return phoneProvider.verifyPhoneNumber(
+            { phoneNumber, session },
+            recaptchaVerifier
+        );
+    },
+
+    /**
+     * Complete MFA enrollment
+     */
+    finishPhoneMfaEnrollment: async (verificationId: string, code: string, displayName: string = 'Phone Number'): Promise<void> => {
+        const user = auth.currentUser;
+        if (!user) throw new Error('No authenticated user.');
+
+        const credential = PhoneAuthProvider.credential(verificationId, code);
+        const assertion = PhoneMultiFactorGenerator.assertion(credential);
+        await multiFactor(user).enroll(assertion, displayName);
+    },
+
+    /**
+     * Unenroll MFA
+     */
+    unenrollMfa: async (factor: MultiFactorInfo | string): Promise<void> => {
+        const user = auth.currentUser;
+        if (!user) throw new Error('No authenticated user.');
+
+        if (typeof factor === 'string') {
+            // Unenroll by UID
+            await multiFactor(user).unenroll(factor);
+        } else {
+            await multiFactor(user).unenroll(factor);
+        }
+    },
+
+    /**
      * Login with Google (Native)
      */
     loginWithGoogle: async (): Promise<SuccessResponse> => {
         try {
             await GoogleSignin.hasPlayServices();
             const response = await GoogleSignin.signIn();
-            const { idToken } = response.data || response; // Handle both structures just in case
+            const idToken = (response as any).data?.idToken || (response as any).idToken;
 
             if (!idToken) throw new Error('No ID token found');
 

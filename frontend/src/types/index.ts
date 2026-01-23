@@ -1,6 +1,6 @@
 // Core domain models and shared types
 
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { User as FirebaseUser } from 'firebase/auth';
 
 // ============================================================================
@@ -14,11 +14,11 @@ export interface User {
     displayName?: string;
     photoURL?: string;
     role?: 'personal' | 'professional';
-    createdAt?: Date | FirebaseFirestoreTypes.Timestamp;
-    updatedAt?: Date | FirebaseFirestoreTypes.Timestamp;
+    createdAt?: Date | Timestamp;
+    updatedAt?: Date | Timestamp;
     onboardingCompleted?: boolean;
     subscriptionStatus?: 'free' | 'premium' | 'trial';
-    subscriptionEndDate?: Date | FirebaseFirestoreTypes.Timestamp;
+    subscriptionEndDate?: Date | Timestamp;
 }
 
 export interface UserProfile extends User {
@@ -26,7 +26,7 @@ export interface UserProfile extends User {
     profession?: string;
     interests?: string[];
     location?: string;
-    dateOfBirth?: Date | FirebaseFirestoreTypes.Timestamp;
+    dateOfBirth?: Date | Timestamp;
     gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
 }
 
@@ -63,8 +63,8 @@ export interface Circle {
     category: string;
     imageUrl?: string;
     createdBy: string;
-    createdAt: Date | FirebaseFirestoreTypes.Timestamp;
-    updatedAt: Date | FirebaseFirestoreTypes.Timestamp;
+    createdAt: Date | Timestamp;
+    updatedAt: Date | Timestamp;
     memberCount: number;
     isPublic: boolean;
     tags?: string[];
@@ -86,7 +86,7 @@ export interface Message {
     senderId: string;
     senderName: string;
     senderPhotoURL?: string;
-    timestamp: Date | FirebaseFirestoreTypes.Timestamp;
+    timestamp: Date | Timestamp;
     type: 'text' | 'image' | 'voice' | 'system';
     imageUrl?: string;
     voiceUrl?: string;
@@ -100,10 +100,10 @@ export interface Chat {
     participantNames: { [key: string]: string };
     participantPhotos?: { [key: string]: string };
     lastMessage?: string;
-    lastMessageTime?: Date | FirebaseFirestoreTypes.Timestamp;
+    lastMessageTime?: Date | Timestamp;
     unreadCount?: { [key: string]: number };
     type: 'direct' | 'group' | 'ai';
-    createdAt: Date | FirebaseFirestoreTypes.Timestamp;
+    createdAt: Date | Timestamp;
 }
 
 // ============================================================================
@@ -130,8 +130,8 @@ export interface Assessment {
     type: 'mood' | 'wellbeing' | 'nineIndex';
     responses: AssessmentResponse[];
     score?: number;
-    completedAt: Date | FirebaseFirestoreTypes.Timestamp;
-    createdAt: Date | FirebaseFirestoreTypes.Timestamp;
+    completedAt: Date | Timestamp;
+    createdAt: Date | Timestamp;
 }
 
 // ============================================================================
@@ -146,7 +146,7 @@ export interface Notification {
     type: 'message' | 'circle' | 'assessment' | 'system';
     read: boolean;
     data?: Record<string, any>;
-    createdAt: Date | FirebaseFirestoreTypes.Timestamp;
+    createdAt: Date | Timestamp;
 }
 
 // ============================================================================
@@ -167,8 +167,8 @@ export interface UserSubscription {
     userId: string;
     planId: string;
     status: 'active' | 'cancelled' | 'expired' | 'trial';
-    startDate: Date | FirebaseFirestoreTypes.Timestamp;
-    endDate: Date | FirebaseFirestoreTypes.Timestamp;
+    startDate: Date | Timestamp;
+    endDate: Date | Timestamp;
     autoRenew: boolean;
 }
 
@@ -185,7 +185,7 @@ export interface Resource {
     url?: string;
     thumbnailUrl?: string;
     duration?: number;
-    createdAt: Date | FirebaseFirestoreTypes.Timestamp;
+    createdAt: Date | Timestamp;
 }
 
 // ============================================================================
@@ -198,14 +198,14 @@ export interface Huddle {
     description: string;
     hostId: string;
     hostName: string;
-    scheduledTime: Date | FirebaseFirestoreTypes.Timestamp;
+    scheduledTime: Date | Timestamp;
     duration: number;
     participants: string[];
     maxParticipants?: number;
     status: 'scheduled' | 'live' | 'completed' | 'cancelled';
     meetingUrl?: string;
     circleId?: string;
-    createdAt: Date | FirebaseFirestoreTypes.Timestamp;
+    createdAt: Date | Timestamp;
 }
 
 // ============================================================================

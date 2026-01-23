@@ -9,6 +9,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import ProfilePhotoModal from '../components/ProfilePhotoModal';
 import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { circleService } from '../services/api/circleService';
 import { authService } from '../services/auth/authService';
 import { userService } from '../services/api/userService';
@@ -18,6 +19,7 @@ import BottomNavigation from '../components/BottomNavigation';
 const PersonalProfileScreen = ({ navigation }) => {
     // Modal States
     const { user, userData } = useAuth();
+    const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState('My circles');
     const [isLogoutVisible, setIsLogoutVisible] = useState(false);
     const [isEditPhotoVisible, setIsEditPhotoVisible] = useState(false);
@@ -131,7 +133,10 @@ const PersonalProfileScreen = ({ navigation }) => {
 
     const renderHeader = () => (
         <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <TouchableOpacity
+                onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard')}
+                style={styles.backButton}
+            >
                 <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
             </TouchableOpacity>
 

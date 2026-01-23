@@ -11,6 +11,7 @@ import { useAuth } from './context/AuthContext';
 // Import all screens (keeping original imports for brevity in this replacement)
 import OnboardingScreen from './screens/OnboardingScreen';
 import SignInScreen from './screens/SignInScreen';
+import TwoFactorSignInScreen from './screens/TwoFactorSignInScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import VerificationScreen from './screens/VerificationScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
@@ -44,7 +45,7 @@ const PERSISTENCE_KEY = 'NAVIGATION_STATE_V1';
 const Stack = createNativeStackNavigator();
 
 export default function Navigation() {
-    const { user } = useAuth();
+    const { user, userData } = useAuth();
     const [isReady, setIsReady] = useState(false);
     const [initialState, setInitialState] = useState();
 
@@ -61,6 +62,8 @@ export default function Navigation() {
                         setInitialState(state);
                     }
                 }
+            } catch (e) {
+                console.error('Failed to restore navigation state', e);
             } finally {
                 setIsReady(true);
             }
@@ -75,6 +78,11 @@ export default function Navigation() {
         return null;
     }
 
+    const isVerified = user?.emailVerified;
+    const isProfileComplete = userData?.onboardingCompleted;
+
+    console.log('[Navigation] Rendering. User:', user?.email, 'Verified:', isVerified, 'ProfileComplete:', isProfileComplete);
+
     return (
         <NavigationContainer
             initialState={initialState}
@@ -82,10 +90,22 @@ export default function Navigation() {
                 AsyncStorage.setItem(PERSISTENCE_KEY, JSON.stringify(state))
             }
         >
-            {user ? (
+            {!user ? (
+                <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="Splash" component={SplashScreen} />
+                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                    <Stack.Screen name="SignIn" component={SignInScreen} />
+                    <Stack.Screen name="SignUp" component={SignUpScreen} />
+                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+                    <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+                </Stack.Navigator>
+            ) : !isProfileComplete ? (
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+                </Stack.Navigator>
+            ) : (
                 <Stack.Navigator initialRouteName="Dashboard" screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="Dashboard" component={DashboardScreen} />
-                    <Stack.Screen name="Verification" component={VerificationScreen} />
                     <Stack.Screen name="Notifications" component={NotificationsScreen} />
                     <Stack.Screen name="CheckIn" component={CheckInScreen} />
                     <Stack.Screen name="Explore" component={ExploreScreen} />
@@ -109,17 +129,6 @@ export default function Navigation() {
                     <Stack.Screen name="Assessment" component={AssessmentScreen} />
                     <Stack.Screen name="NineIndex" component={NineIndexScreen} />
                     <Stack.Screen name="Stats" component={StatsScreen} />
-                </Stack.Navigator>
-            ) : (
-                <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="Splash" component={SplashScreen} />
-                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                    <Stack.Screen name="SignIn" component={SignInScreen} />
-                    <Stack.Screen name="SignUp" component={SignUpScreen} />
-                    <Stack.Screen name="Verification" component={VerificationScreen} />
-                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-                    <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-                    <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
                 </Stack.Navigator>
             )}
         </NavigationContainer>

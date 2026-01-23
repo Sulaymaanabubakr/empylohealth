@@ -67,6 +67,16 @@ export declare const submitAssessment: functions.HttpsFunction & functions.Runna
  */
 export declare const seedAssessmentQuestions: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Seed Challenges (Admin Utility)
+ * Callable Function: 'seedChallenges'
+ */
+export declare const seedChallenges: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Seed Resources (Admin Utility)
+ * Callable Function: 'seedResources'
+ */
+export declare const seedResources: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Get User Wellbeing Stats
  * Callable Function: 'getUserStats'
  */

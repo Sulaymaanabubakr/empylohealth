@@ -17,6 +17,35 @@ import { assessmentService } from '../services/api/assessmentService';
 
 const { width } = Dimensions.get('window');
 
+/**
+ * Calculates a dynamic "Health Score" for the circle based on members and activity.
+ */
+const calculateCircleRating = (circle: any) => {
+    if (!circle) return '4.2';
+    if (circle.score) return circle.score; // Use backend score if available
+
+    let score = 4.2; // Strong baseline because all circles are supportive
+
+    // Member count impact (More members = more trusted)
+    const memberCount = circle.members?.length || 0;
+    if (memberCount > 50) score += 0.4;
+    else if (memberCount > 20) score += 0.3;
+    else if (memberCount > 10) score += 0.2;
+    else if (memberCount > 2) score += 0.1;
+
+    // Activity Bonus (Recency of updates)
+    const lastUpdate = circle.updatedAt?.toMillis?.() || circle.lastMessageAt?.toMillis?.() || 0;
+
+    if (lastUpdate > 0) {
+        const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
+        if (hoursSinceUpdate < 24) score += 0.4; // Updated today
+        else if (hoursSinceUpdate < 72) score += 0.2; // Updated recently
+        else if (hoursSinceUpdate < 168) score += 0.1; // Updated this week
+    }
+
+    return Math.min(score, 5.0).toFixed(1); // Cap at 5.0
+};
+
 const CircularProgress = ({ score, label }) => {
     const size = 120;
     const strokeWidth = 14;
@@ -204,34 +233,7 @@ const DashboardScreen = ({ navigation }) => {
         }
     };
 
-    /**
-     * Calculates a dynamic "Health Score" for the circle based on members and activity.
-     */
-    const calculateCircleRating = (circle: any) => {
-        if (circle.score) return circle.score; // Use backend score if available
 
-        let score = 4.2; // Strong baseline because all circles are supportive
-
-        // Member count impact (More members = more trusted)
-        const memberCount = circle.members?.length || 0;
-        if (memberCount > 50) score += 0.4;
-        else if (memberCount > 20) score += 0.3;
-        else if (memberCount > 10) score += 0.2;
-        else if (memberCount > 2) score += 0.1;
-
-        // Activity Bonus (Recency of updates)
-        // Check both updatedAt and any lastMessageAt if it exists
-        const lastUpdate = circle.updatedAt?.toMillis?.() || circle.lastMessageAt?.toMillis?.() || 0;
-
-        if (lastUpdate > 0) {
-            const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
-            if (hoursSinceUpdate < 24) score += 0.4; // Updated today
-            else if (hoursSinceUpdate < 72) score += 0.2; // Updated recently
-            else if (hoursSinceUpdate < 168) score += 0.1; // Updated this week
-        }
-
-        return Math.min(score, 5.0).toFixed(1); // Cap at 5.0
-    };
 
     const currentDate = new Date().toLocaleDateString('en-GB', {
         weekday: 'long',
@@ -698,11 +700,6 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         marginBottom: 4,
         color: '#212121',
-    },
-    circleMembers: {
-        fontSize: 14,
-        color: '#757575',
-        fontWeight: '500',
     },
     circleMembers: {
         fontSize: 14,

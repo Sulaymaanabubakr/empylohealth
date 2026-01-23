@@ -1,7 +1,7 @@
 // TypeScript conversion in progress
 import { functions, db, auth } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, getDocs, doc, onSnapshot } from 'firebase/firestore';
 
 export const assessmentService = {
     /**

@@ -35,7 +35,7 @@ const OnboardingScreen = ({ navigation }) => {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('SignUpSelection')}>
+            <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
               <Text style={styles.signInLink}>Sign Up</Text>
             </TouchableOpacity>
           </View>

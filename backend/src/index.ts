@@ -35,6 +35,8 @@ export const sendMessage = coreApi.sendMessage;
 export const submitAssessment = coreApi.submitAssessment;
 export const getUserStats = coreApi.getUserStats;
 export const getKeyChallenges = coreApi.getKeyChallenges;
+export const seedChallenges = coreApi.seedChallenges;
+export const seedResources = coreApi.seedResources;
 export const seedAssessmentQuestions = coreApi.seedAssessmentQuestions;
 export const updateSubscription = coreApi.updateSubscription;
 

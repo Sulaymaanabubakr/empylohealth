@@ -17,6 +17,7 @@ interface AuthContextType {
     logout: () => Promise<{ success: boolean }>;
     loginWithGoogle: () => Promise<{ success: boolean; cancelled?: boolean; user?: FirebaseUser }>;
     loginWithApple: () => Promise<{ success: boolean; cancelled?: boolean; user?: FirebaseUser }>;
+    refreshUser: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -133,8 +134,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return await authService.loginWithApple();
     };
 
+    const refreshUser = async () => {
+        const currentUser = authService.getCurrentUser();
+        if (currentUser) {
+            await currentUser.reload();
+            setUser({ ...authService.getCurrentUser() } as FirebaseUser); // Spread to trigger state update
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, userData, loading, login, register, logout, loginWithGoogle, loginWithApple }}>
+        <AuthContext.Provider value={{ user, userData, loading, login, register, logout, loginWithGoogle, loginWithApple, refreshUser }}>
             {loading ? (
                 <View style={{ flex: 1, backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center' }}>
                     {/* Use ActivityIndicator for better reliability during app boot */}

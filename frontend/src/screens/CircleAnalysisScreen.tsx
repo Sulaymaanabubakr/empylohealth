@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, StatusBar, Dimensions, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, StatusBar, Dimensions, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING } from '../theme/theme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
@@ -11,6 +11,7 @@ import { doc, getDoc, collection, query, getDocs, orderBy, limit } from 'firebas
 const { width } = Dimensions.get('window');
 
 const CircleAnalysisScreen = ({ route, navigation }) => {
+    const insets = useSafeAreaInsets();
     const { circle } = route.params || {};
     const [memberStats, setMemberStats] = useState([]);
     const [circleStreak, setCircleStreak] = useState(0);
@@ -37,7 +38,6 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
 
         let streak = 0;
         let checkDate = new Date();
-        // Check if there was activity today or yesterday to continue/start a streak
         if (!activeDays.has(checkDate.toDateString())) {
             checkDate.setDate(checkDate.getDate() - 1);
         }
@@ -52,8 +52,6 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
     const fetchRealTimeData = async () => {
         try {
             setLoading(true);
-
-            // 1. Ensure we have the full circle object with chatId
             let currentCircle = circle;
             if (!currentCircle?.chatId && currentCircle?.id) {
                 const circleDoc = await getDoc(doc(db, 'circles', currentCircle.id));
@@ -62,7 +60,6 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                 }
             }
 
-            // 2. Determine where messages are stored
             const chatId = currentCircle?.chatId || currentCircle?.id;
             if (!chatId) {
                 setLoading(false);
@@ -71,10 +68,8 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
 
             const messagesRef = collection(db, 'chats', chatId, 'messages');
             const q = query(messagesRef, orderBy('createdAt', 'desc'), limit(200));
-
             let messageSnap = await getDocs(q);
 
-            // Fallback: Check if they are in circles subcollection
             if (messageSnap.empty && currentCircle.id !== chatId) {
                 const legacyRef = collection(db, 'circles', currentCircle.id, 'messages');
                 const legacyQ = query(legacyRef, orderBy('createdAt', 'desc'), limit(200));
@@ -82,8 +77,6 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
             }
 
             const messages = messageSnap.docs.map(doc => doc.data());
-
-            // 3. Process Activity Chart Data (Last 7 Days)
             const daysShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
             const today = new Date();
             today.setHours(23, 59, 59, 999);
@@ -104,7 +97,6 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                 else if (msg.createdAt?.toMillis) msgDate = new Date(msg.createdAt.toMillis());
 
                 if (msgDate) {
-                    // Update Chart Data
                     const diffTime = today.getTime() - msgDate.getTime();
                     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
@@ -115,7 +107,6 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                         }
                     }
 
-                    // Update Leaderboard Data
                     const uid = msg.senderId || msg.userId;
                     if (uid) {
                         memberMessageCounts[uid] = (memberMessageCounts[uid] || 0) + 1;
@@ -127,14 +118,13 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                 labels: last7DaysLabels,
                 datasets: [{
                     data: last7DaysCounts,
-                    color: (opacity = 1) => `rgba(0, 200, 83, ${opacity})`,
+                    color: (opacity = 1) => `rgba(0, 150, 136, ${opacity})`,
                     strokeWidth: 2
                 }]
             });
 
             setCircleStreak(calculateStreak(messages));
 
-            // 4. Fetch profiles for all members
             const stats = [];
             if (currentCircle.members) {
                 for (const memberId of currentCircle.members) {
@@ -170,56 +160,58 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
     const calculateCircleRating = (circleObj) => {
         if (!circleObj) return "0.0";
         if (circleObj.score) return circleObj.score.toFixed(1);
-
         let score = 4.2;
         const memberCount = circleObj.members?.length || 0;
         if (memberCount > 50) score += 0.4;
         else if (memberCount > 20) score += 0.3;
-        else if (memberCount > 10) score += 0.2;
-        else if (memberCount > 2) score += 0.1;
-
         const lastUpdate = circleObj.updatedAt?.toMillis?.() || circleObj.lastMessageAt?.toMillis?.() || 0;
         if (lastUpdate > 0) {
             const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
             if (hoursSinceUpdate < 24) score += 0.4;
-            else if (hoursSinceUpdate < 72) score += 0.2;
-            else if (hoursSinceUpdate < 168) score += 0.1;
         }
-
         return Math.min(score, 5.0).toFixed(1);
     };
 
     const chartConfig = {
         backgroundGradientFrom: "#FFF",
         backgroundGradientTo: "#FFF",
-        color: (opacity = 1) => `rgba(0, 200, 83, ${opacity})`,
+        color: (opacity = 1) => `rgba(0, 150, 136, ${opacity})`,
         strokeWidth: 3,
         barPercentage: 0.5,
         useShadowColorFromDataset: false,
         decimalPlaces: 0,
-        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+        labelColor: (opacity = 1) => `rgba(160, 174, 192, ${opacity})`,
+        propsForDots: {
+            r: "4",
+            strokeWidth: "2",
+            stroke: COLORS.primary
+        }
     };
 
     const getRankIcon = (index) => {
         if (index === 0) return { icon: "trophy", color: "#FFD700" };
         if (index === 1) return { icon: "medal", color: "#C0C0C0" };
         if (index === 2) return { icon: "medal", color: "#CD7F32" };
-        return { icon: "shield-outline", color: "#9E9E9E" };
+        return { icon: "shield-outline", color: "#A0AEC0" };
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <StatusBar barStyle="dark-content" backgroundColor="#F4F7F6" />
+        <View style={styles.container}>
+            <StatusBar barStyle="dark-content" />
 
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#212121" />
+            {/* Premium Header */}
+            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    style={styles.backButton}
+                >
+                    <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Circle Insights</Text>
-                <View style={{ width: 40 }} />
+                <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
 
                 {/* Circle Health Card */}
                 <View style={styles.healthCard}>
@@ -228,16 +220,16 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                             <Text style={styles.healthTitle}>{circle?.name}</Text>
                             <Text style={styles.healthSubtitle}>{circle?.members?.length || 0} Members</Text>
                         </View>
-                        <View style={styles.ratingBigContainer}>
-                            <Ionicons name="star" size={20} color="#00C853" style={{ marginRight: 4 }} />
-                            <Text style={styles.ratingBigText}>{calculateCircleRating(circle)}</Text>
+                        <View style={styles.ratingBadge}>
+                            <Ionicons name="star" size={16} color="#00C853" style={{ marginRight: 4 }} />
+                            <Text style={styles.ratingText}>{calculateCircleRating(circle)}</Text>
                         </View>
                     </View>
                     <View style={styles.separator} />
                     <View style={styles.statsRow}>
                         <View style={styles.statItem}>
                             <Text style={styles.statValue}>98%</Text>
-                            <Text style={styles.statLabel}>Engagement</Text>
+                            <Text style={styles.statLabel}>Activity</Text>
                         </View>
                         <View style={styles.statVerticalLine} />
                         <View style={styles.statItem}>
@@ -247,116 +239,130 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                         <View style={styles.statVerticalLine} />
                         <View style={styles.statItem}>
                             <Text style={styles.statValue}>4.8</Text>
-                            <Text style={styles.statLabel}>Trust Score</Text>
+                            <Text style={styles.statLabel}>Trust</Text>
                         </View>
                     </View>
                 </View>
 
-                {/* Activity Chart */}
+                {/* Activity Chart Section */}
                 <View style={[styles.section, { paddingRight: 0 }]}>
-                    <Text style={styles.sectionTitle}>Weekly Activity</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        <LineChart
-                            data={activityData}
-                            width={width - 20}
-                            height={220}
-                            chartConfig={chartConfig}
-                            bezier
-                            style={styles.chart}
-                            withDots={true}
-                            withInnerLines={false}
-                            withOuterLines={false}
-                        />
-                    </ScrollView>
+                    <Text style={styles.sectionLabel}>WEEKLY ACTIVITY</Text>
+                    <View style={styles.chartContainer}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <LineChart
+                                data={activityData}
+                                width={width - 40}
+                                height={200}
+                                chartConfig={chartConfig}
+                                bezier
+                                style={styles.chart}
+                                withDots={true}
+                                withInnerLines={false}
+                                withOuterLines={false}
+                            />
+                        </ScrollView>
+                    </View>
                 </View>
 
                 {/* Leaderboard Section */}
-                <View style={styles.section}>
+                <View style={[styles.section, { marginTop: 10 }]}>
                     <View style={styles.sectionHeader}>
-                        <View style={styles.iconBox}>
-                            <MaterialCommunityIcons name="podium-gold" size={24} color="#FFA000" />
-                        </View>
-                        <Text style={styles.sectionTitle}>Leaderboard</Text>
+                        <Text style={styles.sectionLabel}>LEADERBOARD</Text>
+                        <MaterialCommunityIcons name="podium" size={20} color={COLORS.primary} />
                     </View>
-                    <Text style={styles.sectionDescription}>
-                        Recognizing our top contributors based on real contributions.
-                    </Text>
 
-                    {loading ? (
-                        <Text style={{ padding: 20, textAlign: 'center', color: '#999' }}>Loading real-time rankings...</Text>
-                    ) : (
-                        <View style={styles.leaderboardList}>
-                            {memberStats.map((member, index) => {
+                    <View style={styles.leaderboardCard}>
+                        {loading ? (
+                            <View style={{ padding: 40, alignItems: 'center' }}>
+                                <ActivityIndicator color={COLORS.primary} />
+                                <Text style={styles.loadingText}>Syncing ranks...</Text>
+                            </View>
+                        ) : memberStats.length === 0 ? (
+                            <Text style={styles.emptyText}>No activity recorded yet.</Text>
+                        ) : (
+                            memberStats.map((member, index) => {
                                 const rank = getRankIcon(index);
                                 return (
-                                    <View key={member.id} style={styles.rankRow}>
+                                    <View key={member.id} style={[styles.rankRow, index === memberStats.length - 1 && { borderBottomWidth: 0 }]}>
                                         <View style={styles.rankPosition}>
                                             <MaterialCommunityIcons name={rank.icon} size={24} color={rank.color} />
                                             <Text style={[styles.rankNumber, { color: rank.color }]}>#{index + 1}</Text>
                                         </View>
 
                                         <View style={styles.rankUser}>
-                                            <Avatar uri={member.photoURL} name={member.name} size={40} />
+                                            <Avatar uri={member.photoURL} name={member.name} size={44} />
                                             <View style={styles.rankInfo}>
-                                                <Text style={styles.rankName}>{member.name}</Text>
+                                                <Text style={styles.rankName} numberOfLines={1}>{member.name}</Text>
                                                 <Text style={styles.rankLevel}>Level {member.level} • {member.contributionPoints} pts</Text>
                                             </View>
                                         </View>
 
                                         {index < 3 && (
-                                            <View style={[styles.topBadge, { backgroundColor: rank.color + '20' }]}>
+                                            <View style={[styles.topBadge, { backgroundColor: rank.color + '15' }]}>
                                                 <Text style={[styles.topBadgeText, { color: rank.color }]}>TOP {index + 1}</Text>
                                             </View>
                                         )}
                                     </View>
                                 );
-                            })}
-                        </View>
-                    )}
+                            })
+                        )}
+                    </View>
                 </View>
 
             </ScrollView>
-        </SafeAreaView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F4F7F6',
-    },
-    content: {
-        padding: SPACING.lg,
-        paddingBottom: 40,
+        backgroundColor: '#F7F9FB',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: SPACING.lg,
-        paddingVertical: 16,
-        backgroundColor: '#F4F7F6',
+        paddingHorizontal: 20,
+        paddingBottom: 15,
+        backgroundColor: '#FFFFFF',
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 3,
+        zIndex: 10,
     },
     backButton: {
-        padding: 8,
-        marginLeft: -8,
-        borderRadius: 20,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#F7F9FB',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 20,
+        flex: 1,
+        fontSize: 18,
         fontWeight: '800',
-        color: '#212121',
+        color: '#1A1A1A',
+        textAlign: 'center',
+        fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
+    },
+    content: {
+        padding: 20,
     },
     healthCard: {
-        backgroundColor: '#FFF',
+        backgroundColor: '#FFFFFF',
         borderRadius: 24,
         padding: 20,
-        marginBottom: 24,
+        marginBottom: 25,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 4,
+        shadowRadius: 15,
+        elevation: 5,
     },
     healthHeader: {
         flexDirection: 'row',
@@ -366,31 +372,32 @@ const styles = StyleSheet.create({
     },
     healthTitle: {
         fontSize: 22,
-        fontWeight: '800',
-        color: '#212121',
+        fontWeight: '900',
+        color: '#1A1A1A',
         marginBottom: 4,
+        letterSpacing: -0.5,
     },
     healthSubtitle: {
         fontSize: 14,
-        color: '#757575',
-        fontWeight: '500',
+        color: '#718096',
+        fontWeight: '600',
     },
-    ratingBigContainer: {
+    ratingBadge: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#E8F5E9',
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 16,
+        borderRadius: 12,
     },
-    ratingBigText: {
-        fontSize: 20,
+    ratingText: {
+        fontSize: 18,
         fontWeight: '800',
         color: '#2E7D32',
     },
     separator: {
         height: 1,
-        backgroundColor: '#F0F0F0',
+        backgroundColor: '#F3F4F6',
         marginBottom: 20,
     },
     statsRow: {
@@ -405,56 +412,53 @@ const styles = StyleSheet.create({
     statValue: {
         fontSize: 18,
         fontWeight: '800',
-        color: '#212121',
+        color: '#1A1A1A',
         marginBottom: 4,
     },
     statLabel: {
         fontSize: 11,
-        color: '#9E9E9E',
+        color: '#A0AEC0',
         textTransform: 'uppercase',
-        fontWeight: '700',
-        letterSpacing: 0.5,
+        fontWeight: '800',
+        letterSpacing: 1,
     },
     statVerticalLine: {
         width: 1,
         height: 30,
-        backgroundColor: '#F0F0F0',
+        backgroundColor: '#F3F4F6',
     },
     section: {
         marginBottom: 30,
     },
     sectionHeader: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 15,
+        paddingHorizontal: 5,
     },
-    iconBox: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        backgroundColor: '#FFF8E1',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    sectionTitle: {
-        fontSize: 20,
+    sectionLabel: {
+        fontSize: 12,
         fontWeight: '800',
-        color: '#212121',
+        color: '#A0AEC0',
+        letterSpacing: 1.5,
     },
-    sectionDescription: {
-        fontSize: 14,
-        color: '#757575',
-        marginBottom: 20,
-        lineHeight: 20,
+    chartContainer: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        padding: 10,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.04,
+        shadowRadius: 10,
+        elevation: 2,
     },
     chart: {
         marginVertical: 8,
-        borderRadius: 24,
-        paddingRight: 40,
+        borderRadius: 20,
     },
-    leaderboardList: {
-        backgroundColor: '#FFF',
+    leaderboardCard: {
+        backgroundColor: '#FFFFFF',
         borderRadius: 24,
         padding: 16,
         shadowColor: "#000",
@@ -466,18 +470,18 @@ const styles = StyleSheet.create({
     rankRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12,
+        paddingVertical: 14,
         borderBottomWidth: 1,
-        borderBottomColor: '#F5F5F5',
+        borderBottomColor: '#F7F9FB',
     },
     rankPosition: {
         alignItems: 'center',
-        width: 40,
-        marginRight: 8,
+        width: 45,
+        marginRight: 10,
     },
     rankNumber: {
         fontSize: 12,
-        fontWeight: '800',
+        fontWeight: '900',
         marginTop: 2,
     },
     rankUser: {
@@ -487,27 +491,39 @@ const styles = StyleSheet.create({
     },
     rankInfo: {
         marginLeft: 12,
+        flex: 1,
     },
     rankName: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#212121',
+        color: '#1A1A1A',
     },
     rankLevel: {
         fontSize: 12,
         color: COLORS.primary,
-        fontWeight: '600',
+        fontWeight: '700',
         marginTop: 2,
     },
     topBadge: {
-        paddingVertical: 4,
-        paddingHorizontal: 8,
-        borderRadius: 8,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 12,
     },
     topBadgeText: {
         fontSize: 10,
         fontWeight: '800',
     },
+    loadingText: {
+        marginTop: 10,
+        color: '#A0AEC0',
+        fontWeight: '600',
+    },
+    emptyText: {
+        padding: 30,
+        textAlign: 'center',
+        color: '#718096',
+        fontWeight: '500',
+    }
 });
 
 export default CircleAnalysisScreen;

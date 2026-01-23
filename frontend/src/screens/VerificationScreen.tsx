@@ -10,17 +10,22 @@ import { authService } from '../services/auth/authService';
 import { useAuth } from '../context/AuthContext';
 
 const VerificationScreen = ({ navigation, route }) => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const handleVerify = async () => {
+    console.log('[VerificationScreen] Verify clicked');
     try {
-      const result = await authService.refreshEmailVerification();
-      if (result.verified) {
-        navigation.navigate('ProfileSetup');
+      await refreshUser();
+      const currentUser = authService.getCurrentUser();
+      console.log('[VerificationScreen] Current user after refresh:', currentUser?.email, 'Verified:', currentUser?.emailVerified);
+
+      if (currentUser?.emailVerified) {
+        console.log('[VerificationScreen] Verified! Navigator should auto-switch.');
         return;
       }
       Alert.alert('Not verified', 'Please verify your email using the link we sent.');
     } catch (error) {
+      console.error('[VerificationScreen] Error during verify:', error);
       Alert.alert('Error', error.message || 'Unable to verify email.');
     }
   };
@@ -36,7 +41,10 @@ const VerificationScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('SignIn')}
+      >
         <Ionicons name="chevron-back" size={24} color="black" />
       </TouchableOpacity>
 

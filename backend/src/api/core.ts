@@ -805,6 +805,160 @@ export const seedAssessmentQuestions = functions.https.onCall(async (data, conte
 });
 
 /**
+ * Seed Challenges (Admin Utility)
+ * Callable Function: 'seedChallenges'
+ */
+export const seedChallenges = functions.https.onCall(async (data, context) => {
+    const challenges = [
+        {
+            title: 'Work-Life Balance',
+            level: 'Moderate',
+            icon: 'briefcase-outline',
+            bg: '#E3F2FD',
+            color: '#2196F3',
+            category: 'Stress',
+            priority: 10,
+            status: 'published',
+            description: 'Maintain a healthy boundary between work and personal life.',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        {
+            title: 'Social Anxiety',
+            level: 'High',
+            icon: 'account-group-outline',
+            bg: '#F3E5F5',
+            color: '#8E24AA',
+            category: 'Social Connection',
+            priority: 8,
+            status: 'published',
+            description: 'Strategies to manage discomfort in social settings.',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        {
+            title: 'Public Speaking',
+            level: 'Moderate',
+            icon: 'bullhorn-outline',
+            bg: '#E1F5FE',
+            color: '#0288D1',
+            category: 'Social Connection',
+            priority: 7,
+            status: 'published',
+            description: 'Build confidence in presenting to groups.',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        {
+            title: 'Procrastination',
+            level: 'Moderate',
+            icon: 'clock-outline',
+            bg: '#FFF3E0',
+            color: '#FF9800',
+            category: 'Focus',
+            priority: 9,
+            status: 'published',
+            description: 'Overcome the tendency to delay important tasks.',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        {
+            title: 'Sleep Hygiene',
+            level: 'Low',
+            icon: 'bed-outline',
+            bg: '#E8F5E9',
+            color: '#4CAF50',
+            category: 'Energy',
+            priority: 7,
+            status: 'published',
+            description: 'Improve your sleep quality with better routines.',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        }
+    ];
+
+    try {
+        const batch = db.batch();
+        const collectionRef = db.collection('challenges');
+
+        // Check if exists to prevent duplicates
+        const existing = await collectionRef.get();
+        if (!existing.empty) {
+            return { success: false, message: "Challenges already exist" };
+        }
+
+        challenges.forEach(c => {
+            const docRef = collectionRef.doc();
+            batch.set(docRef, c);
+        });
+
+        await batch.commit();
+        return { success: true, count: challenges.length };
+    } catch (error: any) {
+        console.error("Error seeding challenges:", error);
+        throw new functions.https.HttpsError('internal', `Unable to seed challenges: ${error.message || error}`);
+    }
+});
+
+/**
+ * Seed Resources (Admin Utility)
+ * Callable Function: 'seedResources'
+ */
+export const seedResources = functions.https.onCall(async (data, context) => {
+    const resources = [
+        {
+            title: 'The Art of Mindful Breathing',
+            description: 'Learn how to use your breath to calm your nervous system instantly.',
+            category: 'Self-development',
+            tag: 'LEARN',
+            time: '5 min',
+            color: '#E0F2F1',
+            status: 'published',
+            tags: ['Stress', 'Focus'],
+            publishedAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        {
+            title: 'Building Better Morning Habits',
+            description: 'Transform your day by implementing these simple morning rituals.',
+            category: 'Self-development',
+            tag: 'HABIT',
+            time: '8 min',
+            color: '#FFF3E0',
+            status: 'published',
+            tags: ['Energy', 'Motivation'],
+            publishedAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        {
+            title: 'Managing Workplace Stress',
+            description: 'Practical tips to keep your cool during high-pressure work days.',
+            category: 'Self-development',
+            tag: 'READ',
+            time: '12 min',
+            color: '#E3F2FD',
+            status: 'published',
+            tags: ['Stress'],
+            publishedAt: admin.firestore.FieldValue.serverTimestamp()
+        }
+    ];
+
+    try {
+        const batch = db.batch();
+        const collectionRef = db.collection('resources');
+
+        const existing = await collectionRef.get();
+        if (!existing.empty) {
+            return { success: false, message: "Resources already exist" };
+        }
+
+        resources.forEach(r => {
+            const docRef = collectionRef.doc();
+            batch.set(docRef, r);
+        });
+
+        await batch.commit();
+        return { success: true, count: resources.length };
+    } catch (error: any) {
+        console.error("Error seeding resources:", error);
+        throw new functions.https.HttpsError('internal', `Unable to seed resources: ${error.message || error}`);
+    }
+});
+
+/**
  * Get User Wellbeing Stats
  * Callable Function: 'getUserStats'
  */
@@ -889,6 +1043,50 @@ export const getKeyChallenges = functions.https.onCall(async (data, context) => 
             }
         }
 
+        // Default challenges if DB is empty
+        const defaultChallenges = [
+            {
+                title: 'Work-Life Balance',
+                level: 'Moderate',
+                icon: 'briefcase-outline',
+                bg: '#E3F2FD',
+                color: '#2196F3',
+                category: 'Stress',
+                priority: 10,
+                status: 'published'
+            },
+            {
+                title: 'Social Anxiety',
+                level: 'High',
+                icon: 'account-group-outline',
+                bg: '#F3E5F5',
+                color: '#8E24AA',
+                category: 'Social Connection',
+                priority: 8,
+                status: 'published'
+            },
+            {
+                title: 'Procrastination',
+                level: 'Moderate',
+                icon: 'clock-outline',
+                bg: '#FFF3E0',
+                color: '#FF9800',
+                category: 'Focus',
+                priority: 9,
+                status: 'published'
+            },
+            {
+                title: 'Sleep Hygiene',
+                level: 'Low',
+                icon: 'bed-outline',
+                bg: '#E8F5E9',
+                color: '#4CAF50',
+                category: 'Energy',
+                priority: 7,
+                status: 'published'
+            }
+        ];
+
         // If no items found (or no weak themes), fill with general high priority challenges
         if (items.length === 0) {
             const snapshot = await db.collection('challenges')
@@ -897,6 +1095,17 @@ export const getKeyChallenges = functions.https.onCall(async (data, context) => 
                 .limit(4)
                 .get();
             items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+
+        // If STILL empty (no data in DB at all), use hardcoded defaults
+        if (items.length === 0) {
+            // Filter defaults by weak themes if possible, otherwise first 2
+            if (weakThemes.length > 0) {
+                items = defaultChallenges.filter(c => weakThemes.includes(c.category)).slice(0, 4);
+            }
+            if (items.length === 0) {
+                items = defaultChallenges.slice(0, 2);
+            }
         }
 
         // Add context for the UI (why is this shown?)
@@ -952,6 +1161,30 @@ export const getRecommendedContent = functions.https.onCall(async (data, context
             genericItems.forEach(i => {
                 if (!existingIds.has(i.id)) items.push(i);
             });
+        }
+
+        // If STILL empty, use hardcoded defaults
+        if (items.length === 0) {
+            items = [
+                {
+                    id: 'def_1',
+                    title: 'The Art of Mindful Breathing',
+                    description: 'Learn how to use your breath to calm your nervous system instantly.',
+                    category: 'Self-development',
+                    tag: 'LEARN',
+                    time: '5 min',
+                    color: '#E0F2F1'
+                },
+                {
+                    id: 'def_2',
+                    title: 'Building Better Morning Habits',
+                    description: 'Transform your day by implementing these simple morning rituals.',
+                    category: 'Self-development',
+                    tag: 'HABIT',
+                    time: '8 min',
+                    color: '#FFF3E0'
+                }
+            ];
         }
 
         return { items };

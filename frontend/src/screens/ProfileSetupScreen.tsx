@@ -1,57 +1,48 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import Dropdown from '../components/Dropdown';
 import DatePicker from '../components/DatePicker';
-import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { userService } from '../services/api/userService';
+import { authService } from '../services/auth/authService';
 import { mediaService } from '../services/api/mediaService';
 
+const { width } = Dimensions.get('window');
+
 const ProfileSetupScreen = ({ navigation }) => {
-    // const isPersonal = userType === 'personal'; // REMOVED
+    const insets = useSafeAreaInsets();
     const { user } = useAuth();
-    const [name, setName] = useState('');
+    const { showToast } = useToast();
+    const [name, setName] = useState(user?.displayName || '');
     const [gender, setGender] = useState('');
     const [location, setLocation] = useState('');
     const [dateOfBirth, setDateOfBirth] = useState('');
-    const [avatarUri, setAvatarUri] = useState('');
+    const [avatarUri, setAvatarUri] = useState(user?.photoURL || '');
     const [uploading, setUploading] = useState(false);
-    // const [firstName, setFirstName] = useState(''); // REMOVED
-    // const [lastName, setLastName] = useState(''); // REMOVED
-
-    // REMOVED client state variables (ageRange, ethnicity, etc.)
 
     const genderOptions = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
     const locationOptions = [
-        'England - East Midlands',
-        'England - East of England',
-        'England - London',
-        'England - North East',
-        'England - North West',
-        'England - South East',
-        'England - South West',
-        'England - West Midlands',
-        'England - Yorkshire and the Humber',
-        'Scotland',
-        'Wales',
-        'Northern Ireland'
+        'England - East Midlands', 'England - East of England', 'England - London',
+        'England - North East', 'England - North West', 'England - South East',
+        'England - South West', 'England - West Midlands', 'England - Yorkshire and the Humber',
+        'Scotland', 'Wales', 'Northern Ireland'
     ];
 
     const pickImage = async () => {
-        // Request permission
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
         if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Please grant camera roll permissions to upload an image.');
+            showToast('Permission needed to upload an image', 'warning');
             return;
         }
 
-        // Pick image
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
@@ -60,199 +51,270 @@ const ProfileSetupScreen = ({ navigation }) => {
         });
 
         if (!result.canceled && result.assets[0]) {
-            const imageUri = result.assets[0].uri;
-            setAvatarUri(imageUri);
+            setAvatarUri(result.assets[0].uri);
         }
     };
 
     const handleSave = async () => {
         if (!user?.uid) {
-            Alert.alert('Error', 'User not found. Please sign in again.');
+            showToast('User not found. Please sign in again.', 'error');
             return;
         }
+        if (!name) {
+            showToast('Please enter your name', 'warning');
+            return;
+        }
+
         setUploading(true);
         try {
-            let photoURL = avatarUri || '';
-            if (avatarUri) {
+            let photoURL = avatarUri;
+            if (avatarUri && avatarUri !== user.photoURL) {
                 photoURL = await mediaService.uploadAsset(avatarUri, 'avatars');
             }
 
-            const displayName = name; // Always use 'name'
             const updateData = {
-                name: displayName,
+                name,
                 dob: dateOfBirth,
                 gender,
                 location,
                 photoURL,
-                role: 'personal', // Always personal
-                profileCompleted: true,
-                demographics: null, // Always null for personal
+                role: 'personal',
+                onboardingCompleted: true,
                 updatedAt: new Date()
             };
 
-            await userService.updateUserDocument(user.uid, updateData);
-            navigation.navigate('Assessment');
+            await Promise.all([
+                userService.updateUserDocument(user.uid, updateData),
+                authService.updateAuthProfile(name, photoURL)
+            ]);
+
+            showToast('Profile saved successfully!', 'success');
+            navigation.replace('Dashboard');
         } catch (error) {
             console.error('Profile setup failed', error);
-            Alert.alert('Error', 'Unable to save profile. Please try again.');
+            showToast('Unable to save profile. Please try again.', 'error');
         } finally {
             setUploading(false);
         }
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                <Ionicons name="chevron-back" size={24} color="black" />
-            </TouchableOpacity>
+        <View style={styles.container}>
+            <StatusBar barStyle="dark-content" />
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <Text style={styles.title}>Profile Setup</Text>
+            {/* Minimalist Header */}
+            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity
+                    onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('SignIn')}
+                    style={styles.backButton}
+                >
+                    <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Profile Setup</Text>
+                <View style={{ width: 44 }} />
+            </View>
 
-                <View style={styles.avatarContainer}>
-                    <TouchableOpacity style={styles.avatar} onPress={pickImage} disabled={uploading}>
-                        {avatarUri ? (
-                            <View style={styles.avatarWrapper}>
-                                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-                            </View>
-                        ) : (
-                            <View style={styles.avatarWrapper}>
-                                <View style={[styles.avatarImage, { backgroundColor: '#E0E0E0' }]} />
-                                <MaterialCommunityIcons name="account" size={60} color="#999" style={styles.defaultAvatarIcon} />
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.editIcon} onPress={pickImage} disabled={uploading}>
-                        <Feather name="edit-2" size={16} color={COLORS.primary} />
-                    </TouchableOpacity>
-                    {uploading && <Text style={styles.uploadingText}>Uploading...</Text>}
+            <ScrollView
+                style={styles.contentScroll}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Hero section with better placement */}
+                <View style={styles.heroSection}>
+                    <Text style={styles.introTitle}>Complete Your Profile</Text>
                 </View>
 
-                <Input label="Name" placeholder="Enter your name" value={name} onChangeText={setName} />
+                {/* Refined Avatar Picker */}
+                <View style={styles.avatarSection}>
+                    <TouchableOpacity
+                        style={styles.avatarContainer}
+                        onPress={pickImage}
+                        activeOpacity={0.8}
+                    >
+                        <View style={styles.avatarBorder}>
+                            {avatarUri ? (
+                                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                            ) : (
+                                <View style={styles.avatarPlaceholder}>
+                                    <Ionicons name="person" size={50} color={COLORS.primary} />
+                                </View>
+                            )}
+                        </View>
+                        <LinearGradient
+                            colors={[COLORS.secondary, '#FFB347']}
+                            style={styles.cameraIconContainer}
+                        >
+                            <Ionicons name="camera" size={18} color="white" />
+                        </LinearGradient>
+                    </TouchableOpacity>
+                    <Text style={styles.avatarHint}>Add a profile photo</Text>
+                </View>
 
-                <DatePicker
-                    label="Date of Birth"
-                    value={dateOfBirth}
-                    onSelect={setDateOfBirth}
-                    placeholder="mm.dd.yyyy"
-                    icon={<MaterialCommunityIcons name="calendar-outline" size={20} color={COLORS.secondary} />}
-                />
+                {/* Form Card */}
+                <View style={styles.formContainer}>
+                    <Input
+                        label="Full Name"
+                        placeholder="Your full name"
+                        value={name}
+                        onChangeText={setName}
+                        icon={<MaterialCommunityIcons name="account-outline" size={20} color={COLORS.primary} />}
+                    />
 
-                <Dropdown
-                    label="Gender"
-                    value={gender}
-                    options={genderOptions}
-                    onSelect={setGender}
-                    icon={<MaterialCommunityIcons name="gender-male-female" size={20} color={COLORS.secondary} />}
-                />
+                    <DatePicker
+                        label="Date of Birth"
+                        value={dateOfBirth}
+                        onSelect={setDateOfBirth}
+                        placeholder="Select your birth date"
+                        icon={<MaterialCommunityIcons name="calendar-heart" size={20} color={COLORS.primary} />}
+                    />
 
-                <Dropdown
-                    label="Location"
-                    value={location}
-                    options={locationOptions}
-                    onSelect={setLocation}
-                    icon={<MaterialCommunityIcons name="map-marker-outline" size={20} color={COLORS.secondary} />}
-                />
+                    <Dropdown
+                        label="Gender"
+                        value={gender}
+                        options={genderOptions}
+                        onSelect={setGender}
+                        icon={<MaterialCommunityIcons name="gender-male-female" size={20} color={COLORS.primary} />}
+                    />
 
-                <Button
-                    title={uploading ? 'Saving...' : 'Save & Continue'}
-                    onPress={handleSave}
-                    style={styles.saveButton}
-                    disabled={uploading}
-                />
+                    <Dropdown
+                        label="Your region"
+                        value={location}
+                        options={locationOptions}
+                        onSelect={setLocation}
+                        icon={<MaterialCommunityIcons name="map-marker-radius" size={20} color={COLORS.primary} />}
+                    />
+
+                    <Button
+                        title={uploading ? 'Finalizing...' : 'Save & Continue'}
+                        onPress={handleSave}
+                        style={styles.saveButton}
+                        disabled={uploading}
+                    />
+                </View>
             </ScrollView>
-        </SafeAreaView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F7F9FB', // Softer, non-stark background
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingBottom: SPACING.sm,
     },
     backButton: {
-        padding: SPACING.md,
-        marginTop: SPACING.sm,
-        width: 60,
-    },
-    scrollContent: {
-        paddingHorizontal: SPACING.xl,
-        paddingBottom: SPACING.xl,
-    },
-    title: {
-        ...TYPOGRAPHY.h2,
-        marginBottom: SPACING.xl,
-    },
-    avatarContainer: {
-        alignItems: 'center',
-        marginBottom: SPACING.xxl,
-    },
-    avatar: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: COLORS.white,
+        width: 44,
+        height: 44,
+        borderRadius: 15,
+        backgroundColor: '#FFFFFF',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 2,
     },
-    editIcon: {
-        position: 'absolute',
-        bottom: 0,
-        right: width * 0.35, // Rough adjustment
-        backgroundColor: '#E0F2F1',
-        borderRadius: 15,
-        padding: 6,
-        borderWidth: 2,
-        borderColor: COLORS.white,
+    headerTitle: {
+        flex: 1,
+        fontSize: 16,
+        fontFamily: 'SpaceGrotesk_700Bold',
+        color: '#1A1A1A',
+        textAlign: 'center',
+        letterSpacing: 0.5,
+    },
+    contentScroll: {
+        flex: 1,
+    },
+    scrollContent: {
+        paddingHorizontal: SPACING.lg,
+    },
+    heroSection: {
+        paddingVertical: 24,
+        alignItems: 'center',
+    },
+    introTitle: {
+        fontSize: 28,
+        color: '#1A1A1A',
+        fontFamily: 'SpaceGrotesk_700Bold',
+        textAlign: 'center',
+        marginBottom: 10,
+    },
+    avatarSection: {
+        alignItems: 'center',
+        marginBottom: 30,
+    },
+    avatarContainer: {
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    avatarBorder: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: 'white',
+        padding: 5,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     avatarImage: {
         width: '100%',
         height: '100%',
-        borderRadius: 50,
+        borderRadius: 55,
     },
-    uploadingText: {
-        marginTop: SPACING.xs,
-        fontSize: 12,
-        color: COLORS.primary,
-    },
-    label: {
-        ...TYPOGRAPHY.caption,
-        fontWeight: '600',
-        marginBottom: SPACING.xs,
-        color: COLORS.text,
-    },
-    dropdownContainer: {
-        marginBottom: SPACING.md,
-    },
-    dropdown: {
-        flexDirection: 'row',
+    avatarPlaceholder: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 55,
+        backgroundColor: '#F0F9F8',
+        justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: COLORS.white,
-        borderRadius: RADIUS.pill,
-        paddingHorizontal: SPACING.md,
-        height: 56,
         borderWidth: 1,
-        borderColor: COLORS.lightGray,
+        borderColor: '#E0F2F1',
     },
-    dropdownIcon: {
-        marginRight: SPACING.sm,
+    cameraIconContainer: {
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 4,
+        borderColor: '#F7F9FB', // Matches container bg
     },
-    dropdownText: {
-        flex: 1,
-        color: '#999',
-        fontSize: 16,
+    avatarHint: {
+        marginTop: 14,
+        fontSize: 14,
+        color: COLORS.primary,
+        fontFamily: 'DMSans_500Medium',
+        fontWeight: '600',
     },
-    row: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
+    formContainer: {
+        backgroundColor: 'white',
+        borderRadius: 30,
+        padding: 24,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.05,
+        shadowRadius: 15,
+        elevation: 5,
+        marginBottom: 30,
     },
     saveButton: {
-        marginTop: SPACING.xl,
+        marginTop: 15,
+        height: 56,
+        borderRadius: 16,
     },
 });
-
-const { width } = Dimensions.get('window');
 
 export default ProfileSetupScreen;

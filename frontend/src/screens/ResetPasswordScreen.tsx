@@ -36,7 +36,10 @@ const ResetPasswordScreen = ({ navigation, route }) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('SignIn')}
+            >
                 <Ionicons name="chevron-back" size={24} color="black" />
             </TouchableOpacity>
 
