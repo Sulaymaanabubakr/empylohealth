@@ -1,4 +1,4 @@
-import { Heart, Globe, Lightbulb, Users } from 'lucide-react';
+import { Heart, Compass, Smile } from 'lucide-react';
 
 const AboutUs = () => {
     return (
@@ -6,39 +6,10 @@ const AboutUs = () => {
             {/* Hero */}
             <section className="about-hero">
                 <div className="container">
-                    <h1>We Are Democratizing <br /> <span className="text-gradient">Mental Health Support</span></h1>
+                    <h1>Democratizing <br /> <span className="text-gradient">Mental Health Support</span></h1>
                     <p className="hero-lead">
-                        Empylo is on a mission to build a world where everyone has a circle of support,
-                        accessible anytime, anywhere.
+                        Our mission is to build a world where everyone has a circle of care that’s accessible anytime, anywhere.
                     </p>
-                </div>
-            </section>
-
-            {/* Values */}
-            <section className="values-section">
-                <div className="container">
-                    <div className="values-grid">
-                        <div className="value-card">
-                            <Heart className="value-icon" size={32} />
-                            <h3>Empathy First</h3>
-                            <p>We design with the heart. Every feature is built to validate feelings and foster understanding.</p>
-                        </div>
-                        <div className="value-card">
-                            <Users className="value-icon" size={32} />
-                            <h3>Community Power</h3>
-                            <p>Healing happens together. We empower users to lift each other up through shared experiences.</p>
-                        </div>
-                        <div className="value-card">
-                            <Globe className="value-icon" size={32} />
-                            <h3>Accessible to All</h3>
-                            <p>Mental health support shouldn't be a luxury. We are breaking down barriers to entry.</p>
-                        </div>
-                        <div className="value-card">
-                            <Lightbulb className="value-icon" size={32} />
-                            <h3>Innovation</h3>
-                            <p>Leveraging technology not to replace human connection, but to enhance and scale it.</p>
-                        </div>
-                    </div>
                 </div>
             </section>
 
@@ -48,13 +19,42 @@ const AboutUs = () => {
                     <div className="story-text">
                         <h2>Our Story</h2>
                         <p>
-                            Empylo was born from a simple observation: while the world is more connected than ever,
-                            people feel increasingly isolated in their struggles.
+                            Circles Health App was born from a simple observation: while the world is more connected than ever,
+                            many people feel increasingly disconnected and alone in their struggles.
                         </p>
                         <p>
-                            We set out to create a third space - a digital sanctuary that combines the warmth of
-                            human connection with the precision of clinically-backed tools.
+                            We are creating a third space - a digital sanctuary that brings together genuine connection and
+                            holistic wellbeing. Designed to address the growing intersection between loneliness and worsening
+                            mental health, Circles Health App helps people find balance, belonging, and support in their everyday lives.
                         </p>
+                        <p>
+                            Founded by a digital clinician with over a decade of experience in mental health care and health technology,
+                            we build solutions to support mental wellbeing.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            {/* Values */}
+            <section className="values-section">
+                <div className="container" style={{ textAlign: 'center' }}>
+                    <h2 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '48px', color: 'var(--color-secondary)' }}>Our Guiding Principles</h2>
+                    <div className="values-grid">
+                        <div className="value-card">
+                            <Heart className="value-icon" size={32} />
+                            <h3>Passion</h3>
+                            <p>We care deeply about human connection and the shared journey toward wellbeing.</p>
+                        </div>
+                        <div className="value-card">
+                            <Compass className="value-icon" size={32} />
+                            <h3>Purpose</h3>
+                            <p>Every feature is designed with intention - to inspire growth, reflection, and meaningful support.</p>
+                        </div>
+                        <div className="value-card">
+                            <Smile className="value-icon" size={32} />
+                            <h3>Play</h3>
+                            <p>We value curiosity, lightness, and creativity as vital parts of wellbeing and connection.</p>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -117,8 +117,8 @@ const AboutUs = () => {
                 
                 .story-section {
                     padding: 100px 0;
-                    background: var(--color-secondary);
-                    color: white;
+                    background: var(--color-primary-bg);
+                    color: var(--color-secondary);
                     text-align: center;
                 }
                 
@@ -136,7 +136,7 @@ const AboutUs = () => {
                     font-size: 1.1rem;
                     line-height: 1.8;
                     margin-bottom: 24px;
-                    color: #CBD5E1;
+                    color: var(--color-text-light);
                 }
                 
                 @media (max-width: 768px) {

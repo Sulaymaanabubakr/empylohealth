@@ -9,8 +9,8 @@ const Features = () => {
         },
         {
             icon: BarChart3,
-            title: "Mood Tracking",
-            desc: "Visualize your emotional trends with daily check-ins. Gain insights into your mental well-being."
+            title: "Comprehensive Wellbeing",
+            desc: "Evidence-based check-ins grounded in the biopsychosocial model help you strengthen every part of your wellbeing."
         },
         {
             icon: MessageCircle,
@@ -24,8 +24,8 @@ const Features = () => {
         },
         {
             icon: HeartPulse,
-            title: "Professional Care",
-            desc: "Access a network of certified therapists and counselors when you need extra support."
+            title: "Motivational Learning",
+            desc: "Bite-sized insights that inspire personal growth and help you build positive habits."
         },
         {
             icon: Sparkles,

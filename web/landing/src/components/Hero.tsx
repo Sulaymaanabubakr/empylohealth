@@ -17,13 +17,12 @@ const Hero = () => {
                     </div>
 
                     <h1 className="hero-title">
-                        Stronger <span className="highlight">Connections</span>,<br />
-                        Better Health
+                        Find meaning in <br />
+                        <span className="highlight">how you connect.</span>
                     </h1>
 
                     <p className="hero-description">
-                        Sign up to champion a workplace that values mental health, and
-                        together, let's create a nurturing environment where your employees can thrive.
+                        Create circles with the people who matter most, share honest check-ins, and grow together through reflection and care.
                     </p>
 
                     <div className="hero-actions">

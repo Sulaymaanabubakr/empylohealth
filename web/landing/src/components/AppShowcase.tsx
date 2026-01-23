@@ -10,8 +10,7 @@ const AppShowcase = () => {
                     <div className="text-side">
                         <h2>Simple, Intuitive, <span className="highlight-text">Empowering</span></h2>
                         <p>
-                            Designed with empathy at its core. Empylo's interface is calming, easy to navigate,
-                            and focused on what matters most - your well-being.
+                            Built with empathy and simplicity at its heart, Empylo offers a calming, intuitive experience centered on what truly matters - connection and wellbeing.
                         </p>
 
                         <div className="showcase-cards">

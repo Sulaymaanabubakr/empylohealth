@@ -14,8 +14,7 @@ const Footer = () => {
                         <span className="logo-text-white">Empylo</span>
                     </Link>
                     <p className="brand-tagline">
-                        Empowering mental wellness through connection and technology.
-                        Join the circle today.
+                        Solutions to support long-term mental wellbeing. Join our app today.
                     </p>
                     <div className="social-icons">
                         <a href="#" className="social-icon"><Facebook size={20} /></a>
