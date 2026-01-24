@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+console.log('[PERF] Navigation.js: Module evaluating');
 import { Linking, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -65,6 +66,7 @@ export default function Navigation() {
             } catch (e) {
                 console.error('Failed to restore navigation state', e);
             } finally {
+                console.log('[PERF] Navigation: isReady set to true');
                 setIsReady(true);
             }
         };
@@ -75,6 +77,7 @@ export default function Navigation() {
     }, [isReady]);
 
     if (!isReady) {
+        console.log('[PERF] Navigation: Waiting for isReady...');
         return null;
     }
 

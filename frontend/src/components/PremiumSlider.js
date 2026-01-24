@@ -5,7 +5,7 @@ import { COLORS } from '../theme/theme';
 const THUMB_SIZE = 40;
 const TRACK_HEIGHT = 6;
 
-    onValueChange: (value) ;
+
 
 const PremiumSlider = ({ value, onValueChange, steps = 5 }) => {
     const [containerWidth, setContainerWidth] = useState(0);

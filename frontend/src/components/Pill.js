@@ -9,6 +9,7 @@ export const Pill = ({ label }) => {
       <Text style={styles.pillText}>{label}</Text>
     </View>
   );
+};
 
 const styles = StyleSheet.create({
   pill: {

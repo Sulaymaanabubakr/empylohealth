@@ -1,10 +1,8 @@
-import React, { ReactNode } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { theme } from '../theme/theme';
-
-  children: ReactNode;
 
 export const Screen = ({ children, hero }) => {
   return (
@@ -20,6 +18,7 @@ export const Screen = ({ children, hero }) => {
       </SafeAreaView>
     </View>
   );
+};
 
 const styles = StyleSheet.create({
   screen: {
@@ -53,4 +52,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF7FF',
   },
 });
+
 export default Screen;

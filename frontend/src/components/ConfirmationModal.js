@@ -3,8 +3,6 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions } from 'rea
 
 const { width } = Dimensions.get('window');
 
-    onConfirm: () ;
-    onCancel: () ;
 
 const ConfirmationModal = ({
     visible,

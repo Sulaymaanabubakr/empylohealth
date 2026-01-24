@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../theme/theme';
 
@@ -16,6 +16,7 @@ export const ListRow = ({ title, subtitle, right, icon }) => {
       {right}
     </View>
   );
+};
 
 const styles = StyleSheet.create({
   listRow: {

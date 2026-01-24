@@ -5,10 +5,6 @@ import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-    plan: SubscriptionPlan | null;
-    onClose: () ;
-    onSubscribe: () ;
-
 const PlanDetailModal = ({ visible, plan, onClose, onSubscribe }) => {
     if (!plan) return null;
 

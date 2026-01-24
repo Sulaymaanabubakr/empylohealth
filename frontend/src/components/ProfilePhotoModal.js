@@ -4,12 +4,6 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
-    onClose: () ;
-    onUseAvatar: () ;
-    onTakePhoto: () ;
-    onChoosePhoto: () ;
-    onDeletePhoto: () ;
-
 const ProfilePhotoModal = ({ visible, onClose, currentImage, onUseAvatar, onTakePhoto, onChoosePhoto, onDeletePhoto }) => {
     return (
         <Modal

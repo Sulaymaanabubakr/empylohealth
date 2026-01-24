@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+console.log('[PERF] AuthContext.js: Module evaluating');
 import { View, Image, ActivityIndicator } from 'react-native';
 import { authService } from '../services/auth/authService';
 import { userService } from '../services/api/userService';
@@ -21,7 +22,13 @@ export const AuthProvider = ({ children }) => {
         const initStartTime = Date.now();
 
         // Initialize Google Sign In
-        authService.init('433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com');
+        try {
+            console.log('[PERF] AuthContext: calling authService.init');
+            authService.init('433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com');
+            console.log('[PERF] AuthContext: authService.init complete');
+        } catch (e) {
+            console.error('[PERF] AuthContext: authService.init FAILED', e);
+        }
 
         const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
             console.log('[PERF] AuthContext: Auth state changed', currentUser ? 'Authenticated' : 'Not authenticated', `${Date.now() - initStartTime}ms`);
@@ -127,10 +134,8 @@ export const AuthProvider = ({ children }) => {
     return (
         <AuthContext.Provider value={{ user, userData, loading, login, register, logout, loginWithGoogle, loginWithApple, refreshUser }}>
             {loading ? (
-                <View style={{ flex: 1, backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center' }}>
-                    {/* Use ActivityIndicator for better reliability during app boot */}
-                    {/* <Image source={require('../../assets/splash-icon.png')} ... /> */}
-                    <ActivityIndicator size="large" color="#4DB6AC" />
+                <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color="#FFFFFF" />
                 </View>
             ) : (
                 children

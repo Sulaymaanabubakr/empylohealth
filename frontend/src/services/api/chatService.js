@@ -1,11 +1,7 @@
 import { functions, db } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, Unsubscribe } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc } from 'firebase/firestore';
 
-
-    createdAt: Date;
-    user: {
-    };
 
 export const chatService = {
     /**
@@ -14,7 +10,7 @@ export const chatService = {
      */
     createDirectChat: async (recipientId) => {
         try {
-            const createFn = (functions, 'createDirectChat');
+            const createFn = httpsCallable(functions, 'createDirectChat');
             const result = await createFn({ recipientId });
             return result.data; // { success: true, chatId: '...', isNew: boolean }
         } catch (error) {
@@ -30,7 +26,7 @@ export const chatService = {
      * @param {string} type 
      * @param {string} mediaUrl 
      */
-    sendMessage: async (chatId) => {
+    sendMessage: async (chatId, text, type = 'text', mediaUrl = null) => {
         try {
             const sendFn = httpsCallable(functions, 'sendMessage');
             await sendFn({ chatId, text, type, mediaUrl });
@@ -46,7 +42,7 @@ export const chatService = {
      * @param {string} chatId 
      * @param {function} callback 
      */
-    subscribeToMessages: (chatId) ): Unsubscribe => {
+    subscribeToMessages: (chatId, callback) => {
         const q = query(
             collection(db, 'chats', chatId, 'messages'),
             orderBy('createdAt', 'desc'),
@@ -75,7 +71,7 @@ export const chatService = {
      * @param {string} uid 
      * @param {function} callback 
      */
-    subscribeToChatList: (uid) ): Unsubscribe => {
+    subscribeToChatList: (uid, callback) => {
         const q = query(
             collection(db, 'chats'),
             where('participants', 'array-contains', uid),

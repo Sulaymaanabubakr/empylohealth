@@ -1,8 +1,6 @@
-import React, { ReactNode } from 'react';
-import { StyleSheet, View, StyleProp, ViewStyle } from 'react-native';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 import { theme } from '../theme/theme';
-
-  children: ReactNode;
 
 export const Card = ({ children, style }) => {
   return <View style={[styles.card, style]}>{children}</View>;

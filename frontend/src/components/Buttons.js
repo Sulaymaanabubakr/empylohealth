@@ -2,8 +2,6 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { theme, COLORS } from '../theme/theme';
 
-  onPress: () ;
-
 export const PrimaryButton = ({ label, onPress, suffix }) => {
   return (
     <TouchableOpacity style={styles.primaryButton} onPress={onPress} activeOpacity={0.85}>
@@ -15,14 +13,13 @@ export const PrimaryButton = ({ label, onPress, suffix }) => {
   );
 };
 
-  onPress: () ;
-
 export const SecondaryButton = ({ label, onPress }) => {
   return (
     <TouchableOpacity style={styles.secondaryButton} onPress={onPress} activeOpacity={0.85}>
       <Text style={styles.secondaryButtonText}>{label}</Text>
     </TouchableOpacity>
   );
+};
 
 const styles = StyleSheet.create({
   primaryButton: {
@@ -49,4 +46,3 @@ const styles = StyleSheet.create({
     color: theme.colors.ink,
   },
 });
-export default Buttons;

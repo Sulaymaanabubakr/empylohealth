@@ -1,4 +1,5 @@
 import { registerRootComponent } from 'expo';
+console.log('[PERF] index.js: Module evaluating');
 
 import App from './App';
 

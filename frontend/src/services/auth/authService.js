@@ -36,16 +36,22 @@ export const authService = {
      * @param {string} webClientId - From Firebase Console > Auth > Google > Web SDK config
      */
     init: (webClientId) => {
-        GoogleSignin.configure({
-            webClientId: webClientId || 'YOUR_WEB_CLIENT_ID_FROM_FIREBASE_CONSOLE',
-        });
+        try {
+            GoogleSignin.configure({
+                webClientId: webClientId || 'YOUR_WEB_CLIENT_ID_FROM_FIREBASE_CONSOLE',
+            });
+            console.log('[AuthService] Google Sign-In configured successfully');
+        } catch (error) {
+            console.warn('[AuthService] Google Sign-In configuration failed:', error.message);
+            // Non-fatal - app can still run without Google Sign-In
+        }
     },
 
     /**
      * Login with email and password
      * ... (existing)
      */
-    login: async (email) => {
+    login: async (email, password) => {
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             return { success: true, user: userCredential.user };
@@ -63,7 +69,7 @@ export const authService = {
      * Register a new user
      * ... (existing)
      */
-    register: async (email) => {
+    register: async (email, password, name) => {
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
@@ -116,7 +122,7 @@ export const authService = {
     /**
      * Confirm password reset using OOB code
      */
-    confirmPasswordReset: async (oobCode) => {
+    confirmPasswordReset: async (oobCode, newPassword) => {
         try {
             await confirmPasswordReset(auth, oobCode, newPassword);
             return { success: true };
@@ -172,7 +178,7 @@ export const authService = {
         );
     },
 
-    resolveSmsMfaSignIn: async (verificationId) => {
+    resolveSmsMfaSignIn: async (verificationId, code) => {
         if (!authService._pendingMfaResolver) {
             throw new Error('No pending MFA resolver.');
         }
@@ -183,7 +189,7 @@ export const authService = {
         return result;
     },
 
-    resolveTotpMfaSignIn: async (hint) => {
+    resolveTotpMfaSignIn: async (hint, code) => {
         if (!authService._pendingMfaResolver) {
             throw new Error('No pending MFA resolver.');
         }
@@ -211,7 +217,7 @@ export const authService = {
     /**
      * Complete MFA enrollment
      */
-    finishPhoneMfaEnrollment: async (verificationId) => {
+    finishPhoneMfaEnrollment: async (verificationId, code, displayName) => {
         const user = auth.currentUser;
         if (!user) throw new Error('No authenticated user.');
 

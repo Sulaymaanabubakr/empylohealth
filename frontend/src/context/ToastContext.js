@@ -10,7 +10,7 @@ export const ToastProvider = ({ children }) => {
         type: 'info',
     });
 
-    const showToast = useCallback((message) => {
+    const showToast = useCallback((message, type = 'info') => {
         setToast({ visible: true, message, type });
     }, []);
 
