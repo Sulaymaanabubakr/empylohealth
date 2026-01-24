@@ -95,68 +95,69 @@ export function CheckInScreen() {
       </FadeInView>
     </Screen>
   );
+}
 
-  const styles = StyleSheet.create({
-    heroArea: {
-      gap: theme.space.sm,
-    },
-    heroCopy: {
-      fontFamily: theme.typography.body,
-      fontSize: 15,
-      color: theme.colors.inkMuted,
-      lineHeight: 22,
-    },
-    sectionTitle: {
-      fontFamily: theme.typography.title,
-      fontSize: 18,
-      color: theme.colors.ink,
-    },
-    emojiRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: theme.space.sm,
-    },
-    emojiChip: {
-      backgroundColor: theme.colors.card,
-      borderRadius: theme.radius.md,
-      paddingVertical: theme.space.sm,
-      paddingHorizontal: theme.space.md,
-      alignItems: 'center',
-      width: '30%',
-      gap: theme.space.xs,
-    },
-    emojiChipActive: {
-      borderWidth: 2,
-      borderColor: theme.colors.brand,
-    },
-    emojiSymbol: {
-      fontSize: 24,
-    },
-    emojiLabel: {
-      fontFamily: theme.typography.body,
-      fontSize: 12,
-      color: theme.colors.inkMuted,
-    },
-    cardCopy: {
-      fontFamily: theme.typography.body,
-      fontSize: 14,
-      color: theme.colors.inkMuted,
-      lineHeight: 20,
-    },
-    sliderLabels: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-    },
-    sliderLabel: {
-      fontFamily: theme.typography.body,
-      fontSize: 12,
-      color: theme.colors.inkMuted,
-    },
-    textArea: {
-      minHeight: 110,
-      fontFamily: theme.typography.body,
-      color: theme.colors.ink,
-    },
-  });
+const styles = StyleSheet.create({
+  heroArea: {
+    gap: theme.space.sm,
+  },
+  heroCopy: {
+    fontFamily: theme.typography.body,
+    fontSize: 15,
+    color: theme.colors.inkMuted,
+    lineHeight: 22,
+  },
+  sectionTitle: {
+    fontFamily: theme.typography.title,
+    fontSize: 18,
+    color: theme.colors.ink,
+  },
+  emojiRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.space.sm,
+  },
+  emojiChip: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.space.sm,
+    paddingHorizontal: theme.space.md,
+    alignItems: 'center',
+    width: '30%',
+    gap: theme.space.xs,
+  },
+  emojiChipActive: {
+    borderWidth: 2,
+    borderColor: theme.colors.brand,
+  },
+  emojiSymbol: {
+    fontSize: 24,
+  },
+  emojiLabel: {
+    fontFamily: theme.typography.body,
+    fontSize: 12,
+    color: theme.colors.inkMuted,
+  },
+  cardCopy: {
+    fontFamily: theme.typography.body,
+    fontSize: 14,
+    color: theme.colors.inkMuted,
+    lineHeight: 20,
+  },
+  sliderLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sliderLabel: {
+    fontFamily: theme.typography.body,
+    fontSize: 12,
+    color: theme.colors.inkMuted,
+  },
+  textArea: {
+    minHeight: 110,
+    fontFamily: theme.typography.body,
+    color: theme.colors.ink,
+  },
+});
 
-  export default CheckInScreen;
+export default CheckInScreen;
