@@ -248,7 +248,7 @@ getCurrentUser: (): User | null => auth.currentUser,
                                         try {
                                             await GoogleSignin.hasPlayServices();
                                             const response = await GoogleSignin.signIn();
-                                            const idToken = (response as any).data?.idToken || (response as any).idToken;
+                                            const idToken = (response).data?.idToken || (response).idToken;
 
                                             if (!idToken) throw new Error('No ID token found');
 

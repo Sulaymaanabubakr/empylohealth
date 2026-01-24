@@ -35,7 +35,7 @@ export function MainTabs() {
             Profile: 'user',
           };
           const iconName = icons[route.name] || 'home';
-          return <Feather name={iconName as any} size={size} color={color} />;
+          return <Feather name={iconName} size={size} color={color} />;
         },
       })}
     >

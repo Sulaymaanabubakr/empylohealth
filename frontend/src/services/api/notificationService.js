@@ -39,7 +39,7 @@ export const notificationService = {
             let nativeToken = null;
             try {
                 const deviceToken = await Notifications.getDevicePushTokenAsync();
-                nativeToken = deviceToken.data as string;
+                nativeToken = deviceToken.data;
             } catch (error) {
                 // Native token may not be available in Expo Go
             }

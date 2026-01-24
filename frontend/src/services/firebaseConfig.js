@@ -25,14 +25,14 @@ if (Platform.OS === 'web') {
 } else {
     try {
         auth = initializeAuth(app, {
-            persistence: (getReactNativePersistence as any)(ReactNativeAsyncStorage)
+            persistence: (getReactNativePersistence)(ReactNativeAsyncStorage)
         });
     } catch (error) {
         // If already initialized (fast refresh), reuse existing instance.
         auth = getAuth(app);
         console.log('[Firebase] Auth already initialized, reusing instance. Setting persistence for safety.');
         // Ensure persistence is set even on fallback
-        setPersistence(auth, (getReactNativePersistence as any)(ReactNativeAsyncStorage))
+        setPersistence(auth, (getReactNativePersistence)(ReactNativeAsyncStorage))
             .then(() => console.log('[Firebase] Persistence set manually on fallback'))
             .catch((e) => console.error('[Firebase] Failed to set persistence on fallback', e));
     }
