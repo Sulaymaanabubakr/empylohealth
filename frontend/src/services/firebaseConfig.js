@@ -16,9 +16,10 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app: FirebaseApp = initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 
-let auth: Auth;
+
+let auth;
 if (Platform.OS === 'web') {
     auth = getAuth(app);
     setPersistence(auth, browserLocalPersistence).catch(() => { });
@@ -27,19 +28,19 @@ if (Platform.OS === 'web') {
         auth = initializeAuth(app, {
             persistence: (getReactNativePersistence)(ReactNativeAsyncStorage)
         });
-    }
     } catch (error) {
-    // If already initialized (fast refresh), reuse existing instance.
-    auth = getAuth(app);
-    console.log('[Firebase] Auth already initialized, reusing instance. Setting persistence for safety.');
-    // Ensure persistence is set even on fallback
-    setPersistence(auth, (getReactNativePersistence)(ReactNativeAsyncStorage))
-        .then(() => console.log('[Firebase] Persistence set manually on fallback'))
-        .catch((e) => console.error('[Firebase] Failed to set persistence on fallback', e));
+        // If already initialized (fast refresh), reuse existing instance.
+        auth = getAuth(app);
+        console.log('[Firebase] Auth already initialized, reusing instance. Setting persistence for safety.');
+        // Ensure persistence is set even on fallback
+        setPersistence(auth, (getReactNativePersistence)(ReactNativeAsyncStorage))
+            .then(() => console.log('[Firebase] Persistence set manually on fallback'))
+            .catch((e) => console.error('[Firebase] Failed to set persistence on fallback', e));
+    }
 }
 
-const db: Firestore = getFirestore(app);
-const functions: Functions = getFunctions(app, 'us-central1');
+const db = getFirestore(app);
+const functions = getFunctions(app, 'us-central1');
 
 console.log('Firebase Initialized:', {
     appId: app.options.appId,
