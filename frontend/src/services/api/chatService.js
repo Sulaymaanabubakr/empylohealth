@@ -21,7 +21,7 @@ export const chatService = {
      * Create or Get existing Direct Chat
      * @param {string} recipientId 
      */
-    createDirectChat: async (recipientId): Promise<CreateChatResponse> => {
+    createDirectChat: async (recipientId) => {
         try {
             const createFn = httpsCallable<{ recipientId: string }, CreateChatResponse>(functions, 'createDirectChat');
             const result = await createFn({ recipientId });
@@ -39,7 +39,7 @@ export const chatService = {
      * @param {string} type 
      * @param {string} mediaUrl 
      */
-    sendMessage: async (chatId): Promise<{ success: boolean }> => {
+    sendMessage: async (chatId) => {
         try {
             const sendFn = httpsCallable(functions, 'sendMessage');
             await sendFn({ chatId, text, type, mediaUrl });

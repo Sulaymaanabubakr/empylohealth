@@ -9,7 +9,7 @@ export const notificationService = {
      * Register for Push Notifications
      * @param {string} uid User ID to save token for
      */
-    registerForPushNotificationsAsync: async (uid): Promise<void> => {
+    registerForPushNotificationsAsync: async (uid) => {
         if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync('default', {
                 name: 'default',

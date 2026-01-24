@@ -59,7 +59,7 @@ export const authService = {
      * Login with email and password
      * ... (existing)
      */
-    login: async (email): Promise<MfaLoginResponse> => {
+    login: async (email) => {
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             return { success: true, user: userCredential.user };
@@ -77,7 +77,7 @@ export const authService = {
      * Register a new user
      * ... (existing)
      */
-    register: async (email): Promise<AuthResponse> => {
+    register: async (email) => {
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
@@ -92,7 +92,7 @@ export const authService = {
     /**
      * Update Firebase Auth profile
      */
-    updateAuthProfile: async (displayName?: string, photoURL?: string): Promise<void> => {
+    updateAuthProfile: async (displayName?: string, photoURL?: string) => {
         const user = auth.currentUser;
         if (!user) throw new Error('No authenticated user.');
         await updateProfile(user, { displayName, photoURL });
@@ -101,7 +101,7 @@ export const authService = {
     /**
      * Logout the current user
      */
-    logout: async (): Promise<SuccessResponse> => {
+    logout: async () => {
         try {
             await signOut(auth);
             try {
@@ -118,7 +118,7 @@ export const authService = {
     /**
      * Send password reset email
      */
-    sendPasswordReset: async (email): Promise<SuccessResponse> => {
+    sendPasswordReset: async (email) => {
         try {
             await sendPasswordResetEmail(auth, email);
             return { success: true };
@@ -130,7 +130,7 @@ export const authService = {
     /**
      * Confirm password reset using OOB code
      */
-    confirmPasswordReset: async (oobCode): Promise<SuccessResponse> => {
+    confirmPasswordReset: async (oobCode) => {
         try {
             await confirmPasswordReset(auth, oobCode, newPassword);
             return { success: true };
@@ -142,7 +142,7 @@ export const authService = {
     /**
      * Refresh and check if email is verified
      */
-    refreshEmailVerification: async (): Promise<VerificationResponse> => {
+    refreshEmailVerification: async () => {
         if (!auth.currentUser) {
             console.log('[AuthService] No current user for verification refresh');
             return { verified: false };
@@ -153,7 +153,7 @@ export const authService = {
         return { verified: auth.currentUser.emailVerified };
     },
 
-    sendVerificationEmail: async (): Promise<SuccessResponse> => {
+    sendVerificationEmail: async () => {
         if (!auth.currentUser) {
             throw new Error('No authenticated user.');
         }
@@ -175,7 +175,7 @@ getCurrentUser: (): User | null => auth.currentUser,
             authService._pendingMfaResolver = null;
         },
 
-            startSmsMfaSignIn: async (hint): Promise<string> => {
+            startSmsMfaSignIn: async (hint) => {
                 if (!authService._pendingMfaResolver) {
                     throw new Error('No pending MFA resolver.');
                 }
@@ -186,7 +186,7 @@ getCurrentUser: (): User | null => auth.currentUser,
                 );
             },
 
-                resolveSmsMfaSignIn: async (verificationId): Promise<UserCredential> => {
+                resolveSmsMfaSignIn: async (verificationId) => {
                     if (!authService._pendingMfaResolver) {
                         throw new Error('No pending MFA resolver.');
                     }
@@ -197,7 +197,7 @@ getCurrentUser: (): User | null => auth.currentUser,
                     return result;
                 },
 
-                    resolveTotpMfaSignIn: async (hint): Promise<UserCredential> => {
+                    resolveTotpMfaSignIn: async (hint) => {
                         if (!authService._pendingMfaResolver) {
                             throw new Error('No pending MFA resolver.');
                         }
@@ -210,7 +210,7 @@ getCurrentUser: (): User | null => auth.currentUser,
                         /**
                          * Start MFA enrollment with Phone Number
                          */
-                        startPhoneMfaEnrollment: async (phoneNumber): Promise<string> => {
+                        startPhoneMfaEnrollment: async (phoneNumber) => {
                             const user = auth.currentUser;
                             if (!user) throw new Error('No authenticated user.');
 
@@ -225,7 +225,7 @@ getCurrentUser: (): User | null => auth.currentUser,
                             /**
                              * Complete MFA enrollment
                              */
-                            finishPhoneMfaEnrollment: async (verificationId): Promise<void> => {
+                            finishPhoneMfaEnrollment: async (verificationId) => {
                                 const user = auth.currentUser;
                                 if (!user) throw new Error('No authenticated user.');
 
@@ -237,7 +237,7 @@ getCurrentUser: (): User | null => auth.currentUser,
                                 /**
                                  * Unenroll MFA
                                  */
-                                unenrollMfa: async (factor): Promise<void> => {
+                                unenrollMfa: async (factor) => {
                                     const user = auth.currentUser;
                                     if (!user) throw new Error('No authenticated user.');
 
@@ -252,7 +252,7 @@ getCurrentUser: (): User | null => auth.currentUser,
                                     /**
                                      * Login with Google (Native)
                                      */
-                                    loginWithGoogle: async (): Promise<SuccessResponse> => {
+                                    loginWithGoogle: async () => {
                                         try {
                                             await GoogleSignin.hasPlayServices();
                                             const response = await GoogleSignin.signIn();
@@ -274,7 +274,7 @@ getCurrentUser: (): User | null => auth.currentUser,
                                         /**
                                          * Login with Apple (Native)
                                          */
-                                        loginWithApple: async (): Promise<SuccessResponse> => {
+                                        loginWithApple: async () => {
                                             try {
                                                 const csrf = Math.random().toString(36).substring(2, 15);
                                                 const nonce = Math.random().toString(36).substring(2, 10);

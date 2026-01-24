@@ -10,7 +10,7 @@ export const userService = {
      * @param {string} uid 
      * @returns {Promise<object|null>}
      */
-    getUserDocument: async (uid): Promise<User | null> => {
+    getUserDocument: async (uid) => {
         try {
             const userRef = doc(db, 'users', uid);
             const userDoc = await getDoc(userRef);
@@ -29,7 +29,7 @@ export const userService = {
      * @param {string} uid 
      * @param {object} data 
      */
-    updateUserDocument: async (uid): Promise<{ success: boolean }> => {
+    updateUserDocument: async (uid, data) => {
         try {
             const userRef = doc(db, 'users', uid);
             await updateDoc(userRef, data);
