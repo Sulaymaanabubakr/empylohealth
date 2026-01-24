@@ -15,7 +15,7 @@ export const userService = {
             const userRef = doc(db, 'users', uid);
             const userDoc = await getDoc(userRef);
             if (userDoc.exists()) {
-                return userDoc.data() as User;
+                return userDoc.data();
             }
             return null;
         } catch (error) {
@@ -32,7 +32,7 @@ export const userService = {
     updateUserDocument: async (uid): Promise<{ success: boolean }> => {
         try {
             const userRef = doc(db, 'users', uid);
-            await updateDoc(userRef, data as DocumentData);
+            await updateDoc(userRef, data);
             return { success: true };
         } catch (error) {
             console.error("Error updating user document:", error);

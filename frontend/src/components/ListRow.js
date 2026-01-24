@@ -2,8 +2,6 @@ import React, { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../theme/theme';
 
-  title: string;
-  subtitle?: string;
   right?: ReactNode;
   icon?: ReactNode;
 }

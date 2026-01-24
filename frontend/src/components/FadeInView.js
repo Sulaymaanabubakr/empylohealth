@@ -2,7 +2,6 @@ import React, { useEffect, useRef, ReactNode } from 'react';
 import { Animated } from 'react-native';
 
   children: ReactNode;
-  delay?: number;
 }
 
 export const FadeInView = ({ children, delay = 0 }) => {

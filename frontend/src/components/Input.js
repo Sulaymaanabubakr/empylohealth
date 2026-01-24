@@ -4,9 +4,7 @@ import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../theme/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 
-    label?: string;
     icon?: React.ReactNode;
-    secureTextEntry?: boolean;
 }
 
 const Input = ({ label, icon, secureTextEntry, ...props }) => {

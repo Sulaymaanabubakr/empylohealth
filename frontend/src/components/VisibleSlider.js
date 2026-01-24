@@ -5,9 +5,7 @@ import { COLORS } from '../theme/theme';
 
 const THUMB_SIZE = 40;
 
-    value: number;
     onValueChange: (value) => void;
-    steps?: number;
 }
 
 const VisibleSlider = ({ value, onValueChange, steps = 5 }) => {

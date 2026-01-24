@@ -5,9 +5,7 @@ import { COLORS } from '../theme/theme';
 const THUMB_SIZE = 40;
 const TRACK_HEIGHT = 6;
 
-    value: number;
     onValueChange: (value) => void;
-    steps?: number;
 }
 
 const PremiumSlider = ({ value, onValueChange, steps = 5 }) => {

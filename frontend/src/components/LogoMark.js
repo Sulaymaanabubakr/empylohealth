@@ -1,8 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
-  color?: string;
-  size?: number;
 }
 
 export const LogoMark = ({ color = '#E8F1EF', size = 40 }) => {

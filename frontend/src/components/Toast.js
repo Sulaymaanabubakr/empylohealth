@@ -3,9 +3,7 @@ import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import { Ionicons } from '@expo/vector-icons';
 
-    message: string;
     type?: 'info' | 'success' | 'error' | 'warning';
-    visible: boolean;
     onHide?: () => void;
 }
 

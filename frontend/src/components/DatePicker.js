@@ -4,11 +4,8 @@ import { Calendar, DateData } from 'react-native-calendars';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Feather } from '@expo/vector-icons';
 
-    label?: string;
-    value?: string;
     onSelect: (date) => void;
     icon?: ReactNode;
-    placeholder?: string;
 }
 
 const DatePicker = ({ label, value, onSelect, icon, placeholder = 'Select date' }) => {

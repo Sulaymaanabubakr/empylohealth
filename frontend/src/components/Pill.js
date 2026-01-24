@@ -2,7 +2,6 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../theme/theme';
 
-  label: string;
 }
 
 export const Pill = ({ label }) => {

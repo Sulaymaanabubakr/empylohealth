@@ -5,10 +5,6 @@ import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-    visible: boolean;
-    title?: string;
-    message?: string;
-    buttonText?: string;
     onClose: () => void;
 }
 

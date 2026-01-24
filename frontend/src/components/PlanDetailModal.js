@@ -5,7 +5,6 @@ import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-    visible: boolean;
     plan: SubscriptionPlan | null;
     onClose: () => void;
     onSubscribe: () => void;

@@ -2,10 +2,8 @@ import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../theme/theme';
 
-    title: string;
     onPress: () => void;
     type?: 'primary' | 'secondary';
-    loading?: boolean;
     style?: StyleProp<ViewStyle>;
     textStyle?: StyleProp<TextStyle>;
 }

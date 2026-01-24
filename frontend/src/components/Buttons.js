@@ -2,9 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { theme, COLORS } from '../theme/theme';
 
-  label: string;
   onPress: () => void;
-  suffix?: string;
 }
 
 export const PrimaryButton = ({ label, onPress, suffix }) => {
@@ -18,7 +16,6 @@ export const PrimaryButton = ({ label, onPress, suffix }) => {
   );
 };
 
-  label: string;
   onPress: () => void;
 }
 

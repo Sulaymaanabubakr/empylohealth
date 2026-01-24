@@ -3,14 +3,8 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions } from 'rea
 
 const { width } = Dimensions.get('window');
 
-    visible: boolean;
-    title?: string;
-    message: string;
     onConfirm: () => void;
     onCancel: () => void;
-    confirmText?: string;
-    cancelText?: string;
-    singleButton?: boolean;
 }
 
 const ConfirmationModal = ({

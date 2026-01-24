@@ -5,7 +5,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { SvgXml } from 'react-native-svg';
 
   source: any; // Expo asset module
-  background?: string;
 }
 
 export const SvgScreen = ({ source, background = '#FFFFFF' }) => {

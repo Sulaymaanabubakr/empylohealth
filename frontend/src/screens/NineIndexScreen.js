@@ -15,7 +15,7 @@ const NineIndexScreen = ({ navigation }) => {
         "I've been thinking clearly"
     ];
 
-    const [dbQuestions, setDbQuestions] = useState<any[]>([]);
+    const [dbQuestions, setDbQuestions] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [answers, setAnswers] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);

@@ -1,14 +1,14 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, StyleProp, ImageStyle } from 'react-native';
 
-const getInitials = (name): string => {
+const getInitials = (name) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
   if (parts.length === 1) return parts[0][0].toUpperCase();
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 };
 
-const getColor = (name): string => {
+const getColor = (name) => {
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -18,8 +18,6 @@ const getColor = (name): string => {
 };
 
   uri?: string | null;
-  name?: string;
-  size?: number;
 }
 
 const Avatar = ({ uri, name, size = 56, style }) => {

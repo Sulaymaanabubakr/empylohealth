@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 
-    navigation: any;
     activeTab: 'Home' | 'Explore' | 'Chat' | 'Profile';
 }
 
