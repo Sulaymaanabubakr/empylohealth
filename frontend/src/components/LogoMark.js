@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
-}
 
 export const LogoMark = ({ color = '#E8F1EF', size = 40 }) => {
   return (
@@ -11,7 +10,6 @@ export const LogoMark = ({ color = '#E8F1EF', size = 40 }) => {
       <View style={[styles.bar, styles.barBottom, { backgroundColor: color }]} />
     </View>
   );
-}
 
 const styles = StyleSheet.create({
   wrap: {

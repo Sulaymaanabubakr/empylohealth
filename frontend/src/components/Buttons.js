@@ -2,8 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { theme, COLORS } from '../theme/theme';
 
-  onPress: () => void;
-}
+  onPress: () ;
 
 export const PrimaryButton = ({ label, onPress, suffix }) => {
   return (
@@ -16,8 +15,7 @@ export const PrimaryButton = ({ label, onPress, suffix }) => {
   );
 };
 
-  onPress: () => void;
-}
+  onPress: () ;
 
 export const SecondaryButton = ({ label, onPress }) => {
   return (
@@ -25,7 +23,6 @@ export const SecondaryButton = ({ label, onPress }) => {
       <Text style={styles.secondaryButtonText}>{label}</Text>
     </TouchableOpacity>
   );
-}
 
 const styles = StyleSheet.create({
   primaryButton: {

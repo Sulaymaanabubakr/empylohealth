@@ -197,7 +197,6 @@ export function HomeScreen({ navigation }) {
       </FadeInView>
     </Screen>
   );
-}
 
 const styles = StyleSheet.create({
   heroCard: {

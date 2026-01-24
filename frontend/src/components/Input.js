@@ -4,7 +4,6 @@ import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../theme/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 
-}
 
 const Input = ({ label, icon, secureTextEntry, ...props }) => {
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);

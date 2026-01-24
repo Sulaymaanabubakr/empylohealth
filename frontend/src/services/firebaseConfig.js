@@ -36,7 +36,6 @@ if (Platform.OS === 'web') {
             .then(() => console.log('[Firebase] Persistence set manually on fallback'))
             .catch((e) => console.error('[Firebase] Failed to set persistence on fallback', e));
     }
-}
 
 const db: Firestore = getFirestore(app);
 const functions: Functions = getFunctions(app, 'us-central1');

@@ -5,8 +5,7 @@ import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-    onClose: () => void;
-}
+    onClose: () ;
 
 const SubscriptionSuccessModal = ({ visible, onClose }) => {
     return (

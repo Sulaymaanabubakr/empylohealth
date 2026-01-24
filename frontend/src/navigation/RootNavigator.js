@@ -24,4 +24,3 @@ export function RootNavigator() {
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
     </Stack.Navigator>
   );
-}

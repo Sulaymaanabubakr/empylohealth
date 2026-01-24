@@ -75,7 +75,6 @@ export function SettingsScreen({ navigation }) {
       />
     </Screen>
   );
-}
 
 const styles = StyleSheet.create({
   divider: {

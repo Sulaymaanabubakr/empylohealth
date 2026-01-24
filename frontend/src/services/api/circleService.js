@@ -186,7 +186,7 @@ export const circleService = {
         }
     },
 
-    subscribeToScheduledHuddles: (circleId) => void) => {
+    subscribeToScheduledHuddles: (circleId) ) => {
         const q = query(
             collection(db, 'circles', circleId, 'scheduledHuddles'),
             orderBy('scheduledAt', 'asc')
@@ -202,7 +202,7 @@ export const circleService = {
     /**
      * Subscribe to my member status in a specific circle (Real-time Role)
      */
-    subscribeToCircleMember: (circleId) => void) => {
+    subscribeToCircleMember: (circleId) ) => {
         const docRef = doc(db, 'circles', circleId, 'members', uid);
         return onSnapshot(docRef, (doc) => {
             if (doc.exists()) {

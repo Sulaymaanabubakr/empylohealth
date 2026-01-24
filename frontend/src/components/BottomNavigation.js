@@ -5,7 +5,6 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 
     activeTab: 'Home' | 'Explore' | 'Chat' | 'Profile';
-}
 
 const BottomNavigation = ({ navigation, activeTab }) => {
     const insets = useSafeAreaInsets();

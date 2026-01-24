@@ -46,7 +46,6 @@ export function CommunityScreen({ navigation }) {
       <PrimaryButton label="Create a circle" onPress={() => navigation.navigate('CreateCircle')} />
     </Screen>
   );
-}
 
 const styles = StyleSheet.create({
   divider: {

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, ReactNode } from 'react';
 import { Animated } from 'react-native';
 
   children: ReactNode;
-}
 
 export const FadeInView = ({ children, delay = 0 }) => {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -31,4 +30,3 @@ export const FadeInView = ({ children, delay = 0 }) => {
       {children}
     </Animated.View>
   );
-}

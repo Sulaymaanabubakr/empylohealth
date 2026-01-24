@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'rea
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Feather } from '@expo/vector-icons';
 
-    onSelect: (value) => void;
-}
+    onSelect: (value) ;
 
 const Dropdown = ({ label, value, options, onSelect, icon, placeholder = 'Select' }) => {
     const [isOpen, setIsOpen] = useState(false);

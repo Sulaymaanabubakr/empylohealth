@@ -17,7 +17,6 @@ const getColor = (name) => {
   return `hsl(${hue}, 45%, 55%)`;
 };
 
-}
 
 const Avatar = ({ uri, name, size = 56, style }) => {
   const initials = getInitials(name);

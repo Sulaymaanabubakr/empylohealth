@@ -5,7 +5,6 @@ import { StatusBar } from 'expo-status-bar';
 import { theme } from '../theme/theme';
 
   children: ReactNode;
-}
 
 export const Screen = ({ children, hero }) => {
   return (
@@ -21,7 +20,6 @@ export const Screen = ({ children, hero }) => {
       </SafeAreaView>
     </View>
   );
-}
 
 const styles = StyleSheet.create({
   screen: {

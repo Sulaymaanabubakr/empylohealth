@@ -95,7 +95,6 @@ export function CheckInScreen() {
       </FadeInView>
     </Screen>
   );
-}
 
 const styles = StyleSheet.create({
   heroArea: {

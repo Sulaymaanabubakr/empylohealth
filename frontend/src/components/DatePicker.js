@@ -4,8 +4,7 @@ import { Calendar, DateData } from 'react-native-calendars';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Feather } from '@expo/vector-icons';
 
-    onSelect: (date) => void;
-}
+    onSelect: (date) ;
 
 const DatePicker = ({ label, value, onSelect, icon, placeholder = 'Select date' }) => {
     const [isOpen, setIsOpen] = useState(false);

@@ -5,8 +5,7 @@ import { COLORS } from '../theme/theme';
 
 const THUMB_SIZE = 40;
 
-    onValueChange: (value) => void;
-}
+    onValueChange: (value) ;
 
 const VisibleSlider = ({ value, onValueChange, steps = 5 }) => {
     // Calculate thumb position as percentage

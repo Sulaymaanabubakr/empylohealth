@@ -45,4 +45,3 @@ export function MainTabs() {
       <Tabs.Screen name="Profile" component={ProfileScreen} />
     </Tabs.Navigator>
   );
-}

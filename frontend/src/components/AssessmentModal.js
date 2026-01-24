@@ -5,9 +5,8 @@ import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-    onClose: () => void;
-    onTakeNow: () => void;
-}
+    onClose: () ;
+    onTakeNow: () ;
 
 const AssessmentModal = ({ visible, onClose, onTakeNow, type = 'daily' }) => {
     const isWeekly = type === 'weekly';

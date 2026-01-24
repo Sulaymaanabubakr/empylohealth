@@ -5,7 +5,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { SvgXml } from 'react-native-svg';
 
   source: any; // Expo asset module
-}
 
 export const SvgScreen = ({ source, background = '#FFFFFF' }) => {
   const [xml, setXml] = useState(null);
@@ -37,7 +36,6 @@ export const SvgScreen = ({ source, background = '#FFFFFF' }) => {
       {xml ? <SvgXml xml={xml} width="100%" height="100%" /> : null}
     </View>
   );
-}
 
 const styles = StyleSheet.create({
   root: {

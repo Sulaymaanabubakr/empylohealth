@@ -2,12 +2,10 @@ import { functions, db } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, Unsubscribe } from 'firebase/firestore';
 
-}
 
     createdAt: Date;
     user: {
     };
-}
 
 export const chatService = {
     /**
@@ -48,7 +46,7 @@ export const chatService = {
      * @param {string} chatId 
      * @param {function} callback 
      */
-    subscribeToMessages: (chatId) => void): Unsubscribe => {
+    subscribeToMessages: (chatId) ): Unsubscribe => {
         const q = query(
             collection(db, 'chats', chatId, 'messages'),
             orderBy('createdAt', 'desc'),
@@ -77,7 +75,7 @@ export const chatService = {
      * @param {string} uid 
      * @param {function} callback 
      */
-    subscribeToChatList: (uid) => void): Unsubscribe => {
+    subscribeToChatList: (uid) ): Unsubscribe => {
         const q = query(
             collection(db, 'chats'),
             where('participants', 'array-contains', uid),

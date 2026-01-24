@@ -3,7 +3,6 @@ import Svg, { Circle, Path, G } from 'react-native-svg';
 import { COLORS } from '../theme/theme';
 
     type: 0 | 1 | 2 | 3 | 4 | 5;
-}
 
 const EmojiFace = ({ type, size = 160 }) => {
     // Shared props
