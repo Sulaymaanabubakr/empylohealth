@@ -1,22 +1,10 @@
-import React, { createContext, useState, useContext, useCallback, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useCallback } from 'react';
 import Toast from '../components/Toast';
 
-    visible: boolean;
-    message: string;
-    type: 'info' | 'success' | 'error' | 'warning';
-}
-
-    showToast: (message) => void;
-    hideToast: () => void;
-}
-
-const ToastContext = createContext<ToastContextType | undefined>(undefined);
-
-    children: ReactNode;
-}
+const ToastContext = createContext(undefined);
 
 export const ToastProvider = ({ children }) => {
-    const [toast, setToast] = useState<ToastState>({
+    const [toast, setToast] = useState({
         visible: false,
         message: '',
         type: 'info',
@@ -43,7 +31,7 @@ export const ToastProvider = ({ children }) => {
     );
 };
 
-export const useToast = (): ToastContextType => {
+export const useToast = () => {
     const context = useContext(ToastContext);
     if (!context) {
         throw new Error('useToast must be used within a ToastProvider');
