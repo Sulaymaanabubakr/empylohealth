@@ -10,3 +10,9 @@ android/app/build
 android/build
 **/*.zip
 **/*.tar.gz
+
+# Allow Google Services for EAS Build (overrides .gitignore)
+!google-services.json
+!**/google-services.json
+!GoogleService-Info.plist
+!**/GoogleService-Info.plist
