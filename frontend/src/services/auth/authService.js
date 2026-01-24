@@ -92,7 +92,7 @@ export const authService = {
     /**
      * Update Firebase Auth profile
      */
-    updateAuthProfile: async (displayName?: string, photoURL?: string) => {
+    updateAuthProfile: async (displayName, photoURL) => {
         const user = auth.currentUser;
         if (!user) throw new Error('No authenticated user.');
         await updateProfile(user, { displayName, photoURL });

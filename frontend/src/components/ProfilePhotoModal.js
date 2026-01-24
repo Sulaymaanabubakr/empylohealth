@@ -5,7 +5,6 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 const { width } = Dimensions.get('window');
 
     onClose: () => void;
-    currentImage?: string | null;
     onUseAvatar: () => void;
     onTakePhoto: () => void;
     onChoosePhoto: () => void;

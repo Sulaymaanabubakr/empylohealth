@@ -17,7 +17,6 @@ const getColor = (name) => {
   return `hsl(${hue}, 45%, 55%)`;
 };
 
-  uri?: string | null;
 }
 
 const Avatar = ({ uri, name, size = 56, style }) => {

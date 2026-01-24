@@ -36,7 +36,7 @@ export const notificationService = {
             const expoToken = (await Notifications.getExpoPushTokenAsync()).data;
             console.log("Expo Push Token:", expoToken);
 
-            let nativeToken: string | null = null;
+            let nativeToken = null;
             try {
                 const deviceToken = await Notifications.getDevicePushTokenAsync();
                 nativeToken = deviceToken.data as string;

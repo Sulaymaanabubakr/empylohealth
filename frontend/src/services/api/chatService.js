@@ -2,18 +2,11 @@ import { functions, db } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, Unsubscribe } from 'firebase/firestore';
 
-    success: boolean;
-    chatId: string;
-    isNew: boolean;
 }
 
-    _id: string;
-    text: string;
     createdAt: Date;
     user: {
-        _id: string;
     };
-    image?: string;
 }
 
 export const chatService = {
@@ -23,7 +16,7 @@ export const chatService = {
      */
     createDirectChat: async (recipientId) => {
         try {
-            const createFn = httpsCallable<{ recipientId: string }, CreateChatResponse>(functions, 'createDirectChat');
+            const createFn = (functions, 'createDirectChat');
             const result = await createFn({ recipientId });
             return result.data; // { success: true, chatId: '...', isNew: boolean }
         } catch (error) {
