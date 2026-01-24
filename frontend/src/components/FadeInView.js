@@ -30,3 +30,4 @@ export const FadeInView = ({ children, delay = 0 }) => {
       {children}
     </Animated.View>
   );
+export default FadeInView;

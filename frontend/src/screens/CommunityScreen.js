@@ -59,3 +59,4 @@ const styles = StyleSheet.create({
     padding: theme.space.md,
   },
 });
+export default CommunityScreen;

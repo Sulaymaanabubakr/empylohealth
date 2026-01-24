@@ -33,3 +33,4 @@ const styles = StyleSheet.create({
     top: 26,
   },
 });
+export default LogoMark;

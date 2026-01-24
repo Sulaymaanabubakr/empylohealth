@@ -23,3 +23,4 @@ const styles = StyleSheet.create({
     color: theme.colors.brandDark,
   },
 });
+export default Pill;

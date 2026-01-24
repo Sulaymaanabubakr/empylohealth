@@ -21,3 +21,4 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 });
+export default Card;

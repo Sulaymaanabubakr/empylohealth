@@ -53,3 +53,4 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF7FF',
   },
 });
+export default Screen;

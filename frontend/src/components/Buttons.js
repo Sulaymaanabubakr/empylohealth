@@ -49,3 +49,4 @@ const styles = StyleSheet.create({
     color: theme.colors.ink,
   },
 });
+export default Buttons;

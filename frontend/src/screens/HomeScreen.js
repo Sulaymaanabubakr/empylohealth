@@ -252,3 +252,4 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.divider,
   },
 });
+export default HomeScreen;
