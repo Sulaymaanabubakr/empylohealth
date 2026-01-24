@@ -3,11 +3,7 @@ import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import { Ionicons } from '@expo/vector-icons';
 
-    type?: 'info' | 'success' | 'error' | 'warning';
-    onHide?: () => void;
-}
-
-const Toast = ({ message, type = 'info', visible, onHide }) => {
+const Toast = ({ visible, message, type = 'info', onHide }) => {
     const opacity = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(-20)).current;
 
