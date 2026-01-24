@@ -2,7 +2,6 @@ import React, { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme, COLORS } from '../theme/theme';
 
-  right?: ReactNode;
 }
 
 export const AppBar = ({ title, subtitle, right }) => {

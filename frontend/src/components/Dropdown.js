@@ -3,9 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'rea
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Feather } from '@expo/vector-icons';
 
-    options: string[];
     onSelect: (value) => void;
-    icon?: ReactNode;
 }
 
 const Dropdown = ({ label, value, options, onSelect, icon, placeholder = 'Select' }) => {

@@ -3,9 +3,6 @@ import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, StyleProp, ViewS
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../theme/theme';
 
     onPress: () => void;
-    type?: 'primary' | 'secondary';
-    style?: StyleProp<ViewStyle>;
-    textStyle?: StyleProp<TextStyle>;
 }
 
 const Button = ({ title, onPress, type = 'primary', loading = false, style, textStyle }) => {

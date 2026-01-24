@@ -2,8 +2,6 @@ import React, { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../theme/theme';
 
-  right?: ReactNode;
-  icon?: ReactNode;
 }
 
 export const ListRow = ({ title, subtitle, right, icon }) => {

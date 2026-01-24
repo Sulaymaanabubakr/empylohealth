@@ -7,7 +7,6 @@ const { width } = Dimensions.get('window');
 
     onClose: () => void;
     onTakeNow: () => void;
-    type?: 'daily' | 'weekly';
 }
 
 const AssessmentModal = ({ visible, onClose, onTakeNow, type = 'daily' }) => {

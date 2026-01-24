@@ -26,18 +26,10 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 
-success: boolean;
-mfaRequired ?: boolean;
-hints ?: MultiFactorInfo[];
-user ?: User;
 }
 
-verified: boolean;
 }
 
-success: boolean;
-cancelled ?: boolean;
-user ?: User;
 }
 
 /**
@@ -49,7 +41,7 @@ export const authService = {
      * Initialize Google Sign In
      * @param {string} webClientId - From Firebase Console > Auth > Google > Web SDK config
      */
-    init: (webClientId): void => {
+    init: (webClientId() => {
         GoogleSignin.configure({
             webClientId: webClientId || 'YOUR_WEB_CLIENT_ID_FROM_FIREBASE_CONSOLE',
         });
@@ -171,7 +163,7 @@ export const authService = {
 getCurrentUser: (): User | null => auth.currentUser,
 
     getPendingMfaResolver: (): MultiFactorResolver | null => authService._pendingMfaResolver,
-        clearPendingMfaResolver: (): void => {
+        clearPendingMfaResolver: (() => {
             authService._pendingMfaResolver = null;
         },
 

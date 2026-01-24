@@ -5,7 +5,6 @@ import { StatusBar } from 'expo-status-bar';
 import { theme } from '../theme/theme';
 
   children: ReactNode;
-  hero?: ReactNode;
 }
 
 export const Screen = ({ children, hero }) => {
