@@ -56,10 +56,12 @@ firebase deploy --only functions:onUserCreate,functions:onMessageCreate
 
 ## Admin Dashboard
 
+The admin app lives under `web/admin/`.
+
 ### Build for Production
 
 ```bash
-cd admin
+cd web/admin
 npm run build
 ```
 
@@ -74,7 +76,7 @@ firebase deploy --only hosting:admin
 ### Local Development
 
 ```bash
-cd admin
+cd web/admin
 npm run dev
 ```
 
@@ -157,7 +159,7 @@ DAILY_API_KEY=your_daily_key
 CONTACT_ALLOWED_ORIGINS=*
 ```
 
-### Admin (.env in admin/)
+### Admin (web/admin/.env)
 
 ```
 VITE_FIREBASE_API_KEY=...
@@ -167,6 +169,8 @@ VITE_FIREBASE_STORAGE_BUCKET=...
 VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
 ```
+
+Seed/backfill are done from the terminal in this workspace; see **docs/SEEDING.md**.
 
 ### Frontend (app.config.js)
 
@@ -178,8 +182,8 @@ Firebase config is embedded in `frontend/src/services/firebaseConfig.ts` directl
 - [ ] Backend functions deployed (`firebase deploy --only functions`)
 - [ ] Firestore rules deployed (`firebase deploy --only firestore:rules`)
 - [ ] Firestore indexes deployed (`firebase deploy --only firestore:indexes`)
-- [ ] Admin dashboard built (`cd admin && npm run build`)
-- [ ] Admin dashboard tested locally (`cd admin && npm run dev`)
+- [ ] Admin dashboard built (`cd web/admin && npm run build`)
+- [ ] Admin dashboard tested locally (`cd web/admin && npm run dev`)
 - [ ] Frontend mobile app tested on physical device
 - [ ] Environment variables verified for all projects
 
@@ -188,7 +192,7 @@ Firebase config is embedded in `frontend/src/services/firebaseConfig.ts` directl
 | Component | Directory | Build Command | Deploy Command |
 |-----------|-----------|---------------|----------------|
 | Backend Functions | `backend/` | `npm run build` | `firebase deploy --only functions` |
-| Admin Dashboard | `admin/` | `npm run build` | N/A (local or hosting) |
+| Admin Dashboard | `web/admin/` | `npm run build` | N/A (local or hosting) |
 | Frontend App | `frontend/` | N/A | `eas build` |
 | Firestore Rules | Root | N/A | `firebase deploy --only firestore:rules` |
 | Firestore Indexes | Root | N/A | `firebase deploy --only firestore:indexes` |

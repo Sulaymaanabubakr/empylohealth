@@ -1,22 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
 import { DashboardCard } from '../components/DashboardCard';
-// import { RecentFiles } from '../components/RecentFiles'; // Keep for later refactor
 
 export const Dashboard = () => {
     const [stats, setStats] = useState({ users: 0, circles: 0, resources: 0, pending: 0, storage: null as string | null });
-    const [seedToken, setSeedToken] = useState(import.meta.env.VITE_SEED_TOKEN || '');
-    const [seedStatus, setSeedStatus] = useState<string | null>(null);
-    const [seedLoading, setSeedLoading] = useState(false);
-
-    const getFunctionsBaseUrl = () => {
-        const envUrl = import.meta.env.VITE_FUNCTIONS_BASE_URL;
-        if (envUrl) return envUrl.replace(/\/+$/, '');
-        const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
-        return projectId ? `https://us-central1-${projectId}.cloudfunctions.net` : '';
-    };
+    const didFetchRef = useRef(false);
+    const CACHE_KEY = 'dashboard_stats_v1';
+    const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
     const handleDownloadReport = () => {
         const rows = [
@@ -40,84 +32,44 @@ export const Dashboard = () => {
         URL.revokeObjectURL(url);
     };
 
-    const runSeed = async () => {
-        if (!seedToken) {
-            setSeedStatus('Seed token required.');
-            return;
-        }
-        const baseUrl = getFunctionsBaseUrl();
-        if (!baseUrl) {
-            setSeedStatus('Functions base URL not configured.');
-            return;
-        }
-        setSeedLoading(true);
-        setSeedStatus(null);
-        try {
-            const response = await fetch(`${baseUrl}/seedAll?token=${encodeURIComponent(seedToken)}`, {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data?.error || 'Seed failed');
-            }
-            setSeedStatus(`Seed complete. ${JSON.stringify(data.results)}`);
-        } catch (error: any) {
-            setSeedStatus(error?.message || 'Seed failed');
-        } finally {
-            setSeedLoading(false);
-        }
-    };
-
-    const runBackfillImages = async () => {
-        if (!seedToken) {
-            setSeedStatus('Seed token required.');
-            return;
-        }
-        const baseUrl = getFunctionsBaseUrl();
-        if (!baseUrl) {
-            setSeedStatus('Functions base URL not configured.');
-            return;
-        }
-        setSeedLoading(true);
-        setSeedStatus(null);
-        try {
-            const response = await fetch(`${baseUrl}/backfillAffirmationImages?token=${encodeURIComponent(seedToken)}`, {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data?.error || 'Backfill failed');
-            }
-            setSeedStatus(`Backfill complete. ${JSON.stringify(data.result)}`);
-        } catch (error: any) {
-            setSeedStatus(error?.message || 'Backfill failed');
-        } finally {
-            setSeedLoading(false);
-        }
-    };
-
     useEffect(() => {
+        // Serve cached stats immediately if fresh to avoid reloading on tab switches
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+            try {
+                const { data, ts } = JSON.parse(cached);
+                if (Date.now() - ts < CACHE_TTL_MS) {
+                    setStats(data);
+                    didFetchRef.current = true;
+                }
+            } catch {
+                // ignore cache parse errors
+            }
+        }
+
+        // Fetch once per mount if not already fetched or cache stale
+        if (didFetchRef.current) return;
+        didFetchRef.current = true;
+
         const fetchStats = async () => {
             try {
                 const getDashboardStats = httpsCallable(functions, 'getDashboardStats');
                 const result = await getDashboardStats();
                 const data = result.data as any;
-                setStats({
+                const parsed = {
                     users: data.users || 0,
                     circles: data.circles || 0,
                     resources: data.resources || 0,
                     pending: data.pendingCircles || 0,
                     storage: data.storageUsed || null
-                });
+                };
+                setStats(parsed);
+                sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data: parsed, ts: Date.now() }));
             } catch (error) {
                 console.error("Failed to fetch dashboard stats", error);
-            } finally {
-                // Done
             }
         };
-        fetchStats();
+        void fetchStats();
     }, []);
 
     return (
@@ -146,43 +98,6 @@ export const Dashboard = () => {
                 <DashboardCard title="Active Circles" files={stats.circles} size="Community" type="success" />
                 <DashboardCard title="Resources" files={stats.resources} size="Library" type="default" />
                 <DashboardCard title="Pending Review" files={stats.pending} size="Action Req" type="pending" />
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                    <div>
-                        <h3 className="font-bold text-gray-900">Seed Content</h3>
-                        <p className="text-sm text-gray-500">Run seed and affirmation image backfill directly from admin.</p>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                        <input
-                            type="password"
-                            value={seedToken}
-                            onChange={(event) => setSeedToken(event.target.value)}
-                            placeholder="Seed token"
-                            className="w-full sm:w-64 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
-                        />
-                        <button
-                            onClick={runSeed}
-                            disabled={seedLoading}
-                            className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-gray-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            {seedLoading ? 'Working…' : 'Seed All'}
-                        </button>
-                        <button
-                            onClick={runBackfillImages}
-                            disabled={seedLoading}
-                            className="bg-gray-100 hover:bg-gray-200 text-gray-900 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            {seedLoading ? 'Working…' : 'Backfill Images'}
-                        </button>
-                    </div>
-                </div>
-                {seedStatus && (
-                    <div className="text-xs text-gray-500 break-words">
-                        {seedStatus}
-                    </div>
-                )}
             </div>
 
             {/* Main Content Sections - Placeholder for now until Charts/Tables are refactored */}

@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.deleteUserAccount = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.submitContactForm = exports.getAffirmations = exports.getRecommendedContent = exports.getExploreContent = exports.updateSubscription = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.seedAssessmentQuestions = exports.seedResources = exports.seedChallenges = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.startHuddle = exports.submitReport = exports.resolveCircleReport = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.updateCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
-exports.createEmployee = void 0;
+exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.deleteUserAccount = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.submitContactForm = exports.getAffirmations = exports.getRecommendedContent = exports.getExploreContent = exports.updateSubscription = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.seedAssessmentQuestions = exports.seedResources = exports.seedChallenges = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.startHuddle = exports.submitReport = exports.resolveCircleReport = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.updateCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
+exports.createEmployee = exports.updateTicketStatus = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Admin SDK once at entry point
 if (admin.apps.length === 0) {
@@ -74,6 +74,7 @@ exports.seedAssessmentQuestions = coreApi.seedAssessmentQuestions;
 exports.seedAffirmations = coreApi.seedAffirmations;
 exports.backfillAffirmationImages = coreApi.backfillAffirmationImages;
 exports.seedAll = coreApi.seedAll;
+exports.getSeedStatus = coreApi.getSeedStatus;
 exports.updateSubscription = coreApi.updateSubscription;
 exports.getExploreContent = coreApi.getExploreContent;
 exports.getRecommendedContent = coreApi.getRecommendedContent;

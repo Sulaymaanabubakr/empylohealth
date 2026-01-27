@@ -54,6 +54,8 @@ const ExploreScreen = ({ navigation }) => {
     const filteredAffirmations = affirmations.filter((item) => {
         if (!activeFilter) return true;
         const tags = item.tags || [];
+        // If an affirmation has no tags, surface it instead of hiding it behind the filter.
+        if (tags.length === 0) return true;
         return tags.includes(activeFilter);
     });
 

@@ -41,6 +41,7 @@ export const seedAssessmentQuestions = coreApi.seedAssessmentQuestions;
 export const seedAffirmations = coreApi.seedAffirmations;
 export const backfillAffirmationImages = coreApi.backfillAffirmationImages;
 export const seedAll = coreApi.seedAll;
+export const getSeedStatus = coreApi.getSeedStatus;
 export const updateSubscription = coreApi.updateSubscription;
 
 export const getExploreContent = coreApi.getExploreContent;

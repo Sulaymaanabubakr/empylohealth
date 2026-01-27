@@ -143,57 +143,10 @@ export declare const getAffirmations: functions.HttpsFunction & functions.Runnab
 export declare const seedAffirmations: functions.HttpsFunction & functions.Runnable<any>;
 export declare const backfillAffirmationImages: functions.HttpsFunction;
 export declare const seedAll: functions.HttpsFunction;
+export declare const getSeedStatus: functions.HttpsFunction;
 export declare const sendAffirmationsMorning: functions.CloudFunction<unknown>;
 export declare const sendAffirmationsAfternoon: functions.CloudFunction<unknown>;
 export declare const sendAffirmationsEvening: functions.CloudFunction<unknown>;
 export declare const submitContactForm: functions.HttpsFunction;
 export declare const deleteUserAccount: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Get Dashboard Stats
- */
-export declare const getDashboardStats: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Get All Content (Admin)
- * data: { type: 'circles'|'resources'|'affirmations', limit: number }
- */
-export declare const getAllContent: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Update Content Status
- * data: { collection: string, docId: string, status: string }
- */
-export declare const updateContentStatus: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Delete Item (Admin)
- * data: { collection: string, id: string }
- */
-export declare const deleteItem: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Get Admin Affirmations
- */
-export declare const getAdminAffirmations: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Create Affirmation
- */
-export declare const createAffirmation: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Delete Affirmation
- */
-export declare const deleteAffirmation: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Get Transactions
- * (Reads from 'transactions' collection if available)
- */
-export declare const getTransactions: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Get All Users (Admin)
- */
-export declare const getAllUsers: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Create Employee (Admin)
- */
-export declare const createEmployee: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Toggle User Status
- */
-export declare const toggleUserStatus: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=core.d.ts.map

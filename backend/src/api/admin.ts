@@ -233,7 +233,8 @@ export const getAdminAffirmations = functions.https.onCall(async (data, context)
     const { limit = 50, startAfterId } = data || {};
 
     try {
-        let query = db.collection('affirmations').orderBy('createdAt', 'desc').limit(limit);
+        // Use publishedAt for stable ordering (always present in seeded + created items)
+        let query = db.collection('affirmations').orderBy('publishedAt', 'desc').limit(limit);
 
         if (startAfterId) {
             const lastDoc = await db.collection('affirmations').doc(startAfterId).get();
@@ -246,7 +247,7 @@ export const getAdminAffirmations = functions.https.onCall(async (data, context)
         const items = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate().toISOString()
+            createdAt: doc.data().createdAt?.toDate().toISOString() || doc.data().publishedAt?.toDate().toISOString()
         }));
 
         return { items, lastId: items.length > 0 ? items[items.length - 1]?.id : null };
@@ -272,6 +273,7 @@ export const createAffirmation = functions.https.onCall(async (data, context) =>
             content,
             scheduledDate: scheduledDate || null,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            publishedAt: admin.firestore.FieldValue.serverTimestamp(),
             createdBy: context.auth!.uid,
             isNew: true
         });

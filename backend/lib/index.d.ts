@@ -24,6 +24,7 @@ export declare const seedAssessmentQuestions: import("firebase-functions/v1").Ht
 export declare const seedAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const backfillAffirmationImages: import("firebase-functions/v1").HttpsFunction;
 export declare const seedAll: import("firebase-functions/v1").HttpsFunction;
+export declare const getSeedStatus: import("firebase-functions/v1").HttpsFunction;
 export declare const updateSubscription: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getExploreContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getRecommendedContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

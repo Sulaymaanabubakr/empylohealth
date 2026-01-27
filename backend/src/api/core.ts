@@ -780,14 +780,13 @@ export const submitAssessment = functions.https.onCall(async (data, context) => 
  * Callable Function: 'seedAssessmentQuestions'
  */
 export const seedAssessmentQuestions = functions.https.onCall(async (data, context) => {
-    // Basic Admin Check (or open for dev)
-    // requireAdmin(context); // Verify if context has admin claim, or just proceed if dev.
+    requireAdmin(context);
 
     // Explicit list of default questions
     const questions = [
         { text: "I've been feeling relaxed", type: "scale", category: "General", tags: ["Stress"], weight: 1, order: 1, isActive: true },
         { text: "I've been feeling useful", type: "scale", category: "General", tags: ["Motivation"], weight: 1, order: 2, isActive: true },
-        { text: "I've been had energy to spare", type: "scale", category: "General", tags: ["Energy"], weight: 1, order: 3, isActive: true },
+        { text: "I've had energy to spare", type: "scale", category: "General", tags: ["Energy"], weight: 1, order: 3, isActive: true },
         { text: "I've been feeling interested in other people", type: "scale", category: "General", tags: ["Social Connection"], weight: 1, order: 4, isActive: true },
         { text: "I've been thinking clearly", type: "scale", category: "General", tags: ["Focus"], weight: 1, order: 5, isActive: true }
     ];
@@ -823,6 +822,8 @@ export const seedAssessmentQuestions = functions.https.onCall(async (data, conte
  * Callable Function: 'seedChallenges'
  */
 export const seedChallenges = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+
     const challenges = seedChallengeData.map((challenge) => ({
         ...challenge,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -856,9 +857,12 @@ export const seedChallenges = functions.https.onCall(async (data, context) => {
  * Callable Function: 'seedResources'
  */
 export const seedResources = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+
     const resources = seedResourceData.map((resource) => ({
         ...resource,
-        publishedAt: admin.firestore.FieldValue.serverTimestamp()
+        publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
     }));
 
     try {
@@ -951,7 +955,8 @@ export const getKeyChallenges = functions.https.onCall(async (data, context) => 
             .map(([theme]) => theme);
 
         // 2. Fetch Challenges matching these themes
-        let query: FirebaseFirestore.Query = db.collection('challenges').where('status', '==', 'published');
+        // Treat 'active' as published/visible; keep compatibility with any legacy 'published'
+        let query: FirebaseFirestore.Query = db.collection('challenges').where('status', 'in', ['active', 'published']);
 
         // If we have specific weak themes, prioritize them or filter by them.
         // For simplicity, if we have weak themes, we filter by them. 
@@ -971,7 +976,7 @@ export const getKeyChallenges = functions.https.onCall(async (data, context) => 
         // If no items found (or no weak themes), fill with general high priority challenges
         if (items.length === 0) {
             const snapshot = await db.collection('challenges')
-                .where('status', '==', 'published')
+                .where('status', 'in', ['active', 'published'])
                 .orderBy('priority', 'desc')
                 .limit(4)
                 .get();
@@ -981,7 +986,7 @@ export const getKeyChallenges = functions.https.onCall(async (data, context) => 
         // If STILL empty, fallback to published resources mapped as challenges
         if (items.length === 0) {
             const snapshot = await db.collection('resources')
-                .where('status', '==', 'published')
+                .where('status', 'in', ['active', 'published'])
                 .orderBy('publishedAt', 'desc')
                 .limit(4)
                 .get();
@@ -1032,7 +1037,7 @@ export const getRecommendedContent = functions.https.onCall(async (data, context
 
         if (weakThemes.length > 0) {
             const snapshot = await db.collection('resources')
-                .where('status', '==', 'published')
+                .where('status', 'in', ['active', 'published'])
                 .where('tags', 'array-contains-any', weakThemes) // Ensure resources have 'tags' array
                 .limit(10)
                 .get();
@@ -1042,7 +1047,7 @@ export const getRecommendedContent = functions.https.onCall(async (data, context
         // Fill with generic if empty
         if (items.length < 5) {
             const snapshot = await db.collection('resources')
-                .where('status', '==', 'published')
+                .where('status', 'in', ['active', 'published'])
                 .orderBy('publishedAt', 'desc')
                 .limit(10 - items.length)
                 .get();
@@ -1113,23 +1118,14 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
         }
 
-        // PERMISSION CHECK: If it's a circle chat, enforce Admin/Mod/Creator
+        // PERMISSION CHECK: If it's a circle chat, only Creator or Admin can start a huddle
         if (chatData?.circleId) {
             const circleId = chatData.circleId;
             const memberDoc = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
             const role = memberDoc.data()?.role;
 
-            // Allow Creators, Admins, Moderators
-            // Allow Creators, Admins, Moderators
-            if (!['creator', 'admin', 'moderator'].includes(role)) {
-                // Check if circle settings allow members to start huddles
-                // We need to fetch circle settings if not admin/mod
-                const circleDoc = await db.collection('circles').doc(circleId).get();
-                const settings = circleDoc.data()?.settings || {};
-
-                if (!settings.allowMemberHuddles) {
-                    throw new functions.https.HttpsError('permission-denied', 'Only Admins and Moderators can start a huddle.');
-                }
+            if (!['creator', 'admin'].includes(role)) {
+                throw new functions.https.HttpsError('permission-denied', 'Only the circle creator or an admin can start a huddle.');
             }
         }
 
@@ -1298,13 +1294,25 @@ export const scheduleHuddle = functions.https.onCall(async (data, context) => {
 export const deleteScheduledHuddle = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const { circleId, eventId } = data;
+    const uid = context.auth.uid;
 
-    // ... Permission check similar to above ...
-    // Simplified for brevity in this turn
+    if (!circleId || !eventId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing circleId or eventId.');
+    }
+
     try {
+        const memberRef = db.collection('circles').doc(circleId).collection('members').doc(uid);
+        const memberDoc = await memberRef.get();
+        const role = memberDoc.data()?.role;
+
+        if (!memberDoc.exists || !['creator', 'admin', 'moderator'].includes(role)) {
+            throw new functions.https.HttpsError('permission-denied', 'Only admins and moderators can delete scheduled huddles.');
+        }
+
         await db.collection('circles').doc(circleId).collection('scheduledHuddles').doc(eventId).delete();
         return { success: true };
     } catch (error) {
+        if (error instanceof functions.https.HttpsError) throw error;
         throw new functions.https.HttpsError('internal', 'Delete failed.');
     }
 });
@@ -1459,7 +1467,7 @@ export const getExploreContent = functions.https.onCall(async (data, context) =>
 
     try {
         const snapshot = await db.collection('resources')
-            .where('status', '==', 'published')
+            .where('status', 'in', ['active', 'published'])
             .orderBy('publishedAt', 'desc')
             .limit(30)
             .get();
@@ -1483,36 +1491,47 @@ export const getAffirmations = functions.https.onCall(async (data, context) => {
         const dailyRef = db.collection('daily_affirmations').doc(todayKey);
         const dailyDoc = await dailyRef.get();
 
-        let affirmationIds: string[] = [];
-        if (dailyDoc.exists) {
-            affirmationIds = dailyDoc.data()?.affirmationIds || [];
-        }
-
-        if (affirmationIds.length === 0) {
+        const buildDailySet = async (): Promise<string[]> => {
             const snapshot = await db.collection('affirmations')
-                .where('status', '==', 'published')
                 .orderBy('publishedAt', 'desc')
                 .limit(200)
                 .get();
             const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            const picks = pickRandomItems(all, 3);
-            affirmationIds = picks.map((item: any) => item.id);
+            // Accept active/published or missing status; filter out suspended/rejected
+            const filtered = all.filter((a: any) => !a.status || ['active', 'published'].includes(a.status));
+            if (filtered.length === 0) return [];
+            const picks = pickRandomItems(filtered, 3);
+            const ids = picks.map((item: any) => item.id);
             await dailyRef.set({
                 date: todayKey,
-                affirmationIds,
+                affirmationIds: ids,
                 createdAt: admin.firestore.FieldValue.serverTimestamp()
             });
-        }
+            return ids;
+        };
 
+        let affirmationIds: string[] = dailyDoc.exists ? (dailyDoc.data()?.affirmationIds || []) : [];
         if (affirmationIds.length === 0) {
-            return { items: [] };
+            affirmationIds = await buildDailySet();
         }
 
-        const snapshot = await db.collection('affirmations')
-            .where(admin.firestore.FieldPath.documentId(), 'in', affirmationIds)
-            .get();
-        const byId = new Map(snapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() }]));
-        const items = affirmationIds.map(id => byId.get(id)).filter(Boolean);
+        const fetchByIds = async (ids: string[]) => {
+            if (ids.length === 0) return [];
+            const snapshot = await db.collection('affirmations')
+                .where(admin.firestore.FieldPath.documentId(), 'in', ids)
+                .get();
+            const byId = new Map(snapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() }]));
+            return ids.map(id => byId.get(id)).filter(Boolean);
+        };
+
+        let items = await fetchByIds(affirmationIds);
+
+        // If the stored ids no longer exist or were filtered out, rebuild once
+        if (items.length === 0) {
+            affirmationIds = await buildDailySet();
+            items = await fetchByIds(affirmationIds);
+        }
+
         return { items };
     } catch (error) {
         console.error("Error fetching affirmations:", error);
@@ -1623,7 +1642,9 @@ export const seedAffirmations = functions.https.onCall(async (data, context) => 
     const affirmations = seedAffirmationData.map((affirmation, index) => ({
         ...affirmation,
         image: seedAffirmationImages[index % seedAffirmationImages.length],
-        publishedAt: admin.firestore.FieldValue.serverTimestamp()
+        publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: affirmation.status || 'active'
     }));
 
     try {
@@ -1655,6 +1676,32 @@ const allowSeedOrigin = (req: functions.https.Request, res: functions.Response) 
     }
     res.set('Access-Control-Allow-Methods', 'GET,OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type, x-seed-token');
+};
+
+const clearCollection = async (collectionName: string) => {
+    const batchSize = 400;
+    let deleted = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+        const snapshot = await db.collection(collectionName).limit(batchSize).get();
+        if (snapshot.empty) break;
+        const batch = db.batch();
+        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+        deleted += snapshot.size;
+        if (snapshot.size < batchSize) break;
+    }
+    return deleted;
+};
+
+const seedCollectionHelper = async (collectionName: string, items: any[], mapItem?: (item: any, index: number) => any) => {
+    const batch = db.batch();
+    items.forEach((item, index) => {
+        const docRef = db.collection(collectionName).doc();
+        batch.set(docRef, mapItem ? mapItem(item, index) : item);
+    });
+    await batch.commit();
+    return { success: true, count: items.length };
 };
 
 const backfillAffirmationImagesInternal = async () => {
@@ -1712,14 +1759,20 @@ export const backfillAffirmationImages = functions.https.onRequest(async (req, r
         res.status(204).send('');
         return;
     }
-    const token = (req.query.token as string) || (req.headers['x-seed-token'] as string) || '';
-    const expected = process.env.SEED_TOKEN || 'seed-a31e736fb9167864e96b4fcb2c254671';
-    if (!expected || token !== expected) {
-        res.status(403).json({ error: 'Forbidden' });
-        return;
-    }
 
+    const force = req.query.force === '1';
     try {
+        if (force) {
+            // If force flag set and affirmations missing, seed them with images first
+            const existing = await db.collection('affirmations').limit(1).get();
+            if (existing.empty) {
+                await seedCollectionHelper('affirmations', seedAffirmationData, (item, index) => ({
+                    ...item,
+                    image: seedAffirmationImages[index % seedAffirmationImages.length],
+                    publishedAt: admin.firestore.FieldValue.serverTimestamp()
+                }));
+            }
+        }
         const result = await backfillAffirmationImagesInternal();
         res.status(200).json({ success: true, result });
     } catch (error: any) {
@@ -1734,19 +1787,18 @@ export const seedAll = functions.https.onRequest(async (req, res) => {
         res.status(204).send('');
         return;
     }
-    const token = (req.query.token as string) || (req.headers['x-seed-token'] as string) || '';
-    const expected = process.env.SEED_TOKEN || 'seed-a31e736fb9167864e96b4fcb2c254671';
-    if (!expected || token !== expected) {
-        res.status(403).json({ error: 'Forbidden' });
-        return;
-    }
+
+    const force = req.query.force === '1';
 
     const results: Record<string, any> = {};
 
     const seedCollection = async (collectionName: string, items: any[], mapItem?: (item: any, index: number) => any) => {
         const existing = await db.collection(collectionName).limit(1).get();
-        if (!existing.empty) {
+        if (!existing.empty && !force) {
             return { skipped: true, reason: 'already seeded' };
+        }
+        if (!existing.empty && force) {
+            results[`${collectionName}_cleared`] = await clearCollection(collectionName);
         }
         const batch = db.batch();
         items.forEach((item, index) => {
@@ -1760,7 +1812,8 @@ export const seedAll = functions.https.onRequest(async (req, res) => {
     try {
         results.resources = await seedCollection('resources', seedResourceData, (item) => ({
             ...item,
-            publishedAt: admin.firestore.FieldValue.serverTimestamp()
+            publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
         }));
         results.challenges = await seedCollection('challenges', seedChallengeData, (item) => ({
             ...item,
@@ -1769,7 +1822,9 @@ export const seedAll = functions.https.onRequest(async (req, res) => {
         results.affirmations = await seedCollection('affirmations', seedAffirmationData, (item, index) => ({
             ...item,
             image: seedAffirmationImages[index % seedAffirmationImages.length],
-            publishedAt: admin.firestore.FieldValue.serverTimestamp()
+            publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            status: item.status || 'active'
         }));
         results.affirmationImages = await backfillAffirmationImagesInternal();
 
@@ -1777,6 +1832,28 @@ export const seedAll = functions.https.onRequest(async (req, res) => {
     } catch (error: any) {
         console.error('Seed all error', error);
         res.status(500).json({ error: error.message || 'Seed failed' });
+    }
+});
+
+export const getSeedStatus = functions.https.onRequest(async (req, res) => {
+    allowSeedOrigin(req, res);
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+
+    const collections = ['resources', 'challenges', 'affirmations', 'daily_affirmations'];
+    const counts: Record<string, number> = {};
+
+    try {
+        for (const col of collections) {
+            const snap = await db.collection(col).count().get();
+            counts[col] = snap.data().count;
+        }
+        res.status(200).json({ success: true, counts });
+    } catch (error: any) {
+        console.error('Seed status error', error);
+        res.status(500).json({ error: error.message || 'Status failed' });
     }
 });
 
@@ -1908,249 +1985,5 @@ export const deleteUserAccount = functions.https.onCall(async (data, context) =>
     } catch (error) {
         console.error('Error deleting user account:', error);
         throw new functions.https.HttpsError('internal', 'Unable to delete account.');
-    }
-});
-// ==========================================
-// ADMIN DASHBOARD FUNCTIONS
-// ==========================================
-
-/**
- * Get Dashboard Stats
- */
-export const getDashboardStats = functions.https.onCall(async (data, context) => {
-    // if (!context.auth || !context.auth.token.admin) ... (Relax for dev if needed, strictly enforce for prod)
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-
-    try {
-        const usersSnap = await db.collection('users').count().get();
-        const circlesSnap = await db.collection('circles').where('status', '==', 'active').count().get();
-        const resourcesSnap = await db.collection('resources').where('status', '==', 'published').count().get();
-        const pendingSnap = await db.collection('circles').where('status', '==', 'pending').count().get();
-
-        // Mock storage for now
-        return {
-            users: usersSnap.data().count,
-            circles: circlesSnap.data().count,
-            resources: resourcesSnap.data().count,
-            pendingCircles: pendingSnap.data().count,
-            storageUsed: '1.2 GB'
-        };
-    } catch (error) {
-        console.error("Error fetching stats:", error);
-        return { users: 0, circles: 0, resources: 0, pendingCircles: 0 };
-    }
-});
-
-/**
- * Get All Content (Admin)
- * data: { type: 'circles'|'resources'|'affirmations', limit: number }
- */
-export const getAllContent = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-
-    const { type, limit: limitCount } = data || {};
-    const collectionName = type === 'resources' ? 'resources' : 'circles'; // 'affirmations' handled separately usually or map it
-
-    // Safety check
-    if (!['circles', 'resources', 'affirmations'].includes(type)) {
-        return { items: [] };
-    }
-
-    try {
-        let q = db.collection(collectionName).orderBy('createdAt', 'desc');
-        if (limitCount) q = q.limit(limitCount);
-
-        const snapshot = await q.get();
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return { items };
-    } catch (error) {
-        console.error("Error fetching admin content:", error);
-        return { items: [] };
-    }
-});
-
-/**
- * Update Content Status
- * data: { collection: string, docId: string, status: string }
- */
-export const updateContentStatus = functions.https.onCall(async (data, context) => {
-    // Require admin
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Authentication required.');
-
-    const { collection: colName, docId, status } = data;
-    if (!colName || !docId || !status) throw new functions.https.HttpsError('invalid-argument', 'Missing fields');
-
-    try {
-        await db.collection(colName).doc(docId).update({
-            status,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        return { success: true };
-    } catch (error) {
-        console.error("Error updating status:", error);
-        throw new functions.https.HttpsError('internal', 'Update failed');
-    }
-});
-
-/**
- * Delete Item (Admin)
- * data: { collection: string, id: string }
- */
-export const deleteItem = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Authentication required.');
-
-    const { collection: colName, id } = data;
-    try {
-        await db.collection(colName).doc(id).delete();
-        return { success: true };
-    } catch (error) {
-        console.error("Delete failed", error);
-        throw new functions.https.HttpsError('internal', 'Delete failed');
-    }
-});
-
-/**
- * Get Admin Affirmations
- */
-export const getAdminAffirmations = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    try {
-        const snapshot = await db.collection('affirmations').orderBy('createdAt', 'desc').limit(data.limit || 50).get();
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return { items };
-    } catch (error) {
-        return { items: [] };
-    }
-});
-
-/**
- * Create Affirmation
- */
-export const createAffirmation = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    const { content, scheduledDate } = data;
-    try {
-        await db.collection('affirmations').add({
-            content,
-            scheduledDate,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            status: 'published' // Auto publish
-        });
-        return { success: true };
-    } catch (error) {
-        throw new functions.https.HttpsError('internal', 'Create failed');
-    }
-});
-
-/**
- * Delete Affirmation
- */
-export const deleteAffirmation = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    try {
-        await db.collection('affirmations').doc(data.id).delete();
-        return { success: true };
-    } catch (error) {
-        throw new functions.https.HttpsError('internal', 'Delete failed');
-    }
-});
-
-/**
- * Get Transactions
- * (Reads from 'transactions' collection if available)
- */
-export const getTransactions = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-
-    try {
-        // Check if transactions collection exists
-        const snapshot = await db.collection('transactions').orderBy('createdAt', 'desc').limit(data.limit || 50).get();
-        if (!snapshot.empty) {
-            const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            return { items };
-        }
-
-        return { items: [] };
-    } catch (error) {
-        return { items: [] };
-    }
-});
-
-/**
- * Get All Users (Admin)
- */
-export const getAllUsers = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    // Check admin claim...
-
-    try {
-        const snapshot = await db.collection('users').orderBy('createdAt', 'desc').limit(data.limit || 50).get();
-        const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return { users };
-    } catch (error) {
-        console.error("Error fetching users", error);
-        throw new functions.https.HttpsError('internal', 'Unable to fetch users');
-    }
-});
-
-/**
- * Create Employee (Admin)
- */
-export const createEmployee = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-
-    const { email, password, displayName, role } = data;
-
-    try {
-        // 1. Create Auth User
-        const userRecord = await admin.auth().createUser({
-            email,
-            password,
-            displayName
-        });
-
-        // 2. Set Custom Claims (Admin/Editor)
-        await admin.auth().setCustomUserClaims(userRecord.uid, {
-            admin: role === 'admin',
-            role: role
-        });
-
-        // 3. Create Firestore Profile
-        await db.collection('users').doc(userRecord.uid).set({
-            email,
-            displayName,
-            role,
-            status: 'active',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        return { success: true, uid: userRecord.uid };
-    } catch (error: any) {
-        console.error("Error creating employee", error);
-        throw new functions.https.HttpsError('internal', error.message || 'Create failed');
-    }
-});
-
-/**
- * Toggle User Status
- */
-export const toggleUserStatus = functions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-
-    const { uid, status } = data;
-    try {
-        // Update Firestore
-        await db.collection('users').doc(uid).update({ status });
-
-        // Update Auth (Disable account if suspended)
-        if (status === 'suspended') {
-            await admin.auth().updateUser(uid, { disabled: true });
-        } else {
-            await admin.auth().updateUser(uid, { disabled: false });
-        }
-
-        return { success: true };
-    } catch (error) {
-        throw new functions.https.HttpsError('internal', 'Update failed');
     }
 });

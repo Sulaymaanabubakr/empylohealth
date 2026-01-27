@@ -1,9 +1,17 @@
 # Empylo
 
-Monorepo structure:
+Wellbeing and community app: daily check-ins, circles (support groups), chat, huddles (video), and admin dashboard.
 
-- frontend/ (Expo React Native app)
-- backend/ (Firebase Cloud Functions)
+## Project structure
+
+| Part | Path | Stack | Purpose |
+|------|------|-------|---------|
+| **Mobile app** | `frontend/` | Expo, React Native, JS | iOS/Android user app |
+| **Backend** | `backend/` | Firebase Functions, Firestore, TypeScript | API, triggers, seed/backfill |
+| **Admin** | `web/admin/` | React, Vite, TypeScript | Content & user management |
+| **Landing** | `web/landing/` | React, Vite, TypeScript | Marketing site |
+
+All apps use the same Firebase project. Functions run in `us-central1`. See `DEPLOYMENT.md` for env vars and deploy steps; see `docs/firestore-collections.md` for data model.
 
 ## Frontend
 
@@ -27,22 +35,19 @@ firebase deploy --only functions
 
 Update `.firebaserc` with your Firebase project id.
 
-## Seeding Initial Content
+## Seeding from the terminal
 
-Seed global resources/circles (local script):
-
-```bash
-cd backend
-npx ts-node scripts/runSeed.ts
-```
-
-Seed resources (callable function):
+Seed and backfill run from your terminal in this workspace, not from the admin dashboard. Use the HTTP endpoints via the helper script:
 
 ```bash
-cd backend
-firebase functions:shell
-seedResources()
+export SEED_TOKEN=your-secret   # same value as in Firebase Functions config
+./backend/scripts/seed-from-terminal.sh status    # show counts
+./backend/scripts/seed-from-terminal.sh seed      # seed resources, challenges, affirmations
+./backend/scripts/seed-from-terminal.sh seed force   # clear and reseed
+./backend/scripts/seed-from-terminal.sh backfill  # add images to affirmations
 ```
+
+Requires deployed functions and `SEED_TOKEN` set in Firebase. Full details: **docs/SEEDING.md**.
 
 ## Technical Debt / Pending Rebuild
 

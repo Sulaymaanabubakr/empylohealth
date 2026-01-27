@@ -132,12 +132,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Subscription plans
-    match /subscriptionPlans/{planId} {
-      allow read: if isAuthenticated();
-      allow write: if false;
-    }
-
     // Assessments (User Submissions)
     match /assessments/{assessmentId} {
       allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;

@@ -28,7 +28,7 @@ const questions = [
         isActive: true
     },
     {
-        text: "I've been had energy to spare",
+        text: "I've had energy to spare",
         type: "scale",
         category: "General",
         tags: ["Energy"],

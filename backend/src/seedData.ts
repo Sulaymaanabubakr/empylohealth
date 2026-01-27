@@ -9,7 +9,7 @@ export const seedChallengeData = [
             color: '#2196F3',
             category: 'Stress',
             priority: 10,
-            status: 'published',
+            status: 'active',
             description: 'Maintain a healthy boundary between work and personal life.',
         },
         {
@@ -20,7 +20,7 @@ export const seedChallengeData = [
             color: '#8E24AA',
             category: 'Social Connection',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Strategies to manage discomfort in social settings.',
         },
         {
@@ -31,7 +31,7 @@ export const seedChallengeData = [
             color: '#0288D1',
             category: 'Social Connection',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Build confidence in presenting to groups.',
         },
         {
@@ -42,7 +42,7 @@ export const seedChallengeData = [
             color: '#FF9800',
             category: 'Focus',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Overcome the tendency to delay important tasks.',
         },
         {
@@ -53,7 +53,7 @@ export const seedChallengeData = [
             color: '#4CAF50',
             category: 'Energy',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Improve your sleep quality with better routines.',
         }
         ,
@@ -65,7 +65,7 @@ export const seedChallengeData = [
             color: '#8E24AA',
             category: 'Stress',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Reduce rumination with quick grounding techniques.',
         },
         {
@@ -76,7 +76,7 @@ export const seedChallengeData = [
             color: '#F9A825',
             category: 'Energy',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Boost energy with short breaks and hydration.',
         },
         {
@@ -87,7 +87,7 @@ export const seedChallengeData = [
             color: '#43A047',
             category: 'Motivation',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Rebuild momentum with tiny wins and clear goals.',
         },
         {
@@ -98,7 +98,7 @@ export const seedChallengeData = [
             color: '#D81B60',
             category: 'Social Connection',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Reconnect with people through low-pressure outreach.',
         },
         {
@@ -109,7 +109,7 @@ export const seedChallengeData = [
             color: '#00838F',
             category: 'Focus',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Improve concentration with timed sprints.',
         },
         {
@@ -120,7 +120,7 @@ export const seedChallengeData = [
             color: '#5E35B1',
             category: 'Focus',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Simplify choices to preserve mental energy.',
         },
         {
@@ -131,7 +131,7 @@ export const seedChallengeData = [
             color: '#FB8C00',
             category: 'Social Connection',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Repair connections after a difficult moment.',
         },
         {
@@ -142,7 +142,7 @@ export const seedChallengeData = [
             color: '#1E88E5',
             category: 'Motivation',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Start the day with an easy, repeatable routine.',
         },
         {
@@ -153,7 +153,7 @@ export const seedChallengeData = [
             color: '#00796B',
             category: 'Stress',
             priority: 10,
-            status: 'published',
+            status: 'active',
             description: 'Manage pressure with planning and recovery cycles.',
         },
         {
@@ -164,7 +164,7 @@ export const seedChallengeData = [
             color: '#6A1B9A',
             category: 'Energy',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Wind down without crashing your next day.',
         },
         {
@@ -175,7 +175,7 @@ export const seedChallengeData = [
             color: '#2E7D32',
             category: 'Motivation',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Rebuild self-belief through evidence-based wins.',
         },
         {
@@ -186,7 +186,7 @@ export const seedChallengeData = [
             color: '#C2185B',
             category: 'Social Connection',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Plan low-effort ways to feel connected.',
         },
         {
@@ -197,7 +197,7 @@ export const seedChallengeData = [
             color: '#0097A7',
             category: 'Focus',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Reduce distractions and set clear daily priorities.',
         },
         {
@@ -208,7 +208,7 @@ export const seedChallengeData = [
             color: '#1565C0',
             category: 'Social Connection',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Prepare with calm routines and a clear structure.',
         },
         {
@@ -219,7 +219,7 @@ export const seedChallengeData = [
             color: '#4527A0',
             category: 'Stress',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Create boundaries that protect recovery time.',
         },
         {
@@ -230,7 +230,7 @@ export const seedChallengeData = [
             color: '#F9A825',
             category: 'Energy',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Build a simple morning activation routine.',
         },
         {
@@ -241,7 +241,7 @@ export const seedChallengeData = [
             color: '#2E7D32',
             category: 'Motivation',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Recover momentum with tiny, repeatable wins.',
         },
         {
@@ -252,7 +252,7 @@ export const seedChallengeData = [
             color: '#C2185B',
             category: 'Social Connection',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Balance connection with intentional downtime.',
         },
         {
@@ -263,7 +263,7 @@ export const seedChallengeData = [
             color: '#00838F',
             category: 'Focus',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Create focus zones and reduce ambient noise.',
         },
         {
@@ -274,7 +274,7 @@ export const seedChallengeData = [
             color: '#6A1B9A',
             category: 'Stress',
             priority: 10,
-            status: 'published',
+            status: 'active',
             description: 'Recover with rest, support, and gentle pacing.',
         },
         {
@@ -285,7 +285,7 @@ export const seedChallengeData = [
             color: '#1E88E5',
             category: 'Focus',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Clarify what matters most and cut noise.',
         },
         {
@@ -296,7 +296,7 @@ export const seedChallengeData = [
             color: '#FB8C00',
             category: 'Motivation',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Use micro-goals to rebuild drive.',
         },
         {
@@ -307,7 +307,7 @@ export const seedChallengeData = [
             color: '#5E35B1',
             category: 'Social Connection',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Restore safety and clarity in group settings.',
         },
         {
@@ -318,7 +318,7 @@ export const seedChallengeData = [
             color: '#388E3C',
             category: 'Energy',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Improve sleep quality with simple resets.',
         },
         {
@@ -329,7 +329,7 @@ export const seedChallengeData = [
             color: '#AD1457',
             category: 'Stress',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Use quick calming tools before joining.',
         },
         {
@@ -340,7 +340,7 @@ export const seedChallengeData = [
             color: '#F9A825',
             category: 'Energy',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Prevent crashes with a lighter routine.',
         },
         {
@@ -351,7 +351,7 @@ export const seedChallengeData = [
             color: '#0097A7',
             category: 'Focus',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Break tasks into the next smallest step.',
         },
         {
@@ -362,7 +362,7 @@ export const seedChallengeData = [
             color: '#2E7D32',
             category: 'Motivation',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Set clear targets and timelines.',
         },
         {
@@ -373,7 +373,7 @@ export const seedChallengeData = [
             color: '#C2185B',
             category: 'Social Connection',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Practice low-stakes social wins.',
         },
         {
@@ -384,7 +384,7 @@ export const seedChallengeData = [
             color: '#1565C0',
             category: 'Stress',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Anchor yourself during transitions.',
         },
         {
@@ -395,7 +395,7 @@ export const seedChallengeData = [
             color: '#FBC02D',
             category: 'Energy',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Use small habits to rebuild energy.',
         },
         {
@@ -406,7 +406,7 @@ export const seedChallengeData = [
             color: '#4527A0',
             category: 'Stress',
             priority: 10,
-            status: 'published',
+            status: 'active',
             description: 'Reduce overload with a simple audit.',
         },
         {
@@ -417,7 +417,7 @@ export const seedChallengeData = [
             color: '#00838F',
             category: 'Focus',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Use structured notes to stay present.',
         },
         {
@@ -428,7 +428,7 @@ export const seedChallengeData = [
             color: '#2E7D32',
             category: 'Motivation',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Start with a 5-minute commitment.',
         },
         {
@@ -439,7 +439,7 @@ export const seedChallengeData = [
             color: '#C2185B',
             category: 'Social Connection',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Bridge distance with small rituals.',
         },
         {
@@ -450,7 +450,7 @@ export const seedChallengeData = [
             color: '#1976D2',
             category: 'Stress',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Focus on controllables and steady routines.',
         },
         {
@@ -461,7 +461,7 @@ export const seedChallengeData = [
             color: '#00796B',
             category: 'Focus',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Reset with movement and structured tasks.',
         },
         {
@@ -472,7 +472,7 @@ export const seedChallengeData = [
             color: '#F9A825',
             category: 'Energy',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Plan lighter commitments that still connect.',
         },
         {
@@ -483,7 +483,7 @@ export const seedChallengeData = [
             color: '#2E7D32',
             category: 'Motivation',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Use short learning bursts to stay consistent.',
         },
         {
@@ -494,7 +494,7 @@ export const seedChallengeData = [
             color: '#AD1457',
             category: 'Social Connection',
             priority: 9,
-            status: 'published',
+            status: 'active',
             description: 'Plan safe exits and calming anchors.',
         },
         {
@@ -505,7 +505,7 @@ export const seedChallengeData = [
             color: '#5E35B1',
             category: 'Stress',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Reduce alert fatigue with smart settings.',
         },
         {
@@ -516,7 +516,7 @@ export const seedChallengeData = [
             color: '#00838F',
             category: 'Focus',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Create a distraction-free study block.',
         },
         {
@@ -527,7 +527,7 @@ export const seedChallengeData = [
             color: '#F9A825',
             category: 'Energy',
             priority: 7,
-            status: 'published',
+            status: 'active',
             description: 'Start small to rebuild movement habits.',
         },
         {
@@ -538,7 +538,7 @@ export const seedChallengeData = [
             color: '#2E7D32',
             category: 'Motivation',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Break work into a clear finish line.',
         },
         {
@@ -549,7 +549,7 @@ export const seedChallengeData = [
             color: '#C2185B',
             category: 'Social Connection',
             priority: 8,
-            status: 'published',
+            status: 'active',
             description: 'Use simple scripts to feel more at ease.',
         }
 ];
@@ -562,7 +562,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '5 min',
             color: '#E0F2F1',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Focus'],
         },
         {
@@ -572,7 +572,7 @@ export const seedResourceData = [
             tag: 'HABIT',
             time: '8 min',
             color: '#FFF3E0',
-            status: 'published',
+            status: 'active',
             tags: ['Energy', 'Motivation'],
         },
         {
@@ -582,7 +582,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '12 min',
             color: '#E3F2FD',
-            status: 'published',
+            status: 'active',
             tags: ['Stress'],
         },
         {
@@ -592,7 +592,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '10 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Energy'],
         },
         {
@@ -602,7 +602,7 @@ export const seedResourceData = [
             tag: 'HABIT',
             time: '7 min',
             color: '#E0F7FA',
-            status: 'published',
+            status: 'active',
             tags: ['Focus', 'Motivation'],
         },
         {
@@ -612,7 +612,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '6 min',
             color: '#F3E5F5',
-            status: 'published',
+            status: 'active',
             tags: ['Energy', 'Stress'],
         },
         {
@@ -622,7 +622,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '9 min',
             color: '#FCE4EC',
-            status: 'published',
+            status: 'active',
             tags: ['Social Connection'],
         },
         {
@@ -632,7 +632,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '5 min',
             color: '#FFF8E1',
-            status: 'published',
+            status: 'active',
             tags: ['Energy', 'Focus'],
         },
         {
@@ -642,7 +642,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '11 min',
             color: '#E3F2FD',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation', 'Focus'],
         },
         {
@@ -652,7 +652,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '8 min',
             color: '#EDE7F6',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Social Connection'],
         },
         {
@@ -662,7 +662,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '5 min',
             color: '#FFF3E0',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation', 'Energy'],
         },
         {
@@ -672,7 +672,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '7 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Focus', 'Motivation'],
         },
         {
@@ -682,7 +682,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '9 min',
             color: '#E0F2F1',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Social Connection'],
         },
         {
@@ -692,7 +692,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '6 min',
             color: '#E3F2FD',
-            status: 'published',
+            status: 'active',
             tags: ['Energy', 'Stress'],
         },
         {
@@ -702,7 +702,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '20 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Energy', 'Social Connection'],
         },
         {
@@ -712,7 +712,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '30 min',
             color: '#E0F7FA',
-            status: 'published',
+            status: 'active',
             tags: ['Focus', 'Motivation'],
         },
         {
@@ -722,7 +722,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '15 min',
             color: '#F3E5F5',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Social Connection'],
         },
         {
@@ -732,7 +732,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '12 min',
             color: '#FFF8E1',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation', 'Social Connection'],
         },
         {
@@ -742,7 +742,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '18 min',
             color: '#EDE7F6',
-            status: 'published',
+            status: 'active',
             tags: ['Focus', 'Social Connection'],
         },
         {
@@ -752,7 +752,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '5 min',
             color: '#E0F2F1',
-            status: 'published',
+            status: 'active',
             tags: ['Stress'],
         },
         {
@@ -762,7 +762,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '25 min',
             color: '#E3F2FD',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation', 'Focus'],
         },
         {
@@ -772,7 +772,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '7 min',
             color: '#FCE4EC',
-            status: 'published',
+            status: 'active',
             tags: ['Social Connection'],
         },
         {
@@ -782,7 +782,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '4 min',
             color: '#E0F7FA',
-            status: 'published',
+            status: 'active',
             tags: ['Focus'],
         },
         {
@@ -792,7 +792,7 @@ export const seedResourceData = [
             tag: 'HABIT',
             time: '9 min',
             color: '#E3F2FD',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Energy'],
         },
         {
@@ -802,7 +802,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '6 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation'],
         },
         {
@@ -812,7 +812,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '5 min',
             color: '#E0F2F1',
-            status: 'published',
+            status: 'active',
             tags: ['Focus'],
         },
         {
@@ -822,7 +822,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '5 min',
             color: '#F3E5F5',
-            status: 'published',
+            status: 'active',
             tags: ['Stress'],
         },
         {
@@ -832,7 +832,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '6 min',
             color: '#FCE4EC',
-            status: 'published',
+            status: 'active',
             tags: ['Social Connection'],
         },
         {
@@ -842,7 +842,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '7 min',
             color: '#FFF8E1',
-            status: 'published',
+            status: 'active',
             tags: ['Energy'],
         },
         {
@@ -852,7 +852,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '6 min',
             color: '#EDE7F6',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation', 'Focus'],
         },
         {
@@ -862,7 +862,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '8 min',
             color: '#FCE4EC',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Social Connection'],
         },
         {
@@ -872,7 +872,7 @@ export const seedResourceData = [
             tag: 'HABIT',
             time: '10 min',
             color: '#E3F2FD',
-            status: 'published',
+            status: 'active',
             tags: ['Focus', 'Stress'],
         },
         {
@@ -882,7 +882,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '4 min',
             color: '#FFF8E1',
-            status: 'published',
+            status: 'active',
             tags: ['Energy'],
         },
         {
@@ -892,7 +892,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '5 min',
             color: '#FCE4EC',
-            status: 'published',
+            status: 'active',
             tags: ['Social Connection'],
         },
         {
@@ -902,7 +902,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '10 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Energy'],
         },
         {
@@ -912,7 +912,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '9 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation'],
         },
         {
@@ -922,7 +922,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '6 min',
             color: '#E0F7FA',
-            status: 'published',
+            status: 'active',
             tags: ['Focus'],
         },
         {
@@ -932,7 +932,7 @@ export const seedResourceData = [
             tag: 'HABIT',
             time: '7 min',
             color: '#F3E5F5',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Energy'],
         },
         {
@@ -942,7 +942,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '5 min',
             color: '#FFF8E1',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation', 'Social Connection'],
         },
         {
@@ -952,7 +952,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '45 min',
             color: '#E0F7FA',
-            status: 'published',
+            status: 'active',
             tags: ['Focus', 'Motivation'],
         },
         {
@@ -962,7 +962,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '8 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Energy', 'Stress'],
         },
         {
@@ -972,7 +972,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '6 min',
             color: '#EDE7F6',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation', 'Social Connection'],
         },
         {
@@ -982,7 +982,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '6 min',
             color: '#E3F2FD',
-            status: 'published',
+            status: 'active',
             tags: ['Focus', 'Motivation'],
         },
         {
@@ -992,7 +992,7 @@ export const seedResourceData = [
             tag: 'GROUP',
             time: '10 min',
             color: '#F3E5F5',
-            status: 'published',
+            status: 'active',
             tags: ['Stress', 'Social Connection'],
         },
         {
@@ -1002,7 +1002,7 @@ export const seedResourceData = [
             tag: 'PRACTICE',
             time: '4 min',
             color: '#FFF8E1',
-            status: 'published',
+            status: 'active',
             tags: ['Energy'],
         },
         {
@@ -1012,7 +1012,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '5 min',
             color: '#E0F7FA',
-            status: 'published',
+            status: 'active',
             tags: ['Focus'],
         },
         {
@@ -1022,7 +1022,7 @@ export const seedResourceData = [
             tag: 'HABIT',
             time: '6 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation'],
         },
         {
@@ -1032,7 +1032,7 @@ export const seedResourceData = [
             tag: 'LEARN',
             time: '7 min',
             color: '#FCE4EC',
-            status: 'published',
+            status: 'active',
             tags: ['Social Connection', 'Stress'],
         },
         {
@@ -1042,7 +1042,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '6 min',
             color: '#EDE7F6',
-            status: 'published',
+            status: 'active',
             tags: ['Stress'],
         },
         {
@@ -1052,7 +1052,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '5 min',
             color: '#FFF8E1',
-            status: 'published',
+            status: 'active',
             tags: ['Energy'],
         },
         {
@@ -1062,7 +1062,7 @@ export const seedResourceData = [
             tag: 'HABIT',
             time: '8 min',
             color: '#E0F7FA',
-            status: 'published',
+            status: 'active',
             tags: ['Focus'],
         },
         {
@@ -1072,7 +1072,7 @@ export const seedResourceData = [
             tag: 'READ',
             time: '6 min',
             color: '#E8F5E9',
-            status: 'published',
+            status: 'active',
             tags: ['Motivation'],
         },
         {
@@ -1082,7 +1082,7 @@ export const seedResourceData = [
             tag: 'HABIT',
             time: '5 min',
             color: '#FCE4EC',
-            status: 'published',
+            status: 'active',
             tags: ['Social Connection'],
         }
 ];
@@ -1101,54 +1101,54 @@ export const seedAffirmationImages = [
 ];
 
 export const seedAffirmationData = [
-{ content: 'I am steady, capable, and moving forward.', tags: ['Courage'], status: 'published' },
-        { content: 'I choose progress over perfection today.', tags: ['Hard work'], status: 'published' },
-        { content: 'My focus improves with each small step.', tags: ['Career'], status: 'published' },
-        { content: 'I deserve rest and renewal.', tags: ['Love'], status: 'published' },
-        { content: 'I can handle challenges with calm.', tags: ['Courage'], status: 'published' },
-        { content: 'I bring value to every room I enter.', tags: ['Relationships'], status: 'published' },
-        { content: 'I am building momentum with consistency.', tags: ['Hard work'], status: 'published' },
-        { content: 'My work aligns with my goals.', tags: ['Career'], status: 'published' },
-        { content: 'I speak to myself with kindness.', tags: ['Love'], status: 'published' },
-        { content: 'I am brave enough to start again.', tags: ['Courage'], status: 'published' },
-        { content: 'I can do hard things with clarity.', tags: ['Hard work'], status: 'published' },
-        { content: 'I am growing into my next level.', tags: ['Career'], status: 'published' },
-        { content: 'I am worthy of good connections.', tags: ['Relationships'], status: 'published' },
-        { content: 'I protect my peace with clear boundaries.', tags: ['Love'], status: 'published' },
-        { content: 'I turn setbacks into lessons.', tags: ['Courage'], status: 'published' },
-        { content: 'I honor my effort every day.', tags: ['Hard work'], status: 'published' },
-        { content: 'I create opportunity through action.', tags: ['Career'], status: 'published' },
-        { content: 'I listen with empathy and care.', tags: ['Relationships'], status: 'published' },
-        { content: 'I am patient with my process.', tags: ['Love'], status: 'published' },
-        { content: 'I trust myself to figure it out.', tags: ['Courage'], status: 'published' },
-        { content: 'My discipline builds my freedom.', tags: ['Hard work'], status: 'published' },
-        { content: 'I show up for the career I want.', tags: ['Career'], status: 'published' },
-        { content: 'I choose love in my self-talk.', tags: ['Love'], status: 'published' },
-        { content: 'I can ask for help when I need it.', tags: ['Relationships'], status: 'published' },
-        { content: 'I am resilient and adaptable.', tags: ['Courage'], status: 'published' },
-        { content: 'My consistency is my superpower.', tags: ['Hard work'], status: 'published' },
-        { content: 'I am capable of meaningful work.', tags: ['Career'], status: 'published' },
-        { content: 'I cultivate relationships that uplift me.', tags: ['Relationships'], status: 'published' },
-        { content: 'I give myself grace today.', tags: ['Love'], status: 'published' },
-        { content: 'I move forward even when it is hard.', tags: ['Courage'], status: 'published' },
-        { content: 'I stay committed to my goals.', tags: ['Hard work'], status: 'published' },
-        { content: 'My career grows with each decision.', tags: ['Career'], status: 'published' },
-        { content: 'I create safe space for connection.', tags: ['Relationships'], status: 'published' },
-        { content: 'I am enough, exactly as I am.', tags: ['Love'], status: 'published' },
-        { content: 'I choose courage over comfort.', tags: ['Courage'], status: 'published' },
-        { content: 'I finish what I start.', tags: ['Hard work'], status: 'published' },
-        { content: 'I am proud of my progress.', tags: ['Career'], status: 'published' },
-        { content: 'I nurture the relationships that matter.', tags: ['Relationships'], status: 'published' },
-        { content: 'I am gentle with myself in growth.', tags: ['Love'], status: 'published' },
-        { content: 'I have what it takes today.', tags: ['Courage'], status: 'published' },
-        { content: 'I focus on what I can control.', tags: ['Hard work'], status: 'published' },
-        { content: 'My work is meaningful and impactful.', tags: ['Career'], status: 'published' },
-        { content: 'I show love through my actions.', tags: ['Love'], status: 'published' },
-        { content: 'I communicate with respect and care.', tags: ['Relationships'], status: 'published' },
-        { content: 'I release fear and choose progress.', tags: ['Courage'], status: 'published' },
-        { content: 'I show up with purpose.', tags: ['Hard work'], status: 'published' },
-        { content: 'I am open to new opportunities.', tags: ['Career'], status: 'published' },
-        { content: 'I give and receive love freely.', tags: ['Love'], status: 'published' },
-        { content: 'I am building trust through honesty.', tags: ['Relationships'], status: 'published' },
-        { content: 'I choose patience and clarity today.', tags: ['Courage'], status: 'published' }
+{ content: 'I am steady, capable, and moving forward.', tags: ['Courage'], status: 'active' },
+        { content: 'I choose progress over perfection today.', tags: ['Hard work'], status: 'active' },
+        { content: 'My focus improves with each small step.', tags: ['Career'], status: 'active' },
+        { content: 'I deserve rest and renewal.', tags: ['Love'], status: 'active' },
+        { content: 'I can handle challenges with calm.', tags: ['Courage'], status: 'active' },
+        { content: 'I bring value to every room I enter.', tags: ['Relationships'], status: 'active' },
+        { content: 'I am building momentum with consistency.', tags: ['Hard work'], status: 'active' },
+        { content: 'My work aligns with my goals.', tags: ['Career'], status: 'active' },
+        { content: 'I speak to myself with kindness.', tags: ['Love'], status: 'active' },
+        { content: 'I am brave enough to start again.', tags: ['Courage'], status: 'active' },
+        { content: 'I can do hard things with clarity.', tags: ['Hard work'], status: 'active' },
+        { content: 'I am growing into my next level.', tags: ['Career'], status: 'active' },
+        { content: 'I am worthy of good connections.', tags: ['Relationships'], status: 'active' },
+        { content: 'I protect my peace with clear boundaries.', tags: ['Love'], status: 'active' },
+        { content: 'I turn setbacks into lessons.', tags: ['Courage'], status: 'active' },
+        { content: 'I honor my effort every day.', tags: ['Hard work'], status: 'active' },
+        { content: 'I create opportunity through action.', tags: ['Career'], status: 'active' },
+        { content: 'I listen with empathy and care.', tags: ['Relationships'], status: 'active' },
+        { content: 'I am patient with my process.', tags: ['Love'], status: 'active' },
+        { content: 'I trust myself to figure it out.', tags: ['Courage'], status: 'active' },
+        { content: 'My discipline builds my freedom.', tags: ['Hard work'], status: 'active' },
+        { content: 'I show up for the career I want.', tags: ['Career'], status: 'active' },
+        { content: 'I choose love in my self-talk.', tags: ['Love'], status: 'active' },
+        { content: 'I can ask for help when I need it.', tags: ['Relationships'], status: 'active' },
+        { content: 'I am resilient and adaptable.', tags: ['Courage'], status: 'active' },
+        { content: 'My consistency is my superpower.', tags: ['Hard work'], status: 'active' },
+        { content: 'I am capable of meaningful work.', tags: ['Career'], status: 'active' },
+        { content: 'I cultivate relationships that uplift me.', tags: ['Relationships'], status: 'active' },
+        { content: 'I give myself grace today.', tags: ['Love'], status: 'active' },
+        { content: 'I move forward even when it is hard.', tags: ['Courage'], status: 'active' },
+        { content: 'I stay committed to my goals.', tags: ['Hard work'], status: 'active' },
+        { content: 'My career grows with each decision.', tags: ['Career'], status: 'active' },
+        { content: 'I create safe space for connection.', tags: ['Relationships'], status: 'active' },
+        { content: 'I am enough, exactly as I am.', tags: ['Love'], status: 'active' },
+        { content: 'I choose courage over comfort.', tags: ['Courage'], status: 'active' },
+        { content: 'I finish what I start.', tags: ['Hard work'], status: 'active' },
+        { content: 'I am proud of my progress.', tags: ['Career'], status: 'active' },
+        { content: 'I nurture the relationships that matter.', tags: ['Relationships'], status: 'active' },
+        { content: 'I am gentle with myself in growth.', tags: ['Love'], status: 'active' },
+        { content: 'I have what it takes today.', tags: ['Courage'], status: 'active' },
+        { content: 'I focus on what I can control.', tags: ['Hard work'], status: 'active' },
+        { content: 'My work is meaningful and impactful.', tags: ['Career'], status: 'active' },
+        { content: 'I show love through my actions.', tags: ['Love'], status: 'active' },
+        { content: 'I communicate with respect and care.', tags: ['Relationships'], status: 'active' },
+        { content: 'I release fear and choose progress.', tags: ['Courage'], status: 'active' },
+        { content: 'I show up with purpose.', tags: ['Hard work'], status: 'active' },
+        { content: 'I am open to new opportunities.', tags: ['Career'], status: 'active' },
+        { content: 'I give and receive love freely.', tags: ['Love'], status: 'active' },
+        { content: 'I am building trust through honesty.', tags: ['Relationships'], status: 'active' },
+        { content: 'I choose patience and clarity today.', tags: ['Courage'], status: 'active' }
 ];
