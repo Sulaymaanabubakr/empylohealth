@@ -21,11 +21,17 @@ export declare const getKeyChallenges: import("firebase-functions/v1").HttpsFunc
 export declare const seedChallenges: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const seedResources: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const seedAssessmentQuestions: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const seedAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const backfillAffirmationImages: import("firebase-functions/v1").HttpsFunction;
+export declare const seedAll: import("firebase-functions/v1").HttpsFunction;
 export declare const updateSubscription: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getExploreContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getRecommendedContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const submitContactForm: import("firebase-functions/v1").HttpsFunction;
+export declare const sendAffirmationsMorning: import("firebase-functions/v1").CloudFunction<unknown>;
+export declare const sendAffirmationsAfternoon: import("firebase-functions/v1").CloudFunction<unknown>;
+export declare const sendAffirmationsEvening: import("firebase-functions/v1").CloudFunction<unknown>;
 export declare const deleteUserAccount: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getDashboardStats: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAllUsers: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

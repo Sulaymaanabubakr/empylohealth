@@ -2,6 +2,10 @@ import appStoreBadge from '../assets/app-store-badge.svg';
 import googlePlayBadge from '../assets/google-play-badge.svg';
 
 const Download = () => {
+    const APP_STORE_URL = import.meta.env.VITE_APP_STORE_URL as string | undefined;
+    const PLAY_STORE_URL = import.meta.env.VITE_PLAY_STORE_URL as string | undefined;
+    const QR_IMAGE_URL = import.meta.env.VITE_APP_QR_URL as string | undefined;
+
     return (
         <div className="download-page">
             <div className="container download-container">
@@ -12,19 +16,34 @@ const Download = () => {
                     </p>
 
                     <div className="store-buttons">
-                        <a href="https://apps.apple.com" target="_blank" rel="noopener noreferrer" className="store-link">
-                            <img src={appStoreBadge} alt="Download on the App Store" className="store-badge" />
-                        </a>
-                        <a href="https://play.google.com" target="_blank" rel="noopener noreferrer" className="store-link">
-                            <img src={googlePlayBadge} alt="Get it on Google Play" className="store-badge" />
-                        </a>
+                        {APP_STORE_URL ? (
+                            <a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer" className="store-link">
+                                <img src={appStoreBadge} alt="Download on the App Store" className="store-badge" />
+                            </a>
+                        ) : (
+                            <div className="store-link disabled">
+                                <img src={appStoreBadge} alt="App Store link not configured" className="store-badge" />
+                            </div>
+                        )}
+                        {PLAY_STORE_URL ? (
+                            <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" className="store-link">
+                                <img src={googlePlayBadge} alt="Get it on Google Play" className="store-badge" />
+                            </a>
+                        ) : (
+                            <div className="store-link disabled">
+                                <img src={googlePlayBadge} alt="Google Play link not configured" className="store-badge" />
+                            </div>
+                        )}
                     </div>
 
                     <div className="qr-section glass-panel">
-                        <p>Scan to download instantly</p>
-                        {/* Placeholder QR Code */}
+                        <p>{QR_IMAGE_URL ? 'Scan to download instantly' : 'Download links coming soon'}</p>
                         <div className="qr-placeholder">
-                            <div className="qr-code"></div>
+                            {QR_IMAGE_URL ? (
+                                <img src={QR_IMAGE_URL} alt="Download QR code" className="qr-code" />
+                            ) : (
+                                <div className="qr-code empty"></div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -70,6 +89,11 @@ const Download = () => {
                     display: inline-block;
                     transition: transform 0.2s, opacity 0.2s;
                 }
+
+                .store-link.disabled {
+                    pointer-events: none;
+                    opacity: 0.45;
+                }
                 
                 .store-link:hover {
                     transform: translateY(-3px);
@@ -111,7 +135,13 @@ const Download = () => {
                 .qr-code {
                     width: 120px;
                     height: 120px;
-                    background: #CBD5E1; /* Placeholder */
+                    background: #CBD5E1;
+                    border-radius: 8px;
+                    object-fit: cover;
+                }
+
+                .qr-code.empty {
+                    background: #E2E8F0;
                 }
 
                 @media (max-width: 768px) {

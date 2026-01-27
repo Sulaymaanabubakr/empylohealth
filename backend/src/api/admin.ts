@@ -39,7 +39,7 @@ export const getDashboardStats = functions.https.onCall(async (data, context) =>
             circles: circlesCount,
             resources: resourcesCount,
             pendingCircles: pendingCircles,
-            storageUsed: '29.1 GB'
+            storageUsed: null
         };
     } catch (error) {
         console.error("Error fetching admin stats:", error);
@@ -399,8 +399,11 @@ export const resolveReport = functions.https.onCall(async (data, context) => {
             batch.update(userRef, { status: 'suspended' });
             await auth.updateUser(reportData.reportedUserId, { disabled: true });
         } else if (action === 'delete_content' && reportData?.contentId && reportData?.contentType) {
-            const contentRef = db.collection(reportData.contentType).doc(reportData.contentId);
-            batch.delete(contentRef);
+            const deletableCollections = ['circles', 'resources', 'users', 'challenges', 'affirmations'];
+            if (deletableCollections.includes(reportData.contentType)) {
+                const contentRef = db.collection(reportData.contentType).doc(reportData.contentId);
+                batch.delete(contentRef);
+            }
         }
 
         await batch.commit();

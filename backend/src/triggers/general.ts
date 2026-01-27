@@ -71,6 +71,22 @@ export const onMessageCreate = functions.firestore.document('chats/{chatId}/mess
                 fcmTokens.push(...userFcmTokens);
             }
 
+            // 3b. Write in-app notifications for recipients
+            const notificationBatch = db.batch();
+            recipients.forEach((uid: string) => {
+                const notifRef = db.collection('notifications').doc();
+                notificationBatch.set(notifRef, {
+                    uid,
+                    title: 'New Message',
+                    subtitle: message.type === 'text' ? message.text : 'Sent a photo',
+                    type: 'CHAT_MESSAGE',
+                    chatId,
+                    senderId,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            await notificationBatch.commit();
+
             if (expoTokens.length === 0 && fcmTokens.length === 0) return;
 
             const payload = {

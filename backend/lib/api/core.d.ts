@@ -140,6 +140,12 @@ export declare const getExploreContent: functions.HttpsFunction & functions.Runn
  * Callable Function: 'getAffirmations'
  */
 export declare const getAffirmations: functions.HttpsFunction & functions.Runnable<any>;
+export declare const seedAffirmations: functions.HttpsFunction & functions.Runnable<any>;
+export declare const backfillAffirmationImages: functions.HttpsFunction;
+export declare const seedAll: functions.HttpsFunction;
+export declare const sendAffirmationsMorning: functions.CloudFunction<unknown>;
+export declare const sendAffirmationsAfternoon: functions.CloudFunction<unknown>;
+export declare const sendAffirmationsEvening: functions.CloudFunction<unknown>;
 export declare const submitContactForm: functions.HttpsFunction;
 export declare const deleteUserAccount: functions.HttpsFunction & functions.Runnable<any>;
 /**
@@ -175,7 +181,7 @@ export declare const createAffirmation: functions.HttpsFunction & functions.Runn
 export declare const deleteAffirmation: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Get Transactions
- * (Currently mocks data or fetches from a future 'transactions' collection)
+ * (Reads from 'transactions' collection if available)
  */
 export declare const getTransactions: functions.HttpsFunction & functions.Runnable<any>;
 /**

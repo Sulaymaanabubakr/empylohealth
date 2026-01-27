@@ -101,9 +101,9 @@ export const Transactions = () => {
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
-                    { label: 'Total Revenue', value: `$${stats.totalRevenue.toFixed(2)}`, change: 'Live', color: 'text-green-600', bg: 'bg-green-50' },
-                    { label: 'Completed Payments', value: String(stats.activeSubs), change: 'Live', color: 'text-blue-600', bg: 'bg-blue-50' },
-                    { label: 'Failed Payments', value: String(stats.failed), change: 'Live', color: 'text-red-600', bg: 'bg-red-50' },
+                    { label: 'Total Revenue', value: `$${stats.totalRevenue.toFixed(2)}`, change: 'Calculated', color: 'text-green-600', bg: 'bg-green-50' },
+                    { label: 'Completed Payments', value: String(stats.activeSubs), change: 'Calculated', color: 'text-blue-600', bg: 'bg-blue-50' },
+                    { label: 'Failed Payments', value: String(stats.failed), change: 'Calculated', color: 'text-red-600', bg: 'bg-red-50' },
                 ].map((stat, idx) => (
                     <div key={idx} className="bg-surface p-6 rounded-2xl border border-border shadow-sm flex items-center justify-between">
                         <div>

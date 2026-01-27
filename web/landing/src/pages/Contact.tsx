@@ -1,6 +1,60 @@
 import { Mail, MapPin, Send } from 'lucide-react';
+import { useState } from 'react';
 
 const Contact = () => {
+    const CONTACT_ENDPOINT = import.meta.env.VITE_CONTACT_FORM_URL as string | undefined;
+    const [formState, setFormState] = useState({
+        fullName: '',
+        email: '',
+        company: '',
+        message: ''
+    });
+    const [status, setStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [submitting, setSubmitting] = useState(false);
+
+    const handleChange = (field: string, value: string) => {
+        setFormState((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setStatus(null);
+
+        if (!CONTACT_ENDPOINT) {
+            setStatus({ type: 'error', text: 'Contact form is not configured. Please set VITE_CONTACT_FORM_URL.' });
+            return;
+        }
+
+        const [firstName, ...rest] = formState.fullName.trim().split(' ');
+        const lastName = rest.join(' ').trim() || 'N/A';
+
+        setSubmitting(true);
+        try {
+            const res = await fetch(CONTACT_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName,
+                    lastName,
+                    email: formState.email.trim(),
+                    company: formState.company.trim(),
+                    message: formState.message.trim()
+                })
+            });
+
+            if (!res.ok) {
+                throw new Error('Failed to submit contact form.');
+            }
+
+            setStatus({ type: 'success', text: 'Thanks! Your message has been sent.' });
+            setFormState({ fullName: '', email: '', company: '', message: '' });
+        } catch (error: any) {
+            setStatus({ type: 'error', text: error?.message || 'Unable to submit message.' });
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     return (
         <div className="contact-page">
             <div className="contact-bg"></div>
@@ -30,21 +84,58 @@ const Contact = () => {
                 </div>
 
                 <div className="contact-form-card glass-panel">
-                    <form>
+                    <form onSubmit={handleSubmit}>
                         <div className="form-group">
                             <label>Full Name</label>
-                            <input type="text" placeholder="Jane Doe" className="form-input" />
+                            <input
+                                type="text"
+                                placeholder="Jane Doe"
+                                className="form-input"
+                                value={formState.fullName}
+                                onChange={(e) => handleChange('fullName', e.target.value)}
+                                required
+                            />
                         </div>
                         <div className="form-group">
                             <label>Email Address</label>
-                            <input type="email" placeholder="jane@example.com" className="form-input" />
+                            <input
+                                type="email"
+                                placeholder="jane@example.com"
+                                className="form-input"
+                                value={formState.email}
+                                onChange={(e) => handleChange('email', e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Company</label>
+                            <input
+                                type="text"
+                                placeholder="Company name"
+                                className="form-input"
+                                value={formState.company}
+                                onChange={(e) => handleChange('company', e.target.value)}
+                                required
+                            />
                         </div>
                         <div className="form-group">
                             <label>Message</label>
-                            <textarea rows={5} placeholder="How can we help?" className="form-input"></textarea>
+                            <textarea
+                                rows={5}
+                                placeholder="How can we help?"
+                                className="form-input"
+                                value={formState.message}
+                                onChange={(e) => handleChange('message', e.target.value)}
+                                required
+                            ></textarea>
                         </div>
-                        <button type="button" className="btn btn-primary btn-block">
-                            Send Message <Send size={18} />
+                        {status && (
+                            <div className={`form-status ${status.type}`}>
+                                {status.text}
+                            </div>
+                        )}
+                        <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+                            {submitting ? 'Sending...' : 'Send Message'} <Send size={18} />
                         </button>
                     </form>
                 </div>
@@ -149,6 +240,25 @@ const Contact = () => {
                 .form-input:focus {
                     outline: none;
                     border-color: var(--color-primary);
+                }
+
+                .form-status {
+                    margin: 4px 0 16px;
+                    font-size: 0.9rem;
+                    padding: 12px 14px;
+                    border-radius: 12px;
+                }
+
+                .form-status.success {
+                    background: #ECFDF3;
+                    color: #027A48;
+                    border: 1px solid #D1FADF;
+                }
+
+                .form-status.error {
+                    background: #FEF3F2;
+                    color: #B42318;
+                    border: 1px solid #FEE4E2;
                 }
                 
                 .btn-block {

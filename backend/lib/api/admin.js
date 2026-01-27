@@ -69,7 +69,7 @@ exports.getDashboardStats = functions.https.onCall(async (data, context) => {
             circles: circlesCount,
             resources: resourcesCount,
             pendingCircles: pendingCircles,
-            storageUsed: '29.1 GB'
+            storageUsed: null
         };
     }
     catch (error) {
@@ -390,8 +390,11 @@ exports.resolveReport = functions.https.onCall(async (data, context) => {
             await auth.updateUser(reportData.reportedUserId, { disabled: true });
         }
         else if (action === 'delete_content' && reportData?.contentId && reportData?.contentType) {
-            const contentRef = db.collection(reportData.contentType).doc(reportData.contentId);
-            batch.delete(contentRef);
+            const deletableCollections = ['circles', 'resources', 'users', 'challenges', 'affirmations'];
+            if (deletableCollections.includes(reportData.contentType)) {
+                const contentRef = db.collection(reportData.contentType).doc(reportData.contentId);
+                batch.delete(contentRef);
+            }
         }
         await batch.commit();
         return { success: true };

@@ -1,40 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/api/userService';
-import { functions, auth } from '../services/firebaseConfig';
+import { functions } from '../services/firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import { multiFactor } from 'firebase/auth';
-import { authService } from '../services/auth/authService';
 
 const SecurityScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
     // State for toggles
     const [securityNotif, setSecurityNotif] = useState(true);
-    const [twoFactor, setTwoFactor] = useState(true);
     const [biometrics, setBiometrics] = useState(true);
 
     const [isDeleteVisible, setIsDeleteVisible] = useState(false);
     const [isDeleteSuccessVisible, setIsDeleteSuccessVisible] = useState(false);
 
-    // MFA State
-    const [isMfaModalVisible, setIsMfaModalVisible] = useState(false);
-    const [mfaStep, setMfaStep] = useState('phone'); // 'phone' or 'code'
-    const [phoneNumber, setPhoneNumber] = useState('');
-    const [mfaCode, setMfaCode] = useState('');
-    const [verificationId, setVerificationId] = useState('');
-    const [mfaLoading, setMfaLoading] = useState(false);
-
     useEffect(() => {
         setSecurityNotif(userData?.settings?.securityNotifications ?? true);
         setBiometrics(userData?.settings?.biometrics ?? false);
-        if (auth.currentUser) {
-            const enrolled = multiFactor(auth.currentUser).enrolledFactors;
-            setTwoFactor(enrolled.length > 0);
-        }
     }, [userData]);
 
     const persistSetting = async (field, value) => {
@@ -67,81 +52,6 @@ const SecurityScreen = ({ navigation }) => {
     const handleDeleteComplete = () => {
         setIsDeleteSuccessVisible(false);
         navigation.navigate('SignIn');
-    };
-
-    const handleMfaToggle = async (value) => {
-        if (!value) {
-            // Unenroll
-            Alert.alert(
-                "Disable Two-Factor Authentication",
-                "Are you sure you want to disable 2FA? This will make your account less secure.",
-                [
-                    { text: "Cancel", style: "cancel", onPress: () => setTwoFactor(true) },
-                    {
-                        text: "Disable",
-                        style: "destructive",
-                        onPress: async () => {
-                            try {
-                                const enrolled = multiFactor(auth.currentUser).enrolledFactors;
-                                for (const factor of enrolled) {
-                                    await authService.unenrollMfa(factor);
-                                }
-                                setTwoFactor(false);
-                                Alert.alert("Success", "2FA has been disabled.");
-                            } catch (error) {
-                                console.error(error);
-                                setTwoFactor(true);
-                                Alert.alert("Error", "Failed to disable 2FA.");
-                            }
-                        }
-                    }
-                ]
-            );
-        } else {
-            // Start enrollment
-            setIsMfaModalVisible(true);
-            setMfaStep('phone');
-        }
-    };
-
-    const handleSendMfaCode = async () => {
-        if (!phoneNumber) {
-            Alert.alert("Error", "Please enter a phone number.");
-            return;
-        }
-        setMfaLoading(true);
-        try {
-            // For now, we use a mock/internal verifier if available, 
-            // or let Firebase handle it (which might fail on mobile without Recaptcha)
-            // Ideally, we'd use a real RecaptchaVerifier here.
-            const vid = await authService.startPhoneMfaEnrollment(phoneNumber, null); // passing null as verifier
-            setVerificationId(vid);
-            setMfaStep('code');
-        } catch (error) {
-            console.error(error);
-            Alert.alert("Error", error.message || "Failed to send verification code. Check if your Firebase project has SMS MFA enabled.");
-        } finally {
-            setMfaLoading(false);
-        }
-    };
-
-    const handleVerifyMfaCode = async () => {
-        if (!mfaCode) {
-            Alert.alert("Error", "Please enter the verification code.");
-            return;
-        }
-        setMfaLoading(true);
-        try {
-            await authService.finishPhoneMfaEnrollment(verificationId, mfaCode);
-            setTwoFactor(true);
-            setIsMfaModalVisible(false);
-            Alert.alert("Success", "Two-Factor Authentication is now enabled!");
-        } catch (error) {
-            console.error(error);
-            Alert.alert("Error", error.message || "Failed to verify code.");
-        } finally {
-            setMfaLoading(false);
-        }
     };
 
     const renderToggleCard = (label, description, value, onValueChange, iconName) => (
@@ -201,14 +111,6 @@ const SecurityScreen = ({ navigation }) => {
 
 
                 {renderToggleCard(
-                    "Two-Factor Authentication",
-                    "Add an extra layer of security to your account by requiring a verification code when you sign in.",
-                    twoFactor,
-                    handleMfaToggle,
-                    "lock-closed-outline"
-                )}
-
-                {renderToggleCard(
                     "Biometrics",
                     "Use Face ID or Fingerprint to securely unlock your app.",
                     biometrics,
@@ -257,41 +159,6 @@ const SecurityScreen = ({ navigation }) => {
                 confirmText="Goodbye"
                 onConfirm={handleDeleteComplete}
             />
-
-            {/* MFA Enrollment Modal */}
-            <ConfirmationModal
-                visible={isMfaModalVisible}
-                title={mfaStep === 'phone' ? "Enable 2FA" : "Verify Code"}
-                message={mfaStep === 'phone' ? "Enter your phone number to receive a verification code." : `Enter the code sent to ${phoneNumber}`}
-                onConfirm={mfaStep === 'phone' ? handleSendMfaCode : handleVerifyMfaCode}
-                onCancel={() => {
-                    setIsMfaModalVisible(false);
-                    if (!twoFactor) setTwoFactor(false);
-                }}
-                confirmText={mfaLoading ? "Processing..." : (mfaStep === 'phone' ? "Send Code" : "Verify")}
-                cancelText="Cancel"
-            >
-                {mfaStep === 'phone' ? (
-                    <TextInput
-                        style={styles.modalInput}
-                        placeholder="+1234567890"
-                        value={phoneNumber}
-                        onChangeText={setPhoneNumber}
-                        keyboardType="phone-pad"
-                        autoFocus
-                    />
-                ) : (
-                    <TextInput
-                        style={styles.modalInput}
-                        placeholder="123456"
-                        value={mfaCode}
-                        onChangeText={setMfaCode}
-                        keyboardType="number-pad"
-                        maxLength={6}
-                        autoFocus
-                    />
-                )}
-            </ConfirmationModal>
 
         </SafeAreaView>
     );
@@ -407,16 +274,6 @@ const styles = StyleSheet.create({
         color: '#D32F2F',
         marginBottom: 4,
         lineHeight: 18,
-    },
-    modalInput: {
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
-        borderRadius: 8,
-        padding: 12,
-        marginTop: 16,
-        fontSize: 16,
-        color: '#1A1A1A',
-        width: '100%',
     },
 });
 

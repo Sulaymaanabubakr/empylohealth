@@ -6,7 +6,17 @@ import { DashboardCard } from '../components/DashboardCard';
 // import { RecentFiles } from '../components/RecentFiles'; // Keep for later refactor
 
 export const Dashboard = () => {
-    const [stats, setStats] = useState({ users: 0, circles: 0, resources: 0, pending: 0, storage: '0 GB' });
+    const [stats, setStats] = useState({ users: 0, circles: 0, resources: 0, pending: 0, storage: null as string | null });
+    const [seedToken, setSeedToken] = useState(import.meta.env.VITE_SEED_TOKEN || '');
+    const [seedStatus, setSeedStatus] = useState<string | null>(null);
+    const [seedLoading, setSeedLoading] = useState(false);
+
+    const getFunctionsBaseUrl = () => {
+        const envUrl = import.meta.env.VITE_FUNCTIONS_BASE_URL;
+        if (envUrl) return envUrl.replace(/\/+$/, '');
+        const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+        return projectId ? `https://us-central1-${projectId}.cloudfunctions.net` : '';
+    };
 
     const handleDownloadReport = () => {
         const rows = [
@@ -14,7 +24,7 @@ export const Dashboard = () => {
             ['Active Circles', stats.circles],
             ['Resources', stats.resources],
             ['Pending Review', stats.pending],
-            ['Storage Used', stats.storage]
+            ['Storage Used', stats.storage || 'Not tracked']
         ];
         const csv = [['Metric', 'Value'], ...rows]
             .map((row) => row.map(String).map((value) => `"${value.replace(/"/g, '""')}"`).join(','))
@@ -30,6 +40,63 @@ export const Dashboard = () => {
         URL.revokeObjectURL(url);
     };
 
+    const runSeed = async () => {
+        if (!seedToken) {
+            setSeedStatus('Seed token required.');
+            return;
+        }
+        const baseUrl = getFunctionsBaseUrl();
+        if (!baseUrl) {
+            setSeedStatus('Functions base URL not configured.');
+            return;
+        }
+        setSeedLoading(true);
+        setSeedStatus(null);
+        try {
+            const response = await fetch(`${baseUrl}/seedAll?token=${encodeURIComponent(seedToken)}`, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data?.error || 'Seed failed');
+            }
+            setSeedStatus(`Seed complete. ${JSON.stringify(data.results)}`);
+        } catch (error: any) {
+            setSeedStatus(error?.message || 'Seed failed');
+        } finally {
+            setSeedLoading(false);
+        }
+    };
+
+    const runBackfillImages = async () => {
+        if (!seedToken) {
+            setSeedStatus('Seed token required.');
+            return;
+        }
+        const baseUrl = getFunctionsBaseUrl();
+        if (!baseUrl) {
+            setSeedStatus('Functions base URL not configured.');
+            return;
+        }
+        setSeedLoading(true);
+        setSeedStatus(null);
+        try {
+            const response = await fetch(`${baseUrl}/backfillAffirmationImages?token=${encodeURIComponent(seedToken)}`, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data?.error || 'Backfill failed');
+            }
+            setSeedStatus(`Backfill complete. ${JSON.stringify(data.result)}`);
+        } catch (error: any) {
+            setSeedStatus(error?.message || 'Backfill failed');
+        } finally {
+            setSeedLoading(false);
+        }
+    };
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -42,7 +109,7 @@ export const Dashboard = () => {
                     circles: data.circles || 0,
                     resources: data.resources || 0,
                     pending: data.pendingCircles || 0,
-                    storage: data.storageUsed || '0 GB'
+                    storage: data.storageUsed || null
                 });
             } catch (error) {
                 console.error("Failed to fetch dashboard stats", error);
@@ -81,29 +148,56 @@ export const Dashboard = () => {
                 <DashboardCard title="Pending Review" files={stats.pending} size="Action Req" type="pending" />
             </div>
 
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div>
+                        <h3 className="font-bold text-gray-900">Seed Content</h3>
+                        <p className="text-sm text-gray-500">Run seed and affirmation image backfill directly from admin.</p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                        <input
+                            type="password"
+                            value={seedToken}
+                            onChange={(event) => setSeedToken(event.target.value)}
+                            placeholder="Seed token"
+                            className="w-full sm:w-64 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+                        />
+                        <button
+                            onClick={runSeed}
+                            disabled={seedLoading}
+                            className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-gray-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {seedLoading ? 'Working…' : 'Seed All'}
+                        </button>
+                        <button
+                            onClick={runBackfillImages}
+                            disabled={seedLoading}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-900 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {seedLoading ? 'Working…' : 'Backfill Images'}
+                        </button>
+                    </div>
+                </div>
+                {seedStatus && (
+                    <div className="text-xs text-gray-500 break-words">
+                        {seedStatus}
+                    </div>
+                )}
+            </div>
+
             {/* Main Content Sections - Placeholder for now until Charts/Tables are refactored */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm min-h-[400px]">
                     <h3 className="font-bold text-gray-900 mb-6">User Growth Analytics</h3>
                     <div className="h-64 flex items-center justify-center bg-gray-50 rounded-xl border border-dashed border-gray-200 text-gray-400">
-                        Chart Placeholder
+                        No analytics data yet.
                     </div>
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                     <h3 className="font-bold text-gray-900 mb-6">Recent Activity</h3>
-                    <div className="space-y-4">
-                        {[1, 2, 3, 4].map(i => (
-                            <div key={i} className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer">
-                                <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                    US
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-900">New user registration</p>
-                                    <p className="text-xs text-gray-400">2 minutes ago</p>
-                                </div>
-                            </div>
-                        ))}
+                    <div className="h-48 flex items-center justify-center bg-gray-50 rounded-xl border border-dashed border-gray-200 text-gray-400">
+                        No recent activity yet.
                     </div>
                 </div>
             </div>

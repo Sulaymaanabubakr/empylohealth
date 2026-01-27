@@ -33,10 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toggleUserStatus = exports.createEmployee = exports.getAllUsers = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.updateContentStatus = exports.getAllContent = exports.getDashboardStats = exports.deleteUserAccount = exports.submitContactForm = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.toggleUserStatus = exports.createEmployee = exports.getAllUsers = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.updateContentStatus = exports.getAllContent = exports.getDashboardStats = exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const cloudinary_1 = require("cloudinary");
+const seedData_1 = require("../seedData");
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
@@ -47,6 +48,17 @@ cloudinary_1.v2.config({
     api_key: process.env.CLOUDINARY_API_KEY || '',
     api_secret: process.env.CLOUDINARY_API_SECRET || ''
 });
+const getTodayKey = () => new Date().toISOString().slice(0, 10);
+const pickRandomItems = (items, count) => {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = copy[i];
+        copy[i] = copy[j];
+        copy[j] = temp;
+    }
+    return copy.slice(0, Math.min(count, copy.length));
+};
 const requireAdmin = (context) => {
     if (!context.auth?.token?.admin) {
         throw new functions.https.HttpsError('permission-denied', 'Admin privileges required.');
@@ -752,68 +764,10 @@ exports.seedAssessmentQuestions = functions.https.onCall(async (data, context) =
  * Callable Function: 'seedChallenges'
  */
 exports.seedChallenges = functions.https.onCall(async (data, context) => {
-    const challenges = [
-        {
-            title: 'Work-Life Balance',
-            level: 'Moderate',
-            icon: 'briefcase-outline',
-            bg: '#E3F2FD',
-            color: '#2196F3',
-            category: 'Stress',
-            priority: 10,
-            status: 'published',
-            description: 'Maintain a healthy boundary between work and personal life.',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        },
-        {
-            title: 'Social Anxiety',
-            level: 'High',
-            icon: 'account-group-outline',
-            bg: '#F3E5F5',
-            color: '#8E24AA',
-            category: 'Social Connection',
-            priority: 8,
-            status: 'published',
-            description: 'Strategies to manage discomfort in social settings.',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        },
-        {
-            title: 'Public Speaking',
-            level: 'Moderate',
-            icon: 'bullhorn-outline',
-            bg: '#E1F5FE',
-            color: '#0288D1',
-            category: 'Social Connection',
-            priority: 7,
-            status: 'published',
-            description: 'Build confidence in presenting to groups.',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        },
-        {
-            title: 'Procrastination',
-            level: 'Moderate',
-            icon: 'clock-outline',
-            bg: '#FFF3E0',
-            color: '#FF9800',
-            category: 'Focus',
-            priority: 9,
-            status: 'published',
-            description: 'Overcome the tendency to delay important tasks.',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        },
-        {
-            title: 'Sleep Hygiene',
-            level: 'Low',
-            icon: 'bed-outline',
-            bg: '#E8F5E9',
-            color: '#4CAF50',
-            category: 'Energy',
-            priority: 7,
-            status: 'published',
-            description: 'Improve your sleep quality with better routines.',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        }
-    ];
+    const challenges = seedData_1.seedChallengeData.map((challenge) => ({
+        ...challenge,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }));
     try {
         const batch = db.batch();
         const collectionRef = db.collection('challenges');
@@ -839,41 +793,10 @@ exports.seedChallenges = functions.https.onCall(async (data, context) => {
  * Callable Function: 'seedResources'
  */
 exports.seedResources = functions.https.onCall(async (data, context) => {
-    const resources = [
-        {
-            title: 'The Art of Mindful Breathing',
-            description: 'Learn how to use your breath to calm your nervous system instantly.',
-            category: 'Self-development',
-            tag: 'LEARN',
-            time: '5 min',
-            color: '#E0F2F1',
-            status: 'published',
-            tags: ['Stress', 'Focus'],
-            publishedAt: admin.firestore.FieldValue.serverTimestamp()
-        },
-        {
-            title: 'Building Better Morning Habits',
-            description: 'Transform your day by implementing these simple morning rituals.',
-            category: 'Self-development',
-            tag: 'HABIT',
-            time: '8 min',
-            color: '#FFF3E0',
-            status: 'published',
-            tags: ['Energy', 'Motivation'],
-            publishedAt: admin.firestore.FieldValue.serverTimestamp()
-        },
-        {
-            title: 'Managing Workplace Stress',
-            description: 'Practical tips to keep your cool during high-pressure work days.',
-            category: 'Self-development',
-            tag: 'READ',
-            time: '12 min',
-            color: '#E3F2FD',
-            status: 'published',
-            tags: ['Stress'],
-            publishedAt: admin.firestore.FieldValue.serverTimestamp()
-        }
-    ];
+    const resources = seedData_1.seedResourceData.map((resource) => ({
+        ...resource,
+        publishedAt: admin.firestore.FieldValue.serverTimestamp()
+    }));
     try {
         const batch = db.batch();
         const collectionRef = db.collection('resources');
@@ -977,49 +900,6 @@ exports.getKeyChallenges = functions.https.onCall(async (data, context) => {
                 console.log("Error querying challenges by theme", e);
             }
         }
-        // Default challenges if DB is empty
-        const defaultChallenges = [
-            {
-                title: 'Work-Life Balance',
-                level: 'Moderate',
-                icon: 'briefcase-outline',
-                bg: '#E3F2FD',
-                color: '#2196F3',
-                category: 'Stress',
-                priority: 10,
-                status: 'published'
-            },
-            {
-                title: 'Social Anxiety',
-                level: 'High',
-                icon: 'account-group-outline',
-                bg: '#F3E5F5',
-                color: '#8E24AA',
-                category: 'Social Connection',
-                priority: 8,
-                status: 'published'
-            },
-            {
-                title: 'Procrastination',
-                level: 'Moderate',
-                icon: 'clock-outline',
-                bg: '#FFF3E0',
-                color: '#FF9800',
-                category: 'Focus',
-                priority: 9,
-                status: 'published'
-            },
-            {
-                title: 'Sleep Hygiene',
-                level: 'Low',
-                icon: 'bed-outline',
-                bg: '#E8F5E9',
-                color: '#4CAF50',
-                category: 'Energy',
-                priority: 7,
-                status: 'published'
-            }
-        ];
         // If no items found (or no weak themes), fill with general high priority challenges
         if (items.length === 0) {
             const snapshot = await db.collection('challenges')
@@ -1029,15 +909,26 @@ exports.getKeyChallenges = functions.https.onCall(async (data, context) => {
                 .get();
             items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         }
-        // If STILL empty (no data in DB at all), use hardcoded defaults
+        // If STILL empty, fallback to published resources mapped as challenges
         if (items.length === 0) {
-            // Filter defaults by weak themes if possible, otherwise first 2
-            if (weakThemes.length > 0) {
-                items = defaultChallenges.filter(c => weakThemes.includes(c.category)).slice(0, 4);
-            }
-            if (items.length === 0) {
-                items = defaultChallenges.slice(0, 2);
-            }
+            const snapshot = await db.collection('resources')
+                .where('status', '==', 'published')
+                .orderBy('publishedAt', 'desc')
+                .limit(4)
+                .get();
+            items = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title,
+                    level: 'Moderate',
+                    icon: 'lightbulb-outline',
+                    bg: data.color || '#E0F2F1',
+                    color: '#009688',
+                    category: data.category || 'General',
+                    status: data.status || 'published'
+                };
+            });
         }
         // Add context for the UI (why is this shown?)
         return items.map(item => ({
@@ -1088,29 +979,6 @@ exports.getRecommendedContent = functions.https.onCall(async (data, context) => 
                 if (!existingIds.has(i.id))
                     items.push(i);
             });
-        }
-        // If STILL empty, use hardcoded defaults
-        if (items.length === 0) {
-            items = [
-                {
-                    id: 'def_1',
-                    title: 'The Art of Mindful Breathing',
-                    description: 'Learn how to use your breath to calm your nervous system instantly.',
-                    category: 'Self-development',
-                    tag: 'LEARN',
-                    time: '5 min',
-                    color: '#E0F2F1'
-                },
-                {
-                    id: 'def_2',
-                    title: 'Building Better Morning Habits',
-                    description: 'Transform your day by implementing these simple morning rituals.',
-                    category: 'Self-development',
-                    tag: 'HABIT',
-                    time: '8 min',
-                    color: '#FFF3E0'
-                }
-            ];
         }
         return { items };
     }
@@ -1204,12 +1072,8 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
                 console.error("Daily API Error", e);
             }
         }
-        // Fallback for demo if no key (or dev env)
         if (!roomUrl) {
-            // throw new functions.https.HttpsError('failed-precondition', 'Video service is not configured.');
-            // Use a placeholder or throw? Let's throw for prod safety, but maybe relax for verified dev.
-            // Allowing a mock url for now if key missing to not block UI dev.
-            roomUrl = `https://demo.daily.co/huddle-${Date.now()}`;
+            throw new functions.https.HttpsError('failed-precondition', 'Video service is not configured.');
         }
         const huddleRef = db.collection('huddles').doc();
         const huddleData = {
@@ -1360,15 +1224,29 @@ exports.submitReport = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'Missing fields');
     }
     try {
-        const reportRef = db.collection('circles').doc(circleId).collection('reports').doc();
-        await reportRef.set({
+        const reportPayload = {
             reporterId: context.auth.uid,
+            reportedBy: context.auth.uid,
             targetId,
             targetType,
             reason,
             description: description || '',
+            details: description || '',
             status: 'pending', // pending | resolved | dismissed
             createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+        const reportRef = db.collection('circles').doc(circleId).collection('reports').doc();
+        await reportRef.set(reportPayload);
+        // Also write to top-level reports for global moderation
+        const normalizedContentType = targetType === 'member' ? 'users' :
+            targetType === 'message' ? 'messages' :
+                targetType === 'huddle' ? 'huddles' : 'unknown';
+        await db.collection('reports').add({
+            ...reportPayload,
+            circleId,
+            reportedUserId: targetType === 'member' ? targetId : null,
+            contentId: targetType !== 'member' ? targetId : null,
+            contentType: normalizedContentType
         });
         return { success: true, reportId: reportRef.id };
     }
@@ -1486,18 +1364,289 @@ exports.getAffirmations = functions.https.onCall(async (data, context) => {
     if (!context.auth)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     try {
+        const todayKey = getTodayKey();
+        const dailyRef = db.collection('daily_affirmations').doc(todayKey);
+        const dailyDoc = await dailyRef.get();
+        let affirmationIds = [];
+        if (dailyDoc.exists) {
+            affirmationIds = dailyDoc.data()?.affirmationIds || [];
+        }
+        if (affirmationIds.length === 0) {
+            const snapshot = await db.collection('affirmations')
+                .where('status', '==', 'published')
+                .orderBy('publishedAt', 'desc')
+                .limit(200)
+                .get();
+            const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const picks = pickRandomItems(all, 3);
+            affirmationIds = picks.map((item) => item.id);
+            await dailyRef.set({
+                date: todayKey,
+                affirmationIds,
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        if (affirmationIds.length === 0) {
+            return { items: [] };
+        }
         const snapshot = await db.collection('affirmations')
-            .where('status', '==', 'published')
-            .orderBy('publishedAt', 'desc')
-            .limit(30)
+            .where(admin.firestore.FieldPath.documentId(), 'in', affirmationIds)
             .get();
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const byId = new Map(snapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() }]));
+        const items = affirmationIds.map(id => byId.get(id)).filter(Boolean);
         return { items };
     }
     catch (error) {
         console.error("Error fetching affirmations:", error);
         throw new functions.https.HttpsError('internal', 'Unable to fetch affirmations.');
     }
+});
+const ensureDailyAffirmations = async () => {
+    const todayKey = getTodayKey();
+    const dailyRef = db.collection('daily_affirmations').doc(todayKey);
+    const dailyDoc = await dailyRef.get();
+    let affirmationIds = dailyDoc.exists ? (dailyDoc.data()?.affirmationIds || []) : [];
+    if (affirmationIds.length === 0) {
+        const snapshot = await db.collection('affirmations')
+            .where('status', '==', 'published')
+            .orderBy('publishedAt', 'desc')
+            .limit(200)
+            .get();
+        const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const picks = pickRandomItems(all, 3);
+        affirmationIds = picks.map((item) => item.id);
+        await dailyRef.set({
+            date: todayKey,
+            affirmationIds,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    }
+    return affirmationIds;
+};
+const sendDailyAffirmationsNotification = async (slotIndex, title) => {
+    const affirmationIds = await ensureDailyAffirmations();
+    if (affirmationIds.length === 0)
+        return;
+    const pickId = affirmationIds[Math.min(slotIndex, affirmationIds.length - 1)];
+    const affirmationDoc = await db.collection('affirmations').doc(pickId).get();
+    const content = affirmationDoc.data()?.content || 'Your daily affirmation is ready.';
+    const usersSnap = await db.collection('users').get();
+    const users = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const batchSize = 400;
+    for (let i = 0; i < users.length; i += batchSize) {
+        const batch = db.batch();
+        users.slice(i, i + batchSize).forEach((user) => {
+            const notifRef = db.collection('notifications').doc();
+            batch.set(notifRef, {
+                uid: user.id,
+                title,
+                subtitle: content,
+                type: 'DAILY_AFFIRMATION',
+                slot: slotIndex,
+                affirmationId: pickId,
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        });
+        await batch.commit();
+    }
+    // Best-effort push notifications (if tokens exist)
+    const expoMessages = [];
+    const fcmTokens = [];
+    users.forEach((user) => {
+        if (Array.isArray(user.expoPushTokens)) {
+            user.expoPushTokens.forEach((token) => {
+                expoMessages.push({
+                    to: token,
+                    title,
+                    body: content,
+                    data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId }
+                });
+            });
+        }
+        if (Array.isArray(user.fcmTokens)) {
+            fcmTokens.push(...user.fcmTokens);
+        }
+    });
+    // FCM
+    const fcmChunkSize = 500;
+    for (let i = 0; i < fcmTokens.length; i += fcmChunkSize) {
+        const chunk = fcmTokens.slice(i, i + fcmChunkSize);
+        const messagePayload = {
+            tokens: chunk,
+            notification: { title, body: content },
+            data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId }
+        };
+        await admin.messaging().sendEachForMulticast(messagePayload);
+    }
+    // Expo
+    const expoChunkSize = 100;
+    for (let i = 0; i < expoMessages.length; i += expoChunkSize) {
+        const chunk = expoMessages.slice(i, i + expoChunkSize);
+        await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(chunk)
+        });
+    }
+};
+exports.seedAffirmations = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const affirmations = seedData_1.seedAffirmationData.map((affirmation, index) => ({
+        ...affirmation,
+        image: seedData_1.seedAffirmationImages[index % seedData_1.seedAffirmationImages.length],
+        publishedAt: admin.firestore.FieldValue.serverTimestamp()
+    }));
+    try {
+        const collectionRef = db.collection('affirmations');
+        const existing = await collectionRef.get();
+        if (!existing.empty) {
+            return { success: false, message: 'Affirmations already exist' };
+        }
+        const batch = db.batch();
+        affirmations.forEach((a) => {
+            const docRef = collectionRef.doc();
+            batch.set(docRef, a);
+        });
+        await batch.commit();
+        return { success: true, count: affirmations.length };
+    }
+    catch (error) {
+        console.error('Error seeding affirmations:', error);
+        throw new functions.https.HttpsError('internal', `Unable to seed affirmations: ${error.message || error}`);
+    }
+});
+const allowSeedOrigin = (req, res) => {
+    const allowed = (process.env.SEED_ALLOWED_ORIGINS || '*').split(',').map((item) => item.trim()).filter(Boolean);
+    const origin = req.headers.origin || '*';
+    if (allowed.includes('*') || allowed.includes(origin)) {
+        res.set('Access-Control-Allow-Origin', origin);
+    }
+    res.set('Access-Control-Allow-Methods', 'GET,OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, x-seed-token');
+};
+const backfillAffirmationImagesInternal = async () => {
+    const collectionRef = db.collection('affirmations');
+    let snapshot;
+    try {
+        snapshot = await collectionRef.orderBy('publishedAt', 'asc').get();
+    }
+    catch {
+        snapshot = await collectionRef.get();
+    }
+    if (snapshot.empty) {
+        return { updated: 0, total: 0 };
+    }
+    let updated = 0;
+    let total = 0;
+    let imageIndex = 0;
+    let batch = db.batch();
+    let batchCount = 0;
+    const commitBatch = async () => {
+        if (batchCount === 0)
+            return;
+        await batch.commit();
+        batch = db.batch();
+        batchCount = 0;
+    };
+    snapshot.forEach((doc) => {
+        total += 1;
+        const data = doc.data();
+        if (data?.image) {
+            return;
+        }
+        const image = seedData_1.seedAffirmationImages[imageIndex % seedData_1.seedAffirmationImages.length];
+        imageIndex += 1;
+        batch.update(doc.ref, {
+            image,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        updated += 1;
+        batchCount += 1;
+        if (batchCount >= 450) {
+            void commitBatch();
+        }
+    });
+    await commitBatch();
+    return { updated, total };
+};
+exports.backfillAffirmationImages = functions.https.onRequest(async (req, res) => {
+    allowSeedOrigin(req, res);
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    const token = req.query.token || req.headers['x-seed-token'] || '';
+    const expected = process.env.SEED_TOKEN || 'seed-a31e736fb9167864e96b4fcb2c254671';
+    if (!expected || token !== expected) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    try {
+        const result = await backfillAffirmationImagesInternal();
+        res.status(200).json({ success: true, result });
+    }
+    catch (error) {
+        console.error('Backfill affirmations error', error);
+        res.status(500).json({ error: error.message || 'Backfill failed' });
+    }
+});
+exports.seedAll = functions.https.onRequest(async (req, res) => {
+    allowSeedOrigin(req, res);
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    const token = req.query.token || req.headers['x-seed-token'] || '';
+    const expected = process.env.SEED_TOKEN || 'seed-a31e736fb9167864e96b4fcb2c254671';
+    if (!expected || token !== expected) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const results = {};
+    const seedCollection = async (collectionName, items, mapItem) => {
+        const existing = await db.collection(collectionName).limit(1).get();
+        if (!existing.empty) {
+            return { skipped: true, reason: 'already seeded' };
+        }
+        const batch = db.batch();
+        items.forEach((item, index) => {
+            const docRef = db.collection(collectionName).doc();
+            batch.set(docRef, mapItem ? mapItem(item, index) : item);
+        });
+        await batch.commit();
+        return { success: true, count: items.length };
+    };
+    try {
+        results.resources = await seedCollection('resources', seedData_1.seedResourceData, (item) => ({
+            ...item,
+            publishedAt: admin.firestore.FieldValue.serverTimestamp()
+        }));
+        results.challenges = await seedCollection('challenges', seedData_1.seedChallengeData, (item) => ({
+            ...item,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        }));
+        results.affirmations = await seedCollection('affirmations', seedData_1.seedAffirmationData, (item, index) => ({
+            ...item,
+            image: seedData_1.seedAffirmationImages[index % seedData_1.seedAffirmationImages.length],
+            publishedAt: admin.firestore.FieldValue.serverTimestamp()
+        }));
+        results.affirmationImages = await backfillAffirmationImagesInternal();
+        res.status(200).json({ success: true, results });
+    }
+    catch (error) {
+        console.error('Seed all error', error);
+        res.status(500).json({ error: error.message || 'Seed failed' });
+    }
+});
+const AFFIRMATION_TIMEZONE = process.env.AFFIRMATION_TIMEZONE || 'UTC';
+exports.sendAffirmationsMorning = functions.pubsub.schedule('0 8 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
+    await sendDailyAffirmationsNotification(0, 'Morning Affirmation');
+});
+exports.sendAffirmationsAfternoon = functions.pubsub.schedule('0 13 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
+    await sendDailyAffirmationsNotification(1, 'Afternoon Affirmation');
+});
+exports.sendAffirmationsEvening = functions.pubsub.schedule('0 21 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
+    await sendDailyAffirmationsNotification(2, 'Evening Affirmation');
 });
 // ==========================================
 // CONTACT (WEB) FUNCTIONS
@@ -1527,7 +1676,7 @@ exports.submitContactForm = functions.https.onRequest(async (req, res) => {
             res.status(400).json({ error: 'Missing required fields.' });
             return;
         }
-        await db.collection('contactMessages').add({
+        const contactPayload = {
             firstName: String(firstName).trim(),
             lastName: String(lastName).trim(),
             email: String(email).trim(),
@@ -1537,6 +1686,16 @@ exports.submitContactForm = functions.https.onRequest(async (req, res) => {
             source: 'webapp',
             userAgent: req.headers['user-agent'] || '',
             createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+        await db.collection('contactMessages').add(contactPayload);
+        await db.collection('support_tickets').add({
+            email: contactPayload.email,
+            subject: `Contact form: ${contactPayload.company}`,
+            message: contactPayload.message,
+            status: 'open',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: 'webapp'
         });
         res.status(200).json({ success: true });
     }
@@ -1735,13 +1894,11 @@ exports.deleteAffirmation = functions.https.onCall(async (data, context) => {
 });
 /**
  * Get Transactions
- * (Currently mocks data or fetches from a future 'transactions' collection)
+ * (Reads from 'transactions' collection if available)
  */
 exports.getTransactions = functions.https.onCall(async (data, context) => {
     if (!context.auth)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    // In a real app, this would query Stripe/Paystack or a 'transactions' collection
-    // For now, return mock data or empty if collection doesn't exist
     try {
         // Check if transactions collection exists
         const snapshot = await db.collection('transactions').orderBy('createdAt', 'desc').limit(data.limit || 50).get();
@@ -1749,7 +1906,6 @@ exports.getTransactions = functions.https.onCall(async (data, context) => {
             const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             return { items };
         }
-        // Return Mock if empty for UI demo
         return { items: [] };
     }
     catch (error) {

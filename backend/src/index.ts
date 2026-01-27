@@ -38,12 +38,18 @@ export const getKeyChallenges = coreApi.getKeyChallenges;
 export const seedChallenges = coreApi.seedChallenges;
 export const seedResources = coreApi.seedResources;
 export const seedAssessmentQuestions = coreApi.seedAssessmentQuestions;
+export const seedAffirmations = coreApi.seedAffirmations;
+export const backfillAffirmationImages = coreApi.backfillAffirmationImages;
+export const seedAll = coreApi.seedAll;
 export const updateSubscription = coreApi.updateSubscription;
 
 export const getExploreContent = coreApi.getExploreContent;
 export const getRecommendedContent = coreApi.getRecommendedContent;
 export const getAffirmations = coreApi.getAffirmations;
 export const submitContactForm = coreApi.submitContactForm;
+export const sendAffirmationsMorning = coreApi.sendAffirmationsMorning;
+export const sendAffirmationsAfternoon = coreApi.sendAffirmationsAfternoon;
+export const sendAffirmationsEvening = coreApi.sendAffirmationsEvening;
 
 export const deleteUserAccount = coreApi.deleteUserAccount;
 

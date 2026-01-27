@@ -110,11 +110,11 @@ export const Moderation = () => {
                 </button>
                 <div className="border border-border rounded-2xl p-4 shadow-sm bg-gray-50 opacity-60">
                     <p className="text-xs uppercase tracking-widest text-gray-500">Auto-Flagged (AI)</p>
-                    <p className="mt-2 text-3xl font-semibold text-gray-900">0</p>
+                    <p className="mt-2 text-3xl font-semibold text-gray-900">N/A</p>
                 </div>
                 <div className="border border-border rounded-2xl p-4 shadow-sm bg-gray-50 opacity-60">
                     <p className="text-xs uppercase tracking-widest text-gray-500">Avg Resolution Time</p>
-                    <p className="mt-2 text-3xl font-semibold text-gray-900">--</p>
+                    <p className="mt-2 text-3xl font-semibold text-gray-900">N/A</p>
                 </div>
             </div>
 

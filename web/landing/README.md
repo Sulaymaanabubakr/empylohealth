@@ -2,6 +2,17 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Environment
+
+Set these in a `.env` file for the landing site:
+
+```
+VITE_CONTACT_FORM_URL=<https endpoint for submitContactForm>
+VITE_APP_STORE_URL=<app store link>
+VITE_PLAY_STORE_URL=<play store link>
+VITE_APP_QR_URL=<qr image url>
+```
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh

@@ -9,18 +9,9 @@ import {
     confirmPasswordReset,
     sendEmailVerification,
     reload,
-    getMultiFactorResolver,
-    PhoneAuthProvider,
-    PhoneMultiFactorGenerator,
-    TotpMultiFactorGenerator,
     GoogleAuthProvider,
     OAuthProvider,
     signInWithCredential,
-    User,
-    UserCredential,
-    MultiFactorResolver,
-    MultiFactorInfo,
-    multiFactor,
 } from 'firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -30,16 +21,17 @@ import * as Crypto from 'expo-crypto';
  * Service to handle all Authentication logic
  */
 export const authService = {
-    _pendingMfaResolver: null,
     /**
      * Initialize Google Sign In
      * @param {string} webClientId - From Firebase Console > Auth > Google > Web SDK config
      */
     init: (webClientId) => {
         try {
-            GoogleSignin.configure({
-                webClientId: webClientId || 'YOUR_WEB_CLIENT_ID_FROM_FIREBASE_CONSOLE',
-            });
+            if (!webClientId) {
+                console.warn('[AuthService] Google Sign-In web client ID not provided; skipping configure.');
+                return;
+            }
+            GoogleSignin.configure({ webClientId });
             console.log('[AuthService] Google Sign-In configured successfully');
         } catch (error) {
             console.warn('[AuthService] Google Sign-In configuration failed:', error.message);
@@ -56,11 +48,6 @@ export const authService = {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             return { success: true, user: userCredential.user };
         } catch (error) {
-            if (error.code === 'auth/multi-factor-auth-required') {
-                const resolver = getMultiFactorResolver(auth, error);
-                authService._pendingMfaResolver = resolver;
-                return { success: false, mfaRequired: true, hints: resolver.hints };
-            }
             throw error;
         }
     },
@@ -161,85 +148,6 @@ export const authService = {
     },
 
     getCurrentUser: () => auth.currentUser,
-
-    getPendingMfaResolver: () => authService._pendingMfaResolver,
-    clearPendingMfaResolver: () => {
-        authService._pendingMfaResolver = null;
-    },
-
-    startSmsMfaSignIn: async (hint) => {
-        if (!authService._pendingMfaResolver) {
-            throw new Error('No pending MFA resolver.');
-        }
-        const phoneProvider = new PhoneAuthProvider(auth);
-        return phoneProvider.verifyPhoneNumber(
-            { multiFactorHint: hint, session: authService._pendingMfaResolver.session },
-            recaptchaVerifier
-        );
-    },
-
-    resolveSmsMfaSignIn: async (verificationId, code) => {
-        if (!authService._pendingMfaResolver) {
-            throw new Error('No pending MFA resolver.');
-        }
-        const credential = PhoneAuthProvider.credential(verificationId, code);
-        const assertion = PhoneMultiFactorGenerator.assertion(credential);
-        const result = await authService._pendingMfaResolver.resolveSignIn(assertion);
-        authService._pendingMfaResolver = null;
-        return result;
-    },
-
-    resolveTotpMfaSignIn: async (hint, code) => {
-        if (!authService._pendingMfaResolver) {
-            throw new Error('No pending MFA resolver.');
-        }
-        const assertion = TotpMultiFactorGenerator.assertionForSignIn(hint.uid, code);
-        const result = await authService._pendingMfaResolver.resolveSignIn(assertion);
-        authService._pendingMfaResolver = null;
-        return result;
-    },
-
-    /**
-     * Start MFA enrollment with Phone Number
-     */
-    startPhoneMfaEnrollment: async (phoneNumber) => {
-        const user = auth.currentUser;
-        if (!user) throw new Error('No authenticated user.');
-
-        const session = await multiFactor(user).getSession();
-        const phoneProvider = new PhoneAuthProvider(auth);
-        return phoneProvider.verifyPhoneNumber(
-            { phoneNumber, session },
-            recaptchaVerifier
-        );
-    },
-
-    /**
-     * Complete MFA enrollment
-     */
-    finishPhoneMfaEnrollment: async (verificationId, code, displayName) => {
-        const user = auth.currentUser;
-        if (!user) throw new Error('No authenticated user.');
-
-        const credential = PhoneAuthProvider.credential(verificationId, code);
-        const assertion = PhoneMultiFactorGenerator.assertion(credential);
-        await multiFactor(user).enroll(assertion, displayName);
-    },
-
-    /**
-     * Unenroll MFA
-     */
-    unenrollMfa: async (factor) => {
-        const user = auth.currentUser;
-        if (!user) throw new Error('No authenticated user.');
-
-        if (typeof factor === 'string') {
-            // Unenroll by UID
-            await multiFactor(user).unenroll(factor);
-        } else {
-            await multiFactor(user).unenroll(factor);
-        }
-    },
 
     /**
      * Login with Google (Native)

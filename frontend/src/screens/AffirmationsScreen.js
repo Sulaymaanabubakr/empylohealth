@@ -18,7 +18,12 @@ const AffirmationsScreen = ({ navigation }) => {
         const loadAffirmations = async () => {
             try {
                 const items = await resourceService.getAffirmations();
-                const cleaned = items.filter((item) => item.image && (item.text || item.title));
+                const cleaned = items
+                    .map((item) => ({
+                        ...item,
+                        text: item.text || item.title || item.content || ''
+                    }))
+                    .filter((item) => item.text);
                 setAffirmations(cleaned);
             } catch (error) {
                 console.log('Failed to load affirmations', error);
@@ -76,6 +81,57 @@ const AffirmationsScreen = ({ navigation }) => {
     const renderItem = ({ item }) => {
         const isLiked = likedItems.has(item.id);
 
+        const contentText = item.text || item.title || item.content || '';
+        const bgColor = item.color || '#0B1F1C';
+
+        if (!item.image) {
+            return (
+                <View style={[styles.slide, { width, height, backgroundColor: bgColor }]}>
+                    <View style={styles.overlay} />
+
+                    <TouchableOpacity
+                        style={[styles.backButton, { top: insets.top + 10 }]}
+                        onPress={() => navigation.goBack()}
+                    >
+                        <View style={styles.backButtonCircle}>
+                            <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+                        </View>
+                    </TouchableOpacity>
+
+                    <View style={styles.contentContainer}>
+                        <Text style={styles.date}>{item.date || item.tag || ''}</Text>
+                        <Text style={styles.affirmationText}>{contentText}</Text>
+                    </View>
+
+                    <View style={[styles.bottomActions, { paddingBottom: insets.bottom + 40 }]}>
+                        <TouchableOpacity style={styles.actionButton} onPress={handlePrev}>
+                            <Ionicons name="arrow-undo-outline" size={28} color={currentIndex === 0 ? "rgba(255,255,255,0.3)" : "#FFF"} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(contentText)}>
+                            <Ionicons name="share-social-outline" size={28} color="#FFF" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.actionButton} onPress={handleMic}>
+                            <Feather name="mic" size={28} color="#FFF" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.actionButton} onPress={() => handleLove(item.id)}>
+                            <Ionicons
+                                name={isLiked ? "heart" : "heart-outline"}
+                                size={28}
+                                color={isLiked ? "#FF5252" : "#FFF"}
+                            />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.actionButton} onPress={handleNext}>
+                            <Ionicons name="arrow-redo-outline" size={28} color={currentIndex === affirmations.length - 1 ? "rgba(255,255,255,0.3)" : "#FFF"} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            );
+        }
+
         return (
             <ImageBackground
                 source={{ uri: item.image }}
@@ -98,7 +154,7 @@ const AffirmationsScreen = ({ navigation }) => {
                 {/* Content */}
                 <View style={styles.contentContainer}>
                     <Text style={styles.date}>{item.date || item.tag || ''}</Text>
-                    <Text style={styles.affirmationText}>{item.text || item.title}</Text>
+                    <Text style={styles.affirmationText}>{contentText}</Text>
                 </View>
 
                 {/* Bottom Actions */}
@@ -107,7 +163,7 @@ const AffirmationsScreen = ({ navigation }) => {
                         <Ionicons name="arrow-undo-outline" size={28} color={currentIndex === 0 ? "rgba(255,255,255,0.3)" : "#FFF"} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(item.text || item.title)}>
+                    <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(contentText)}>
                         <Ionicons name="share-social-outline" size={28} color="#FFF" />
                     </TouchableOpacity>
 

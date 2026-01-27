@@ -10,10 +10,10 @@ export const circleService = {
      * @param {string} description 
      * @param {string} category 
      */
-    createCircle: async (name) => {
+    createCircle: async (name, description = '', category = 'General', type = 'public', image = null, visibility = 'visible') => {
         try {
             const createFn = httpsCallable(functions, 'createCircle');
-            const result = await createFn({ name, description, category, type, image });
+            const result = await createFn({ name, description, category, type, image, visibility });
             return result.data; // { success: true, circleId: '...' }
         } catch (error) {
             console.error("Error creating circle:", error);
@@ -26,7 +26,7 @@ export const circleService = {
      * @param {string} circleId
      * @param {object} data
      */
-    updateCircle: async (circleId) => {
+    updateCircle: async (circleId, data) => {
         try {
             const updateFn = httpsCallable(functions, 'updateCircle');
             await updateFn({ circleId, ...data });
@@ -111,7 +111,7 @@ export const circleService = {
     /**
      * Manage member status (Promote, Demote, Kick, Ban)
      */
-    manageMember: async (circleId) => {
+    manageMember: async (circleId, targetUid, action) => {
         try {
             const manageFn = httpsCallable(functions, 'manageMember');
             const result = await manageFn({ circleId, targetUid, action });
@@ -125,7 +125,7 @@ export const circleService = {
     /**
      * Handle join request (Accept/Reject)
      */
-    handleJoinRequest: async (circleId) => {
+    handleJoinRequest: async (circleId, targetUid, action) => {
         try {
             const fn = httpsCallable(functions, 'handleJoinRequest');
             await fn({ circleId, targetUid, action });
@@ -139,7 +139,7 @@ export const circleService = {
     /**
      * Submit a report for a circle member or content
      */
-    resolveCircleReport: async (circleId) => {
+    resolveCircleReport: async (circleId, reportId, action, resolutionNote = '') => {
         try {
             const fn = httpsCallable(functions, 'resolveCircleReport');
             const result = await fn({ circleId, reportId, action, resolutionNote });
@@ -153,7 +153,7 @@ export const circleService = {
     /**
      * Submit a report for a circle member or content
      */
-    submitReport: async (circleId) => {
+    submitReport: async (circleId, targetId, targetType, reason, description = '') => {
         try {
             const fn = httpsCallable(functions, 'submitReport');
             const result = await fn({ circleId, targetId, targetType, reason, description });
@@ -164,7 +164,7 @@ export const circleService = {
         }
     },
 
-    scheduleHuddle: async (circleId) => {
+    scheduleHuddle: async (circleId, title, scheduledAt) => {
         try {
             const fn = httpsCallable(functions, 'scheduleHuddle');
             const result = await fn({ circleId, title, scheduledAt: scheduledAt.toISOString() });
@@ -175,7 +175,7 @@ export const circleService = {
         }
     },
 
-    deleteScheduledHuddle: async (circleId) => {
+    deleteScheduledHuddle: async (circleId, eventId) => {
         try {
             const fn = httpsCallable(functions, 'deleteScheduledHuddle');
             await fn({ circleId, eventId });

@@ -130,7 +130,7 @@ export const Support = () => {
                 <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex items-center justify-between">
                     <div>
                         <p className="text-xs uppercase tracking-widest text-gray-500">Response Time</p>
-                        <p className="mt-1 text-3xl font-semibold text-blue-600">~2h</p>
+                        <p className="mt-1 text-3xl font-semibold text-blue-600">N/A</p>
                     </div>
                     <div className="bg-blue-50 text-blue-600 p-3 rounded-xl"><Clock size={24} /></div>
                 </div>

@@ -12,7 +12,6 @@ import { useAuth } from './context/AuthContext';
 // Import all screens (keeping original imports for brevity in this replacement)
 import OnboardingScreen from './screens/OnboardingScreen';
 import SignInScreen from './screens/SignInScreen';
-import TwoFactorSignInScreen from './screens/TwoFactorSignInScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import VerificationScreen from './screens/VerificationScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
@@ -80,11 +79,13 @@ export default function Navigation() {
         console.log('[PERF] Navigation: Waiting for isReady...');
         return null;
     }
+    if (user && userData === null) {
+        return null;
+    }
 
-    const isVerified = user?.emailVerified;
     const isProfileComplete = userData?.onboardingCompleted;
 
-    console.log('[Navigation] Rendering. User:', user?.email, 'Verified:', isVerified, 'ProfileComplete:', isProfileComplete);
+    console.log('[Navigation] Rendering. User:', user?.email, 'ProfileComplete:', isProfileComplete);
 
     return (
         <NavigationContainer
