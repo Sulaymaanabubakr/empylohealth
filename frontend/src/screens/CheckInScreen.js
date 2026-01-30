@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, TextInput, View, TouchableOpacity, Alert } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
 import { Screen } from '../components/Screen';
 import { FadeInView } from '../components/FadeInView';
@@ -18,6 +19,7 @@ const emojis = [
 ];
 
 export function CheckInScreen() {
+  const navigation = useNavigation();
   const [selectedMood, setSelectedMood] = useState('');
   const [focusLevel, setFocusLevel] = useState(5);
   const [notes, setNotes] = useState('');
@@ -25,12 +27,20 @@ export function CheckInScreen() {
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
+    if (!selectedMood) {
+      Alert.alert('Select Mood', 'Please select how you are feeling today.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const score = Math.round((focusLevel / 10) * 100);
       await assessmentService.submitAssessment('daily', score, { focusLevel, notes }, selectedMood);
+      Alert.alert('Check-in Saved', 'Your daily check-in has been recorded!', [
+        { text: 'OK', onPress: () => navigation.navigate('Home') }
+      ]);
     } catch (error) {
       console.error('Check-in submission failed', error);
+      Alert.alert('Error', 'Failed to save check-in. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
