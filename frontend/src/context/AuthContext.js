@@ -143,6 +143,11 @@ export const AuthProvider = ({ children, onAuthReady }) => {
         <AuthContext.Provider value={{ user, userData, loading, login, register, logout, loginWithGoogle, loginWithApple, refreshUser }}>
             {loading ? (
                 <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
+                    <Image
+                        source={require('../assets/images/logo_white.png')}
+                        style={{ width: '50%', height: undefined, aspectRatio: 1, marginBottom: 40 }}
+                        resizeMode="contain"
+                    />
                     <ActivityIndicator size="large" color="#FFFFFF" />
                 </View>
             ) : (

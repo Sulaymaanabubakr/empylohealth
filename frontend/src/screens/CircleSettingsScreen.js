@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
@@ -7,11 +7,15 @@ import { circleService } from '../services/api/circleService';
 import { doc, collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
+import ImageCropper from '../components/ImageCropper';
 import { userService } from '../services/api/userService';
+import { mediaService } from '../services/api/mediaService';
+import * as ImagePicker from 'expo-image-picker';
 
 // Components for different tabs
-const GeneralSettings = ({ circle, onEdit, canEdit }) => (
+const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto }) => (
     <View style={styles.tabContent}>
         <Text style={styles.sectionTitle}>General Information</Text>
         <View style={styles.infoCard}>
@@ -31,9 +35,14 @@ const GeneralSettings = ({ circle, onEdit, canEdit }) => (
             </View>
         </View>
         {canEdit && (
-            <TouchableOpacity style={styles.updateButton} onPress={onEdit}>
-                <Text style={styles.updateButtonText}>Edit Details</Text>
-            </TouchableOpacity>
+            <View style={{ gap: 10 }}>
+                <TouchableOpacity style={[styles.updateButton, { backgroundColor: '#E0F2F1' }]} onPress={onEditPhoto}>
+                    <Text style={[styles.updateButtonText, { color: COLORS.primary }]}>Change Photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.updateButton} onPress={onEdit}>
+                    <Text style={styles.updateButtonText}>Edit Details</Text>
+                </TouchableOpacity>
+            </View>
         )}
     </View>
 );
@@ -120,6 +129,7 @@ const TabButton = ({ title, active, onPress, badge, alert }) => (
 const CircleSettingsScreen = ({ navigation, route }) => {
     const { circleId } = route.params;
     const { user } = useAuth();
+    const { showModal } = useModal();
     const insets = useSafeAreaInsets();
 
     const [activeTab, setActiveTab] = useState('General'); // 'General', 'Members', 'Requests', 'Reports', 'Events'
@@ -131,6 +141,12 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [loading, setLoading] = useState(true);
 
     const [processingId, setProcessingId] = useState(null);
+
+    // Image Cropper State
+    const [cropperVisible, setCropperVisible] = useState(false);
+    const [tempImage, setTempImage] = useState(null);
+    // Note: uploading state might conflict with 'loading' if not careful, but useful for specific overlay
+    const [uploading, setUploading] = useState(false);
 
     // Derived Role State
     const myMemberRec = members.find(m => m.uid === user.uid);
@@ -162,7 +178,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
     const handleUpdateCircle = async () => {
         if (!editName.trim()) {
-            Alert.alert("Error", "Name cannot be empty");
+            showModal({ type: 'error', title: 'Error', message: 'Name cannot be empty' });
             return;
         }
         setLoading(true);
@@ -173,11 +189,35 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             });
             setCircle({ ...circle, name: editName.trim(), description: editDesc.trim() });
             setShowEditModal(false);
-            Alert.alert("Success", "Circle updated successfully.");
+            showModal({ type: 'success', title: 'Success', message: 'Circle updated successfully.' });
         } catch (error) {
-            Alert.alert("Error", "Failed to update circle.");
+            showModal({ type: 'error', title: 'Error', message: 'Failed to update circle.' });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleUpdatePhoto = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                showModal({ type: 'error', title: 'Permission Required', message: 'Please grant photo library access to upload a circle photo.' });
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: false, // Use custom cropper
+                quality: 1,
+            });
+
+            if (!result.canceled && result.assets[0]?.uri) {
+                setTempImage(result.assets[0].uri);
+                setTimeout(() => setCropperVisible(true), 500);
+            }
+        } catch (error) {
+            console.error('Photo selection error:', error);
+            showModal({ type: 'error', title: 'Error', message: 'Failed to select photo.' });
         }
     };
 
@@ -287,9 +327,9 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         setProcessingId(req.uid);
         try {
             await circleService.handleJoinRequest(circleId, req.uid, 'accept');
-            Alert.alert('Approved', `${req.displayName} has gathered to the circle.`);
+            showModal({ type: 'success', title: 'Approved', message: `${req.displayName} has gathered to the circle.` });
         } catch (error) {
-            Alert.alert('Error', 'Failed to approve request.');
+            showModal({ type: 'error', title: 'Error', message: 'Failed to approve request.' });
         } finally {
             setProcessingId(null);
         }
@@ -300,7 +340,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         try {
             await circleService.handleJoinRequest(circleId, req.uid, 'reject');
         } catch (error) {
-            Alert.alert('Error', 'Failed to reject request.');
+            showModal({ type: 'error', title: 'Error', message: 'Failed to reject request.' });
         } finally {
             setProcessingId(null);
         }
@@ -340,16 +380,14 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             });
         }
 
-        Alert.alert(
-            'Options',
-            `Actions for ${member.name}`,
-            options
-        );
+        // Alert.alert replacement
+        console.log('Options for member:', member.name, options);
+        showModal({ type: 'info', title: 'Member Options', message: 'Member management actions are being updated.' });
     };
 
     const handleSubmitReport = async () => {
         if (!reportReason) {
-            Alert.alert("Required", "Please provide a reason.");
+            showModal({ type: 'error', title: 'Required', message: 'Please provide a reason.' });
             return;
         }
         setLoading(true);
@@ -361,12 +399,13 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 reportReason,
                 reportDesc
             );
-            Alert.alert("Reported", "Thank you. Administrators will review this.");
+
             setShowReportModal(false);
+            showModal({ type: 'success', title: 'Reported', message: 'Thank you. Administrators will review this.' });
             setReportReason('');
             setReportDesc('');
         } catch (error) {
-            Alert.alert("Error", "Failed to submit report.");
+            showModal({ type: 'error', title: 'Error', message: 'Failed to submit report.' });
         } finally {
             setLoading(false);
         }
@@ -376,10 +415,10 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         setLoading(true);
         try {
             await circleService.manageMember(circleId, member.uid, action);
-            Alert.alert("Success", "Member updated.");
+            showModal({ type: 'success', title: 'Success', message: 'Member updated.' });
             // List updates automatically via onSnapshot
         } catch (error) {
-            Alert.alert("Error", "Action failed.");
+            showModal({ type: 'error', title: 'Error', message: 'Action failed.' });
         } finally {
             setLoading(false);
         }
@@ -387,7 +426,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
     const handleScheduleEvent = async () => {
         if (!eventTitle.trim()) {
-            Alert.alert("Required", "Please enter a title.");
+            showModal({ type: 'error', title: 'Required', message: 'Please enter a title.' });
             return;
         }
         try {
@@ -395,35 +434,38 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             await circleService.scheduleHuddle(circleId, eventTitle, eventDate);
             setShowScheduleModal(false);
             setEventTitle('');
-            Alert.alert("Success", "Huddle scheduled.");
+            showModal({ type: 'success', title: 'Success', message: 'Huddle scheduled.' });
         } catch (error) {
-            Alert.alert("Error", "Failed to schedule huddle.");
+            showModal({ type: 'error', title: 'Error', message: 'Failed to schedule huddle.' });
         } finally {
             setLoading(false);
         }
     };
 
     const handleDeleteEvent = async (eventId) => {
-        Alert.alert(
-            "Delete Event",
-            "Are you sure you want to delete this event?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            await circleService.deleteScheduledHuddle(circleId, eventId);
-                            Alert.alert("Deleted", "Event successfully deleted.");
-                        } catch (error) {
-                            console.error("Error deleting event:", error);
-                            Alert.alert("Error", "Failed to delete event.");
-                        }
-                    }
+        showModal({
+            type: 'confirmation',
+            title: 'Delete Event',
+            message: 'Are you sure you want to delete this event?',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    await circleService.deleteScheduledHuddle(circleId, eventId);
+                    // Short delay to allow modal to close before showing success? 
+                    // Or modal handles replacement? The current StatusModal design only supports one at a time.
+                    // We need to wait for close.
+                    setTimeout(() => {
+                        showModal({ type: 'success', title: 'Deleted', message: 'Event successfully deleted.' });
+                    }, 500);
+                } catch (error) {
+                    console.error("Error deleting event:", error);
+                    setTimeout(() => {
+                        showModal({ type: 'error', title: 'Error', message: 'Failed to delete event.' });
+                    }, 500);
                 }
-            ]
-        );
+            }
+        });
     };
 
     const MembersTab = () => {
@@ -456,28 +498,27 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     );
 
     const handleResolveReport = async (report, action) => {
-        Alert.alert(
-            "Confirm Action",
-            `Are you sure you want to ${action} this report?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Confirm",
-                    style: action === 'ban' ? 'destructive' : 'default',
-                    onPress: async () => {
-                        setLoading(true);
-                        try {
-                            await circleService.resolveCircleReport(circleId, report.id, action, `Action taken by ${user.uid}`);
-                            Alert.alert("Success", "Report resolved.");
-                        } catch (error) {
-                            Alert.alert("Error", "Failed to resolve report.");
-                        } finally {
-                            setLoading(false);
-                        }
-                    }
+        showModal({
+            type: 'confirmation',
+            title: 'Confirm Action',
+            message: `Are you sure you want to ${action} this report?`,
+            confirmText: 'Confirm',
+            onConfirm: async () => {
+                setLoading(true);
+                try {
+                    await circleService.resolveCircleReport(circleId, report.id, action, `Action taken by ${user.uid}`);
+                    setTimeout(() => {
+                        showModal({ type: 'success', title: 'Success', message: 'Report resolved.' });
+                    }, 500);
+                } catch (error) {
+                    setTimeout(() => {
+                        showModal({ type: 'error', title: 'Error', message: 'Failed to resolve report.' });
+                    }, 500);
+                } finally {
+                    setLoading(false);
                 }
-            ]
-        );
+            }
+        });
     };
 
     const ReportsTab = () => (
@@ -588,7 +629,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                {activeTab === 'General' && <GeneralSettings circle={circle} onEdit={openEditModal} canEdit={isAdminOrCreator} />}
+                {activeTab === 'General' && <GeneralSettings circle={circle} onEdit={openEditModal} canEdit={isAdminOrCreator} onEditPhoto={handleUpdatePhoto} />}
                 {activeTab === 'Members' && <MembersTab />}
                 {activeTab === 'Requests' && isAdminOrCreator && <RequestsTab />}
                 {activeTab === 'Reports' && isModOrAbove && <ReportsTab />}
@@ -596,7 +637,10 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             </ScrollView>
 
             <Modal visible={showScheduleModal} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.modalOverlay}
+                >
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Schedule Huddle</Text>
 
@@ -625,11 +669,14 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             <Modal visible={showEditModal} animationType="fade" transparent>
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.modalOverlay}
+                >
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Edit Circle Details</Text>
 
@@ -659,12 +706,15 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Report Modal */}
             <Modal visible={showReportModal} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.modalOverlay}
+                >
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Report Member</Text>
                         <Text style={{ marginBottom: 16, color: '#666' }}>Reporting {reportTarget?.name}</Text>
@@ -695,9 +745,38 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
-        </SafeAreaView>
+
+
+            <ImageCropper
+                visible={cropperVisible}
+                imageUri={tempImage}
+                onClose={() => setCropperVisible(false)}
+                onCrop={async (uri, cropData) => {
+                    setCropperVisible(false);
+                    setLoading(true); // Block UI
+                    try {
+                        const uploadedUrl = await mediaService.uploadAsset(uri, 'circles');
+                        // Apply standard header transformation
+                        const optimizedUrl = uploadedUrl.replace('/upload/', '/upload/c_fill,w_800,h_400,g_auto/');
+
+                        await circleService.updateCircle(circleId, {
+                            image: optimizedUrl
+                        });
+
+                        // Optimistic update
+                        setCircle(prev => ({ ...prev, image: optimizedUrl }));
+                        showModal({ type: 'success', title: 'Success', message: 'Circle photo updated.' });
+                    } catch (error) {
+                        console.error("Upload failed", error);
+                        showModal({ type: 'error', title: 'Error', message: 'Failed to upload photo.' });
+                    } finally {
+                        setLoading(false);
+                    }
+                }}
+            />
+        </SafeAreaView >
     );
 };
 

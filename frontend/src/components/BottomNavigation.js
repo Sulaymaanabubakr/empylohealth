@@ -4,61 +4,79 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 
-    activeTab: 'Home' | 'Explore' | 'Chat' | 'Profile';
+activeTab: 'Home' | 'Explore' | 'Chat' | 'Profile';
 
-const BottomNavigation = ({ navigation, activeTab }) => {
+const BottomNavigation = ({ state, descriptors, navigation }) => {
     const insets = useSafeAreaInsets();
-
-    const tabs = [
-        {
-            name: 'Home',
-            label: 'Home',
-            icon: (color) => <Ionicons name={activeTab === 'Home' ? "home" : "home-outline"} size={activeTab === 'Home' ? 24 : 26} color={color} />,
-            onPress: () => navigation.navigate('Dashboard'),
-        },
-        {
-            name: 'Explore',
-            label: 'Explore',
-            icon: (color) => <Feather name="compass" size={26} color={color} />,
-            onPress: () => navigation.navigate('Explore'),
-        },
-        {
-            name: 'Chat',
-            label: 'Chat',
-            icon: (color) => <Ionicons name={activeTab === 'Chat' ? "chatbubble" : "chatbubble-outline"} size={activeTab === 'Chat' ? 24 : 26} color={color} />,
-            onPress: () => navigation.navigate('ChatList'),
-        },
-        {
-            name: 'Profile',
-            label: 'Profile',
-            icon: (color) => <Ionicons name={activeTab === 'Profile' ? "person" : "person-outline"} size={activeTab === 'Profile' ? 24 : 26} color={color} />,
-            onPress: () => navigation.navigate('Profile'),
-        },
-    ];
 
     return (
         <View style={[styles.bottomNavContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
             <View style={styles.bottomNav}>
-                {tabs.map((tab) => {
-                    const isActive = activeTab === tab.name;
-                    const iconColor = isActive ? COLORS.primary : '#BDBDBD';
+                {state.routes.map((route, index) => {
+                    const { options } = descriptors[route.key];
+                    const label =
+                        options.tabBarLabel !== undefined
+                            ? options.tabBarLabel
+                            : options.title !== undefined
+                                ? options.title
+                                : route.name;
+
+                    const isFocused = state.index === index;
+
+                    const onPress = () => {
+                        const event = navigation.emit({
+                            type: 'tabPress',
+                            target: route.key,
+                            canPreventDefault: true,
+                        });
+
+                        if (!isFocused && !event.defaultPrevented) {
+                            navigation.navigate(route.name, route.params);
+                        }
+                    };
+
+                    const onLongPress = () => {
+                        navigation.emit({
+                            type: 'tabLongPress',
+                            target: route.key,
+                        });
+                    };
+
+                    // Determine icon based on route name and focus state
+                    // We can duplicate the icon logic here or pass it from MainTabs options
+                    // For safety, let's keep the icon mappings here based on route.name
+                    let iconFn = (color) => <Ionicons name="square" size={24} color={color} />;
+                    if (route.name === 'Dashboard') {
+                        iconFn = (color) => <Ionicons name={isFocused ? "home" : "home-outline"} size={isFocused ? 24 : 26} color={color} />;
+                    } else if (route.name === 'Explore') {
+                        iconFn = (color) => <Feather name="compass" size={26} color={color} />;
+                    } else if (route.name === 'ChatList') {
+                        iconFn = (color) => <Ionicons name={isFocused ? "chatbubble" : "chatbubble-outline"} size={isFocused ? 24 : 26} color={color} />;
+                    } else if (route.name === 'Profile') {
+                        iconFn = (color) => <Ionicons name={isFocused ? "person" : "person-outline"} size={isFocused ? 24 : 26} color={color} />;
+                    }
 
                     return (
                         <TouchableOpacity
-                            key={tab.name}
+                            key={route.key}
+                            accessibilityRole="button"
+                            accessibilityState={isFocused ? { selected: true } : {}}
+                            accessibilityLabel={options.tabBarAccessibilityLabel}
+                            testID={options.tabBarTestID}
+                            onPress={onPress} // Default tab press
+                            onLongPress={onLongPress}
                             style={styles.navItem}
-                            onPress={tab.onPress}
                             activeOpacity={0.7}
                         >
-                            {isActive ? (
+                            {isFocused ? (
                                 <View style={[styles.activeNavIcon, { backgroundColor: '#E0F2F1' }]}>
-                                    {tab.icon(COLORS.primary)}
+                                    {iconFn(COLORS.primary)}
                                 </View>
                             ) : (
-                                tab.icon('#BDBDBD')
+                                iconFn('#BDBDBD')
                             )}
-                            <Text style={[styles.navLabel, isActive && { color: COLORS.primary, fontWeight: '700' }]}>
-                                {tab.label}
+                            <Text style={[styles.navLabel, isFocused && { color: COLORS.primary, fontWeight: '700' }]}>
+                                {label === 'Dashboard' ? 'Home' : (label === 'ChatList' ? 'Chat' : label)}
                             </Text>
                         </TouchableOpacity>
                     );

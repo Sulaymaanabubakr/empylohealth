@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient'; // Only for button
@@ -8,6 +8,7 @@ import Dropdown from '../components/Dropdown';
 import DatePicker from '../components/DatePicker';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
 import Avatar from '../components/Avatar';
@@ -16,6 +17,7 @@ import { auth } from '../services/firebaseConfig';
 
 const PersonalInformationScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
+    const { showModal } = useModal();
 
     // Form State (initialized with userData)
     const [name, setName] = useState(userData?.name || '');
@@ -49,7 +51,7 @@ const PersonalInformationScreen = ({ navigation }) => {
     const pickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Please grant camera roll permissions to upload an image.');
+            showModal({ type: 'error', title: 'Permission needed', message: 'Please grant camera roll permissions to upload an image.' });
             return;
         }
 
@@ -88,7 +90,7 @@ const PersonalInformationScreen = ({ navigation }) => {
 
             if (newPassword) {
                 if (!currentPassword) {
-                    Alert.alert('Missing password', 'Enter your current password to update it.');
+                    showModal({ type: 'error', title: 'Missing password', message: 'Enter your current password to update it.' });
                     setIsSubmitting(false);
                     return;
                 }
@@ -100,14 +102,14 @@ const PersonalInformationScreen = ({ navigation }) => {
             // 3. Update Firestore via userService
             if (user?.uid) {
                 await userService.updateUserDocument(user.uid, updateData);
-                Alert.alert("Success", "Profile updated successfully!");
+                showModal({ type: 'success', title: 'Success', message: 'Profile updated successfully!' });
                 navigation.goBack();
             } else {
-                Alert.alert("Error", "User not found. Please login again.");
+                showModal({ type: 'error', title: 'Error', message: 'User not found. Please login again.' });
             }
         } catch (error) {
             console.error("Profile Save Error:", error);
-            Alert.alert("Error", "Failed to save profile changes. " + error.message);
+            showModal({ type: 'error', title: 'Error', message: `Failed to save profile changes. ${error.message}` });
         } finally {
             setIsSubmitting(false);
         }
@@ -126,86 +128,92 @@ const PersonalInformationScreen = ({ navigation }) => {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            >
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-                {/* Avatar */}
-                <View style={styles.avatarSection}>
-                    <View style={styles.avatarWrapper}>
-                        <View style={styles.avatarBorder}>
-                            <Avatar uri={avatarUri || ''} name={name || user?.displayName || 'User'} size={100} />
+                    {/* Avatar */}
+                    <View style={styles.avatarSection}>
+                        <View style={styles.avatarWrapper}>
+                            <View style={styles.avatarBorder}>
+                                <Avatar uri={avatarUri || ''} name={name || user?.displayName || 'User'} size={100} />
+                            </View>
+                            <TouchableOpacity style={styles.editAvatarButton} onPress={pickImage}>
+                                <MaterialCommunityIcons name="camera" size={18} color="#FFF" />
+                            </TouchableOpacity>
                         </View>
-                        <TouchableOpacity style={styles.editAvatarButton} onPress={pickImage}>
-                            <MaterialCommunityIcons name="camera" size={18} color="#FFF" />
-                        </TouchableOpacity>
                     </View>
-                </View>
 
-                {/* Form Card */}
-                <View style={styles.formCard}>
-                    <Input
-                        label="Name"
-                        value={name}
-                        onChangeText={setName}
-                        placeholder="Enter your name"
-                        icon={<Ionicons name="person-outline" size={20} color="#009688" />}
-                    />
+                    {/* Form Card */}
+                    <View style={styles.formCard}>
+                        <Input
+                            label="Name"
+                            value={name}
+                            onChangeText={setName}
+                            placeholder="Enter your name"
+                            icon={<Ionicons name="person-outline" size={20} color="#009688" />}
+                        />
 
-                    <Input
-                        label="Current password"
-                        value={currentPassword}
-                        onChangeText={setCurrentPassword}
-                        secureTextEntry
-                        placeholder="Enter current password"
-                        icon={<Ionicons name="lock-closed-outline" size={20} color="#009688" />}
-                    />
+                        <Input
+                            label="Current password"
+                            value={currentPassword}
+                            onChangeText={setCurrentPassword}
+                            secureTextEntry
+                            placeholder="Enter current password"
+                            icon={<Ionicons name="lock-closed-outline" size={20} color="#009688" />}
+                        />
 
-                    <Input
-                        label="New password"
-                        value={newPassword}
-                        onChangeText={setNewPassword}
-                        secureTextEntry
-                        placeholder="Enter new password"
-                        icon={<Ionicons name="lock-closed-outline" size={20} color="#009688" />}
-                    />
+                        <Input
+                            label="New password"
+                            value={newPassword}
+                            onChangeText={setNewPassword}
+                            secureTextEntry
+                            placeholder="Enter new password"
+                            icon={<Ionicons name="lock-closed-outline" size={20} color="#009688" />}
+                        />
 
-                    <DatePicker
-                        label="Date of Birth"
-                        value={dob}
-                        onSelect={setDob}
-                        placeholder="Select date"
-                        icon={<MaterialCommunityIcons name="calendar-outline" size={20} color="#009688" />}
-                    />
+                        <DatePicker
+                            label="Date of Birth"
+                            value={dob}
+                            onSelect={setDob}
+                            placeholder="Select date"
+                            icon={<MaterialCommunityIcons name="calendar-outline" size={20} color="#009688" />}
+                        />
 
-                    <Dropdown
-                        label="Gender"
-                        value={gender}
-                        options={genderOptions}
-                        onSelect={setGender}
-                        icon={<MaterialCommunityIcons name="gender-male-female" size={20} color="#009688" />}
-                    />
+                        <Dropdown
+                            label="Gender"
+                            value={gender}
+                            options={genderOptions}
+                            onSelect={setGender}
+                            icon={<MaterialCommunityIcons name="gender-male-female" size={20} color="#009688" />}
+                        />
 
-                    <Dropdown
-                        label="Location"
-                        value={location}
-                        options={locationOptions}
-                        onSelect={setLocation}
-                        icon={<Ionicons name="location-outline" size={20} color="#009688" />}
-                    />
-                </View>
+                        <Dropdown
+                            label="Location"
+                            value={location}
+                            options={locationOptions}
+                            onSelect={setLocation}
+                            icon={<Ionicons name="location-outline" size={20} color="#009688" />}
+                        />
+                    </View>
 
-                {/* Gradient Save Button */}
-                <TouchableOpacity style={styles.saveButtonContainer} onPress={handleSave} disabled={isSubmitting}>
-                    <LinearGradient
-                        colors={['#009688', '#4DB6AC']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.saveButton}
-                    >
-                        <Text style={styles.saveButtonText}>{isSubmitting ? 'Saving...' : 'Save Changes'}</Text>
-                    </LinearGradient>
-                </TouchableOpacity>
+                    {/* Gradient Save Button */}
+                    <TouchableOpacity style={styles.saveButtonContainer} onPress={handleSave} disabled={isSubmitting}>
+                        <LinearGradient
+                            colors={['#009688', '#4DB6AC']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.saveButton}
+                        >
+                            <Text style={styles.saveButtonText}>{isSubmitting ? 'Saving...' : 'Save Changes'}</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
 
-            </ScrollView>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };

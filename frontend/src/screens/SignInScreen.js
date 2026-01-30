@@ -8,7 +8,9 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
-  Dimensions
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
@@ -53,72 +55,77 @@ const SignInScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Image
-            source={require('../assets/images/header_shape.png')}
-            style={styles.headerShape}
-            resizeMode="stretch"
-          />
-        </View>
-
-        <View style={styles.formContainer}>
-          <Text style={styles.title}>Sign In</Text>
-
-          <Input
-            label="Email Address"
-            placeholder="Enter your email..."
-            keyboardType="email-address"
-            icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-          />
-
-          <View style={styles.passwordContainer}>
-            <Input
-              label="Password"
-              placeholder="Enter your password"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <Image
+              source={require('../assets/images/header_shape.png')}
+              style={styles.headerShape}
+              resizeMode="stretch"
             />
           </View>
 
-          <Button
-            title={loading ? "Signing in..." : "Sign in"}
-            onPress={handleSignIn}
-            style={styles.signInButton}
-            disabled={loading}
-          />
+          <View style={styles.formContainer}>
+            <Text style={styles.title}>Sign In</Text>
 
-          <Text style={styles.orText}>Or continue with</Text>
+            <Input
+              label="Email Address"
+              placeholder="Enter your email..."
+              keyboardType="email-address"
+              icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+            />
 
-          <View style={styles.socialContainer}>
-            <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-              const res = await loginWithGoogle();
-            }}>
-              <AntDesign name="google" size={24} color="black" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-              const res = await loginWithApple();
-            }}>
-              <FontAwesome name="apple" size={24} color="black" />
+            <View style={styles.passwordContainer}>
+              <Input
+                label="Password"
+                placeholder="Enter your password"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
+
+            <Button
+              title={loading ? "Signing in..." : "Sign in"}
+              onPress={handleSignIn}
+              style={styles.signInButton}
+              disabled={loading}
+            />
+
+            <Text style={styles.orText}>Or continue with</Text>
+
+            <View style={styles.socialContainer}>
+              <TouchableOpacity style={styles.socialIcon} onPress={async () => {
+                const res = await loginWithGoogle();
+              }}>
+                <AntDesign name="google" size={24} color="black" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.socialIcon} onPress={async () => {
+                const res = await loginWithApple();
+              }}>
+                <FontAwesome name="apple" size={24} color="black" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Don't have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+                <Text style={styles.linkText}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.forgotPassword} onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={styles.linkText}>Forgot Password</Text>
             </TouchableOpacity>
           </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-              <Text style={styles.linkText}>Sign Up</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.forgotPassword} onPress={() => navigation.navigate('ForgotPassword')}>
-            <Text style={styles.linkText}>Forgot Password</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

@@ -8,23 +8,31 @@ import { COLORS } from '../theme/theme';
 import ConfirmationModal from '../components/ConfirmationModal';
 import ProfilePhotoModal from '../components/ProfilePhotoModal';
 import Avatar from '../components/Avatar';
+import ImageCropper from '../components/ImageCropper';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { circleService } from '../services/api/circleService';
 import { authService } from '../services/auth/authService';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
-import BottomNavigation from '../components/BottomNavigation';
+import { useModal } from '../context/ModalContext';
+
 
 const PersonalProfileScreen = ({ navigation }) => {
     // Modal States
+    // Modal States
     const { user, userData } = useAuth();
     const { showToast } = useToast();
+    const { showModal } = useModal();
     const [activeTab, setActiveTab] = useState('My circles');
     const [isLogoutVisible, setIsLogoutVisible] = useState(false);
     const [isEditPhotoVisible, setIsEditPhotoVisible] = useState(false);
     const [myCircles, setMyCircles] = useState([]);
     const [uploading, setUploading] = useState(false);
+
+    // Cropper State
+    const [cropperVisible, setCropperVisible] = useState(false);
+    const [tempImage, setTempImage] = useState(null);
 
     React.useEffect(() => {
         if (user?.uid) {
@@ -52,29 +60,24 @@ const PersonalProfileScreen = ({ navigation }) => {
         try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission Required', 'Please grant photo library access to upload a profile picture.');
+                showModal({ type: 'error', title: 'Permission Required', message: 'Please grant photo library access to upload a profile picture.' });
                 return;
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'], // Updated from ImagePicker.MediaTypeOptions.Images
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
+                mediaTypes: ['images'],
+                allowsEditing: false, // Use custom cropper
+                quality: 1,
             });
 
-            if (!result.canceled && result.assets[0]) {
-                setUploading(true);
+            if (!result.canceled && result.assets[0]?.uri) {
                 setIsEditPhotoVisible(false);
-                const uploadedUrl = await mediaService.uploadAsset(result.assets[0].uri, 'avatars');
-                await userService.updateUserDocument(user.uid, { photoURL: uploadedUrl });
-                setUploading(false);
-                Alert.alert('Success', 'Profile photo updated!');
+                setTempImage(result.assets[0].uri);
+                setTimeout(() => setCropperVisible(true), 500); // Small delay to allow modal to close smoothly
             }
         } catch (error) {
-            setUploading(false);
-            console.error('Photo upload error:', error);
-            Alert.alert('Error', 'Failed to upload photo. Please try again.');
+            console.error('Photo selection error:', error);
+            showModal({ type: 'error', title: 'Error', message: 'Failed to select photo.' });
         }
     };
 
@@ -82,28 +85,23 @@ const PersonalProfileScreen = ({ navigation }) => {
         try {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission Required', 'Please grant camera access to take a profile picture.');
+                showModal({ type: 'error', title: 'Permission Required', message: 'Please grant camera access to take a profile picture.' });
                 return;
             }
 
             const result = await ImagePicker.launchCameraAsync({
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
+                allowsEditing: false,
+                quality: 1,
             });
 
-            if (!result.canceled && result.assets[0]) {
-                setUploading(true);
+            if (!result.canceled && result.assets[0]?.uri) {
                 setIsEditPhotoVisible(false);
-                const uploadedUrl = await mediaService.uploadAsset(result.assets[0].uri, 'avatars');
-                await userService.updateUserDocument(user.uid, { photoURL: uploadedUrl });
-                setUploading(false);
-                Alert.alert('Success', 'Profile photo updated!');
+                setTempImage(result.assets[0].uri);
+                setTimeout(() => setCropperVisible(true), 500);
             }
         } catch (error) {
-            setUploading(false);
             console.error('Camera error:', error);
-            Alert.alert('Error', 'Failed to take photo. Please try again.');
+            showModal({ type: 'error', title: 'Error', message: 'Failed to take photo.' });
         }
     };
 
@@ -113,17 +111,17 @@ const PersonalProfileScreen = ({ navigation }) => {
             setIsEditPhotoVisible(false);
             await userService.updateUserDocument(user.uid, { photoURL: '' });
             setUploading(false);
-            Alert.alert('Success', 'Profile photo removed.');
+            showModal({ type: 'success', title: 'Success', message: 'Profile photo removed.' });
         } catch (error) {
             setUploading(false);
             console.error('Delete photo error:', error);
-            Alert.alert('Error', 'Failed to delete photo.');
+            showModal({ type: 'error', title: 'Error', message: 'Failed to delete photo.' });
         }
     };
 
     const handleUseAvatar = () => {
         setIsEditPhotoVisible(false);
-        Alert.alert('Avatar', 'Avatar functionality coming soon!');
+        showModal({ type: 'info', title: 'Avatar', message: 'Avatar functionality coming soon!' });
     };
 
     const safeAvatar = userData?.photoURL || user?.photoURL || '';
@@ -291,10 +289,34 @@ const PersonalProfileScreen = ({ navigation }) => {
                 {activeTab === 'Account' && renderAccount()}
             </ScrollView>
 
-            {/* Bottom Navigation */}
-            <BottomNavigation navigation={navigation} activeTab="Profile" />
+
 
             {/* Modals */}
+            <ImageCropper
+                visible={cropperVisible}
+                imageUri={tempImage}
+                onClose={() => setCropperVisible(false)}
+                onCrop={async (uri, cropData) => {
+                    setCropperVisible(false);
+                    setUploading(true);
+                    try {
+                        // Upload
+                        const uploadedUrl = await mediaService.uploadAsset(uri, 'avatars');
+                        // Optimization
+                        const optimizedUrl = uploadedUrl.replace('/upload/', '/upload/c_thumb,g_face,w_400,h_400,z_0.7/');
+
+                        // Update User
+                        await userService.updateUserDocument(user.uid, { photoURL: optimizedUrl });
+                        showModal({ type: 'success', title: 'Success', message: 'Profile photo updated!' });
+                    } catch (error) {
+                        console.error("Upload failed", error);
+                        showModal({ type: 'error', title: 'Error', message: 'Failed to update profile photo.' });
+                    } finally {
+                        setUploading(false);
+                    }
+                }}
+            />
+
             <ConfirmationModal
                 visible={isLogoutVisible}
                 message="Are you sure you want to Log out?"

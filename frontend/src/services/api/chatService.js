@@ -88,21 +88,48 @@ export const chatService = {
                 if (!isGroup) {
                     const otherId = participants.find((id) => id !== uid);
                     if (otherId) {
-                        const userDoc = await getDoc(doc(db, 'users', otherId));
-                        const userData = userDoc.exists() ? userDoc.data() : {};
-                        name = userData?.name || userData?.displayName || 'Anonymous';
-                        avatar = userData?.photoURL || null;
+                        try {
+                            const userDoc = await getDoc(doc(db, 'users', otherId));
+                            const userData = userDoc.exists() ? userDoc.data() : {};
+                            name = userData?.name || userData?.displayName || 'Anonymous';
+                            avatar = userData?.photoURL || null;
+                            console.log(`[ChatService] Fetched user ${otherId}:`, { name, hasPhoto: !!avatar, photoURL: avatar });
+                        } catch (err) {
+                            console.error(`[ChatService] Error fetching user ${otherId}:`, err);
+                        }
+                    } else {
+                        console.log('[ChatService] No other participant found in direct chat', participants);
                     }
                 }
 
                 const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
                 const time = updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
+                let circlePhoto = null;
+                if (isGroup && data.circleId && !avatar) {
+                    try {
+                        const circleDoc = await getDoc(doc(db, 'circles', data.circleId));
+                        if (circleDoc.exists()) {
+                            const circleData = circleDoc.data();
+                            circlePhoto = circleData.photoURL || circleData.image || null;
+                            // Also fallback name if chat name is generic
+                            if (!name || name === 'Chat') {
+                                name = circleData.name || 'Circle Chat';
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error fetching circle for chat:', err);
+                    }
+                }
+
+                // Final avatar fallback: data.avatar -> direct user photo -> circle photo
+                const finalAvatar = avatar || circlePhoto || null;
+
                 return {
                     id: docSnap.id,
                     ...data,
                     name,
-                    avatar,
+                    avatar: finalAvatar,
                     time,
                     members: participants.length,
                     unread: 0,

@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
+import { mediaService } from '../services/api/mediaService';
+import { useModal } from '../context/ModalContext';
 import * as ImagePicker from 'expo-image-picker';
+import ImageCropper from '../components/ImageCropper';
 
 const CreateCircleScreen = ({ navigation }) => {
+    const { showModal } = useModal();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState('Support Group');
@@ -14,28 +17,26 @@ const CreateCircleScreen = ({ navigation }) => {
     const [image, setImage] = useState(null);
     const [loading, setLoading] = useState(false);
 
+    // Cropper State
+    const [cropperVisible, setCropperVisible] = useState(false);
+    const [tempImage, setTempImage] = useState(null);
+
     const pickImage = async () => {
-        // No permissions request is necessary for launching the image library
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.5,
-            base64: true, // We might need base64 for cloud function or upload
+            mediaTypes: ['images'], // Fix deprecation
+            allowsEditing: false, // Use custom cropper
+            quality: 1,
         });
 
-        if (!result.canceled) {
-            setImage(result.assets[0].uri);
-            // In a real app, you'd upload this image to storage here or in handleCreate
-            // and get a download URL. For now, we'll pass the base64 or URI if backend handles it.
-            // If backend expects a URL, we might need to handle upload separately. 
-            // Assuming backend (cloud function) might handle base64 or we just use URI for local demo.
+        if (!result.canceled && result.assets[0]?.uri) {
+            setTempImage(result.assets[0].uri);
+            setCropperVisible(true);
         }
     };
 
     const handleCreate = async () => {
         if (!name || !description) {
-            Alert.alert("Error", "Please fill in all fields");
+            showModal({ type: 'error', title: 'Error', message: 'Please fill in all fields' });
             return;
         }
 
@@ -54,11 +55,15 @@ const CreateCircleScreen = ({ navigation }) => {
                 }
             }
 
-            Alert.alert("Success", "Circle created successfully!");
-            navigation.goBack();
+            showModal({
+                type: 'success',
+                title: 'Success',
+                message: 'Circle created successfully!',
+                onConfirm: () => navigation.goBack()
+            });
         } catch (error) {
             console.error(error);
-            Alert.alert("Error", "Failed to create circle. " + error.message);
+            showModal({ type: 'error', title: 'Error', message: 'Failed to create circle. ' + error.message });
         } finally {
             setLoading(false);
         }
@@ -77,81 +82,112 @@ const CreateCircleScreen = ({ navigation }) => {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            >
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-                {/* Circle Icon Picker */}
-                <View style={styles.iconContainer}>
-                    <TouchableOpacity onPress={pickImage} activeOpacity={0.8}>
-                        <View style={[styles.iconPlaceholder, image && styles.iconImageContainer]}>
-                            {image ? (
-                                <Image source={{ uri: image }} style={styles.iconImage} />
-                            ) : (
-                                <Ionicons name="camera-outline" size={32} color="#757575" />
-                            )}
-                        </View>
-                        <View style={styles.editIconBadge}>
-                            <MaterialCommunityIcons name="pencil" size={14} color="#FFF" />
-                        </View>
-                    </TouchableOpacity>
-                    <Text style={styles.helperText}>Add Profile Picture</Text>
-                </View>
-
-                {/* Form Fields */}
-                <View style={styles.formSection}>
-                    <Text style={styles.label}>Circle Name</Text>
-                    <View style={styles.inputContainer}>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="e.g. Anxiety Support, Morning Yoga..."
-                            value={name}
-                            onChangeText={setName}
-                            placeholderTextColor="#9E9E9E"
-                        />
-                    </View>
-                </View>
-
-                <View style={styles.formSection}>
-                    <Text style={styles.label}>Access Level</Text>
-                    <View style={styles.accessContainer}>
-                        <TouchableOpacity
-                            style={[styles.accessButton, accessType === 'Public' && styles.accessButtonActive]}
-                            onPress={() => setAccessType('Public')}
-                        >
-                            <Ionicons name="globe-outline" size={20} color={accessType === 'Public' ? COLORS.primary : '#757575'} />
-                            <Text style={[styles.accessText, accessType === 'Public' && styles.accessTextActive]}>Public</Text>
+                    {/* Circle Icon Picker */}
+                    <View style={styles.iconContainer}>
+                        <TouchableOpacity onPress={pickImage} activeOpacity={0.8}>
+                            <View style={[styles.iconPlaceholder, image && styles.iconImageContainer]}>
+                                {image ? (
+                                    <Image source={{ uri: image }} style={styles.iconImage} />
+                                ) : (
+                                    <Ionicons name="camera-outline" size={32} color="#757575" />
+                                )}
+                            </View>
+                            <View style={styles.editIconBadge}>
+                                <MaterialCommunityIcons name="pencil" size={14} color="#FFF" />
+                            </View>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.accessButton, accessType === 'Private' && styles.accessButtonActive]}
-                            onPress={() => setAccessType('Private')}
-                        >
-                            <Ionicons name="lock-closed-outline" size={20} color={accessType === 'Private' ? COLORS.primary : '#757575'} />
-                            <Text style={[styles.accessText, accessType === 'Private' && styles.accessTextActive]}>Private</Text>
-                        </TouchableOpacity>
+                        <Text style={styles.helperText}>Add Profile Picture</Text>
                     </View>
-                    <Text style={styles.helperTextSmall}>
-                        {accessType === 'Public'
-                            ? "Anyone can find and join this circle."
-                            : "Only invited members can join this circle."}
-                    </Text>
-                </View>
 
-                <View style={styles.formSection}>
-                    <Text style={styles.label}>Description</Text>
-                    <View style={styles.textAreaContainer}>
-                        <TextInput
-                            style={styles.textArea}
-                            placeholder="What is this circle about?"
-                            value={description}
-                            onChangeText={setDescription}
-                            placeholderTextColor="#9E9E9E"
-                            multiline
-                            maxLength={1000}
-                        />
-                        <Text style={styles.charCount}>{description.length}/1000</Text>
+                    <ImageCropper
+                        visible={cropperVisible}
+                        imageUri={tempImage}
+                        onClose={() => setCropperVisible(false)}
+                        onCrop={async (uri, cropData) => {
+                            setCropperVisible(false);
+                            setLoading(true);
+                            try {
+                                // Upload to Cloudinary
+                                const uploadedUrl = await mediaService.uploadAsset(uri, 'circles');
+
+                                // Apply transformations if needed (e.g. standard circle thumb)
+                                // Cloudinary URL structure replacement for optimization
+                                // Insert /c_fill,w_200,h_200,g_auto/ for optimized thumbnails
+                                const optimizedUrl = uploadedUrl.replace('/upload/', '/upload/c_fill,w_400,h_400,g_auto/');
+
+                                setImage(optimizedUrl);
+                            } catch (error) {
+                                showModal({ type: 'error', title: 'Upload Failed', message: 'Could not upload image.' });
+                            } finally {
+                                setLoading(false);
+                            }
+                        }}
+                    />
+
+                    {/* Form Fields */}
+                    <View style={styles.formSection}>
+                        <Text style={styles.label}>Circle Name</Text>
+                        <View style={styles.inputContainer}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. Anxiety Support, Morning Yoga..."
+                                value={name}
+                                onChangeText={setName}
+                                placeholderTextColor="#9E9E9E"
+                            />
+                        </View>
                     </View>
-                </View>
 
-            </ScrollView>
+                    <View style={styles.formSection}>
+                        <Text style={styles.label}>Access Level</Text>
+                        <View style={styles.accessContainer}>
+                            <TouchableOpacity
+                                style={[styles.accessButton, accessType === 'Public' && styles.accessButtonActive]}
+                                onPress={() => setAccessType('Public')}
+                            >
+                                <Ionicons name="globe-outline" size={20} color={accessType === 'Public' ? COLORS.primary : '#757575'} />
+                                <Text style={[styles.accessText, accessType === 'Public' && styles.accessTextActive]}>Public</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.accessButton, accessType === 'Private' && styles.accessButtonActive]}
+                                onPress={() => setAccessType('Private')}
+                            >
+                                <Ionicons name="lock-closed-outline" size={20} color={accessType === 'Private' ? COLORS.primary : '#757575'} />
+                                <Text style={[styles.accessText, accessType === 'Private' && styles.accessTextActive]}>Private</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.helperTextSmall}>
+                            {accessType === 'Public'
+                                ? "Anyone can find and join this circle."
+                                : "Only invited members can join this circle."}
+                        </Text>
+                    </View>
+
+                    <View style={styles.formSection}>
+                        <Text style={styles.label}>Description</Text>
+                        <View style={styles.textAreaContainer}>
+                            <TextInput
+                                style={styles.textArea}
+                                placeholder="What is this circle about?"
+                                value={description}
+                                onChangeText={setDescription}
+                                placeholderTextColor="#9E9E9E"
+                                multiline
+                                maxLength={1000}
+                            />
+                            <Text style={styles.charCount}>{description.length}/1000</Text>
+                        </View>
+                    </View>
+
+                </ScrollView>
+            </KeyboardAvoidingView>
 
             {/* Footer */}
             <View style={styles.footer}>

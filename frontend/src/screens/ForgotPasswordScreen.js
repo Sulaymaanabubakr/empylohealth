@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
@@ -7,22 +7,29 @@ import Button from '../components/Button';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import EmailIllustration from '../../assets/images/email_icon.svg';
 import { authService } from '../services/auth/authService';
+import { useModal } from '../context/ModalContext';
 
 const ForgotPasswordScreen = ({ navigation }) => {
+    const { showModal } = useModal();
     const [email, setEmail] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleReset = async () => {
         if (!email) {
-            Alert.alert('Missing email', 'Please enter your email address.');
+            showModal({ type: 'error', title: 'Missing email', message: 'Please enter your email address.' });
             return;
         }
         setIsSubmitting(true);
         try {
             await authService.sendPasswordReset(email);
-            Alert.alert('Email sent', 'Check your inbox for reset instructions.');
+            showModal({
+                type: 'success',
+                title: 'Email sent',
+                message: 'Check your inbox for reset instructions.',
+                onConfirm: () => navigation.navigate('SignIn')
+            });
         } catch (error) {
-            Alert.alert('Error', error.message || 'Unable to send reset email.');
+            showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to send reset email.' });
         } finally {
             setIsSubmitting(false);
         }
@@ -30,40 +37,47 @@ const ForgotPasswordScreen = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('SignIn')}
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
             >
-                <Ionicons name="chevron-back" size={24} color="black" />
-            </TouchableOpacity>
+                <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('SignIn')}
+                    >
+                        <Ionicons name="chevron-back" size={24} color="black" />
+                    </TouchableOpacity>
 
-            <View style={styles.content}>
-                <Text style={styles.title}>Forgot Password</Text>
+                    <View style={styles.content}>
+                        <Text style={styles.title}>Forgot Password</Text>
 
-                <View style={[styles.icon, { justifyContent: 'center', alignItems: 'center' }]}>
-                    <EmailIllustration width={120} height={120} />
-                </View>
+                        <View style={[styles.icon, { justifyContent: 'center', alignItems: 'center' }]}>
+                            <EmailIllustration width={120} height={120} />
+                        </View>
 
-                <Text style={styles.infoText}>
-                    Please enter your email and we will send you instructions on how to reset your password
-                </Text>
+                        <Text style={styles.infoText}>
+                            Please enter your email and we will send you instructions on how to reset your password
+                        </Text>
 
-                <Input
-                    placeholder="Enter your email..."
-                    keyboardType="email-address"
-                    icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                />
+                        <Input
+                            placeholder="Enter your email..."
+                            keyboardType="email-address"
+                            icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
+                            value={email}
+                            onChangeText={setEmail}
+                            autoCapitalize="none"
+                        />
 
-                <Button
-                    title={isSubmitting ? "Sending..." : "Reset Password"}
-                    onPress={handleReset}
-                    style={styles.resetButton}
-                    disabled={isSubmitting}
-                />
-            </View>
+                        <Button
+                            title={isSubmitting ? "Sending..." : "Reset Password"}
+                            onPress={handleReset}
+                            style={styles.resetButton}
+                            disabled={isSubmitting}
+                        />
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };

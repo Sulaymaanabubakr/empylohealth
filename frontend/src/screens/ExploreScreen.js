@@ -1,46 +1,54 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
 import { resourceService } from '../services/api/resourceService';
-import BottomNavigation from '../components/BottomNavigation';
+
 
 const { width } = Dimensions.get('window');
 
 const ExploreScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets(); // Add hook
     const [activeTab, setActiveTab] = useState('Self-development');
-    const [activeFilter, setActiveFilter] = useState('Love');
+    const [activeFilter, setActiveFilter] = useState('All');
     const [activities, setActivities] = useState([]);
     const [supportGroups, setSupportGroups] = useState([]);
     const [affirmations, setAffirmations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        const loadContent = async () => {
-            try {
-                setError(null);
-                console.log('ExploreScreen: fetching content...');
-                const [items, circles, affs] = await Promise.all([
-                    resourceService.getExploreContent(),
-                    circleService.getAllCircles(),
-                    resourceService.getAffirmations()
-                ]);
-                console.log('ExploreScreen: fetched', items.length, 'resources,', circles.length, 'circles,', affs.length, 'affirmations');
-                setActivities(items);
-                setSupportGroups(circles);
-                setAffirmations(affs);
-            } catch (err) {
-                console.error("ExploreScreen Error:", err);
-                setError(err.message || "Failed to load content");
-            } finally {
-                setLoading(false);
-            }
-        };
+        loadContent();
+    }, []);
+
+    const loadContent = async () => {
+        try {
+            setError(null);
+            console.log('ExploreScreen: fetching content...');
+            const [items, circles, affs] = await Promise.all([
+                resourceService.getExploreContent(),
+                circleService.getAllCircles(),
+                resourceService.getAffirmations()
+            ]);
+            console.log('ExploreScreen: fetched', items.length, 'resources,', circles.length, 'circles,', affs.length, 'affirmations');
+            setActivities(items);
+            setSupportGroups(circles);
+            setAffirmations(affs);
+        } catch (err) {
+            console.error("ExploreScreen Error:", err);
+            setError(err.message || "Failed to load content");
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    const onRefresh = React.useCallback(() => {
+        setRefreshing(true);
         loadContent();
     }, []);
 
@@ -50,12 +58,13 @@ const ExploreScreen = ({ navigation }) => {
     // If empty (e.g. first run before seed), maybe show static fallback or specific empty state.
     // For now, assuming backend seed is run or will be run.
 
-    const filters = ['Love', 'Hard work', 'Career', 'Courage', 'Relationships'];
+    const filters = ['All', 'Love', 'Hard work', 'Career', 'Courage', 'Relationships'];
     const filteredAffirmations = affirmations.filter((item) => {
-        if (!activeFilter) return true;
+        if (activeFilter === 'All') return true;
         const tags = item.tags || [];
-        // If an affirmation has no tags, surface it instead of hiding it behind the filter.
-        if (tags.length === 0) return true;
+        // If an affirmation has no tags, surface it instead of hiding it behind the filter? 
+        // Better to check if it matches filter.
+        if (tags.length === 0) return false;
         return tags.includes(activeFilter);
     });
 
@@ -75,172 +84,186 @@ const ExploreScreen = ({ navigation }) => {
                 <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
+            >
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.scrollContent}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+                    }
+                >
 
-                {/* Search Bar */}
-                <View style={styles.searchContainer}>
-                    <Ionicons name="search" size={20} color="#9E9E9E" style={styles.searchIcon} />
-                    <TextInput
-                        placeholder="Search anything..."
-                        placeholderTextColor="#9E9E9E"
-                        style={styles.searchInput}
-                    />
-                </View>
+                    {/* Search Bar */}
+                    <View style={styles.searchContainer}>
+                        <Ionicons name="search" size={20} color="#9E9E9E" style={styles.searchIcon} />
+                        <TextInput
+                            placeholder="Search anything..."
+                            placeholderTextColor="#9E9E9E"
+                            style={styles.searchInput}
+                        />
+                    </View>
 
-                {/* Segmented Control */}
-                <View style={styles.tabContainer}>
-                    <TouchableOpacity
-                        style={[styles.tab, activeTab === 'Self-development' && styles.activeTab]}
-                        onPress={() => setActiveTab('Self-development')}
-                    >
-                        <Text style={[styles.tabText, activeTab === 'Self-development' && styles.activeTabText]}>Self-development</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.tab, activeTab === 'Group activities' && styles.activeTab]}
-                        onPress={() => setActiveTab('Group activities')}
-                    >
-                        <Text style={[styles.tabText, activeTab === 'Group activities' && styles.activeTabText]}>Group activities</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Recommended Activities */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Recommended activities</Text>
-                    <Text style={styles.seeAllText}>See all</Text>
-                </View>
-
-                {error ? (
-                    <View style={styles.errorContainer}>
-                        <Ionicons name="alert-circle-outline" size={48} color={COLORS.error || '#FF5252'} />
-                        <Text style={styles.errorText}>{error}</Text>
-                        <TouchableOpacity style={styles.retryButton} onPress={() => {
-                            setLoading(true);
-                            setError(null);
-                            // Re-trigger effect? For now just manual reload via navigation or we need to extract loadContent
-                        }}>
-                            <Text style={styles.retryText}>Retry</Text>
+                    {/* Segmented Control */}
+                    <View style={styles.tabContainer}>
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'Self-development' && styles.activeTab]}
+                            onPress={() => setActiveTab('Self-development')}
+                        >
+                            <Text style={[styles.tabText, activeTab === 'Self-development' && styles.activeTabText]}>Self-development</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'Group activities' && styles.activeTab]}
+                            onPress={() => setActiveTab('Group activities')}
+                        >
+                            <Text style={[styles.tabText, activeTab === 'Group activities' && styles.activeTabText]}>Group activities</Text>
                         </TouchableOpacity>
                     </View>
-                ) : loading ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="small" color={COLORS.primary} />
+
+                    {/* Recommended Activities */}
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Recommended activities</Text>
+                        <Text style={styles.seeAllText}>See all</Text>
                     </View>
-                ) : (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-                        {displayedActivities.map((item) => (
+
+                    {error ? (
+                        <View style={styles.errorContainer}>
+                            <Ionicons name="alert-circle-outline" size={48} color={COLORS.error || '#FF5252'} />
+                            <Text style={styles.errorText}>{error}</Text>
+                            <TouchableOpacity style={styles.retryButton} onPress={() => {
+                                setLoading(true);
+                                setError(null);
+                                // Re-trigger effect? For now just manual reload via navigation or we need to extract loadContent
+                            }}>
+                                <Text style={styles.retryText}>Retry</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : loading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="small" color={COLORS.primary} />
+                        </View>
+                    ) : (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+                            {displayedActivities.map((item) => (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={[styles.activityCard, { backgroundColor: item.color || '#F3F4F6' }]}
+                                    onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                                >
+                                    <View style={styles.timeBadge}>
+                                        <Text style={styles.timeText}>{item.time}</Text>
+                                    </View>
+                                    {item.image ? (
+                                        <Image
+                                            source={{ uri: item.image }}
+                                            style={styles.activityImage}
+                                            resizeMode="contain"
+                                        />
+                                    ) : null}
+                                    <View style={styles.activityContent}>
+                                        <Text style={styles.activityTitle}>{item.title}</Text>
+                                        <Text style={[styles.activityTag, { color: item.tag === 'LEARN' ? '#EF6C00' : '#00695C' }]}>
+                                            {item.tag}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    )}
+
+                    {!loading && displayedActivities.length === 0 && (
+                        <Text style={styles.emptyStateText}>No activities yet.</Text>
+                    )}
+
+                    {/* Support Groups Preview (Only for Group activities tab) */}
+                    {activeTab === 'Group activities' && (
+                        <View style={{ marginTop: 24 }}>
+                            <View style={styles.sectionHeader}>
+                                <Text style={styles.sectionTitle}>Circles</Text>
+                                <TouchableOpacity onPress={() => navigation.navigate('SupportGroups')}>
+                                    <Text style={styles.seeAllText}>See all</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <View style={{ paddingHorizontal: SPACING.lg }}>
+                                <Text style={{ color: '#757575', marginBottom: 12 }}>Showing circles near you</Text>
+                                {supportGroups.slice(0, 3).map((group) => (
+                                    <View key={group.id} style={styles.groupCardPreview}>
+                                        <Image
+                                            source={group.image ? { uri: group.image } : require('../assets/images/icon_support_community.png')}
+                                            style={styles.groupImagePreview}
+                                        />
+                                        <View style={{ flex: 1 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Text style={styles.groupNamePreview}>{group.name}</Text>
+                                                {/* {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />} */}
+                                            </View>
+                                            <Text style={styles.groupMembersPreview}>{group.members?.length || 0} members</Text>
+                                        </View>
+                                        <TouchableOpacity
+                                            style={styles.viewButtonPreview}
+                                            onPress={() => navigation.navigate('CircleDetail', { circle: group })}
+                                        >
+                                            <Text style={styles.viewButtonTextPreview}>VIEW</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Daily Affirmations */}
+                    <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Daily Affirmations</Text>
+
+                    {/* Filters */}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+                        {filters.map((filter) => (
+                            <TouchableOpacity
+                                key={filter}
+                                style={[styles.filterChip, activeFilter === filter && styles.activeFilterChip]}
+                                onPress={() => setActiveFilter(filter)}
+                            >
+                                <Text style={[styles.filterText, activeFilter === filter && styles.activeFilterText]}>{filter}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.horizontalScroll}
+                    >
+                        {filteredAffirmations.map((item) => (
                             <TouchableOpacity
                                 key={item.id}
-                                style={[styles.activityCard, { backgroundColor: item.color || '#F3F4F6' }]}
-                                onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                                style={styles.affirmationCard}
+                                onPress={() => navigation.navigate('Affirmations')}
                             >
-                                <View style={styles.timeBadge}>
-                                    <Text style={styles.timeText}>{item.time}</Text>
-                                </View>
                                 {item.image ? (
-                                    <Image
-                                        source={{ uri: item.image }}
-                                        style={styles.activityImage}
-                                        resizeMode="contain"
-                                    />
+                                    <Image source={{ uri: item.image }} style={styles.affirmationImage} />
                                 ) : null}
-                                <View style={styles.activityContent}>
-                                    <Text style={styles.activityTitle}>{item.title}</Text>
-                                    <Text style={[styles.activityTag, { color: item.tag === 'LEARN' ? '#EF6C00' : '#00695C' }]}>
-                                        {item.tag}
-                                    </Text>
+                                <View style={styles.affirmationOverlay}>
+                                    <View style={styles.affirmationHeader}>
+                                        <Text style={styles.affirmationDate}>{(item.tags && item.tags[0]) || item.tag || item.date || ''}</Text>
+                                        <TouchableOpacity style={styles.expandButton}>
+                                            <Ionicons name="resize" size={12} color="#FFF" />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <Text style={styles.affirmationText}>{item.content || item.title || ''}</Text>
                                 </View>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
-                )}
 
-                {!loading && displayedActivities.length === 0 && (
-                    <Text style={styles.emptyStateText}>No activities yet.</Text>
-                )}
+                    {!loading && filteredAffirmations.length === 0 && (
+                        <Text style={styles.emptyStateText}>No affirmations yet.</Text>
+                    )}
 
-                {/* Support Groups Preview (Only for Group activities tab) */}
-                {activeTab === 'Group activities' && (
-                    <View style={{ marginTop: 24 }}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Circles</Text>
-                            <TouchableOpacity onPress={() => navigation.navigate('SupportGroups')}>
-                                <Text style={styles.seeAllText}>See all</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <View style={{ paddingHorizontal: SPACING.lg }}>
-                            <Text style={{ color: '#757575', marginBottom: 12 }}>Showing circles near you</Text>
-                            {supportGroups.slice(0, 3).map((group) => (
-                                <View key={group.id} style={styles.groupCardPreview}>
-                                    <Image
-                                        source={group.image ? { uri: group.image } : require('../assets/images/icon_support_community.png')}
-                                        style={styles.groupImagePreview}
-                                    />
-                                    <View style={{ flex: 1 }}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <Text style={styles.groupNamePreview}>{group.name}</Text>
-                                            {/* {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />} */}
-                                        </View>
-                                        <Text style={styles.groupMembersPreview}>{group.members?.length || 0} members</Text>
-                                    </View>
-                                    <TouchableOpacity
-                                        style={styles.viewButtonPreview}
-                                        onPress={() => navigation.navigate('CircleDetail', { circle: group })}
-                                    >
-                                        <Text style={styles.viewButtonTextPreview}>VIEW</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            ))}
-                        </View>
-                    </View>
-                )}
-
-                {/* Daily Affirmations */}
-                <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Daily Affirmations</Text>
-
-                {/* Filters */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-                    {filters.map((filter) => (
-                        <TouchableOpacity
-                            key={filter}
-                            style={[styles.filterChip, activeFilter === filter && styles.activeFilterChip]}
-                            onPress={() => setActiveFilter(filter)}
-                        >
-                            <Text style={[styles.filterText, activeFilter === filter && styles.activeFilterText]}>{filter}</Text>
-                        </TouchableOpacity>
-                    ))}
                 </ScrollView>
+            </KeyboardAvoidingView>
 
-                <View style={styles.affirmationRow}>
-                    {filteredAffirmations.map((item) => (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={styles.affirmationCard}
-                            onPress={() => navigation.navigate('Affirmations')}
-                        >
-                            {item.image ? (
-                                <Image source={{ uri: item.image }} style={styles.affirmationImage} />
-                            ) : null}
-                            <View style={styles.affirmationOverlay}>
-                                <View style={styles.affirmationHeader}>
-                                    <Text style={styles.affirmationDate}>{(item.tags && item.tags[0]) || item.tag || item.date || ''}</Text>
-                                    <TouchableOpacity style={styles.expandButton}>
-                                        <Ionicons name="resize" size={12} color="#FFF" />
-                                    </TouchableOpacity>
-                                </View>
-                                <Text style={styles.affirmationText}>{item.content || item.title || ''}</Text>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
-                </View>
 
-                {!loading && filteredAffirmations.length === 0 && (
-                    <Text style={styles.emptyStateText}>No affirmations yet.</Text>
-                )}
-
-            </ScrollView>
-
-            {/* Bottom Navigation */}
-            <BottomNavigation navigation={navigation} activeTab="Explore" />
         </SafeAreaView>
     );
 };
@@ -441,14 +464,9 @@ const styles = StyleSheet.create({
     activeFilterText: {
         color: '#1A1A1A',
     },
-    affirmationRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 20,
-    },
     affirmationCard: {
-        width: '48%',
-        height: 220, // Taller card
+        width: 160, // Wider cards (requested by user)
+        height: 220,
         borderRadius: 24,
         overflow: 'hidden',
         position: 'relative',
@@ -458,6 +476,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 5,
         backgroundColor: '#FFF',
+        marginRight: 12, // Spacing between horizontal cards
     },
     affirmationImage: {
         width: '100%',

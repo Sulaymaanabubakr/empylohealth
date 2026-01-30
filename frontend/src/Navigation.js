@@ -4,6 +4,7 @@ import { Linking, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import MainTabs from './navigation/MainTabs';
 
 import SplashScreen from './screens/SplashScreen';
 // ... other imports ...
@@ -129,19 +130,22 @@ export default function Navigation() {
                     <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
                 </Stack.Navigator>
             ) : (
-                <Stack.Navigator initialRouteName="Dashboard" screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="Dashboard" component={DashboardScreen} />
+                <Stack.Navigator initialRouteName="MainTabs" screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="MainTabs" component={MainTabs} />
+                    {/* Dashboard, Explore, ChatList, Profile moved to MainTabs */}
+
                     <Stack.Screen name="Notifications" component={NotificationsScreen} />
                     <Stack.Screen name="CheckIn" component={CheckInScreen} />
-                    <Stack.Screen name="Explore" component={ExploreScreen} />
+                    {/* <Stack.Screen name="Explore" component={ExploreScreen} /> Removing duplicate */}
                     <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
                     <Stack.Screen name="Affirmations" component={AffirmationsScreen} />
                     <Stack.Screen name="SupportGroups" component={SupportGroupsScreen} />
-                    <Stack.Screen name="ChatList" component={ChatListScreen} />
+                    {/* <Stack.Screen name="ChatList" component={ChatListScreen} /> Removing duplicate */}
                     <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
                     <Stack.Screen name="Huddle" component={HuddleScreen} options={{ presentation: 'modal' }} />
-                    <Stack.Screen name="Profile" component={ProfileScreen} />
+                    {/* <Stack.Screen name="Profile" component={ProfileScreen} /> Removing duplicate */}
                     <Stack.Screen name="LearningSession" component={LearningSessionScreen} />
+
                     <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
                     <Stack.Screen name="CircleDetail" component={CircleDetailScreen} />
                     <Stack.Screen name="CircleAnalysis" component={CircleAnalysisScreen} />

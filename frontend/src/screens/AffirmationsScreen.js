@@ -1,14 +1,16 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, FlatList, ImageBackground, TouchableOpacity, StatusBar, Share, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, FlatList, ImageBackground, TouchableOpacity, StatusBar, Share, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { resourceService } from '../services/api/resourceService';
+import { useModal } from '../context/ModalContext';
 
 const { width, height } = Dimensions.get('window');
 
 const AffirmationsScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const flatListRef = useRef(null);
+    const { showModal } = useModal();
     const [currentIndex, setCurrentIndex] = useState(0);
     const [likedItems, setLikedItems] = useState(new Set());
     const [affirmations, setAffirmations] = useState([]);
@@ -70,7 +72,7 @@ const AffirmationsScreen = ({ navigation }) => {
     };
 
     const handleMic = () => {
-        Alert.alert("Voice Note", "Press and hold to record your own affirmation. (Feature coming soon)");
+        showModal({ type: 'info', title: 'Voice Note', message: 'Press and hold to record your own affirmation. (Feature coming soon)' });
     };
 
     const onMomentumScrollEnd = (event) => {

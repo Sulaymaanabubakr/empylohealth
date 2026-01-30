@@ -1195,6 +1195,9 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
         return { success: true, huddleId: huddleRef.id, roomUrl };
     } catch (error) {
         console.error("Error starting huddle:", error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
         throw new functions.https.HttpsError('internal', 'Unable to start huddle.');
     }
 });

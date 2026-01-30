@@ -1,47 +1,28 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Feather } from '@expo/vector-icons';
 import DashboardScreen from '../screens/DashboardScreen';
 import ExploreScreen from '../screens/ExploreScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import { theme } from '../theme/theme';
+import BottomNavigation from '../components/BottomNavigation';
 
-const Tabs = createBottomTabNavigator();
+const Tab = createBottomTabNavigator();
 
-export function MainTabs() {
+const MainTabs = () => {
   return (
-    <Tabs.Navigator
-      screenOptions={({ route }) => ({
+    <Tab.Navigator
+      tabBar={(props) => <BottomNavigation {...props} />}
+      screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          borderTopWidth: 0,
-          elevation: 6,
-          backgroundColor: '#FFFFFF',
-          height: 68,
-          paddingBottom: 10,
-        },
-        tabBarActiveTintColor: theme.colors.brand,
-        tabBarInactiveTintColor: '#94A4A2',
-        tabBarLabelStyle: {
-          fontFamily: theme.typography.bodyMedium,
-          fontSize: 11,
-        },
-        tabBarIcon: ({ color, size }) => {
-          const icons = {
-            Dashboard: 'home',
-            Explore: 'compass',
-            Chat: 'message-circle',
-            Profile: 'user',
-          };
-          const iconName = icons[route.name] || 'home';
-          return <Feather name={iconName} size={size} color={color} />;
-        },
-      })}
+      }}
+      initialRouteName="Dashboard"
     >
-      <Tabs.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Home' }} />
-      <Tabs.Screen name="Explore" component={ExploreScreen} />
-      <Tabs.Screen name="Chat" component={ChatListScreen} />
-      <Tabs.Screen name="Profile" component={ProfileScreen} />
-    </Tabs.Navigator>
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Explore" component={ExploreScreen} />
+      <Tab.Screen name="ChatList" component={ChatListScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
   );
+};
+
+export default MainTabs;

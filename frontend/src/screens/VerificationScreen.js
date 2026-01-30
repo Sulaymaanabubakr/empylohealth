@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Platform, StatusBar, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY } from '../theme/theme';
 import Button from '../components/Button';
@@ -8,9 +8,11 @@ import { Ionicons } from '@expo/vector-icons';
 import EmailIllustration from '../../assets/images/email_icon.svg';
 import { authService } from '../services/auth/authService';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 
 const VerificationScreen = ({ navigation, route }) => {
   const { user, refreshUser } = useAuth();
+  const { showModal } = useModal();
 
   const handleVerify = async () => {
     console.log('[VerificationScreen] Verify clicked');
@@ -23,19 +25,19 @@ const VerificationScreen = ({ navigation, route }) => {
         console.log('[VerificationScreen] Verified! Navigator should auto-switch.');
         return;
       }
-      Alert.alert('Not verified', 'Please verify your email using the link we sent.');
+      showModal({ type: 'error', title: 'Not verified', message: 'Please verify your email using the link we sent.' });
     } catch (error) {
       console.error('[VerificationScreen] Error during verify:', error);
-      Alert.alert('Error', error.message || 'Unable to verify email.');
+      showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to verify email.' });
     }
   };
 
   const handleResend = async () => {
     try {
       await authService.sendVerificationEmail();
-      Alert.alert('Email sent', 'Check your inbox for the verification link.');
+      showModal({ type: 'success', title: 'Email sent', message: 'Check your inbox for the verification link.' });
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to resend verification email.');
+      showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to resend verification email.' });
     }
   };
 

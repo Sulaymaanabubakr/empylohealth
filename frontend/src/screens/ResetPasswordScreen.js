@@ -1,34 +1,40 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { authService } from '../services/auth/authService';
+import { useModal } from '../context/ModalContext';
 
 const ResetPasswordScreen = ({ navigation, route }) => {
     const { oobCode } = route.params || {};
+    const { showModal } = useModal();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleReset = async () => {
         if (!oobCode) {
-            Alert.alert('Missing code', 'Open the reset link from your email.');
+            showModal({ type: 'error', title: 'Missing code', message: 'Open the reset link from your email.' });
             return;
         }
         if (!password || password !== confirmPassword) {
-            Alert.alert('Password mismatch', 'Please enter matching passwords.');
+            showModal({ type: 'error', title: 'Password mismatch', message: 'Please enter matching passwords.' });
             return;
         }
         setIsSubmitting(true);
         try {
             await authService.confirmPasswordReset(oobCode, password);
-            Alert.alert('Success', 'Your password has been reset.');
-            navigation.navigate('SignIn');
+            showModal({
+                type: 'success',
+                title: 'Success',
+                message: 'Your password has been reset.',
+                onConfirm: () => navigation.navigate('SignIn')
+            });
         } catch (error) {
-            Alert.alert('Error', error.message || 'Unable to reset password.');
+            showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to reset password.' });
         } finally {
             setIsSubmitting(false);
         }

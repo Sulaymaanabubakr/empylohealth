@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import Navigation from './src/Navigation';
 import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/context/ToastContext';
+import { ModalProvider } from './src/context/ModalContext';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
@@ -82,9 +83,11 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <ToastProvider>
-            <AuthProvider onAuthReady={onAuthReady}>
-              <Navigation />
-            </AuthProvider>
+            <ModalProvider>
+              <AuthProvider onAuthReady={onAuthReady}>
+                <Navigation />
+              </AuthProvider>
+            </ModalProvider>
           </ToastProvider>
           <StatusBar style="auto" />
         </SafeAreaProvider>

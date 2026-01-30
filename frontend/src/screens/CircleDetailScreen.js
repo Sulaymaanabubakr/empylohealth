@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, Share, Dimensions, ImageBackground, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Share, Dimensions, ImageBackground, ActivityIndicator, Image } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
-import ConfirmationModal from '../components/ConfirmationModal';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
-import SuccessModal from '../components/SuccessModal';
 import { huddleService } from '../services/api/huddleService';
 import { circleService } from '../services/api/circleService';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,16 +19,15 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const { user } = useAuth();
     const initialCircle = route.params?.circle;
     const insets = useSafeAreaInsets();
+    const { showModal } = useModal();
 
     const [circle, setCircle] = useState(initialCircle);
-    const [isLeaveVisible, setIsLeaveVisible] = useState(false);
     const [memberProfiles, setMemberProfiles] = useState([]);
     const [isLeaving, setIsLeaving] = useState(false);
     const [isJoining, setIsJoining] = useState(false);
     const [isMember, setIsMember] = useState(false);
     const [role, setRole] = useState(null); // 'creator' | 'admin' | 'moderator' | 'member' | null
     const [requestStatus, setRequestStatus] = useState('none'); // 'none' | 'pending'
-    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [events, setEvents] = useState([]);
 
     // Refresh circle data locally to keep member list updated
@@ -54,19 +53,30 @@ const CircleDetailScreen = ({ navigation, route }) => {
         // 1. Subscribe to Real-time Role (Subcollection)
         const unsubscribe = circleService.subscribeToCircleMember(circle.id, user.uid, (member) => {
             if (member) {
-                setRole(member.role);
-                setIsMember(true);
-                setRequestStatus('none');
-                // Sync local membership check logic
-                if (!circle.members?.includes(user.uid)) {
-                    refreshCircle(); // Force refresh if array is out of sync
+                // Check for pending status
+                if (member.status === 'pending' || member.role === 'pending') {
+                    setRequestStatus('pending');
+                    setIsMember(false);
+                    setRole(null);
+                } else {
+                    setRole(member.role || 'member');
+                    setIsMember(true);
+                    setRequestStatus('none');
+
+                    // Sync local membership check logic
+                    if (!circle.members?.includes(user.uid)) {
+                        refreshCircle(); // Force refresh if array is out of sync
+                    }
                 }
             } else {
                 setRole(null);
                 setIsMember(false);
-                // Check if there is a pending request? (Could add another listener or check once)
-                // For now, assume 'none' unless join action sets it
-                // setRequestStatus('none'); 
+                // Don't auto-reset requestStatus here if it was set by local storage check? 
+                // Actually, if member doc doesn't exist, they definitely aren't pending (unless pending requests are stored elsewhere).
+                // But let's verify if pending requests are in 'members' collection or 'requests' collection.
+                // If they are in 'requests', this subscription won't find them.
+                // But usually for simplicity they are in members with status='pending'.
+                // If not, we rely on AsyncStorage as fallback.
             }
         });
 
@@ -110,6 +120,21 @@ const CircleDetailScreen = ({ navigation, route }) => {
         };
     }, [circle, user]);
 
+    useEffect(() => {
+        checkPendingStatus();
+    }, []);
+
+    const checkPendingStatus = async () => {
+        try {
+            const status = await AsyncStorage.getItem(`pending_request_${circle.id}`);
+            if (status === 'true') {
+                setRequestStatus('pending');
+            }
+        } catch (e) {
+            console.log(e);
+        }
+    };
+
     const handleJoinCircle = async () => {
         if (!circle?.id) return;
         try {
@@ -118,15 +143,23 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
             if (result.status === 'pending') {
                 setRequestStatus('pending');
-                Alert.alert("Request Sent", result.message || "Your request to join is pending approval.");
+                await AsyncStorage.setItem(`pending_request_${circle.id}`, 'true');
+                showModal({ type: 'success', title: 'Request Sent', message: result.message || "Your request to join is pending approval." });
             } else {
                 // Success: Listener will update state
+                // Clear pending status if it existed
+                await AsyncStorage.removeItem(`pending_request_${circle.id}`);
                 await refreshCircle();
-                setShowSuccessModal(true);
+                showModal({
+                    type: 'success',
+                    title: 'Welcome!',
+                    message: `You have successfully joined ${circle.name}.`,
+                    confirmText: "Let's Go!"
+                });
             }
         } catch (error) {
             console.error('Failed to join circle', error);
-            Alert.alert("Error", "Failed to join circle. Please try again.");
+            showModal({ type: 'error', title: 'Error', message: 'Failed to join circle. Please try again.' });
         } finally {
             setIsJoining(false);
         }
@@ -134,20 +167,28 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     const handleLeaveCircle = async () => {
         if (!circle?.id) {
-            setIsLeaveVisible(false);
             navigation.goBack();
             return;
         }
-        try {
-            setIsLeaving(true);
-            await circleService.leaveCircle(circle.id);
-            setIsLeaveVisible(false);
-            navigation.goBack(); // Or refresh if we want them to stay on the page as non-member
-        } catch (error) {
-            console.error('Failed to leave circle', error);
-        } finally {
-            setIsLeaving(false);
-        }
+
+        showModal({
+            type: 'confirmation',
+            title: 'Leave Circle',
+            message: 'Are you sure you want to leave this Circle?',
+            confirmText: 'Leave',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    setIsLeaving(true);
+                    await circleService.leaveCircle(circle.id);
+                    navigation.goBack();
+                } catch (error) {
+                    console.error('Failed to leave circle', error);
+                } finally {
+                    setIsLeaving(false);
+                }
+            }
+        });
     };
 
     const handleInvite = async () => {
@@ -273,7 +314,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                                 }
                                             });
                                         } else {
-                                            Alert.alert('Chat unavailable', 'This circle does not have a chat yet.');
+                                            showModal({ type: 'info', title: 'Chat unavailable', message: 'This circle does not have a chat yet.' });
                                         }
                                     }}
                                 >
@@ -287,7 +328,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     style={styles.actionItem}
                                     onPress={async () => {
                                         if (!circle.chatId) {
-                                            Alert.alert('Huddle unavailable', 'This circle does not have a chat yet.');
+                                            showModal({ type: 'info', title: 'Huddle unavailable', message: 'This circle does not have a chat yet.' });
                                             return;
                                         }
 
@@ -306,7 +347,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                         // Permission Logic: Creator/Admin/Mod OR specific setting
                                         const allowMemberHuddles = circle.settings?.allowMemberHuddles;
                                         if (!['creator', 'admin', 'moderator'].includes(role) && !allowMemberHuddles) {
-                                            Alert.alert('Permission Denied', 'Starting huddles is restricted to Admins and Moderators.');
+                                            showModal({ type: 'error', title: 'Permission Denied', message: 'Starting huddles is restricted to Admins and Moderators.' });
                                             return;
                                         }
 
@@ -319,7 +360,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                                 roomUrl: result.roomUrl
                                             });
                                         } catch (error) {
-                                            Alert.alert('Unable to start huddle', 'Please try again later.');
+                                            showModal({ type: 'error', title: 'Unable to start huddle', message: 'Please try again later.' });
                                         }
                                     }}
                                 >
@@ -383,7 +424,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                             {event.scheduledAt?.toDate ? event.scheduledAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(event.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </Text>
                                     </View>
-                                    <TouchableOpacity style={styles.remindBtn} onPress={() => Alert.alert('Reminder', 'Added to your calendar (Demo)')}>
+                                    <TouchableOpacity style={styles.remindBtn} onPress={() => showModal({ type: 'success', title: 'Reminder', message: 'Added to your calendar (Demo)' })}>
                                         <Ionicons name="notifications-outline" size={20} color={COLORS.primary} />
                                     </TouchableOpacity>
                                 </View>
@@ -443,7 +484,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
                     {/* Leave Circle Button (moved from header) */}
                     {isMember && (
-                        <TouchableOpacity style={styles.leaveButton} onPress={() => setIsLeaveVisible(true)}>
+                        <TouchableOpacity style={styles.leaveButton} onPress={handleLeaveCircle}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Ionicons name="log-out-outline" size={20} color="#FF5252" style={{ marginRight: 8 }} />
                                 <Text style={styles.leaveButtonText}>Leave Circle</Text>
@@ -480,31 +521,25 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
             {/* Sticky Pending Status */}
             {requestStatus === 'pending' && (
-                <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + 10, backgroundColor: '#FFF59D' }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + 10 }]}>
+                    <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#FFF8E1', // Light yellow button background
+                        paddingVertical: 18,
+                        paddingHorizontal: 32,
+                        borderRadius: 32,
+                        width: '100%',
+                    }}>
                         <Ionicons name="time-outline" size={24} color="#F57F17" style={{ marginRight: 8 }} />
-                        <View>
-                            <Text style={{ fontSize: 16, fontWeight: '700', color: '#F57F17' }}>Request Pending</Text>
-                            <Text style={{ fontSize: 12, color: '#F9A825' }}>Admins are reviewing your request.</Text>
-                        </View>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: '#F57F17' }}>Request Pending</Text>
                     </View>
+                    <Text style={styles.joinButtonSubtext}>Admins are reviewing your request.</Text>
                 </View>
             )}
 
-            <ConfirmationModal
-                visible={isLeaveVisible}
-                message="Are you sure you want to leave this Circle?"
-                onConfirm={handleLeaveCircle}
-                onCancel={() => setIsLeaveVisible(false)}
-            />
 
-            <SuccessModal
-                visible={showSuccessModal}
-                title="Welcome!"
-                message={`You have successfully joined ${circle.name}.`}
-                buttonText="Let's Go!"
-                onClose={() => setShowSuccessModal(false)}
-            />
         </View>
     );
 };

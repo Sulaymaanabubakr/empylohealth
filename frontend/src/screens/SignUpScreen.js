@@ -8,7 +8,9 @@ import {
     Image,
     ScrollView,
     TouchableOpacity,
-    Dimensions
+    Dimensions,
+    KeyboardAvoidingView,
+    Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
@@ -61,96 +63,101 @@ const SignUpScreen = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.header}>
-                    <Image
-                        source={require('../assets/images/header_shape.png')}
-                        style={styles.headerShape}
-                        resizeMode="stretch"
-                    />
-                </View>
-
-                <View style={styles.formContainer}>
-                    <Text style={styles.title}>Sign Up</Text>
-
-                    <Input
-                        label="Full Name"
-                        placeholder="Enter your full name"
-                        icon={<MaterialCommunityIcons name="account-outline" size={20} color={COLORS.secondary} />}
-                        value={name}
-                        onChangeText={setName}
-                    />
-
-                    <Input
-                        label="Email Address"
-                        placeholder="Enter your email..."
-                        keyboardType="email-address"
-                        icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
-                        value={email}
-                        onChangeText={setEmail}
-                        autoCapitalize="none"
-                    />
-
-                    <Input
-                        label="Password"
-                        placeholder="Enter your password..."
-                        secureTextEntry
-                        icon={<MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.secondary} />}
-                        value={password}
-                        onChangeText={setPassword}
-                    />
-
-                    <Input
-                        label="Confirm password"
-                        placeholder="Re-enter your password..."
-                        secureTextEntry
-                        icon={<MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.secondary} />}
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                    />
-
-                    <View style={styles.checkboxContainer}>
-                        <TouchableOpacity
-                            style={[styles.checkbox, agree && styles.checked]}
-                            onPress={() => setAgree(!agree)}
-                        >
-                            {agree && <MaterialCommunityIcons name="check" size={14} color="white" />}
-                        </TouchableOpacity>
-                        <Text style={styles.checkboxLabel}>I agree to the <Text style={styles.boldLink}>Terms</Text> and <Text style={styles.boldLink}>Privacy</Text></Text>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
+            >
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    <View style={styles.header}>
+                        <Image
+                            source={require('../assets/images/header_shape.png')}
+                            style={styles.headerShape}
+                            resizeMode="stretch"
+                        />
                     </View>
 
-                    <Button
-                        title={loading ? "Creating account..." : "Sign up"}
-                        onPress={handleSignUp}
-                        disabled={!agree || loading}
-                        style={styles.signUpButton}
-                    />
+                    <View style={styles.formContainer}>
+                        <Text style={styles.title}>Sign Up</Text>
 
-                    <Text style={styles.orText}>Or continue with</Text>
+                        <Input
+                            label="Full Name"
+                            placeholder="Enter your full name"
+                            icon={<MaterialCommunityIcons name="account-outline" size={20} color={COLORS.secondary} />}
+                            value={name}
+                            onChangeText={setName}
+                        />
 
-                    <View style={styles.socialContainer}>
-                        <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-                            const res = await loginWithGoogle();
-                            if (res.success) navigation.replace('ProfileSetup');
-                        }}>
-                            <AntDesign name="google" size={24} color="black" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-                            const res = await loginWithApple();
-                            if (res.success) navigation.replace('ProfileSetup');
-                        }}>
-                            <FontAwesome name="apple" size={24} color="black" />
-                        </TouchableOpacity>
+                        <Input
+                            label="Email Address"
+                            placeholder="Enter your email..."
+                            keyboardType="email-address"
+                            icon={<MaterialCommunityIcons name="email-outline" size={20} color={COLORS.secondary} />}
+                            value={email}
+                            onChangeText={setEmail}
+                            autoCapitalize="none"
+                        />
+
+                        <Input
+                            label="Password"
+                            placeholder="Enter your password..."
+                            secureTextEntry
+                            icon={<MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.secondary} />}
+                            value={password}
+                            onChangeText={setPassword}
+                        />
+
+                        <Input
+                            label="Confirm password"
+                            placeholder="Re-enter your password..."
+                            secureTextEntry
+                            icon={<MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.secondary} />}
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                        />
+
+                        <View style={styles.checkboxContainer}>
+                            <TouchableOpacity
+                                style={[styles.checkbox, agree && styles.checked]}
+                                onPress={() => setAgree(!agree)}
+                            >
+                                {agree && <MaterialCommunityIcons name="check" size={14} color="white" />}
+                            </TouchableOpacity>
+                            <Text style={styles.checkboxLabel}>I agree to the <Text style={styles.boldLink}>Terms</Text> and <Text style={styles.boldLink}>Privacy</Text></Text>
+                        </View>
+
+                        <Button
+                            title={loading ? "Creating account..." : "Sign up"}
+                            onPress={handleSignUp}
+                            disabled={!agree || loading}
+                            style={styles.signUpButton}
+                        />
+
+                        <Text style={styles.orText}>Or continue with</Text>
+
+                        <View style={styles.socialContainer}>
+                            <TouchableOpacity style={styles.socialIcon} onPress={async () => {
+                                const res = await loginWithGoogle();
+                                if (res.success) navigation.replace('ProfileSetup');
+                            }}>
+                                <AntDesign name="google" size={24} color="black" />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.socialIcon} onPress={async () => {
+                                const res = await loginWithApple();
+                                if (res.success) navigation.replace('ProfileSetup');
+                            }}>
+                                <FontAwesome name="apple" size={24} color="black" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.footer}>
+                            <Text style={styles.footerText}>Already have an account? </Text>
+                            <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
+                                <Text style={styles.linkText}>Sign In</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-
-                    <View style={styles.footer}>
-                        <Text style={styles.footerText}>Already have an account? </Text>
-                        <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
-                            <Text style={styles.linkText}>Sign In</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </ScrollView>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };

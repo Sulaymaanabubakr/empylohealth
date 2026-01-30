@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, StatusBar, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 import { chatService } from '../services/api/chatService';
 import { huddleService } from '../services/api/huddleService';
 import { circleService } from '../services/api/circleService';
@@ -12,9 +13,30 @@ import Avatar from '../components/Avatar';
 const ChatDetailScreen = ({ navigation, route }) => {
     const { chat } = route.params;
     const { user } = useAuth();
+    const { showModal } = useModal();
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const flatListRef = useRef(null);
+    const insets = useSafeAreaInsets();
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
+    const [headerHeight, setHeaderHeight] = useState(0);
+
+    // Keyboard Visibility management for bottom insets
+    useEffect(() => {
+        const showSubscription = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+            () => setKeyboardVisible(true)
+        );
+        const hideSubscription = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+            () => setKeyboardVisible(false)
+        );
+
+        return () => {
+            showSubscription.remove();
+            hideSubscription.remove();
+        };
+    }, []);
 
     // Subscribe to messages
     useEffect(() => {
@@ -66,35 +88,32 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const handleMessageLongPress = (message) => {
         if (!chat.circleId) return; // Only allow reporting in circles context for now
 
-        Alert.alert(
-            "Report Message",
-            "Does this message violate community guidelines?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Report",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            const { circleService } = require('../services/api/circleService'); // Late require to avoid cycle if any
-                            // In real app better to import at top, but ensure no cycle.
-                            // Assuming chatService and circleService are independent enough.
-                            await circleService.submitReport(
-                                chat.circleId,
-                                message.id,
-                                'message',
-                                'Inappropriate Content', // Default reason for quick action
-                                message.text
-                            );
-                            Alert.alert("Report Sent", "Exellence. Start packing, we've initiated a review."); // Keeping it light or serious? standard.
-                            // "Thank you. We have received your report."
-                        } catch (error) {
-                            Alert.alert("Error", "Could not submit report.");
-                        }
-                    }
+        showModal({
+            type: 'confirmation',
+            title: 'Report Message',
+            message: 'Does this message violate community guidelines?',
+            confirmText: 'Report',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    const { circleService } = require('../services/api/circleService');
+                    await circleService.submitReport(
+                        chat.circleId,
+                        message.id,
+                        'message',
+                        'Inappropriate Content',
+                        message.text
+                    );
+                    setTimeout(() => {
+                        showModal({ type: 'success', title: 'Report Sent', message: "Exellence. Start packing, we've initiated a review." });
+                    }, 500);
+                } catch (error) {
+                    setTimeout(() => {
+                        showModal({ type: 'error', title: 'Error', message: 'Could not submit report.' });
+                    }, 500);
                 }
-            ]
-        );
+            }
+        });
     };
 
     const renderMessage = ({ item }) => {
@@ -125,15 +144,26 @@ const ChatDetailScreen = ({ navigation, route }) => {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
             {/* Header */}
-            <View style={styles.header}>
+            <View
+                style={styles.header}
+                onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+            >
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Avatar uri={chat.avatar} name={chat.name} size={40} />
+                <View style={{ marginRight: 12 }}>
+                    {/* Use the avatar computed by the service, or fallbacks if data structure differs */}
+                    <Avatar
+                        uri={chat.avatar || chat.photoURL || chat.image}
+                        name={chat.name}
+                        size={40}
+                        key={chat.avatar || 'default'}
+                    />
+                </View>
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerName}>{chat.name}</Text>
                     <Text style={styles.headerStatus}>{chat.members ? `${chat.members} members` : (chat.isOnline ? 'Online' : 'Offline')}</Text>
@@ -144,9 +174,9 @@ const ChatDetailScreen = ({ navigation, route }) => {
             </View>
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
             >
                 <FlatList
                     ref={flatListRef}
@@ -155,10 +185,19 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     keyExtractor={item => item.id}
                     contentContainerStyle={[styles.listContent, { paddingBottom: 20 }]}
                     showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                 />
 
                 {/* Input Area */}
-                <View style={[styles.inputContainer, { paddingBottom: Platform.OS === 'ios' ? 0 : 16 }]}>
+                <View style={[
+                    styles.inputContainer,
+                    {
+                        paddingBottom: Platform.OS === 'ios'
+                            ? (keyboardVisible ? 8 : Math.max(insets.bottom, 12))
+                            : 12
+                    }
+                ]}>
                     <View style={styles.inputWrapper}>
                         <TextInput
                             style={styles.input}
@@ -176,7 +215,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     )}
                 </View>
             </KeyboardAvoidingView>
-        </SafeAreaView>
+        </View>
     );
 };
 
@@ -276,7 +315,6 @@ const styles = StyleSheet.create({
     inputContainer: {
         paddingHorizontal: SPACING.lg,
         paddingTop: 12,
-        paddingBottom: 12,
         backgroundColor: '#FFFFFF',
         borderTopWidth: 1,
         borderTopColor: '#F5F5F5',

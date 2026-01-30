@@ -82,6 +82,7 @@ export const onMessageCreate = functions.firestore.document('chats/{chatId}/mess
                     type: 'CHAT_MESSAGE',
                     chatId,
                     senderId,
+                    read: false,
                     createdAt: admin.firestore.FieldValue.serverTimestamp()
                 });
             });

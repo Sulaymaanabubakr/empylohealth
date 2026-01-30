@@ -1,21 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 import { userService } from '../services/api/userService';
 import { functions } from '../services/firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 
 const SecurityScreen = ({ navigation }) => {
-    const { user, userData } = useAuth();
+    const { user, userData, deleteAccount } = useAuth();
+    const { showModal } = useModal();
     // State for toggles
     const [securityNotif, setSecurityNotif] = useState(true);
     const [biometrics, setBiometrics] = useState(true);
-
-    const [isDeleteVisible, setIsDeleteVisible] = useState(false);
-    const [isDeleteSuccessVisible, setIsDeleteSuccessVisible] = useState(false);
 
     useEffect(() => {
         setSecurityNotif(userData?.settings?.securityNotifications ?? true);
@@ -36,17 +34,32 @@ const SecurityScreen = ({ navigation }) => {
         }
     };
 
-    const handleDeleteAccount = async () => {
+    const handleDeleteAccount = () => {
         if (!user?.uid) return;
-        try {
-            const deleteFn = httpsCallable(functions, 'deleteUserAccount');
-            await deleteFn();
-            setIsDeleteVisible(false);
-            setIsDeleteSuccessVisible(true);
-        } catch (error) {
-            console.error('Delete account failed', error);
-            Alert.alert('Error', error.message || 'Unable to delete account.');
-        }
+
+        showModal({
+            type: 'confirmation',
+            title: 'Delete Account',
+            message: 'Are you sure you want to permanently delete your account? This action cannot be undone.',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    const deleteFn = httpsCallable(functions, 'deleteUserAccount');
+                    await deleteFn();
+                    showModal({
+                        type: 'success',
+                        title: 'Deleted',
+                        message: 'Your account has been deleted.',
+                        confirmText: 'Goodbye',
+                        onConfirm: () => navigation.navigate('SignIn')
+                    });
+                } catch (error) {
+                    console.error('Delete account failed', error);
+                    showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to delete account.' });
+                }
+            }
+        });
     };
 
     const handleDeleteComplete = () => {
@@ -124,7 +137,7 @@ const SecurityScreen = ({ navigation }) => {
                 {/* Delete Account */}
                 <TouchableOpacity
                     style={styles.deleteCard}
-                    onPress={() => setIsDeleteVisible(true)}
+                    onPress={handleDeleteAccount}
                 >
                     <View style={styles.deleteHeader}>
                         <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#D32F2F" />
@@ -142,23 +155,7 @@ const SecurityScreen = ({ navigation }) => {
 
             </ScrollView>
 
-            <ConfirmationModal
-                visible={isDeleteVisible}
-                title="Delete Account"
-                message="Are you sure you want to permanently delete your account? This action cannot be undone."
-                onConfirm={handleDeleteAccount}
-                onCancel={() => setIsDeleteVisible(false)}
-                confirmText="Delete"
-                cancelText="Cancel"
-            />
 
-            <ConfirmationModal
-                visible={isDeleteSuccessVisible}
-                message="Your account has been deleted."
-                singleButton={true}
-                confirmText="Goodbye"
-                onConfirm={handleDeleteComplete}
-            />
 
         </SafeAreaView>
     );

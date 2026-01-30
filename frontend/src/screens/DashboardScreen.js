@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -10,9 +10,9 @@ import AssessmentModal from '../components/AssessmentModal';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
-import BottomNavigation from '../components/BottomNavigation';
+
 import { assessmentService } from '../services/api/assessmentService';
 
 const { width } = Dimensions.get('window');
@@ -109,6 +109,25 @@ const DashboardScreen = ({ navigation }) => {
     const [showAssessment, setShowAssessment] = useState(false);
     const [assessmentType, setAssessmentType] = useState('daily'); // 'daily' or 'weekly'
     const [memberProfiles, setMemberProfiles] = useState({});
+    const [refreshing, setRefreshing] = useState(false);
+    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+
+    useEffect(() => {
+        if (!user?.uid) return;
+
+        const q = query(
+            collection(db, 'notifications'),
+            where('uid', '==', user.uid)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setHasUnreadNotifications(!snapshot.empty);
+        }, (error) => {
+            console.log("Error fetching notifications:", error);
+        });
+
+        return () => unsubscribe();
+    }, [user]);
 
     useEffect(() => {
         console.log('DashboardScreen mounted. User:', user?.email);
@@ -149,8 +168,16 @@ const DashboardScreen = ({ navigation }) => {
             setRecommendations(recs);
         } catch (err) {
             console.log("Error fetching dashboard data", err);
+        } finally {
+            setRefreshing(false);
         }
     };
+
+    const onRefresh = React.useCallback(() => {
+        setRefreshing(true);
+        fetchDashboardData();
+        checkAssessments();
+    }, []);
 
     const checkAssessments = async () => {
         try {
@@ -258,14 +285,17 @@ const DashboardScreen = ({ navigation }) => {
                     onPress={() => navigation.navigate('Notifications')}
                 >
                     <Ionicons name="notifications" size={24} color="#333" />
-                    <View style={styles.notificationDot} />
+                    {hasUnreadNotifications && <View style={styles.notificationDot} />}
                 </TouchableOpacity>
             </View>
 
             <ScrollView
                 style={{ flex: 1 }}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.scrollContent, { paddingBottom: 160 }]}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 }]}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+                }
             >
                 {/* User Greeting */}
                 <View style={styles.greetingContainer}>
@@ -435,7 +465,15 @@ const DashboardScreen = ({ navigation }) => {
                     <Text style={styles.sectionTitle}>Recommended For You</Text>
                 </View>
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 30 }}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginBottom: 20, marginHorizontal: -SPACING.lg }}
+                    contentContainerStyle={{
+                        paddingHorizontal: SPACING.lg,
+                        paddingVertical: 10 // Space for shadows
+                    }}
+                >
                     {recommendations.length > 0 ? (
                         recommendations.map((item, index) => (
                             <TouchableOpacity
@@ -472,8 +510,7 @@ const DashboardScreen = ({ navigation }) => {
                 onTakeNow={handleTakeAssessment}
             />
 
-            {/* Bottom Navigation */}
-            <BottomNavigation navigation={navigation} activeTab="Home" />
+
         </SafeAreaView>
     );
 };

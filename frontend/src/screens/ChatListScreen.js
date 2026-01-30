@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
 import Avatar from '../components/Avatar';
-import BottomNavigation from '../components/BottomNavigation';
+
 
 const ChatListScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [chats, setChats] = useState([]);
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         if (user?.uid) {
@@ -22,6 +23,14 @@ const ChatListScreen = ({ navigation }) => {
             return () => unsubscribe();
         }
     }, [user]);
+
+    const onRefresh = React.useCallback(() => {
+        setRefreshing(true);
+        // Chats are real-time, but we simulate a refresh for UX or re-verify connection
+        setTimeout(() => {
+            setRefreshing(false);
+        }, 1000);
+    }, []);
 
     // Note: Filtering now applies to the fetched 'chats'
     const filteredChats = chats.filter(chat =>
@@ -35,7 +44,7 @@ const ChatListScreen = ({ navigation }) => {
                 onPress={() => navigation.navigate('ChatDetail', { chat: item })}
             >
                 <View style={styles.avatarContainer}>
-                    <Avatar uri={item.avatar || ''} name={item.name} size={56} />
+                    <Avatar uri={item.avatar || item.photoURL || item.image || ''} name={item.name} size={56} />
                     {item.isOnline && <View style={styles.onlineIndicator} />}
                 </View>
                 <View style={styles.chatContent}>
@@ -89,16 +98,23 @@ const ChatListScreen = ({ navigation }) => {
                 />
             </View>
 
-            <FlatList
-                data={filteredChats}
-                renderItem={renderItem}
-                keyExtractor={item => item.id}
-                contentContainerStyle={{ paddingBottom: 100 }}
-                showsVerticalScrollIndicator={false}
-            />
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
+            >
+                <FlatList
+                    data={filteredChats}
+                    renderItem={renderItem}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+                    }
+                />
+            </KeyboardAvoidingView>
 
-            {/* Bottom Navigation */}
-            <BottomNavigation navigation={navigation} activeTab="Chat" />
+
         </SafeAreaView>
     );
 };

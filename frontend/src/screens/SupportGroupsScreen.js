@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, Image } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
@@ -137,20 +137,25 @@ const SupportGroupsScreen = () => {
             </View>
 
             {/* Groups List */}
-            <FlatList
-                data={filteredGroups}
-                renderItem={renderGroupCard}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={() => (
-                    <View style={styles.emptyState}>
-                        <Ionicons name="people-outline" size={64} color="#E0E0E0" />
-                        <Text style={styles.emptyStateText}>No circles found.</Text>
-                        <Text style={styles.emptyStateSubText}>Try adjusting your search or create a new one!</Text>
-                    </View>
-                )}
-            />
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
+            >
+                <FlatList
+                    data={filteredGroups}
+                    renderItem={renderGroupCard}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={() => (
+                        <View style={styles.emptyState}>
+                            <Ionicons name="people-outline" size={64} color="#E0E0E0" />
+                            <Text style={styles.emptyStateText}>No circles found.</Text>
+                            <Text style={styles.emptyStateSubText}>Try adjusting your search or create a new one!</Text>
+                        </View>
+                    )}
+                />
+            </KeyboardAvoidingView>
 
             {/* Floating Action Button */}
             <TouchableOpacity

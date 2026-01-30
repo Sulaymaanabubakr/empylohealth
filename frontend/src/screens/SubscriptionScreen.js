@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import PlanDetailModal from '../components/PlanDetailModal';
 import SubscriptionSuccessModal from '../components/SubscriptionSuccessModal';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 
@@ -13,6 +14,7 @@ const { width } = Dimensions.get('window');
 
 const SubscriptionScreen = ({ navigation }) => {
     const { userData } = useAuth();
+    const { showModal } = useModal();
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [showSuccess, setShowSuccess] = useState(false);
     const [plans, setPlans] = useState([]);
@@ -52,7 +54,7 @@ const SubscriptionScreen = ({ navigation }) => {
 
     const handleSubscribe = () => {
         if (!selectedPlan?.productId) {
-            Alert.alert('Purchases unavailable', 'This plan is not configured for in-app purchases yet.');
+            showModal({ type: 'info', title: 'Purchases unavailable', message: 'This plan is not configured for in-app purchases yet.' });
             return;
         }
         setSelectedPlan(null);
@@ -112,13 +114,13 @@ const SubscriptionScreen = ({ navigation }) => {
                         </View>
                         <View>
                             <Text style={styles.currentPlanLabel}>Current Plan</Text>
-                    <Text style={styles.currentPlanTitle}>{currentPlanLabel}</Text>
+                            <Text style={styles.currentPlanTitle}>{currentPlanLabel}</Text>
+                        </View>
+                    </View>
+                    <Text style={styles.currentPlanPrice}>
+                        {currentPlanPrice || '—'}{currentPlanPrice ? <Text style={styles.period}>/month</Text> : null}
+                    </Text>
                 </View>
-            </View>
-            <Text style={styles.currentPlanPrice}>
-                {currentPlanPrice || '—'}{currentPlanPrice ? <Text style={styles.period}>/month</Text> : null}
-            </Text>
-        </View>
 
                 <Text style={styles.sectionTitle}>Available Plans</Text>
 
