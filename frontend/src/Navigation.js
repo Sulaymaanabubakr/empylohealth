@@ -49,6 +49,14 @@ export default function Navigation() {
     const [isReady, setIsReady] = useState(false);
     const [initialState, setInitialState] = useState();
 
+    // Helper: Check if saved state belongs to authenticated navigator
+    const isAuthenticatedState = (state) => {
+        if (!state?.routes) return false;
+        const authRoutes = ['Dashboard', 'Profile', 'Explore', 'ChatList', 'Notifications',
+            'CheckIn', 'CircleDetail', 'Affirmations', 'Stats', 'Assessment'];
+        return state.routes.some(r => authRoutes.includes(r.name));
+    };
+
     useEffect(() => {
         const restoreState = async () => {
             try {
@@ -59,7 +67,19 @@ export default function Navigation() {
                     const state = savedStateString ? JSON.parse(savedStateString) : undefined;
 
                     if (state !== undefined) {
-                        setInitialState(state);
+                        // Only restore state if it matches current auth context
+                        // This prevents restoring Onboarding routes when user is logged in
+                        const savedIsAuth = isAuthenticatedState(state);
+                        const userIsLoggedIn = !!user;
+
+                        if (savedIsAuth === userIsLoggedIn) {
+                            console.log('[PERF] Navigation: Restoring compatible state');
+                            setInitialState(state);
+                        } else {
+                            console.log('[PERF] Navigation: Skipping incompatible state (saved:', savedIsAuth, 'current:', userIsLoggedIn, ')');
+                            // Clear stale state to prevent future mismatches
+                            await AsyncStorage.removeItem(PERSISTENCE_KEY);
+                        }
                     }
                 }
             } catch (e) {
@@ -70,20 +90,21 @@ export default function Navigation() {
             }
         };
 
-        if (!isReady) {
+        // Wait for auth to resolve before restoring state
+        if (!isReady && user !== undefined) {
             restoreState();
         }
-    }, [isReady]);
+    }, [isReady, user]);
 
     if (!isReady) {
         console.log('[PERF] Navigation: Waiting for isReady...');
         return null;
     }
-    if (user && userData === null) {
-        return null;
-    }
 
-    const isProfileComplete = userData?.onboardingCompleted;
+    // If userData is still loading for a logged-in user, assume profile is complete
+    // (most returning users have completed onboarding - optimistic approach)
+    // New users without completed profile will be redirected once userData loads
+    const isProfileComplete = userData === null ? true : !!userData.onboardingCompleted;
 
     console.log('[Navigation] Rendering. User:', user?.email, 'ProfileComplete:', isProfileComplete);
 

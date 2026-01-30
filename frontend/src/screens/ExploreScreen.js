@@ -222,12 +222,12 @@ const ExploreScreen = ({ navigation }) => {
                             ) : null}
                             <View style={styles.affirmationOverlay}>
                                 <View style={styles.affirmationHeader}>
-                                    <Text style={styles.affirmationDate}>{item.tag || item.date}</Text>
+                                    <Text style={styles.affirmationDate}>{(item.tags && item.tags[0]) || item.tag || item.date || ''}</Text>
                                     <TouchableOpacity style={styles.expandButton}>
                                         <Ionicons name="resize" size={12} color="#FFF" />
                                     </TouchableOpacity>
                                 </View>
-                                <Text style={styles.affirmationText}>{item.title}</Text>
+                                <Text style={styles.affirmationText}>{item.content || item.title || ''}</Text>
                             </View>
                         </TouchableOpacity>
                     ))}

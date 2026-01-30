@@ -9,10 +9,18 @@ import { notificationService } from '../services/api/notificationService';
 
 export const AuthContext = createContext(undefined);
 
-export const AuthProvider = ({ children }) => {
+export const AuthProvider = ({ children, onAuthReady }) => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    // Notify parent when auth state is determined (fast - from cache)
+    useEffect(() => {
+        if (!loading) {
+            console.log('[PERF] AuthContext: Auth resolved, calling onAuthReady');
+            onAuthReady?.();
+        }
+    }, [loading, onAuthReady]);
 
     const userUnsubscribeRef = React.useRef(null);
 
