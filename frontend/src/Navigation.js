@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
-import { Linking, Platform } from 'react-native';
+import { Linking, Platform, View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,7 +46,7 @@ const PERSISTENCE_KEY = 'NAVIGATION_STATE_V1';
 const Stack = createNativeStackNavigator();
 
 export default function Navigation() {
-    const { user, userData } = useAuth();
+    const { user, userData, loading } = useAuth();
     const [isReady, setIsReady] = useState(false);
     const [initialState, setInitialState] = useState();
 
@@ -77,9 +77,9 @@ export default function Navigation() {
                             console.log('[PERF] Navigation: Restoring compatible state');
                             setInitialState(state);
                         } else {
+                            // Mismatch: don't restore, but DON'T delete either.
+                            // A valid state will be saved once user navigates in the correct stack.
                             console.log('[PERF] Navigation: Skipping incompatible state (saved:', savedIsAuth, 'current:', userIsLoggedIn, ')');
-                            // Clear stale state to prevent future mismatches
-                            await AsyncStorage.removeItem(PERSISTENCE_KEY);
                         }
                     }
                 }
@@ -91,30 +91,42 @@ export default function Navigation() {
             }
         };
 
-        // Wait for auth to resolve before restoring state
-        if (!isReady && user !== undefined) {
+        // Wait for auth to resolve definitively before restoring state
+        if (!isReady && !loading) {
             restoreState();
         }
-    }, [isReady, user]);
+    }, [isReady, user, loading]);
 
     if (!isReady) {
         console.log('[PERF] Navigation: Waiting for isReady...');
         return null;
     }
 
-    // If userData is still loading for a logged-in user, assume profile is complete
-    // (most returning users have completed onboarding - optimistic approach)
-    // New users without completed profile will be redirected once userData loads
-    const isProfileComplete = userData === null ? true : !!userData.onboardingCompleted;
+    // If user is logged in but userData is still null, we are in a loading state.
+    // We should not optimistically assume profile is complete to prevent flickering.
+    if (user && userData === null) {
+        console.log('[PERF] Navigation: User logged in, waiting for userData...');
+        return (
+            <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
+            </View>
+        );
+    }
+
+    const isProfileComplete = !!userData?.onboardingCompleted;
 
     console.log('[Navigation] Rendering. User:', user?.email, 'ProfileComplete:', isProfileComplete);
 
     return (
         <NavigationContainer
             initialState={initialState}
-            onStateChange={(state) =>
-                AsyncStorage.setItem(PERSISTENCE_KEY, JSON.stringify(state))
-            }
+            onStateChange={(state) => {
+                // Only persist navigation state when user is authenticated
+                // This prevents saving unauthenticated "flicker" states
+                if (user) {
+                    AsyncStorage.setItem(PERSISTENCE_KEY, JSON.stringify(state));
+                }
+            }}
         >
             {!user ? (
                 <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>

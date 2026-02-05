@@ -16,7 +16,7 @@ export function CommunityScreen({ navigation }) {
   const [circles, setCircles] = useState([]);
 
   useEffect(() => {
-    if (!user?.uid) return undefined;
+  if (!user?.uid) return null;
     const unsubscribe = circleService.subscribeToMyCircles(user.uid, (data) => {
       setCircles(data || []);
     });

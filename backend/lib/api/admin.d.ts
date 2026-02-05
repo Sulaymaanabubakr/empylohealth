@@ -59,4 +59,9 @@ export declare const getSupportTickets: functions.HttpsFunction & functions.Runn
  * Update Ticket Status
  */
 export declare const updateTicketStatus: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Backfill userCircles index from circles.members arrays
+ * Callable Function: 'backfillUserCircles'
+ */
+export declare const backfillUserCircles: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=admin.d.ts.map

@@ -49,11 +49,14 @@ export SEED_TOKEN=your-secret   # same value as in Firebase Functions config
 
 Requires deployed functions and `SEED_TOKEN` set in Firebase. Full details: **docs/SEEDING.md**.
 
-## Technical Debt / Pending Rebuild
+## Push Notifications
 
-- **Push Notifications**: Temporarily disabled in `src/services/api/notificationService.js` to avoid rebuilding the Android dev client.
-  - To re-enable: Uncomment imports and code in that file.
-  - Then run: `eas build --profile development --platform android` to include `expo-device` and `expo-notifications` native code.
+Push notifications require a Dev Client or production build (not Expo Go).
+If notifications don't arrive, rebuild the dev client:
+
+```
+eas build --profile development --platform android
+```
 
 ## Future Data Flow & Requirements
 

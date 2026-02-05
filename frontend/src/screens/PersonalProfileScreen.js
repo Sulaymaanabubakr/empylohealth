@@ -50,7 +50,7 @@ const PersonalProfileScreen = ({ navigation }) => {
         setIsLogoutVisible(false);
         try {
             await authService.logout();
-            navigation.navigate('SignIn');
+            // Navigation is handled automatically by Navigation.js when user becomes null
         } catch (error) {
             console.error('Failed to sign out', error);
         }

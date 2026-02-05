@@ -70,6 +70,7 @@ export const getReports = adminApi.getReports;
 export const resolveReport = adminApi.resolveReport;
 export const getSupportTickets = adminApi.getSupportTickets;
 export const updateTicketStatus = adminApi.updateTicketStatus;
+export const backfillUserCircles = adminApi.backfillUserCircles;
 
 // User Management
 export const createEmployee = userMgmtApi.createEmployee;

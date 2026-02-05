@@ -11,7 +11,7 @@ import { circleService } from '../services/api/circleService';
 import Avatar from '../components/Avatar';
 
 const ChatDetailScreen = ({ navigation, route }) => {
-    const { chat } = route.params;
+    const chat = route?.params?.chat;
     const { user } = useAuth();
     const { showModal } = useModal();
     const [messages, setMessages] = useState([]);
@@ -37,6 +37,26 @@ const ChatDetailScreen = ({ navigation, route }) => {
             hideSubscription.remove();
         };
     }, []);
+
+    if (!chat) {
+        return (
+            <View style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+                    </TouchableOpacity>
+                    <View style={styles.headerInfo}>
+                        <Text style={styles.headerName}>Chat</Text>
+                        <Text style={styles.headerStatus}>Unavailable</Text>
+                    </View>
+                </View>
+                <View style={{ padding: 20 }}>
+                    <Text>Chat details are unavailable.</Text>
+                </View>
+            </View>
+        );
+    }
 
     // Subscribe to messages
     useEffect(() => {

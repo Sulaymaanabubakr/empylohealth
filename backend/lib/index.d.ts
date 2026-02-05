@@ -49,5 +49,6 @@ export declare const getReports: import("firebase-functions/v1").HttpsFunction &
 export declare const resolveReport: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getSupportTickets: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateTicketStatus: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const backfillUserCircles: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const createEmployee: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 //# sourceMappingURL=index.d.ts.map

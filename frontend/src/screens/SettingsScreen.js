@@ -70,16 +70,16 @@ export function SettingsScreen({ navigation }) {
         label="Sign out"
         onPress={async () => {
           await authService.logout();
-          navigation.navigate('SignIn');
+          // Navigation is handled automatically by Navigation.js when user becomes null
         }}
       />
     </Screen>
   );
 
-const styles = StyleSheet.create({
-  divider: {
-    height: 1,
-    backgroundColor: theme.colors.divider,
-  },
-});
-export default SettingsScreen;
+  const styles = StyleSheet.create({
+    divider: {
+      height: 1,
+      backgroundColor: theme.colors.divider,
+    },
+  });
+  export default SettingsScreen;

@@ -145,6 +145,17 @@ exports.createCircle = functions.https.onCall(async (data, context) => {
             joinedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
+        // 4b. Maintain userCircles index
+        const userCirclesRef = db.collection('userCircles').doc(uid);
+        batch.set(userCirclesRef, {
+            circleIds: admin.firestore.FieldValue.arrayUnion(circleRef.id)
+        }, { merge: true });
+        batch.set(userCirclesRef.collection('circles').doc(circleRef.id), {
+            circleId: circleRef.id,
+            role: 'creator',
+            status: 'member',
+            joinedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
         // 5. Chat creation logic
         const chatRef = db.collection('chats').doc();
         batch.set(chatRef, {
@@ -156,6 +167,12 @@ exports.createCircle = functions.https.onCall(async (data, context) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         batch.update(circleRef, { chatId: chatRef.id });
+        // Remove userCircles index
+        const userCirclesSnap = await db.collection('userCircles').doc(uid).collection('circles').get();
+        userCirclesSnap.docs.forEach((docSnap) => {
+            batch.delete(docSnap.ref);
+        });
+        batch.delete(db.collection('userCircles').doc(uid));
         await batch.commit();
         console.log(`[Circles] Circle created: ${name} (${circleRef.id}) by ${uid}`);
         return { success: true, circleId: circleRef.id };
@@ -275,6 +292,17 @@ exports.joinCircle = functions.https.onCall(async (data, context) => {
             joinedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
+        // Maintain userCircles index
+        const userCirclesRef = db.collection('userCircles').doc(uid);
+        batch.set(userCirclesRef, {
+            circleIds: admin.firestore.FieldValue.arrayUnion(circleId)
+        }, { merge: true });
+        batch.set(userCirclesRef.collection('circles').doc(circleId), {
+            circleId,
+            role: 'member',
+            status: 'member',
+            joinedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
         // 2. Update Circle Doc (Array + Count) for compatibility
         batch.update(circleRef, {
             members: admin.firestore.FieldValue.arrayUnion(uid),
@@ -323,9 +351,7 @@ exports.leaveCircle = functions.https.onCall(async (data, context) => {
         const circleData = circleDoc.data() || {};
         // Check if user is Creator
         if (circleData.adminId === uid) {
-            // Check if other admins exist before allowing leave
-            // For now, simple block
-            // throw new functions.https.HttpsError('failed-precondition', 'Creators cannot leave without transferring ownership.');
+            throw new functions.https.HttpsError('failed-precondition', 'Creators cannot leave without transferring ownership.');
         }
         const batch = db.batch();
         // 1. Remove from Members subcollection
@@ -337,6 +363,12 @@ exports.leaveCircle = functions.https.onCall(async (data, context) => {
             memberCount: admin.firestore.FieldValue.increment(-1),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
+        // 2b. Remove from userCircles index
+        const userCirclesRef = db.collection('userCircles').doc(uid);
+        batch.set(userCirclesRef, {
+            circleIds: admin.firestore.FieldValue.arrayRemove(circleId)
+        }, { merge: true });
+        batch.delete(userCirclesRef.collection('circles').doc(circleId));
         // 3. Update Chat
         if (circleData.chatId) {
             const chatRef = db.collection('chats').doc(circleData.chatId);
@@ -402,6 +434,10 @@ exports.manageMember = functions.https.onCall(async (data, context) => {
                     members: admin.firestore.FieldValue.arrayRemove(targetUid),
                     memberCount: admin.firestore.FieldValue.increment(-1)
                 });
+                batch.set(db.collection('userCircles').doc(targetUid), {
+                    circleIds: admin.firestore.FieldValue.arrayRemove(circleId)
+                }, { merge: true });
+                batch.delete(db.collection('userCircles').doc(targetUid).collection('circles').doc(circleId));
                 // Remove from Chat
                 const circleData = (await circleRef.get()).data();
                 if (circleData?.chatId) {
@@ -416,6 +452,10 @@ exports.manageMember = functions.https.onCall(async (data, context) => {
                     members: admin.firestore.FieldValue.arrayRemove(targetUid), // Remove from quick access array
                     memberCount: admin.firestore.FieldValue.increment(-1)
                 });
+                batch.set(db.collection('userCircles').doc(targetUid), {
+                    circleIds: admin.firestore.FieldValue.arrayRemove(circleId)
+                }, { merge: true });
+                batch.delete(db.collection('userCircles').doc(targetUid).collection('circles').doc(circleId));
                 // Remove from Chat
                 const cData = (await circleRef.get()).data();
                 if (cData?.chatId) {
@@ -465,6 +505,17 @@ exports.handleJoinRequest = functions.https.onCall(async (data, context) => {
                 joinedAt: admin.firestore.FieldValue.serverTimestamp(),
                 approvedBy: uid
             });
+            // Maintain userCircles index
+            const userCirclesRef = db.collection('userCircles').doc(targetUid);
+            batch.set(userCirclesRef, {
+                circleIds: admin.firestore.FieldValue.arrayUnion(circleId)
+            }, { merge: true });
+            batch.set(userCirclesRef.collection('circles').doc(circleId), {
+                circleId,
+                role: 'member',
+                status: 'member',
+                joinedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
             // Update Circle Stats
             batch.update(circleRef, {
                 members: admin.firestore.FieldValue.arrayUnion(targetUid),
@@ -1033,13 +1084,16 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
         if (!participants.includes(uid)) {
             throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
         }
-        // PERMISSION CHECK: If it's a circle chat, only Creator or Admin can start a huddle
+        // PERMISSION CHECK: If it's a circle chat, only Creator/Admin/Moderator can start
         if (chatData?.circleId) {
             const circleId = chatData.circleId;
+            const circleDoc = await db.collection('circles').doc(circleId).get();
+            const circleData = circleDoc.exists ? circleDoc.data() : {};
             const memberDoc = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
             const role = memberDoc.data()?.role;
-            if (!['creator', 'admin'].includes(role)) {
-                throw new functions.https.HttpsError('permission-denied', 'Only the circle creator or an admin can start a huddle.');
+            const allowMemberHuddles = circleData?.settings?.allowMemberHuddles === true;
+            if (!['creator', 'admin', 'moderator'].includes(role) && !allowMemberHuddles) {
+                throw new functions.https.HttpsError('permission-denied', 'Only moderators or admins can start a huddle.');
             }
         }
         // 1. Create Room via Daily.co API if Key exists
@@ -1074,6 +1128,7 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
         const huddleData = {
             id: huddleRef.id,
             chatId,
+            circleId: chatData?.circleId || null,
             roomUrl, // The actual video link
             startedBy: uid,
             isGroup: !!isGroup,
@@ -1100,6 +1155,65 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
                     startedAt: admin.firestore.FieldValue.serverTimestamp()
                 }
             });
+        }
+        // Notify other participants (push + in-app)
+        try {
+            const recipients = participants.filter((p) => p !== uid);
+            if (recipients.length > 0) {
+                const expoTokens = [];
+                const fcmTokens = [];
+                for (const ruid of recipients) {
+                    const userDoc = await db.collection('users').doc(ruid).get();
+                    const userData = userDoc.data() || {};
+                    expoTokens.push(...(userData.expoPushTokens || []));
+                    fcmTokens.push(...(userData.fcmTokens || []));
+                }
+                const notificationBatch = db.batch();
+                recipients.forEach((ruid) => {
+                    const notifRef = db.collection('notifications').doc();
+                    notificationBatch.set(notifRef, {
+                        uid: ruid,
+                        title: 'Incoming Huddle',
+                        subtitle: 'A call has started. Tap to join.',
+                        type: 'HUDDLE_STARTED',
+                        chatId,
+                        huddleId: huddleRef.id,
+                        roomUrl,
+                        read: false,
+                        createdAt: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                });
+                await notificationBatch.commit();
+                const payload = {
+                    title: 'Incoming Huddle',
+                    body: 'A call has started. Tap to join.',
+                    data: { chatId, huddleId: huddleRef.id, roomUrl, type: 'HUDDLE_STARTED' }
+                };
+                if (fcmTokens.length > 0) {
+                    const messagePayload = {
+                        tokens: fcmTokens,
+                        notification: { title: payload.title, body: payload.body },
+                        data: payload.data
+                    };
+                    await admin.messaging().sendEachForMulticast(messagePayload);
+                }
+                if (expoTokens.length > 0) {
+                    const expoMessages = expoTokens.map((token) => ({
+                        to: token,
+                        title: payload.title,
+                        body: payload.body,
+                        data: payload.data
+                    }));
+                    await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(expoMessages)
+                    });
+                }
+            }
+        }
+        catch (notifyError) {
+            console.error("Error sending huddle notifications:", notifyError);
         }
         return { success: true, huddleId: huddleRef.id, roomUrl };
     }
@@ -1149,6 +1263,17 @@ exports.updateHuddleState = functions.https.onCall(async (data, context) => {
             const doc = await huddleRef.get();
             if (doc.exists && doc.data()?.participants.length === 0) {
                 await huddleRef.update({ isActive: false, endedAt: admin.firestore.FieldValue.serverTimestamp() });
+                // Clear active huddle on circle if any
+                const hData = doc.data() || {};
+                if (hData.chatId) {
+                    const chatDoc = await db.collection('chats').doc(hData.chatId).get();
+                    const circleId = chatDoc.data()?.circleId;
+                    if (circleId) {
+                        await db.collection('circles').doc(circleId).update({
+                            activeHuddle: admin.firestore.FieldValue.delete()
+                        });
+                    }
+                }
             }
         }
         return { success: true };

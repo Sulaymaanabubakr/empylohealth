@@ -29,6 +29,9 @@ export const onUserCreate = functions.auth.user().onCreate(async (user: admin.au
         };
 
         await db.collection('users').doc(uid).set(userDoc);
+        await db.collection('userCircles').doc(uid).set({
+            circleIds: []
+        }, { merge: true });
         console.log(`[Backend] User profile created for ${email} (${uid})`);
     } catch (error) {
         console.error(`[Backend] Error creating profile for ${user.email}:`, error);

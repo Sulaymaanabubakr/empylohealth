@@ -42,8 +42,4 @@ backend/.env.yaml
 
 # generated native folders
 /ios
-# Firebase Configs (Sensitive)
-google-services.json
-GoogleService-Info.plist
-**/google-services.json
-**/GoogleService-Info.plist
+

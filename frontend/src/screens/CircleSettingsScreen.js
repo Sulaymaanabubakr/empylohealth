@@ -127,7 +127,7 @@ const TabButton = ({ title, active, onPress, badge, alert }) => (
 );
 
 const CircleSettingsScreen = ({ navigation, route }) => {
-    const { circleId } = route.params;
+    const circleId = route?.params?.circleId;
     const { user } = useAuth();
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
@@ -147,6 +147,20 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [tempImage, setTempImage] = useState(null);
     // Note: uploading state might conflict with 'loading' if not careful, but useful for specific overlay
     const [uploading, setUploading] = useState(false);
+
+    if (!circleId || !user?.uid) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonSimple}>
+                    <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+                </TouchableOpacity>
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>Circle settings are unavailable.</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     // Derived Role State
     const myMemberRec = members.find(m => m.uid === user.uid);
@@ -783,6 +797,9 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F5F7FA' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    backButtonSimple: { padding: 16 },
+    emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+    emptyStateText: { color: '#666', fontSize: 14, textAlign: 'center' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',

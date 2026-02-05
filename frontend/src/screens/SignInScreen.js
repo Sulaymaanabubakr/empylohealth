@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   Dimensions,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
@@ -21,11 +22,12 @@ import { MaterialCommunityIcons, AntDesign, FontAwesome } from '@expo/vector-ico
 const { width } = Dimensions.get('window');
 
 const SignInScreen = ({ navigation }) => {
-  const { login, loginWithGoogle, loginWithApple } = useAuth();
+  const { login, loginWithGoogle, loginWithApple, isAuthenticating } = useAuth();
   const { showToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(null); // 'google' or 'apple' or null
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -101,15 +103,43 @@ const SignInScreen = ({ navigation }) => {
             <Text style={styles.orText}>Or continue with</Text>
 
             <View style={styles.socialContainer}>
-              <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-                const res = await loginWithGoogle();
-              }}>
-                <AntDesign name="google" size={24} color="black" />
+              <TouchableOpacity
+                style={[styles.socialIcon, (isAuthenticating || socialLoading) && styles.socialIconDisabled]}
+                onPress={async () => {
+                  if (isAuthenticating || socialLoading) return;
+                  setSocialLoading('google');
+                  try {
+                    await loginWithGoogle();
+                  } finally {
+                    setSocialLoading(null);
+                  }
+                }}
+                disabled={isAuthenticating || socialLoading}
+              >
+                {socialLoading === 'google' ? (
+                  <ActivityIndicator size="small" color={COLORS.secondary} />
+                ) : (
+                  <AntDesign name="google" size={24} color="black" />
+                )}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-                const res = await loginWithApple();
-              }}>
-                <FontAwesome name="apple" size={24} color="black" />
+              <TouchableOpacity
+                style={[styles.socialIcon, (isAuthenticating || socialLoading) && styles.socialIconDisabled]}
+                onPress={async () => {
+                  if (isAuthenticating || socialLoading) return;
+                  setSocialLoading('apple');
+                  try {
+                    await loginWithApple();
+                  } finally {
+                    setSocialLoading(null);
+                  }
+                }}
+                disabled={isAuthenticating || socialLoading}
+              >
+                {socialLoading === 'apple' ? (
+                  <ActivityIndicator size="small" color={COLORS.secondary} />
+                ) : (
+                  <FontAwesome name="apple" size={24} color="black" />
+                )}
               </TouchableOpacity>
             </View>
 
@@ -198,6 +228,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
+  },
+  socialIconDisabled: {
+    opacity: 0.6,
+    backgroundColor: '#F5F5F5',
   },
   footer: {
     flexDirection: 'row',

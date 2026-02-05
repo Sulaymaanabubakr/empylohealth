@@ -89,6 +89,9 @@ exports.createEmployee = functions.https.onCall(async (data, context) => {
             createdBy: context.auth.uid,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
+        await db.collection('userCircles').doc(userRecord.uid).set({
+            circleIds: []
+        }, { merge: true });
         return { success: true, uid: userRecord.uid };
     }
     catch (error) {

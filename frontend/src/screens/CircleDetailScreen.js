@@ -126,6 +126,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     const checkPendingStatus = async () => {
         try {
+            if (!circle?.id) return;
             const status = await AsyncStorage.getItem(`pending_request_${circle.id}`);
             if (status === 'true') {
                 setRequestStatus('pending');
@@ -168,6 +169,15 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const handleLeaveCircle = async () => {
         if (!circle?.id) {
             navigation.goBack();
+            return;
+        }
+
+        if (circle.adminId === user?.uid) {
+            showModal({
+                type: 'error',
+                title: 'Creator Restriction',
+                message: 'Creators must transfer ownership before leaving.'
+            });
             return;
         }
 

@@ -15,7 +15,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.empylo.circlesapp",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Empylo uses the microphone for voice and video calls.",
+        "NSCameraUsageDescription": "Empylo uses the camera for video calls.",
+        "NSPhotoLibraryUsageDescription": "Empylo needs access to your photos to upload images."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,7 +33,9 @@
       "navigationBar": {
         "backgroundColor": "#ffffff",
         "barStyle": "dark-content"
-      }
+      },
+      "enableProguardInReleaseBuilds": true,
+      "enableShrinkResourcesInReleaseBuilds": true
     },
     "web": {
       "favicon": "./assets/favicon.png"

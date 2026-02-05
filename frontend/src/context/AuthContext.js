@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 console.log('[PERF] AuthContext.js: Module evaluating');
-import { View, Image, ActivityIndicator } from 'react-native';
+import { View, Image, ActivityIndicator, Text } from 'react-native';
+import { TYPOGRAPHY } from '../theme/theme';
 import { authService } from '../services/auth/authService';
 import { userService } from '../services/api/userService';
 import { db } from '../services/firebaseConfig';
@@ -13,6 +14,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [isAuthenticating, setIsAuthenticating] = useState(false);
 
     // Notify parent when auth state is determined (fast - from cache)
     useEffect(() => {
@@ -76,6 +78,11 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                         name: currentUser.displayName || ''
                     });
                 });
+
+                // Register push tokens once per session
+                notificationService.registerForPushNotificationsAsync(currentUser.uid).catch((e) => {
+                    console.warn('[AuthContext] Push registration failed', e?.message || e);
+                });
             } else {
                 setUserData(null);
             }
@@ -87,7 +94,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                 if (prev) console.warn("[PERF] AuthContext: Loading timed out, forcing app entry.");
                 return false;
             });
-        }, 2000); // 2 seconds max wait (reduced from 5s)
+        }, 10000); // Increased to 10s for production reliability
 
         return () => {
             unsubscribe();
@@ -99,23 +106,27 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     }, []);
 
     const login = async (email, password) => {
+        setIsAuthenticating(true);
         try {
             return await authService.login(email, password);
         } catch (error) {
             return { success: false, error: error.message };
+        } finally {
+            setIsAuthenticating(false);
         }
     };
 
     const register = async (email, password, name) => {
+        setIsAuthenticating(true);
         try {
             const result = await authService.register(email, password, name);
             if (result.success) {
-                // Backend Trigger onUserCreate will create the firestore document.
-                // We just return success.
                 return { success: true };
             }
         } catch (error) {
             return { success: false, error: error.message };
+        } finally {
+            setIsAuthenticating(false);
         }
     };
 
@@ -124,11 +135,21 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     };
 
     const loginWithGoogle = async () => {
-        return await authService.loginWithGoogle();
+        setIsAuthenticating(true);
+        try {
+            return await authService.loginWithGoogle();
+        } finally {
+            setIsAuthenticating(false);
+        }
     };
 
     const loginWithApple = async () => {
-        return await authService.loginWithApple();
+        setIsAuthenticating(true);
+        try {
+            return await authService.loginWithApple();
+        } finally {
+            setIsAuthenticating(false);
+        }
     };
 
     const refreshUser = async () => {
@@ -140,8 +161,8 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, userData, loading, login, register, logout, loginWithGoogle, loginWithApple, refreshUser }}>
-            {loading ? (
+        <AuthContext.Provider value={{ user, userData, loading, isAuthenticating, login, register, logout, loginWithGoogle, loginWithApple, refreshUser }}>
+            {(loading || isAuthenticating) ? (
                 <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
                     <Image
                         source={require('../assets/images/logo_white.png')}
@@ -149,6 +170,11 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                         resizeMode="contain"
                     />
                     <ActivityIndicator size="large" color="#FFFFFF" />
+                    {isAuthenticating && (
+                        <Text style={{ color: '#FFFFFF', marginTop: 20, ...TYPOGRAPHY.body, fontWeight: '600' }}>
+                            Processing...
+                        </Text>
+                    )}
                 </View>
             ) : (
                 children

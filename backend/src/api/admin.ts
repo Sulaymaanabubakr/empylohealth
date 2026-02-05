@@ -468,3 +468,49 @@ export const updateTicketStatus = functions.https.onCall(async (data, context) =
         throw new functions.https.HttpsError('internal', 'Update failed');
     }
 });
+
+/**
+ * Backfill userCircles index from circles.members arrays
+ * Callable Function: 'backfillUserCircles'
+ */
+export const backfillUserCircles = functions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { limit = 100, startAfterId = null } = data || {};
+
+    try {
+        let query = db.collection('circles').orderBy('createdAt', 'desc').limit(limit);
+        if (startAfterId) {
+            const lastDoc = await db.collection('circles').doc(startAfterId).get();
+            if (lastDoc.exists) query = query.startAfter(lastDoc);
+        }
+
+        const snap = await query.get();
+        if (snap.empty) return { success: true, processed: 0, nextPage: null };
+
+        const batch = db.batch();
+        snap.docs.forEach((docSnap) => {
+            const circle = docSnap.data() || {};
+            const circleId = docSnap.id;
+            const members = Array.isArray(circle.members) ? circle.members : [];
+            members.forEach((uid: string) => {
+                const userCirclesRef = db.collection('userCircles').doc(uid);
+                batch.set(userCirclesRef, {
+                    circleIds: admin.firestore.FieldValue.arrayUnion(circleId)
+                }, { merge: true });
+                batch.set(userCirclesRef.collection('circles').doc(circleId), {
+                    circleId,
+                    role: uid === circle.adminId ? 'creator' : 'member',
+                    status: 'member',
+                    joinedAt: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            });
+        });
+        await batch.commit();
+
+        const last = snap.docs[snap.docs.length - 1];
+        return { success: true, processed: snap.size, nextPage: last?.id || null };
+    } catch (error) {
+        console.error('Backfill userCircles error', error);
+        throw new functions.https.HttpsError('internal', 'Backfill failed.');
+    }
+});

@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 console.log('[PERF] App.js: Module evaluating');
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import Navigation from './src/Navigation';
 import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/context/ToastContext';
@@ -12,6 +12,24 @@ import * as Font from 'expo-font';
 
 import { View, Platform, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error) {
+    console.error('[App] Render error:', error);
+    this.props.onError?.(error);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -31,7 +49,7 @@ export default function App() {
     'DMSans_700Bold': require('./assets/fonts/DMSans_700Bold.ttf'),
   });
 
-  const [error, setError] = useState(null);
+  const [errorState, setErrorState] = React.useState(null);
 
   // Hide splash only when BOTH fonts AND auth are ready
   const tryHideSplash = useCallback(async () => {
@@ -65,37 +83,33 @@ export default function App() {
         splashHidden.current = true;
         await SplashScreen.hideAsync().catch(() => { });
       }
-    }, 2000);
+    }, 10000); // Increased to 10s for production reliability
     return () => clearTimeout(timer);
   }, []);
 
-  if (error) {
+  if (errorState) {
     return (
       <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
         <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#D32F2F', marginBottom: 10 }}>App Crashed</Text>
-        <Text style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>{error.toString()}</Text>
+        <Text style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>{errorState.toString()}</Text>
       </View>
     );
   }
 
-  try {
-    return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <ToastProvider>
-            <ModalProvider>
-              <AuthProvider onAuthReady={onAuthReady}>
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ToastProvider>
+          <ModalProvider>
+            <AuthProvider onAuthReady={onAuthReady}>
+              <ErrorBoundary onError={setErrorState}>
                 <Navigation />
-              </AuthProvider>
-            </ModalProvider>
-          </ToastProvider>
-          <StatusBar style="auto" />
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    );
-  } catch (err) {
-    console.error('[App] Render error:', err);
-    setError(err);
-    return null;
-  }
+              </ErrorBoundary>
+            </AuthProvider>
+          </ModalProvider>
+        </ToastProvider>
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
 }

@@ -7,25 +7,55 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isMember(circleId, uid) {
+      return exists(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)) &&
+        get(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)).data.status == 'active';
+    }
+
+    function isModeratorOrAdmin(circleId, uid) {
+      return get(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)).data.role in ['creator', 'admin', 'moderator'];
+    }
+
+    function isRequestOwner(circleId, uid) {
+      return exists(/databases/$(database)/documents/circles/$(circleId)/requests/$(uid));
+    }
+
+    function sharedCircleReadAllowed(targetUid) {
+      let me = get(/databases/$(database)/documents/userCircles/$(request.auth.uid)).data.circleIds;
+      let them = get(/databases/$(database)/documents/userCircles/$(targetUid)).data.circleIds;
+      return me != null && them != null && me.hasAny(them);
+    }
+
     // specific user doc
     match /users/{userId} {
-      // Allow anyone authenticated to read basic profile info (needed for Member lists)
-      allow read: if isAuthenticated();
+      // Allow reads only for self or users who share a circle
+      allow read: if isAuthenticated() && (request.auth.uid == userId || sharedCircleReadAllowed(userId));
       // Users can write their own profile
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
+    match /userCircles/{uid} {
+      // Readable by authenticated users to enforce shared-circle checks
+      allow read: if isAuthenticated();
+      allow write: if false;
+
+      match /circles/{circleId} {
+        allow read: if isAuthenticated() && request.auth.uid == uid;
+        allow write: if false;
+      }
+    }
+
     // Circles
     match /circles/{circleId} {
-      // Authenticated users can read circles
-      allow read: if isAuthenticated();
+      // Public circles readable by any authenticated user; private only by members
+      allow read: if isAuthenticated() && (resource.data.type == 'public' || isMember(circleId, request.auth.uid));
       // Only backend (Admin SDK) creates/updates via functions
       allow write: if false; 
 
       // Subcollections
       match /members/{memberId} {
-         // Anyone can read members (needed for listing members in UI)
-         allow read: if isAuthenticated();
+         // Only members can read member list
+         allow read: if isAuthenticated() && isMember(circleId, request.auth.uid);
          allow write: if false;
       }
       
@@ -34,43 +64,49 @@ service cloud.firestore {
          // Admins/Mods can see all requests
          allow read: if isAuthenticated() && (
              request.auth.uid == userId || 
-             get(/databases/$(database)/documents/circles/$(circleId)/members/$(request.auth.uid)).data.role in ['admin', 'creator', 'moderator']
+             isModeratorOrAdmin(circleId, request.auth.uid)
          );
          allow write: if false;
       }
 
       match /reports/{reportId} {
          // Only Admins/Mods can see reports
-         allow read: if isAuthenticated() && 
-             get(/databases/$(database)/documents/circles/$(circleId)/members/$(request.auth.uid)).data.role in ['admin', 'creator', 'moderator'];
+         allow read: if isAuthenticated() && isModeratorOrAdmin(circleId, request.auth.uid);
          allow write: if false;
       }
 
       match /scheduledHuddles/{eventId} {
          // All authenticated users can read scheduled huddles
-         allow read: if isAuthenticated();
+         allow read: if isAuthenticated() && isMember(circleId, request.auth.uid);
          // Only admins/backend write
          allow write: if false;
       }
 
       match /messages/{messageId} {
          // All authenticated users can read circle messages (needed for analysis)
-         allow read: if isAuthenticated();
+         allow read: if isAuthenticated() && isMember(circleId, request.auth.uid);
          allow write: if false;
       }
     }
 
     // Chats
     match /chats/{chatId} {
-      // Participants can read
-      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      // Circle chats: members can read. Direct chats: participants only.
+      allow read: if isAuthenticated() && (
+        (resource.data.circleId != null && isMember(resource.data.circleId, request.auth.uid)) ||
+        (resource.data.circleId == null && request.auth.uid in resource.data.participants)
+      );
       // Only backend creates
       allow write: if false;
 
       match /messages/{messageId} {
-        // Participants of parent chat can read
-        allow read: if isAuthenticated() && 
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        // Same rules as chat doc
+        allow read: if isAuthenticated() && (
+          (get(/databases/$(database)/documents/chats/$(chatId)).data.circleId != null &&
+           isMember(get(/databases/$(database)/documents/chats/$(chatId)).data.circleId, request.auth.uid)) ||
+          (get(/databases/$(database)/documents/chats/$(chatId)).data.circleId == null &&
+           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants)
+        );
         // Only backend sends messages
         allow write: if false;
       }
@@ -110,7 +146,8 @@ service cloud.firestore {
 
     // Huddles
     match /huddles/{huddleId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && resource.data.circleId != null &&
+        isMember(resource.data.circleId, request.auth.uid);
       allow write: if false;
     }
 

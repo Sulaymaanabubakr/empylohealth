@@ -61,6 +61,9 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
             }
         };
         await db.collection('users').doc(uid).set(userDoc);
+        await db.collection('userCircles').doc(uid).set({
+            circleIds: []
+        }, { merge: true });
         console.log(`[Backend] User profile created for ${email} (${uid})`);
     }
     catch (error) {

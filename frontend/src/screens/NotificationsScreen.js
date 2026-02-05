@@ -13,7 +13,7 @@ const NotificationsScreen = ({ navigation }) => {
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
-    if (!user?.uid) return undefined;
+  if (!user?.uid) return null;
     const q = query(
       collection(db, 'notifications'),
       where('uid', '==', user.uid),
