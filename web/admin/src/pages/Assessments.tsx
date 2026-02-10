@@ -16,6 +16,15 @@ interface Question {
     isActive: boolean;
 }
 
+interface SeedAssessmentQuestionsResponse {
+    message?: string;
+}
+
+const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    return 'Unknown error';
+};
+
 export const Assessments = () => {
     const [questions, setQuestions] = useState<Question[]>([]);
     const [loading, setLoading] = useState(true);
@@ -23,7 +32,14 @@ export const Assessments = () => {
     const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form State
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<{
+        text: string;
+        type: Question['type'];
+        category: string;
+        tags: string;
+        weight: number;
+        order: number;
+    }>({
         text: '',
         type: 'scale',
         category: 'General',
@@ -52,7 +68,7 @@ export const Assessments = () => {
             setEditingId(q.id);
             setFormData({
                 text: q.text,
-                type: q.type as any,
+                type: q.type,
                 category: q.category,
                 tags: q.tags.join(', '),
                 weight: q.weight,
@@ -115,10 +131,11 @@ export const Assessments = () => {
         try {
             const seedFn = httpsCallable(functions, 'seedAssessmentQuestions');
             const result = await seedFn();
-            alert((result.data as any).message || 'Seed complete!');
+            const data = (result.data ?? {}) as SeedAssessmentQuestionsResponse;
+            alert(data.message || 'Seed complete!');
         } catch (error) {
             console.error("Seed error", error);
-            alert(`Seed failed: ${(error as any).message}`);
+            alert(`Seed failed: ${getErrorMessage(error)}`);
         }
     };
 
@@ -265,7 +282,7 @@ export const Assessments = () => {
                                         <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Type</label>
                                         <select
                                             value={formData.type}
-                                            onChange={e => setFormData({ ...formData, type: e.target.value as any })}
+                                            onChange={e => setFormData({ ...formData, type: e.target.value as Question['type'] })}
                                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                                         >
                                             <option value="scale">Scale (1-5)</option>

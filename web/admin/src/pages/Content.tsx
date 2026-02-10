@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
@@ -6,12 +6,46 @@ import { Search, Filter, BookOpen, Users, MessageCircle, Calendar, Plus, RotateC
 import clsx from 'clsx';
 import { useSearchParams } from 'react-router-dom';
 
+type ContentTab = 'circles' | 'resources' | 'affirmations';
+type ContentStatus = 'all' | 'active' | 'pending' | 'suspended' | 'rejected';
+
+interface TimestampLike {
+    toDate: () => Date;
+}
+
+interface ContentItem {
+    id: string;
+    name?: string;
+    title?: string;
+    content?: string;
+    description?: string;
+    email?: string;
+    status?: string;
+    isNew?: boolean;
+    scheduledDate?: string;
+    createdAt?: string | TimestampLike;
+}
+
+interface ContentListResponse {
+    items?: ContentItem[];
+}
+
+const TABS: Array<{ id: ContentTab; label: string }> = [
+    { id: 'circles', label: 'Circles' },
+    { id: 'resources', label: 'Resources' },
+    { id: 'affirmations', label: 'Daily Affirmations' }
+];
+
+const STATUS_OPTIONS: ContentStatus[] = ['all', 'active', 'pending', 'suspended', 'rejected'];
+
+const isContentStatus = (value: string): value is ContentStatus => STATUS_OPTIONS.includes(value as ContentStatus);
+
 export const Content = () => {
-    const [activeTab, setActiveTab] = useState<'circles' | 'resources' | 'affirmations'>('circles');
-    const [items, setItems] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<ContentTab>('circles');
+    const [items, setItems] = useState<ContentItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'suspended' | 'rejected'>('all');
+    const [statusFilter, setStatusFilter] = useState<ContentStatus>('all');
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
     const [searchParams] = useSearchParams();
@@ -28,35 +62,26 @@ export const Content = () => {
         }
     }, [searchParams]);
 
-    useEffect(() => {
-        setMessage(null);
-        if (activeTab === 'affirmations') {
-            fetchAffirmations();
-        } else {
-            fetchContent();
-        }
-    }, [activeTab]);
-
-    const fetchContent = async () => {
+    const fetchContent = useCallback(async () => {
         setLoading(true);
         try {
             const getAllContent = httpsCallable(functions, 'getAllContent');
             const result = await getAllContent({ type: activeTab, limit: 20 });
-            const data = result.data as any;
+            const data = (result.data ?? {}) as ContentListResponse;
             setItems(data.items || []);
         } catch (error) {
             console.error("Failed to fetch content", error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [activeTab]);
 
-    const fetchAffirmations = async () => {
+    const fetchAffirmations = useCallback(async () => {
         setLoading(true);
         try {
             const getAdminAffirmations = httpsCallable(functions, 'getAdminAffirmations');
             const result = await getAdminAffirmations({ limit: 50 });
-            const data = result.data as any;
+            const data = (result.data ?? {}) as ContentListResponse;
             setItems(data.items || []);
         } catch (error) {
             console.error("Failed to fetch affirmations", error);
@@ -64,7 +89,16 @@ export const Content = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        setMessage(null);
+        if (activeTab === 'affirmations') {
+            void fetchAffirmations();
+        } else {
+            void fetchContent();
+        }
+    }, [activeTab, fetchAffirmations, fetchContent]);
 
     const handlePostAffirmation = async () => {
         if (!affirmationText) return;
@@ -78,7 +112,7 @@ export const Content = () => {
             });
             setAffirmationText('');
             // Refresh list
-            fetchAffirmations();
+            await fetchAffirmations();
             setMessage({ type: 'success', text: 'Affirmation posted.' });
         } catch (error) {
             console.error("Failed to post affirmation", error);
@@ -180,14 +214,10 @@ export const Content = () => {
 
             {/* Tabs */}
             <div className="flex gap-4 border-b border-gray-200 dark:border-gray-800">
-                {[
-                    { id: 'circles', label: 'Circles' },
-                    { id: 'resources', label: 'Resources' },
-                    { id: 'affirmations', label: 'Daily Affirmations' }
-                ].map((tab) => (
+                {TABS.map((tab) => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
+                        onClick={() => setActiveTab(tab.id)}
                         className={clsx(
                             "pb-3 px-1 text-sm font-medium transition-colors border-b-2",
                             activeTab === tab.id
@@ -277,7 +307,11 @@ export const Content = () => {
                                 <Filter size={16} />
                                 <select
                                     value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                                    onChange={(e) => {
+                                        if (isContentStatus(e.target.value)) {
+                                            setStatusFilter(e.target.value);
+                                        }
+                                    }}
                                     className="bg-transparent border-none text-sm focus:ring-0 outline-none"
                                 >
                                     <option value="all">All</option>
@@ -350,7 +384,7 @@ export const Content = () => {
                                             {activeTab === 'affirmations' ? (
                                                 <div className="flex items-center justify-end gap-3">
                                                     <button
-                                                        onClick={() => setAffirmationText(item.content)}
+                                                        onClick={() => setAffirmationText(item.content ?? '')}
                                                         className="text-gray-400 hover:text-primary transition-colors flex items-center gap-1 text-xs"
                                                         title="Reuse this affirmation"
                                                     >

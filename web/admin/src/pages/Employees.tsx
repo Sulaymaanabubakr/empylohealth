@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Shield, Mail, User as UserIcon, Ban, CheckCircle, Trash2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
@@ -16,6 +16,15 @@ interface UserData {
     createdAt: string;
     status?: string;
 }
+
+interface GetAllUsersResponse {
+    users?: UserData[];
+}
+
+const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    return 'Failed to create employee.';
+};
 
 export const Employees = () => {
     // const { isAdmin } = useAuth();
@@ -46,13 +55,13 @@ export const Employees = () => {
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
 
-    const fetchEmployees = async () => {
+    const fetchEmployees = useCallback(async () => {
         setLoading(true);
         try {
             const getAllUsers = httpsCallable(functions, 'getAllUsers');
             // Filter for employees only
             const result = await getAllUsers({ limit: 100, roles: ['admin', 'editor', 'viewer'] });
-            const data = result.data as any;
+            const data = (result.data ?? {}) as GetAllUsersResponse;
             setEmployees(data.users || []);
         } catch (err) {
             console.error("Failed to fetch employees", err);
@@ -60,11 +69,11 @@ export const Employees = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [showNotification]);
 
     useEffect(() => {
-        fetchEmployees();
-    }, []);
+        void fetchEmployees();
+    }, [fetchEmployees]);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -77,16 +86,16 @@ export const Employees = () => {
             showNotification('success', 'Employee created successfully!');
             setFormData({ displayName: '', email: '', password: '', role: 'editor' });
             setIsModalOpen(false);
-            fetchEmployees();
-        } catch (err: any) {
+            await fetchEmployees();
+        } catch (err) {
             console.error(err);
-            setError(err.message || 'Failed to create employee.');
+            setError(getErrorMessage(err));
         } finally {
             setCreating(false);
         }
     };
 
-    const confirmAction = (title: string, message: string, action: () => void, type: 'danger' | 'warning' = 'danger') => {
+    const confirmAction = (title: string, message: string, action: () => void, type: 'danger' | 'warning' | 'info' = 'danger') => {
         setConfirmConfig({ title, message, onConfirm: action, type });
         setConfirmOpen(true);
     };
@@ -112,7 +121,7 @@ export const Employees = () => {
                     setActionLoading((prev) => ({ ...prev, [id]: false }));
                 }
             },
-            nextStatus === 'suspended' ? 'warning' : 'info' as any
+            nextStatus === 'suspended' ? 'warning' : 'info'
         );
     };
 

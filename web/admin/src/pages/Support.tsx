@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, CheckCircle, Clock, Mail, ExternalLink, RefreshCw, MessageSquare } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
@@ -17,12 +17,19 @@ interface Ticket {
     updatedAt?: string;
 }
 
+interface SupportTicketsResponse {
+    items?: Ticket[];
+}
+
+const TICKET_FILTERS = ['all', 'open', 'resolved'] as const;
+type TicketFilter = typeof TICKET_FILTERS[number];
+
 export const Support = () => {
     const { showNotification } = useNotification();
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('all');
+    const [filter, setFilter] = useState<TicketFilter>('all');
 
     // View/Reply Modal
     const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -30,12 +37,12 @@ export const Support = () => {
     const [replyNote, setReplyNote] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
 
-    const fetchTickets = async () => {
+    const fetchTickets = useCallback(async () => {
         setLoading(true);
         try {
             const getSupportTickets = httpsCallable(functions, 'getSupportTickets');
             const result = await getSupportTickets({ limit: 50 });
-            const data = result.data as any;
+            const data = (result.data ?? {}) as SupportTicketsResponse;
             setTickets(data.items || []);
         } catch (err) {
             console.error("Failed to fetch tickets", err);
@@ -43,11 +50,11 @@ export const Support = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        fetchTickets();
-    }, []);
+        void fetchTickets();
+    }, [fetchTickets]);
 
     const handleUpdateStatus = async (id: string, newStatus: 'open' | 'resolved' | 'pending') => {
         setActionLoading(true);
@@ -57,7 +64,7 @@ export const Support = () => {
 
             showNotification('success', `Ticket marked as ${newStatus}.`);
             setIsModalOpen(false);
-            fetchTickets();
+            void fetchTickets();
         } catch (err) {
             console.error("Failed to update ticket", err);
             showNotification('error', 'Failed to update ticket.');
@@ -140,10 +147,10 @@ export const Support = () => {
             <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden">
                 <div className="p-4 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="flex gap-2">
-                        {['all', 'open', 'resolved'].map(f => (
+                        {TICKET_FILTERS.map((f) => (
                             <button
                                 key={f}
-                                onClick={() => setFilter(f as any)}
+                                onClick={() => setFilter(f)}
                                 className={clsx(
                                     "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize",
                                     filter === f ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"

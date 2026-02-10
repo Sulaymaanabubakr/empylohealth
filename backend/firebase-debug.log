@@ -1,0 +1,93 @@
+[debug] [2026-02-10T07:06:12.937Z] ----------------------------------------------------------------------
+[debug] [2026-02-10T07:06:12.946Z] Command:       /usr/local/bin/node /usr/local/bin/firebase deploy --only functions
+[debug] [2026-02-10T07:06:12.946Z] CLI Version:   15.1.0
+[debug] [2026-02-10T07:06:12.947Z] Platform:      darwin
+[debug] [2026-02-10T07:06:12.947Z] Node Version:  v24.12.0
+[debug] [2026-02-10T07:06:12.947Z] Time:          Tue Feb 10 2026 08:06:12 GMT+0100 (West Africa Standard Time)
+[debug] [2026-02-10T07:06:12.947Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-10T07:06:22.449Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-10T07:06:22.449Z] > authorizing via signed-in user (abubakrysulaimaan24434@gmail.com)
+[debug] [2026-02-10T07:06:22.449Z] [iam] checking project circles-app-by-empylo for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-02-10T07:06:22.451Z] Checked if tokens are valid: false, expires at: 1770706065570
+[debug] [2026-02-10T07:06:22.451Z] Checked if tokens are valid: false, expires at: 1770706065570
+[debug] [2026-02-10T07:06:22.451Z] > refreshing access token with scopes: []
+[debug] [2026-02-10T07:06:22.454Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-02-10T07:06:22.454Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-10T07:06:22.946Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-02-10T07:06:22.947Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-10T07:06:23.023Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/circles-app-by-empylo:testIamPermissions [none]
+[debug] [2026-02-10T07:06:23.023Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/circles-app-by-empylo:testIamPermissions x-goog-quota-user=projects/circles-app-by-empylo
+[debug] [2026-02-10T07:06:23.023Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/circles-app-by-empylo:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-02-10T07:06:24.391Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/circles-app-by-empylo:testIamPermissions 200
+[debug] [2026-02-10T07:06:24.391Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/circles-app-by-empylo:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-02-10T07:06:24.391Z] Checked if tokens are valid: true, expires at: 1770710781947
+[debug] [2026-02-10T07:06:24.391Z] Checked if tokens are valid: true, expires at: 1770710781947
+[debug] [2026-02-10T07:06:24.392Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/circles-app-by-empylo/serviceAccounts/circles-app-by-empylo@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-02-10T07:06:24.392Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/circles-app-by-empylo/serviceAccounts/circles-app-by-empylo@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-02-10T07:06:26.411Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/circles-app-by-empylo/serviceAccounts/circles-app-by-empylo@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-02-10T07:06:26.412Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/circles-app-by-empylo/serviceAccounts/circles-app-by-empylo@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'circles-app-by-empylo'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-02-10T07:06:26.422Z] Checked if tokens are valid: true, expires at: 1770710781947
+[debug] [2026-02-10T07:06:26.423Z] Checked if tokens are valid: true, expires at: 1770710781947
+[debug] [2026-02-10T07:06:26.423Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/circles-app-by-empylo [none]
+[debug] [2026-02-10T07:06:26.706Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/circles-app-by-empylo 200
+[debug] [2026-02-10T07:06:26.706Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/circles-app-by-empylo {"projectNumber":"433309283212","projectId":"circles-app-by-empylo","lifecycleState":"ACTIVE","name":"Circles App By Empylo","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-01-14T04:13:43.651042Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-02-10T07:06:26.713Z] Checked if tokens are valid: true, expires at: 1770710781947
+[debug] [2026-02-10T07:06:26.713Z] Checked if tokens are valid: true, expires at: 1770710781947
+[debug] [2026-02-10T07:06:26.714Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/circles-app-by-empylo/adminSdkConfig [none]
+[debug] [2026-02-10T07:06:27.781Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/circles-app-by-empylo/adminSdkConfig 200
+[debug] [2026-02-10T07:06:27.782Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/circles-app-by-empylo/adminSdkConfig {"projectId":"circles-app-by-empylo","storageBucket":"circles-app-by-empylo.firebasestorage.app"}
+[debug] [2026-02-10T07:06:27.783Z] Checked if tokens are valid: true, expires at: 1770710781947
+[debug] [2026-02-10T07:06:27.783Z] Checked if tokens are valid: true, expires at: 1770710781947
+[debug] [2026-02-10T07:06:27.783Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/circles-app-by-empylo/configs [none]
+[debug] [2026-02-10T07:06:28.735Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/circles-app-by-empylo/configs 200
+[debug] [2026-02-10T07:06:28.736Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/circles-app-by-empylo/configs {}
+[debug] [2026-02-10T07:06:28.741Z] Validating nodejs source
+[debug] [2026-02-10T07:06:32.953Z] > [functions] package.json contents: {
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "npm run build && firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "test": "npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": "22"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "cloudinary": "^2.8.0",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.5",
+    "google-auth-library": "^9.15.0",
+    "node-fetch": "^3.3.2"
+  }
+}
+[debug] [2026-02-10T07:06:32.953Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2026-02-10T07:06:32.957Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-02-10T07:06:32.972Z] Found firebase-functions binary at '/Users/sulaymaanabubakr/Desktop/Empylo/backend/node_modules/.bin/firebase-functions'
+[info] Serving at port 8074
+

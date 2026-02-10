@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Ban, CheckCircle, Trash2, RefreshCw } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
@@ -17,6 +17,10 @@ interface UserData {
     photoURL?: string;
 }
 
+interface GetUsersResponse {
+    users?: UserData[];
+}
+
 export const Users = () => {
     const { showNotification } = useNotification();
     const [users, setUsers] = useState<UserData[]>([]);
@@ -33,13 +37,13 @@ export const Users = () => {
         type: 'danger' | 'warning' | 'info';
     }>({ title: '', message: '', onConfirm: () => { }, type: 'danger' });
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
             const getAllUsers = httpsCallable(functions, 'getAllUsers');
             // Fetch only regular 'user' role
             const result = await getAllUsers({ limit: 100, roles: ['user'] });
-            const data = result.data as any;
+            const data = (result.data ?? {}) as GetUsersResponse;
             setUsers(data.users || []);
         } catch (err) {
             console.error("Failed to fetch users", err);
@@ -47,13 +51,13 @@ export const Users = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [showNotification]);
 
     useEffect(() => {
-        fetchUsers();
-    }, []);
+        void fetchUsers();
+    }, [fetchUsers]);
 
-    const confirmAction = (title: string, message: string, action: () => void, type: 'danger' | 'warning' = 'danger') => {
+    const confirmAction = (title: string, message: string, action: () => void, type: 'danger' | 'warning' | 'info' = 'danger') => {
         setConfirmConfig({ title, message, onConfirm: action, type });
         setConfirmOpen(true);
     };
@@ -79,7 +83,7 @@ export const Users = () => {
                     setActionLoading((prev) => ({ ...prev, [id]: false }));
                 }
             },
-            nextStatus === 'suspended' ? 'warning' : 'info' as any
+            nextStatus === 'suspended' ? 'warning' : 'info'
         );
     };
 

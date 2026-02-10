@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
@@ -19,6 +19,10 @@ interface Report {
     createdAt: string;
 }
 
+interface ReportsResponse {
+    items?: Report[];
+}
+
 export const Moderation = () => {
     const { showNotification } = useNotification();
     const [reports, setReports] = useState<Report[]>([]);
@@ -35,12 +39,12 @@ export const Moderation = () => {
         type: 'danger' | 'warning' | 'info';
     }>({ title: '', message: '', onConfirm: () => { }, type: 'danger' });
 
-    const fetchReports = async () => {
+    const fetchReports = useCallback(async () => {
         setLoading(true);
         try {
             const getReports = httpsCallable(functions, 'getReports');
             const result = await getReports({ limit: 100, status: activeTab });
-            const data = result.data as any;
+            const data = (result.data ?? {}) as ReportsResponse;
             setReports(data.items || []);
         } catch (error) {
             console.error("Fetch error", error);
@@ -48,11 +52,11 @@ export const Moderation = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [activeTab]);
 
     useEffect(() => {
-        fetchReports();
-    }, [activeTab]);
+        void fetchReports();
+    }, [fetchReports]);
 
     const confirmAction = (title: string, message: string, action: () => void, type: 'danger' | 'warning' | 'info' = 'danger') => {
         setConfirmConfig({ title, message, onConfirm: action, type });
@@ -71,7 +75,7 @@ export const Moderation = () => {
                     const resolveReport = httpsCallable(functions, 'resolveReport');
                     await resolveReport({ reportId: id, action });
                     showNotification('success', 'Report resolved.');
-                    fetchReports();
+                    void fetchReports();
                 } catch (err) {
                     console.error("Resolution failed", err);
                     showNotification('error', 'Failed to resolve report.');

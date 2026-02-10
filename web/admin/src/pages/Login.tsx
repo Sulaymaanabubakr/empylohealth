@@ -9,6 +9,8 @@ export const Login = () => {
     const [error, setError] = useState('');
     const [loadingLocal, setLoadingLocal] = useState(false);
     const { login } = useAuth();
+    const getErrorMessage = (error: unknown): string =>
+        error instanceof Error ? error.message : 'Invalid credentials. Please try again.';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -16,9 +18,9 @@ export const Login = () => {
         setLoadingLocal(true);
         try {
             await login(email, password);
-        } catch (err: any) {
+        } catch (err) {
             console.error(err);
-            setError('Invalid credentials. Please try again.');
+            setError(getErrorMessage(err));
         } finally {
             setLoadingLocal(false);
         }

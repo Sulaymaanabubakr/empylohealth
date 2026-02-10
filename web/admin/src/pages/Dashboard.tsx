@@ -4,11 +4,56 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
 import { DashboardCard } from '../components/DashboardCard';
 
+interface DashboardStats {
+    users: number;
+    circles: number;
+    resources: number;
+    pending: number;
+    storage: string | null;
+}
+
+interface DashboardStatsResponse {
+    users?: number;
+    circles?: number;
+    resources?: number;
+    pendingCircles?: number;
+    storageUsed?: string | null;
+}
+
+const CACHE_KEY = 'dashboard_stats_v1';
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const EMPTY_STATS: DashboardStats = { users: 0, circles: 0, resources: 0, pending: 0, storage: null };
+
+const parseStats = (data: DashboardStatsResponse): DashboardStats => ({
+    users: data.users ?? 0,
+    circles: data.circles ?? 0,
+    resources: data.resources ?? 0,
+    pending: data.pendingCircles ?? 0,
+    storage: data.storageUsed ?? null
+});
+
+const readCachedStats = (): { stats: DashboardStats; hasFreshCache: boolean } => {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (!cached) return { stats: EMPTY_STATS, hasFreshCache: false };
+
+    try {
+        const parsed = JSON.parse(cached) as { data?: DashboardStatsResponse; ts?: number };
+        if (!parsed.data || typeof parsed.ts !== 'number') {
+            return { stats: EMPTY_STATS, hasFreshCache: false };
+        }
+        if (Date.now() - parsed.ts >= CACHE_TTL_MS) {
+            return { stats: EMPTY_STATS, hasFreshCache: false };
+        }
+        return { stats: parseStats(parsed.data), hasFreshCache: true };
+    } catch {
+        return { stats: EMPTY_STATS, hasFreshCache: false };
+    }
+};
+
 export const Dashboard = () => {
-    const [stats, setStats] = useState({ users: 0, circles: 0, resources: 0, pending: 0, storage: null as string | null });
+    const initialCache = readCachedStats();
+    const [stats, setStats] = useState<DashboardStats>(initialCache.stats);
     const didFetchRef = useRef(false);
-    const CACHE_KEY = 'dashboard_stats_v1';
-    const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
     const handleDownloadReport = () => {
         const rows = [
@@ -33,18 +78,8 @@ export const Dashboard = () => {
     };
 
     useEffect(() => {
-        // Serve cached stats immediately if fresh to avoid reloading on tab switches
-        const cached = sessionStorage.getItem(CACHE_KEY);
-        if (cached) {
-            try {
-                const { data, ts } = JSON.parse(cached);
-                if (Date.now() - ts < CACHE_TTL_MS) {
-                    setStats(data);
-                    didFetchRef.current = true;
-                }
-            } catch {
-                // ignore cache parse errors
-            }
+        if (initialCache.hasFreshCache) {
+            didFetchRef.current = true;
         }
 
         // Fetch once per mount if not already fetched or cache stale
@@ -55,14 +90,7 @@ export const Dashboard = () => {
             try {
                 const getDashboardStats = httpsCallable(functions, 'getDashboardStats');
                 const result = await getDashboardStats();
-                const data = result.data as any;
-                const parsed = {
-                    users: data.users || 0,
-                    circles: data.circles || 0,
-                    resources: data.resources || 0,
-                    pending: data.pendingCircles || 0,
-                    storage: data.storageUsed || null
-                };
+                const parsed = parseStats((result.data ?? {}) as DashboardStatsResponse);
                 setStats(parsed);
                 sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data: parsed, ts: Date.now() }));
             } catch (error) {
@@ -70,7 +98,7 @@ export const Dashboard = () => {
             }
         };
         void fetchStats();
-    }, []);
+    }, [initialCache.hasFreshCache]);
 
     return (
         <motion.div

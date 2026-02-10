@@ -4,8 +4,25 @@ import { Download, Search, ArrowDownLeft, CreditCard } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
 
+interface TransactionRaw {
+    id: string;
+    user?: string;
+    customerName?: string;
+    displayName?: string;
+    email?: string;
+    amount?: number | string;
+    status?: string;
+    createdAt?: string;
+    date?: string;
+    type?: string;
+}
+
+interface TransactionsResponse {
+    items?: TransactionRaw[];
+}
+
 export const Transactions = () => {
-    const [transactions, setTransactions] = useState<any[]>([]);
+    const [transactions, setTransactions] = useState<TransactionRaw[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [error, setError] = useState('');
@@ -17,7 +34,7 @@ export const Transactions = () => {
             try {
                 const getTransactions = httpsCallable(functions, 'getTransactions');
                 const result = await getTransactions({ limit: 50 });
-                const data = result.data as any;
+                const data = (result.data ?? {}) as TransactionsResponse;
                 setTransactions(data.items || []);
             } catch (err) {
                 console.error("Failed to fetch transactions", err);

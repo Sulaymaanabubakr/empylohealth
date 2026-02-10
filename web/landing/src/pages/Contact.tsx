@@ -48,8 +48,9 @@ const Contact = () => {
 
             setStatus({ type: 'success', text: 'Thanks! Your message has been sent.' });
             setFormState({ fullName: '', email: '', company: '', message: '' });
-        } catch (error: any) {
-            setStatus({ type: 'error', text: error?.message || 'Unable to submit message.' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unable to submit message.';
+            setStatus({ type: 'error', text: message });
         } finally {
             setSubmitting(false);
         }
