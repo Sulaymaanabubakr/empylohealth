@@ -1,0 +1,14 @@
+# Exclude non-mobile parts of the monorepo from EAS upload.
+.git/
+backend/
+web/
+brand_assets/
+docs/
+
+# Repo-level docs/config not needed for app builds.
+*.md
+.cpanel.yml
+.firebaserc
+firebase.json
+firestore.indexes.json
+firestore.rules
