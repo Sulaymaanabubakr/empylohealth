@@ -1,17 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, StatusBar, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, StatusBar, KeyboardAvoidingView, Platform, Keyboard, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { chatService } from '../services/api/chatService';
-import { circleService } from '../services/api/circleService';
+import { db } from '../services/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 
 const ChatDetailScreen = ({ navigation, route }) => {
     const chat = route?.params?.chat;
-    const { user } = useAuth();
+    const { user, userData } = useAuth();
     const { showModal } = useModal();
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
@@ -19,6 +20,9 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
     const [keyboardVisible, setKeyboardVisible] = useState(false);
     const [headerHeight, setHeaderHeight] = useState(0);
+    const [profileModalVisible, setProfileModalVisible] = useState(false);
+    const [selectedProfile, setSelectedProfile] = useState(null);
+    const [profileCache, setProfileCache] = useState({});
 
     // Keyboard Visibility management for bottom insets
     useEffect(() => {
@@ -78,6 +82,67 @@ const ChatDetailScreen = ({ navigation, route }) => {
         }
     }, [chat.id, user]);
 
+    const getOtherParticipantId = () => {
+        if (!Array.isArray(chat?.participants) || !user?.uid) return null;
+        return chat.participants.find((id) => id !== user.uid) || null;
+    };
+
+    const getUserProfile = async (uid) => {
+        if (!uid) return null;
+        if (profileCache[uid]) return profileCache[uid];
+
+        if (uid === user?.uid) {
+            const localProfile = {
+                uid,
+                name: userData?.name || user?.displayName || 'You',
+                photoURL: userData?.photoURL || user?.photoURL || '',
+                role: 'You',
+                about: 'This is you'
+            };
+            setProfileCache((prev) => ({ ...prev, [uid]: localProfile }));
+            return localProfile;
+        }
+
+        try {
+            const snap = await getDoc(doc(db, 'users', uid));
+            const data = snap.exists() ? snap.data() : {};
+            const profile = {
+                uid,
+                name: data?.name || data?.displayName || 'Member',
+                photoURL: data?.photoURL || '',
+                role: chat?.isGroup ? 'Circle member' : 'Contact',
+                about: data?.bio || data?.about || 'Hey there! I am using Empylo.'
+            };
+            setProfileCache((prev) => ({ ...prev, [uid]: profile }));
+            return profile;
+        } catch (error) {
+            console.error('Failed to load user profile', error);
+            return {
+                uid,
+                name: 'Member',
+                photoURL: '',
+                role: chat?.isGroup ? 'Circle member' : 'Contact',
+                about: 'Profile unavailable'
+            };
+        }
+    };
+
+    const openProfileModal = async (uid) => {
+        const profile = await getUserProfile(uid);
+        if (!profile) return;
+        setSelectedProfile(profile);
+        setProfileModalVisible(true);
+    };
+
+    useEffect(() => {
+        const senderIds = [...new Set(messages.map((m) => m?.user?._id).filter(Boolean))];
+        senderIds.forEach((uid) => {
+            if (!profileCache[uid]) {
+                getUserProfile(uid).catch(() => { });
+            }
+        });
+    }, [messages]);
+
     const handleSend = async () => {
         if (!inputText.trim()) return;
 
@@ -135,17 +200,30 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
     const renderMessage = ({ item }) => {
         const isMe = item.isMe;
+        const senderId = item?.user?._id;
+        const senderProfile = senderId ? profileCache[senderId] : null;
+        const senderName = isMe
+            ? 'You'
+            : (senderProfile?.name || (chat?.isGroup ? 'Member' : chat?.name));
+        const senderAvatar = isMe
+            ? (userData?.photoURL || user?.photoURL || '')
+            : (senderProfile?.photoURL || (chat?.isGroup ? '' : (chat.avatar || chat.photoURL || chat.image)));
         // Design: Incoming (Left) = Teal, Outgoing (Right) = Light
         return (
             <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
                 {!isMe && (
-                    <Avatar uri={chat.avatar} name={chat.name} size={32} />
+                    <TouchableOpacity onPress={() => openProfileModal(senderId)} activeOpacity={0.8}>
+                        <Avatar uri={senderAvatar} name={senderName} size={32} />
+                    </TouchableOpacity>
                 )}
                 <TouchableOpacity
                     onLongPress={() => !isMe && handleMessageLongPress(item)}
                     activeOpacity={0.9} // Slight feedback but keep bubble look
                     style={[styles.messageBubble, isMe ? styles.bubbleMe : styles.bubbleOther]}
                 >
+                    {!isMe && chat?.isGroup && (
+                        <Text style={styles.senderNameText}>{senderName}</Text>
+                    )}
                     <Text style={[styles.messageText, isMe ? styles.textMe : styles.textOther]}>
                         {item.text}
                     </Text>
@@ -172,7 +250,14 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <View style={{ marginRight: 12 }}>
+                <TouchableOpacity
+                    style={{ marginRight: 12 }}
+                    onPress={() => {
+                        const targetUid = chat?.isGroup ? null : getOtherParticipantId();
+                        if (targetUid) openProfileModal(targetUid);
+                    }}
+                    activeOpacity={chat?.isGroup ? 1 : 0.8}
+                >
                     {/* Use the avatar computed by the service, or fallbacks if data structure differs */}
                     <Avatar
                         uri={chat.avatar || chat.photoURL || chat.image}
@@ -180,7 +265,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                         size={40}
                         key={chat.avatar || 'default'}
                     />
-                </View>
+                </TouchableOpacity>
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerName}>{chat.name}</Text>
                     <Text style={styles.headerStatus}>{chat.members ? `${chat.members} members` : (chat.isOnline ? 'Online' : 'Offline')}</Text>
@@ -232,6 +317,38 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     )}
                 </View>
             </KeyboardAvoidingView>
+
+            <Modal
+                visible={profileModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setProfileModalVisible(false)}
+            >
+                <View style={styles.profileOverlay}>
+                    <TouchableOpacity style={styles.profileBackdrop} onPress={() => setProfileModalVisible(false)} />
+                    <View style={styles.profileModal}>
+                        <Avatar
+                            uri={selectedProfile?.photoURL || ''}
+                            name={selectedProfile?.name || 'Member'}
+                            size={76}
+                        />
+                        <Text style={styles.profileName}>{selectedProfile?.name || 'Member'}</Text>
+                        <Text style={styles.profileRole}>{selectedProfile?.role || 'Contact'}</Text>
+                        <Text style={styles.profileAbout} numberOfLines={2}>
+                            {selectedProfile?.about || 'Hey there! I am using Empylo.'}
+                        </Text>
+
+                        <View style={styles.profileActions}>
+                            <TouchableOpacity
+                                style={[styles.profileActionBtn, styles.profileActionPrimary]}
+                                onPress={() => setProfileModalVisible(false)}
+                            >
+                                <Text style={styles.profileActionPrimaryText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -314,6 +431,12 @@ const styles = StyleSheet.create({
         fontSize: 15,
         lineHeight: 22,
     },
+    senderNameText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: 'rgba(255,255,255,0.85)',
+        marginBottom: 2
+    },
     textMe: {
         color: '#1A1A1A', // Dark text for Light bubble
     },
@@ -369,6 +492,64 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 3,
     },
+    profileOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24
+    },
+    profileBackdrop: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0
+    },
+    profileModal: {
+        width: '100%',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 18,
+        paddingHorizontal: 20,
+        paddingVertical: 22,
+        alignItems: 'center'
+    },
+    profileName: {
+        fontSize: 19,
+        fontWeight: '700',
+        color: '#1A1A1A',
+        marginTop: 12
+    },
+    profileRole: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: COLORS.primary,
+        marginTop: 4
+    },
+    profileAbout: {
+        marginTop: 10,
+        textAlign: 'center',
+        color: '#616161',
+        fontSize: 13,
+        lineHeight: 18
+    },
+    profileActions: {
+        width: '100%',
+        marginTop: 18
+    },
+    profileActionBtn: {
+        borderRadius: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    profileActionPrimary: {
+        backgroundColor: COLORS.primary
+    },
+    profileActionPrimaryText: {
+        color: '#FFFFFF',
+        fontWeight: '700'
+    }
 });
 
 export default ChatDetailScreen;
