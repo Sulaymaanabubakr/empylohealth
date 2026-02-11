@@ -13,7 +13,10 @@ if ! [[ "$BATCH_SIZE" =~ ^[0-9]+$ ]] || [ "$BATCH_SIZE" -lt 1 ]; then
   exit 1
 fi
 
-mapfile -t FUNCTIONS < <(grep -E '^export const [A-Za-z0-9_]+ =' src/index.ts | sed -E 's/^export const ([A-Za-z0-9_]+) =.*/\1/')
+FUNCTIONS=()
+while IFS= read -r fn; do
+  [ -n "$fn" ] && FUNCTIONS+=("$fn")
+done < <(grep -E '^export const [A-Za-z0-9_]+ =' src/index.ts | sed -E 's/^export const ([A-Za-z0-9_]+) =.*/\1/')
 
 if [ "${#FUNCTIONS[@]}" -eq 0 ]; then
   echo "No exported functions found in src/index.ts"
