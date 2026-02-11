@@ -1,69 +1,74 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
 import Avatar from '../components/Avatar';
 
-
 const ChatListScreen = ({ navigation }) => {
-    const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [chats, setChats] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
-        if (user?.uid) {
-            const unsubscribe = chatService.subscribeToChatList(user.uid, (updatedChats) => {
-                setChats(updatedChats);
-            });
-            return () => unsubscribe();
-        }
-    }, [user]);
+        if (!user?.uid) return;
+        const unsubscribe = chatService.subscribeToChatList(user.uid, (updatedChats) => {
+            setChats(updatedChats);
+        });
+        return () => unsubscribe();
+    }, [user?.uid]);
 
     const onRefresh = React.useCallback(() => {
         setRefreshing(true);
-        // Chats are real-time, but we simulate a refresh for UX or re-verify connection
-        setTimeout(() => {
-            setRefreshing(false);
-        }, 1000);
+        setTimeout(() => setRefreshing(false), 900);
     }, []);
 
-    // Note: Filtering now applies to the fetched 'chats'
-    const filteredChats = chats.filter(chat =>
-        (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase()) // Fallback name if fetching details is complex
+    const filteredChats = chats.filter((chat) =>
+        (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const renderItem = ({ item }) => {
+        const lastMessage = item.lastMessage || (item.isGroup ? 'Group conversation' : 'Start chatting');
         return (
             <TouchableOpacity
-                style={styles.chatItem}
+                style={styles.chatCard}
+                activeOpacity={0.85}
                 onPress={() => navigation.navigate('ChatDetail', { chat: item })}
             >
                 <View style={styles.avatarContainer}>
                     <Avatar uri={item.avatar || item.photoURL || item.image || ''} name={item.name} size={56} />
                     {item.isOnline && <View style={styles.onlineIndicator} />}
                 </View>
+
                 <View style={styles.chatContent}>
                     <View style={styles.chatHeader}>
-                        <Text style={styles.chatName}>{item.name}</Text>
-                        <Text style={styles.chatTime}>{item.time}</Text>
+                        <Text numberOfLines={1} style={styles.chatName}>{item.name}</Text>
+                        <View style={styles.chatMetaRight}>
+                            <Text style={styles.chatTime}>{item.time || ''}</Text>
+                            {item.unread > 0 && (
+                                <View style={styles.unreadBadge}>
+                                    <Text style={styles.unreadText}>{item.unread > 99 ? '99+' : item.unread}</Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
+
                     <View style={styles.chatFooter}>
-                        <Text style={[
-                            styles.lastMessage,
-                            item.unread > 0 ? styles.lastMessageUnread : null
-                        ]} numberOfLines={1}>
-                            {item.lastMessage}
-                        </Text>
-                        {item.unread > 0 && (
-                            <View style={styles.unreadBadge}>
-                                <Text style={styles.unreadText}>{item.unread}</Text>
+                        {item.isGroup && (
+                            <View style={styles.groupChip}>
+                                <Ionicons name="people" size={12} color={COLORS.primary} />
+                                <Text style={styles.groupChipText}>{item.members || 0}</Text>
                             </View>
                         )}
+                        <Text
+                            style={[styles.lastMessage, item.unread > 0 && styles.lastMessageUnread]}
+                            numberOfLines={1}
+                        >
+                            {lastMessage}
+                        </Text>
                     </View>
                 </View>
             </TouchableOpacity>
@@ -72,49 +77,60 @@ const ChatListScreen = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+            <StatusBar barStyle="dark-content" backgroundColor="#F3F6FA" />
 
-            {/* Header */}
-            <View style={styles.header}>
+            <View style={styles.headerRow}>
                 <TouchableOpacity
-                    onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard')}
+                    onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard'))}
                     style={styles.backButton}
                 >
-                    <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+                    <Ionicons name="chevron-back" size={22} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Chats</Text>
-                <View style={{ width: 44 }} />
+                <View style={styles.headerTextWrap}>
+                    <Text style={styles.headerTitle}>Chats</Text>
+                    <Text style={styles.headerSubtitle}>{filteredChats.length} conversation{filteredChats.length === 1 ? '' : 's'}</Text>
+                </View>
+                <View style={styles.backButtonGhost} />
             </View>
 
-            {/* Search */}
             <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color="#9E9E9E" style={styles.searchIcon} />
+                <Ionicons name="search" size={18} color="#8A93A5" style={styles.searchIcon} />
                 <TextInput
-                    placeholder="Search"
-                    placeholderTextColor="#9E9E9E"
+                    placeholder="Search people or groups"
+                    placeholderTextColor="#8A93A5"
                     style={styles.searchInput}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />
+                {!!searchQuery && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                        <Ionicons name="close-circle" size={18} color="#9AA3B2" />
+                    </TouchableOpacity>
+                )}
             </View>
 
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={{ flex: 1 }}
-            >
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
                 <FlatList
                     data={filteredChats}
                     renderItem={renderItem}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={{ paddingBottom: 100 }}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={[
+                        styles.listContent,
+                        filteredChats.length === 0 && styles.listContentEmpty
+                    ]}
                     showsVerticalScrollIndicator={false}
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+                    ListEmptyComponent={
+                        <View style={styles.emptyWrap}>
+                            <View style={styles.emptyIconWrap}>
+                                <Ionicons name="chatbubble-ellipses-outline" size={30} color={COLORS.primary} />
+                            </View>
+                            <Text style={styles.emptyTitle}>No chats yet</Text>
+                            <Text style={styles.emptySubtitle}>When you start a conversation, it will show up here.</Text>
+                        </View>
                     }
                 />
             </KeyboardAvoidingView>
-
-
         </SafeAreaView>
     );
 };
@@ -122,175 +138,196 @@ const ChatListScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#F3F6FA'
     },
-    header: {
+    headerRow: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: SPACING.lg,
         paddingTop: SPACING.sm,
-        paddingBottom: SPACING.sm,
-        backgroundColor: '#FFFFFF',
+        paddingBottom: SPACING.sm
     },
     backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#F5F5F5',
-        justifyContent: 'center',
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E8EDF4',
         alignItems: 'center',
+        justifyContent: 'center'
+    },
+    backButtonGhost: {
+        width: 38,
+        height: 38
+    },
+    headerTextWrap: {
+        flex: 1,
+        marginLeft: 12
     },
     headerTitle: {
-        flex: 1,
-        fontSize: 24, // Large title like screenshot "Chats"
-        fontWeight: '700',
-        color: '#1A1A1A',
-        textAlign: 'center', // Or left? Screenshot shows left-ish but title centered usually standard. 
-        // Screenshot actually shows "Chats" as a large title below the small header? No, it's the main header.
-        // Let's stick to standard centered for now or left if desired. Screenshot: "Chats" is Big Title.
+        fontSize: 26,
+        fontWeight: '800',
+        color: '#1A1A1A'
+    },
+    headerSubtitle: {
+        marginTop: 2,
+        fontSize: 13,
+        color: '#6A7385',
+        fontWeight: '500'
     },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F5F5F5', // Or white with shadow? Screenshot looks like white pill on grey bg? No, distinct search bar.
-        // Screenshot: Search is rounded input.
-        backgroundColor: '#FFFFFF', // Actually looks like input field
-        borderWidth: 1,
-        borderColor: '#F0F0F0',
-        borderRadius: 25,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
         marginHorizontal: SPACING.lg,
+        marginTop: 8,
         marginBottom: SPACING.md,
-        marginTop: SPACING.xs,
-        paddingHorizontal: SPACING.md,
-        height: 48,
+        paddingHorizontal: 14,
+        height: 50,
+        borderWidth: 1,
+        borderColor: '#E8EDF4'
     },
     searchIcon: {
-        marginRight: SPACING.sm,
+        marginRight: 8
     },
     searchInput: {
         flex: 1,
-        fontSize: 15,
-        color: '#1A1A1A',
         height: '100%',
+        color: '#111827',
+        fontSize: 15,
+        fontWeight: '500'
     },
-    chatItem: {
-        flexDirection: 'row',
-        paddingVertical: 12,
+    clearButton: {
+        padding: 4
+    },
+    listContent: {
         paddingHorizontal: SPACING.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F9F9F9',
+        paddingBottom: 20,
+        gap: 10
+    },
+    listContentEmpty: {
+        flex: 1,
+        justifyContent: 'center'
+    },
+    chatCard: {
+        flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 18,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: '#E8EDF4'
     },
     avatarContainer: {
         position: 'relative',
-        marginRight: 16,
-    },
-    avatar: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#E0E0E0',
+        marginRight: 12
     },
     onlineIndicator: {
         position: 'absolute',
-        bottom: 2,
-        right: 2,
-        width: 14,
-        height: 14,
+        bottom: 1,
+        right: 1,
+        width: 13,
+        height: 13,
         borderRadius: 7,
-        backgroundColor: '#4CAF50', // Green
+        backgroundColor: '#44D16A',
         borderWidth: 2,
-        borderColor: '#FFFFFF',
+        borderColor: '#FFFFFF'
     },
     chatContent: {
-        flex: 1,
-        justifyContent: 'center',
+        flex: 1
     },
     chatHeader: {
         flexDirection: 'row',
-        javaxContent: 'space-between',
-        marginBottom: 4,
+        alignItems: 'center'
     },
     chatName: {
+        flex: 1,
+        color: '#111827',
         fontSize: 16,
         fontWeight: '700',
-        color: '#1A1A1A',
-        flex: 1,
+        marginRight: 8
+    },
+    chatMetaRight: {
+        alignItems: 'flex-end'
     },
     chatTime: {
-        fontSize: 12,
-        color: '#9E9E9E',
+        color: '#8A93A5',
+        fontSize: 11,
+        fontWeight: '600'
     },
     chatFooter: {
+        marginTop: 5,
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        alignItems: 'center'
+    },
+    groupChip: {
+        flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#E9F7F6',
+        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        marginRight: 7
+    },
+    groupChipText: {
+        marginLeft: 3,
+        color: COLORS.primary,
+        fontSize: 11,
+        fontWeight: '700'
     },
     lastMessage: {
-        fontSize: 14,
-        color: '#757575',
         flex: 1,
-        marginRight: 16,
+        color: '#6A7385',
+        fontSize: 13,
+        fontWeight: '500'
     },
     lastMessageUnread: {
-        color: '#1A1A1A', // Darker for unread? Or specific style?
-        fontWeight: '500',
+        color: '#1F2937',
+        fontWeight: '700'
     },
     unreadBadge: {
-        backgroundColor: COLORS.primary, // Teal
+        marginTop: 5,
         minWidth: 20,
         height: 20,
         borderRadius: 10,
-        justifyContent: 'center',
+        paddingHorizontal: 6,
+        backgroundColor: COLORS.primary,
         alignItems: 'center',
-        paddingHorizontal: 5,
+        justifyContent: 'center'
     },
     unreadText: {
-        fontSize: 11,
         color: '#FFFFFF',
-        fontWeight: '700',
+        fontSize: 11,
+        fontWeight: '800'
     },
-    bottomNavContainer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        paddingHorizontal: 20,
-        paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-        backgroundColor: 'transparent',
-        zIndex: 100, // Ensure it sits on top of FlatList
+    emptyWrap: {
+        alignItems: 'center',
+        paddingHorizontal: 28
     },
-    bottomNav: {
-        flexDirection: 'row',
-        backgroundColor: '#FFF',
-        paddingVertical: 12,
-        borderRadius: 32,
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: 10,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 25,
-        justifyContent: 'space-around',
-    },
-    navItem: {
+    emptyIconWrap: {
+        width: 66,
+        height: 66,
+        borderRadius: 33,
         alignItems: 'center',
         justifyContent: 'center',
-        flex: 1,
+        backgroundColor: '#E9F7F6'
     },
-    activeNavIcon: {
-        padding: 10,
-        borderRadius: 20,
-        marginBottom: 4,
-        backgroundColor: '#E0F2F1', // Light shade of primary
+    emptyTitle: {
+        marginTop: 14,
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#111827'
     },
-    navLabel: {
-        fontSize: 11,
-        color: '#BDBDBD',
-        marginTop: 4,
-    },
+    emptySubtitle: {
+        marginTop: 8,
+        textAlign: 'center',
+        color: '#6A7385',
+        fontSize: 14,
+        lineHeight: 20
+    }
 });
 
 export default ChatListScreen;

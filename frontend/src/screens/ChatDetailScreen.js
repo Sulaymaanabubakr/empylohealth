@@ -212,7 +212,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         return (
             <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
                 {!isMe && (
-                    <TouchableOpacity onPress={() => openProfileModal(senderId)} activeOpacity={0.8}>
+                    <TouchableOpacity onPress={() => openProfileModal(senderId)} activeOpacity={0.8} style={styles.avatarTap}>
                         <Avatar uri={senderAvatar} name={senderName} size={32} />
                     </TouchableOpacity>
                 )}
@@ -251,7 +251,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
                 <TouchableOpacity
-                    style={{ marginRight: 12 }}
+                    style={styles.headerAvatarPress}
                     onPress={() => {
                         const targetUid = chat?.isGroup ? null : getOtherParticipantId();
                         if (targetUid) openProfileModal(targetUid);
@@ -268,7 +268,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerName}>{chat.name}</Text>
-                    <Text style={styles.headerStatus}>{chat.members ? `${chat.members} members` : (chat.isOnline ? 'Online' : 'Offline')}</Text>
+                    <Text style={styles.headerStatus}>{chat.members ? `${chat.members} members active` : (chat.isOnline ? 'Online now' : 'Last seen recently')}</Text>
                 </View>
                 <TouchableOpacity style={styles.callButton} onPress={handleCall}>
                     <Ionicons name="call" size={22} color={COLORS.primary} />
@@ -285,7 +285,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     data={messages}
                     renderItem={renderMessage}
                     keyExtractor={item => item.id}
-                    contentContainerStyle={[styles.listContent, { paddingBottom: 20 }]}
+                    contentContainerStyle={[styles.listContent, { paddingBottom: 24 }]}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                     onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
@@ -303,7 +303,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     <View style={styles.inputWrapper}>
                         <TextInput
                             style={styles.input}
-                            placeholder="Your message..."
+                            placeholder="Write a message..."
                             placeholderTextColor="#9E9E9E"
                             value={inputText}
                             onChangeText={setInputText}
@@ -356,7 +356,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#F3F6FA',
     },
     header: {
         flexDirection: 'row',
@@ -364,11 +364,23 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.lg,
         paddingTop: SPACING.sm,
         paddingBottom: SPACING.sm,
+        backgroundColor: '#FFFFFF',
         borderBottomWidth: 1,
-        borderBottomColor: '#F5F5F5',
+        borderBottomColor: '#E8EDF4',
     },
     backButton: {
-        marginRight: 10,
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#F3F6FA',
+        borderWidth: 1,
+        borderColor: '#E8EDF4',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10
+    },
+    headerAvatarPress: {
+        marginRight: 12
     },
     headerAvatar: {
         width: 40,
@@ -381,31 +393,40 @@ const styles = StyleSheet.create({
     },
     headerName: {
         fontSize: 16,
-        fontWeight: '700',
-        color: '#1A1A1A',
+        fontWeight: '800',
+        color: '#111827',
     },
     headerStatus: {
         fontSize: 12,
-        color: '#757575',
-        fontWeight: '400',
+        color: '#6A7385',
+        fontWeight: '600',
     },
     callButton: {
-        padding: 8,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#E9F7F6'
     },
     listContent: {
         paddingHorizontal: SPACING.lg,
-        paddingTop: 20,
+        paddingTop: 14,
     },
     messageRow: {
         flexDirection: 'row',
-        marginBottom: 16,
-        alignItems: 'flex-start', // Changed from flex-end to flex-start to align with avatar top
+        marginBottom: 12,
+        alignItems: 'flex-start',
     },
     messageRowMe: {
         justifyContent: 'flex-end',
     },
     messageRowOther: {
         justifyContent: 'flex-start',
+    },
+    avatarTap: {
+        marginRight: 8,
+        marginTop: 2
     },
     messageAvatar: {
         width: 32,
@@ -415,33 +436,37 @@ const styles = StyleSheet.create({
         marginTop: 0,
     },
     messageBubble: {
-        maxWidth: '75%',
-        padding: 12,
-        borderRadius: 16,
+        maxWidth: '78%',
+        paddingHorizontal: 13,
+        paddingVertical: 10,
+        borderRadius: 18,
+        borderWidth: 1
     },
     bubbleMe: {
-        backgroundColor: '#F5F5F5', // Light/Grey for Outgoing
-        borderBottomRightRadius: 4,
+        backgroundColor: '#FFFFFF',
+        borderColor: '#E8EDF4',
+        borderBottomRightRadius: 6,
     },
     bubbleOther: {
-        backgroundColor: COLORS.primary, // Teal for Incoming
-        borderBottomLeftRadius: 4,
+        backgroundColor: COLORS.primary,
+        borderColor: COLORS.primary,
+        borderBottomLeftRadius: 6,
     },
     messageText: {
         fontSize: 15,
-        lineHeight: 22,
+        lineHeight: 21,
     },
     senderNameText: {
         fontSize: 12,
-        fontWeight: '700',
+        fontWeight: '800',
         color: 'rgba(255,255,255,0.85)',
-        marginBottom: 2
+        marginBottom: 3
     },
     textMe: {
-        color: '#1A1A1A', // Dark text for Light bubble
+        color: '#111827',
     },
     textOther: {
-        color: '#FFFFFF', // White text for Teal bubble
+        color: '#FFFFFF',
     },
     messageFooter: {
         flexDirection: 'row',
@@ -454,10 +479,8 @@ const styles = StyleSheet.create({
     },
     inputContainer: {
         paddingHorizontal: SPACING.lg,
-        paddingTop: 12,
-        backgroundColor: '#FFFFFF',
-        borderTopWidth: 1,
-        borderTopColor: '#F5F5F5',
+        paddingTop: 10,
+        backgroundColor: '#F3F6FA',
         flexDirection: 'row',
         alignItems: 'center',
     },
@@ -467,10 +490,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
-        borderColor: '#E0E0E0',
-        borderRadius: 24,
+        borderColor: '#E8EDF4',
+        borderRadius: 25,
         paddingHorizontal: 16,
-        paddingVertical: Platform.OS === 'ios' ? 10 : 4,
+        paddingVertical: Platform.OS === 'ios' ? 11 : 6,
         marginRight: 12,
     },
     input: {
@@ -480,9 +503,9 @@ const styles = StyleSheet.create({
         maxHeight: 100,
     },
     sendButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 46,
+        height: 46,
+        borderRadius: 23,
         backgroundColor: COLORS.primary,
         justifyContent: 'center',
         alignItems: 'center',
