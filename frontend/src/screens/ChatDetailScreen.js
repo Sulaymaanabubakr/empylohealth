@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { chatService } from '../services/api/chatService';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 
 const ChatDetailScreen = ({ navigation, route }) => {
@@ -23,6 +23,8 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [profileModalVisible, setProfileModalVisible] = useState(false);
     const [selectedProfile, setSelectedProfile] = useState(null);
     const [profileCache, setProfileCache] = useState({});
+    const [circleRole, setCircleRole] = useState(null);
+    const [activeHuddle, setActiveHuddle] = useState(null);
 
     // Keyboard Visibility management for bottom insets
     useEffect(() => {
@@ -81,6 +83,34 @@ const ChatDetailScreen = ({ navigation, route }) => {
             return () => unsubscribe();
         }
     }, [chat.id, user]);
+
+    useEffect(() => {
+        if (!chat?.isGroup || !chat?.circleId || !user?.uid) {
+            setCircleRole(null);
+            setActiveHuddle(null);
+            return undefined;
+        }
+
+        const unsubCircle = onSnapshot(doc(db, 'circles', chat.circleId), (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data();
+            setActiveHuddle(data?.activeHuddle || null);
+        });
+
+        const unsubMember = onSnapshot(doc(db, 'circles', chat.circleId, 'members', user.uid), (snap) => {
+            if (!snap.exists()) {
+                setCircleRole(null);
+                return;
+            }
+            const data = snap.data();
+            setCircleRole(data?.role || null);
+        });
+
+        return () => {
+            unsubCircle();
+            unsubMember();
+        };
+    }, [chat?.circleId, chat?.isGroup, user?.uid]);
 
     const getOtherParticipantId = () => {
         if (!Array.isArray(chat?.participants) || !user?.uid) return null;
@@ -159,7 +189,27 @@ const ChatDetailScreen = ({ navigation, route }) => {
         }
     };
 
+    const hasActiveHuddle = Boolean(activeHuddle?.isActive !== false && activeHuddle?.roomUrl);
+    const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
+    const canShowCallButton = !chat?.isGroup || hasActiveHuddle || canStartHuddleInCircle;
+
     const handleCall = async () => {
+        if (chat?.isGroup) {
+            if (hasActiveHuddle) {
+                navigation.navigate('Huddle', {
+                    chat,
+                    huddleId: activeHuddle?.huddleId,
+                    mode: 'join',
+                    callTapTs: Date.now()
+                });
+                return;
+            }
+
+            if (!canStartHuddleInCircle) {
+                return;
+            }
+        }
+
         navigation.navigate('Huddle', {
             chat,
             mode: 'start',
@@ -270,9 +320,13 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     <Text style={styles.headerName}>{chat.name}</Text>
                     <Text style={styles.headerStatus}>{chat.members ? `${chat.members} members active` : (chat.isOnline ? 'Online now' : 'Last seen recently')}</Text>
                 </View>
-                <TouchableOpacity style={styles.callButton} onPress={handleCall}>
-                    <Ionicons name="call" size={22} color={COLORS.primary} />
-                </TouchableOpacity>
+                {canShowCallButton ? (
+                    <TouchableOpacity style={styles.callButton} onPress={handleCall}>
+                        <Ionicons name={hasActiveHuddle ? 'call' : 'call-outline'} size={22} color={COLORS.primary} />
+                    </TouchableOpacity>
+                ) : (
+                    <View style={styles.callButtonPlaceholder} />
+                )}
             </View>
 
             <KeyboardAvoidingView
@@ -408,6 +462,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#E9F7F6'
+    },
+    callButtonPlaceholder: {
+        width: 40,
+        height: 40
     },
     listContent: {
         paddingHorizontal: SPACING.lg,
