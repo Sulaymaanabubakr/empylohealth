@@ -81,9 +81,7 @@ export function CheckInScreen() {
       const score = Math.round((focusLevel / 10) * 100);
       await assessmentService.submitAssessment('daily', score, { focusLevel, notes }, selectedMood);
       setIsSaved(true);
-      setTimeout(() => {
-        navigation.navigate('Dashboard');
-      }, 1200);
+      navigation.navigate('MainTabs', { screen: 'Dashboard' });
     } catch (error) {
       console.error('Check-in submission failed', error);
       showModal({ type: 'error', title: 'Error', message: 'Failed to save check-in. Please try again.' });

@@ -61,11 +61,12 @@ export declare const sendMessage: functions.HttpsFunction & functions.Runnable<a
  * Callable Function: 'submitAssessment'
  */
 export declare const submitAssessment: functions.HttpsFunction & functions.Runnable<any>;
-/**
- * Seed Assessment Questions (Admin Utility)
- * Callable Function: 'seedAssessmentQuestions'
- */
 export declare const seedAssessmentQuestions: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Fix Assessment Question Text (Admin Utility)
+ * Callable Function: 'fixAssessmentQuestionsText'
+ */
+export declare const fixAssessmentQuestionsText: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Seed Challenges (Admin Utility)
  * Callable Function: 'seedChallenges'

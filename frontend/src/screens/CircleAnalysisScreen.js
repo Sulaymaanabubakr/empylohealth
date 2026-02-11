@@ -6,13 +6,15 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import Avatar from '../components/Avatar';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc, collection, query, getDocs, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, query, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
 const CircleAnalysisScreen = ({ route, navigation }) => {
     const insets = useSafeAreaInsets();
-    const { circle } = route.params || {};
+    const initialCircle = route.params?.circle;
+    const circleId = initialCircle?.id;
+    const [circle, setCircle] = useState(initialCircle || null);
     const [memberStats, setMemberStats] = useState([]);
     const [circleStreak, setCircleStreak] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -22,8 +24,22 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
     });
 
     useEffect(() => {
+        if (!circleId) return undefined;
+        const circleRef = doc(db, 'circles', circleId);
+        const unsubscribe = onSnapshot(circleRef, (snap) => {
+            if (snap.exists()) {
+                setCircle({ id: snap.id, ...snap.data() });
+            }
+        }, (error) => {
+            console.error('Failed to subscribe to circle analysis updates', error);
+        });
+
+        return () => unsubscribe();
+    }, [circleId]);
+
+    useEffect(() => {
         if (circle?.id) {
-            fetchRealTimeData();
+            fetchRealTimeData(circle);
         }
     }, [circle]);
 
@@ -49,16 +65,10 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
         return streak;
     };
 
-    const fetchRealTimeData = async () => {
+    const fetchRealTimeData = async (sourceCircle = circle) => {
         try {
             setLoading(true);
-            let currentCircle = circle;
-            if (!currentCircle?.chatId && currentCircle?.id) {
-                const circleDoc = await getDoc(doc(db, 'circles', currentCircle.id));
-                if (circleDoc.exists()) {
-                    currentCircle = { id: circleDoc.id, ...circleDoc.data() };
-                }
-            }
+            const currentCircle = sourceCircle;
 
             const chatId = currentCircle?.chatId || currentCircle?.id;
             if (!chatId) {

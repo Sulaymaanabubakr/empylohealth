@@ -5,12 +5,21 @@ import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Button from '../components/Button';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { assessmentService } from '../services/api/assessmentService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NineIndexScreen = ({ navigation }) => {
+    const normalizeQuestionText = (text = '') => {
+        const value = String(text).trim();
+        if (/i['’]?ve been had energy to spare/i.test(value)) {
+            return "I've had energy to spare";
+        }
+        return value;
+    };
+
     const defaultQuestions = [
         "I've been feeling relaxed",
         "I've been feeling useful",
-        "I've been had energy to spare",
+        "I've had energy to spare",
         "I've been feeling interested in other people",
         "I've been thinking clearly"
     ];
@@ -37,7 +46,8 @@ const NineIndexScreen = ({ navigation }) => {
         }
     };
 
-    const questions = dbQuestions.length > 0 ? dbQuestions.map(q => q.text) : defaultQuestions;
+    const questions = (dbQuestions.length > 0 ? dbQuestions.map(q => q.text) : defaultQuestions)
+        .map(normalizeQuestionText);
 
     const options = ["Not at all", "Rarely", "Sometimes", "Most times", "Always"];
 
@@ -82,7 +92,13 @@ const NineIndexScreen = ({ navigation }) => {
             }, {});
 
             await assessmentService.submitAssessment('questionnaire', score, answerMap, '');
-            navigation.navigate('Dashboard');
+            const now = new Date();
+            await AsyncStorage.multiSet([
+                ['lastWeeklyAssessmentDate', now.toISOString()],
+                ['lastDailyCheckInDate', now.toDateString()]
+            ]);
+            await AsyncStorage.removeItem('pendingWeeklyAssessment');
+            navigation.navigate('MainTabs', { screen: 'Dashboard' });
         } catch (error) {
             console.error('Questionnaire submission failed', error);
         } finally {

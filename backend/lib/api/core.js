@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const cloudinary_1 = require("cloudinary");
@@ -189,7 +189,7 @@ exports.createCircle = functions.https.onCall(async (data, context) => {
 exports.updateCircle = functions.https.onCall(async (data, context) => {
     if (!context.auth)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    const { circleId, name, description, type, settings } = data;
+    const { circleId, name, description, type, settings, image, category, visibility } = data;
     const uid = context.auth.uid;
     if (!circleId)
         throw new functions.https.HttpsError('invalid-argument', 'Circle ID required.');
@@ -212,6 +212,12 @@ exports.updateCircle = functions.https.onCall(async (data, context) => {
             updates.name = name;
         if (description !== undefined)
             updates.description = description;
+        if (image !== undefined)
+            updates.image = image;
+        if (category !== undefined)
+            updates.category = category;
+        if (visibility !== undefined)
+            updates.visibility = visibility;
         if (type) {
             updates.type = type; // 'public' | 'private'
             updates['joinSettings.requiresApproval'] = (type === 'private');
@@ -776,6 +782,12 @@ exports.submitAssessment = functions.https.onCall(async (data, context) => {
  * Seed Assessment Questions (Admin Utility)
  * Callable Function: 'seedAssessmentQuestions'
  */
+const normalizeAssessmentQuestionText = (text) => {
+    if (/i['’]?ve been had energy to spare/i.test(text)) {
+        return "I've had energy to spare";
+    }
+    return text;
+};
 exports.seedAssessmentQuestions = functions.https.onCall(async (data, context) => {
     requireAdmin(context);
     // Explicit list of default questions
@@ -794,8 +806,23 @@ exports.seedAssessmentQuestions = functions.https.onCall(async (data, context) =
         // Check if exists to prevent duplicates
         const existing = await collectionRef.get();
         if (!existing.empty) {
-            console.log("Assessment questions already exist. Skipping seed.");
-            return { success: false, message: "Already seeded" };
+            let corrected = 0;
+            existing.docs.forEach((docSnap) => {
+                const currentText = String(docSnap.data()?.text || '');
+                const normalizedText = normalizeAssessmentQuestionText(currentText);
+                if (normalizedText !== currentText) {
+                    batch.update(docSnap.ref, { text: normalizedText });
+                    corrected += 1;
+                }
+            });
+            if (corrected > 0) {
+                await batch.commit();
+            }
+            return {
+                success: true,
+                message: corrected > 0 ? `Assessment question text corrected in ${corrected} record(s).` : "Already seeded",
+                corrected
+            };
         }
         questions.forEach(q => {
             const docRef = collectionRef.doc();
@@ -807,6 +834,34 @@ exports.seedAssessmentQuestions = functions.https.onCall(async (data, context) =
     catch (error) {
         console.error("Seed failed", error);
         throw new functions.https.HttpsError('internal', `Seed failed: ${error.message || error}`);
+    }
+});
+/**
+ * Fix Assessment Question Text (Admin Utility)
+ * Callable Function: 'fixAssessmentQuestionsText'
+ */
+exports.fixAssessmentQuestionsText = functions.https.onCall(async (_data, context) => {
+    requireAdmin(context);
+    try {
+        const snapshot = await db.collection('assessment_questions').get();
+        const batch = db.batch();
+        let updated = 0;
+        snapshot.docs.forEach((docSnap) => {
+            const currentText = String(docSnap.data()?.text || '');
+            const normalizedText = normalizeAssessmentQuestionText(currentText);
+            if (normalizedText !== currentText) {
+                batch.update(docSnap.ref, { text: normalizedText });
+                updated += 1;
+            }
+        });
+        if (updated > 0) {
+            await batch.commit();
+        }
+        return { success: true, updated };
+    }
+    catch (error) {
+        console.error("Fix assessment questions failed", error);
+        throw new functions.https.HttpsError('internal', `Fix failed: ${error.message || error}`);
     }
 });
 /**

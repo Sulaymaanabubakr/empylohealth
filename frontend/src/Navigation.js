@@ -99,7 +99,11 @@ export default function Navigation() {
 
     if (!isReady) {
         console.log('[PERF] Navigation: Waiting for isReady...');
-        return null;
+        return (
+            <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
+            </View>
+        );
     }
 
     // If user is logged in but userData is still null, we are in a loading state.
@@ -129,7 +133,7 @@ export default function Navigation() {
             }}
         >
             {!user ? (
-                <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
+                <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
                     <Stack.Screen name="Splash" component={SplashScreen} />
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     <Stack.Screen name="SignIn" component={SignInScreen} />
@@ -138,11 +142,11 @@ export default function Navigation() {
                     <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
                 </Stack.Navigator>
             ) : !isProfileComplete ? (
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
                     <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
                 </Stack.Navigator>
             ) : (
-                <Stack.Navigator initialRouteName="MainTabs" screenOptions={{ headerShown: false }}>
+                <Stack.Navigator initialRouteName="MainTabs" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
                     <Stack.Screen name="MainTabs" component={MainTabs} />
                     {/* Dashboard, Explore, ChatList, Profile moved to MainTabs */}
 

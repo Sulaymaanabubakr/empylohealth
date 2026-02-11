@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
@@ -18,6 +18,7 @@ const { width } = Dimensions.get('window');
 const CircleDetailScreen = ({ navigation, route }) => {
     const { user } = useAuth();
     const initialCircle = route.params?.circle;
+    const circleId = initialCircle?.id;
     const insets = useSafeAreaInsets();
     const { showModal } = useModal();
 
@@ -29,12 +30,13 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const [role, setRole] = useState(null); // 'creator' | 'admin' | 'moderator' | 'member' | null
     const [requestStatus, setRequestStatus] = useState('none'); // 'none' | 'pending'
     const [events, setEvents] = useState([]);
+    const [showAllMembers, setShowAllMembers] = useState(false);
 
     // Refresh circle data locally to keep member list updated
     const refreshCircle = async () => {
-        if (!circle?.id) return;
+        if (!circleId) return;
         try {
-            const updated = await circleService.getCircleById(circle.id);
+            const updated = await circleService.getCircleById(circleId);
             if (updated) {
                 setCircle(updated);
             }
@@ -45,13 +47,27 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     useEffect(() => {
         refreshCircle();
-    }, []);
+    }, [circleId]);
 
     useEffect(() => {
-        if (!circle || !user) return;
+        if (!circleId) return undefined;
+        const circleRef = doc(db, 'circles', circleId);
+        const unsubscribeCircle = onSnapshot(circleRef, (snap) => {
+            if (snap.exists()) {
+                setCircle({ id: snap.id, ...snap.data() });
+            }
+        }, (error) => {
+            console.error('Failed to subscribe to circle updates', error);
+        });
+
+        return () => unsubscribeCircle();
+    }, [circleId]);
+
+    useEffect(() => {
+        if (!circleId || !user) return;
 
         // 1. Subscribe to Real-time Role (Subcollection)
-        const unsubscribe = circleService.subscribeToCircleMember(circle.id, user.uid, (member) => {
+        const unsubscribe = circleService.subscribeToCircleMember(circleId, user.uid, (member) => {
             if (member) {
                 // Check for pending status
                 if (member.status === 'pending' || member.role === 'pending') {
@@ -91,12 +107,15 @@ const CircleDetailScreen = ({ navigation, route }) => {
                 const docs = await Promise.all(
                     circle.members.map(async (uid) => {
                         const userDoc = await getDoc(doc(db, 'users', uid));
+                        const memberDoc = await getDoc(doc(db, 'circles', circle.id, 'members', uid));
                         const data = userDoc.exists() ? userDoc.data() : {};
+                        const memberData = memberDoc.exists() ? memberDoc.data() : {};
+                        const memberRole = memberData?.role || (uid === circle.adminId ? 'admin' : 'member');
                         return {
                             id: uid,
                             name: data?.name || data?.displayName || 'Member',
                             image: data?.photoURL || '',
-                            isAdmin: uid === circle.adminId, // Deprecated: use role from subcollection in future lists
+                            role: memberRole,
                             status: uid === user?.uid ? 'online' : 'offline',
                             score: data?.wellbeingScore || 0
                         };
@@ -110,7 +129,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
         loadMembers();
 
         // 3. Subscribe to Scheduled Huddles
-        const unsubscribeEvents = circleService.subscribeToScheduledHuddles(circle.id, (list) => {
+        const unsubscribeEvents = circleService.subscribeToScheduledHuddles(circleId, (list) => {
             setEvents(list);
         });
 
@@ -118,11 +137,11 @@ const CircleDetailScreen = ({ navigation, route }) => {
             unsubscribe();
             unsubscribeEvents();
         };
-    }, [circle, user]);
+    }, [circleId, circle?.members, circle?.adminId, user?.uid]);
 
     useEffect(() => {
         checkPendingStatus();
-    }, []);
+    }, [circleId]);
 
     const checkPendingStatus = async () => {
         try {
@@ -243,7 +262,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
                 <Ionicons name="globe-outline" size={20} color="#2196F3" />
-                <Text style={styles.statValue}>{circle.type || 'Public'}</Text>
+                <Text style={styles.statValue}>{circle.type === 'private' ? 'Private' : 'Public'}</Text>
                 <Text style={styles.statLabel}>Circle Access</Text>
             </View>
         </View>
@@ -449,9 +468,9 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                 <Ionicons name="people-outline" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
                                 <Text style={styles.sectionTitle}>Members ({memberProfiles.length})</Text>
                             </View>
-                            {isMember && (
-                                <TouchableOpacity onPress={() => { }}>
-                                    <Text style={styles.seeAllText}>See All</Text>
+                            {isMember && memberProfiles.length > 5 && (
+                                <TouchableOpacity onPress={() => setShowAllMembers((prev) => !prev)}>
+                                    <Text style={styles.seeAllText}>{showAllMembers ? 'Show Less' : 'See All'}</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -460,12 +479,22 @@ const CircleDetailScreen = ({ navigation, route }) => {
                             {memberProfiles.length === 0 && (
                                 <Text style={styles.emptyMembersText}>No members visible.</Text>
                             )}
-                            {memberProfiles.slice(0, isMember ? undefined : 5).map((member) => (
+                            {memberProfiles
+                                .slice(0, isMember ? (showAllMembers ? undefined : 5) : 5)
+                                .map((member) => (
                                 <View key={member.id} style={styles.memberRow}>
                                     <Avatar uri={member.image} name={member.name} size={48} />
                                     <View style={styles.memberInfo}>
                                         <Text style={styles.memberName}>{member.name}</Text>
-                                        <Text style={styles.memberStatus}>{member.isAdmin ? 'Admin' : 'Member'}</Text>
+                                        <Text style={styles.memberStatus}>
+                                            {member.role === 'creator'
+                                                ? 'Creator'
+                                                : member.role === 'moderator'
+                                                    ? 'Moderator'
+                                                    : member.role === 'admin'
+                                                        ? 'Admin'
+                                                        : 'Member'}
+                                        </Text>
                                     </View>
                                     {isMember && (
                                         <View style={[
@@ -485,7 +514,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                         </View>
                                     )}
                                 </View>
-                            ))}
+                                ))}
                             {!isMember && memberProfiles.length > 5 && (
                                 <Text style={styles.moreMembersText}>+ {(memberProfiles.length - 5)} more members</Text>
                             )}

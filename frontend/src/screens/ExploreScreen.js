@@ -18,6 +18,7 @@ const ExploreScreen = ({ navigation }) => {
     const [affirmations, setAffirmations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [showAllActivities, setShowAllActivities] = useState(false);
 
     const [error, setError] = useState(null);
 
@@ -55,6 +56,7 @@ const ExploreScreen = ({ navigation }) => {
     const displayedActivities = activities.filter(item =>
         activeTab === 'Self-development' ? item.category === 'Self-development' : item.category === 'Group activities'
     );
+    const visibleActivities = showAllActivities ? displayedActivities : displayedActivities.slice(0, 3);
     // If empty (e.g. first run before seed), maybe show static fallback or specific empty state.
     // For now, assuming backend seed is run or will be run.
 
@@ -125,7 +127,9 @@ const ExploreScreen = ({ navigation }) => {
                     {/* Recommended Activities */}
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Recommended activities</Text>
-                        <Text style={styles.seeAllText}>See all</Text>
+                        <TouchableOpacity onPress={() => setShowAllActivities((prev) => !prev)}>
+                            <Text style={styles.seeAllText}>{showAllActivities ? 'Show less' : 'See all'}</Text>
+                        </TouchableOpacity>
                     </View>
 
                     {error ? (
@@ -146,7 +150,7 @@ const ExploreScreen = ({ navigation }) => {
                         </View>
                     ) : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-                            {displayedActivities.map((item) => (
+                            {visibleActivities.map((item) => (
                                 <TouchableOpacity
                                     key={item.id}
                                     style={[styles.activityCard, { backgroundColor: item.color || '#F3F4F6' }]}
@@ -490,9 +494,13 @@ const styles = StyleSheet.create({
         bottom: 0,
         backgroundColor: 'rgba(0,0,0,0.2)', // Darken slightly
         padding: 16,
-        justifyContent: 'space-between',
+        justifyContent: 'center',
     },
     affirmationHeader: {
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        right: 16,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
@@ -512,6 +520,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         lineHeight: 24,
+        textAlign: 'center',
     },
     emptyStateText: {
         color: '#757575',

@@ -16,6 +16,7 @@ import {
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Service to handle all Authentication logic
@@ -82,6 +83,11 @@ export const authService = {
      */
     logout: async () => {
         try {
+            await AsyncStorage.multiRemove([
+                'pendingWeeklyAssessment',
+                'lastWeeklyAssessmentDate',
+                'lastDailyCheckInDate'
+            ]);
             await signOut(auth);
             try {
                 await GoogleSignin.signOut();

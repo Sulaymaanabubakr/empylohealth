@@ -21,6 +21,7 @@ export declare const getKeyChallenges: import("firebase-functions/v1").HttpsFunc
 export declare const seedChallenges: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const seedResources: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const seedAssessmentQuestions: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const fixAssessmentQuestionsText: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const seedAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const backfillAffirmationImages: import("firebase-functions/v1").HttpsFunction;
 export declare const seedAll: import("firebase-functions/v1").HttpsFunction;

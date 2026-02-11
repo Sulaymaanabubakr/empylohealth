@@ -72,7 +72,7 @@ exports.seedChallengeData = [
     {
         title: 'Afternoon Slump',
         level: 'Low',
-        icon: 'weather-sunset-outline',
+        icon: 'weather-sunset-up',
         bg: '#FFF8E1',
         color: '#F9A825',
         category: 'Energy',

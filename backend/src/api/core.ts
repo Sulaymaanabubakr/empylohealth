@@ -178,7 +178,7 @@ export const createCircle = functions.https.onCall(async (data, context) => {
 export const updateCircle = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
-    const { circleId, name, description, type, settings } = data;
+    const { circleId, name, description, type, settings, image, category, visibility } = data;
     const uid = context.auth.uid;
 
     if (!circleId) throw new functions.https.HttpsError('invalid-argument', 'Circle ID required.');
@@ -202,6 +202,9 @@ export const updateCircle = functions.https.onCall(async (data, context) => {
         };
         if (name) updates.name = name;
         if (description !== undefined) updates.description = description;
+        if (image !== undefined) updates.image = image;
+        if (category !== undefined) updates.category = category;
+        if (visibility !== undefined) updates.visibility = visibility;
         if (type) {
             updates.type = type; // 'public' | 'private'
             updates['joinSettings.requiresApproval'] = (type === 'private');
@@ -837,6 +840,13 @@ export const submitAssessment = functions.https.onCall(async (data, context) => 
  * Seed Assessment Questions (Admin Utility)
  * Callable Function: 'seedAssessmentQuestions'
  */
+const normalizeAssessmentQuestionText = (text: string): string => {
+    if (/i['’]?ve been had energy to spare/i.test(text)) {
+        return "I've had energy to spare";
+    }
+    return text;
+};
+
 export const seedAssessmentQuestions = functions.https.onCall(async (data, context) => {
     requireAdmin(context);
 
@@ -858,8 +868,25 @@ export const seedAssessmentQuestions = functions.https.onCall(async (data, conte
         // Check if exists to prevent duplicates
         const existing = await collectionRef.get();
         if (!existing.empty) {
-            console.log("Assessment questions already exist. Skipping seed.");
-            return { success: false, message: "Already seeded" };
+            let corrected = 0;
+            existing.docs.forEach((docSnap) => {
+                const currentText = String(docSnap.data()?.text || '');
+                const normalizedText = normalizeAssessmentQuestionText(currentText);
+                if (normalizedText !== currentText) {
+                    batch.update(docSnap.ref, { text: normalizedText });
+                    corrected += 1;
+                }
+            });
+
+            if (corrected > 0) {
+                await batch.commit();
+            }
+
+            return {
+                success: true,
+                message: corrected > 0 ? `Assessment question text corrected in ${corrected} record(s).` : "Already seeded",
+                corrected
+            };
         }
 
         questions.forEach(q => {
@@ -872,6 +899,38 @@ export const seedAssessmentQuestions = functions.https.onCall(async (data, conte
     } catch (error: any) {
         console.error("Seed failed", error);
         throw new functions.https.HttpsError('internal', `Seed failed: ${error.message || error}`);
+    }
+});
+
+/**
+ * Fix Assessment Question Text (Admin Utility)
+ * Callable Function: 'fixAssessmentQuestionsText'
+ */
+export const fixAssessmentQuestionsText = functions.https.onCall(async (_data, context) => {
+    requireAdmin(context);
+
+    try {
+        const snapshot = await db.collection('assessment_questions').get();
+        const batch = db.batch();
+        let updated = 0;
+
+        snapshot.docs.forEach((docSnap) => {
+            const currentText = String(docSnap.data()?.text || '');
+            const normalizedText = normalizeAssessmentQuestionText(currentText);
+            if (normalizedText !== currentText) {
+                batch.update(docSnap.ref, { text: normalizedText });
+                updated += 1;
+            }
+        });
+
+        if (updated > 0) {
+            await batch.commit();
+        }
+
+        return { success: true, updated };
+    } catch (error: any) {
+        console.error("Fix assessment questions failed", error);
+        throw new functions.https.HttpsError('internal', `Fix failed: ${error.message || error}`);
     }
 });
 

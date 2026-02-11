@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
@@ -138,14 +138,15 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [requests, setRequests] = useState([]);
     const [reports, setReports] = useState([]);
     const [events, setEvents] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false);
 
     const [processingId, setProcessingId] = useState(null);
 
     // Image Cropper State
     const [cropperVisible, setCropperVisible] = useState(false);
     const [tempImage, setTempImage] = useState(null);
-    // Note: uploading state might conflict with 'loading' if not careful, but useful for specific overlay
+    // Note: uploading state might conflict with actionLoading if not careful, but useful for specific overlay
     const [uploading, setUploading] = useState(false);
 
     if (!circleId || !user?.uid) {
@@ -173,6 +174,11 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [reportTarget, setReportTarget] = useState(null); // { uid, name, type (member) }
     const [reportReason, setReportReason] = useState('');
     const [reportDesc, setReportDesc] = useState('');
+    const [memberActionSheet, setMemberActionSheet] = useState({
+        visible: false,
+        title: '',
+        options: []
+    });
 
     // Schedule Event State
     const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -195,7 +201,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             showModal({ type: 'error', title: 'Error', message: 'Name cannot be empty' });
             return;
         }
-        setLoading(true);
+        setActionLoading(true);
         try {
             await circleService.updateCircle(circleId, {
                 name: editName.trim(),
@@ -207,7 +213,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         } catch (error) {
             showModal({ type: 'error', title: 'Error', message: 'Failed to update circle.' });
         } finally {
-            setLoading(false);
+            setActionLoading(false);
         }
     };
 
@@ -235,15 +241,19 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         }
     };
 
-    // Initial Fetch
+    // Real-time Circle + related collections
     useEffect(() => {
         if (!circleId) return;
-        const fetchCircle = async () => {
-            const c = await circleService.getCircleById(circleId);
-            setCircle(c);
-            setLoading(false);
-        };
-        fetchCircle();
+        const circleRef = doc(db, 'circles', circleId);
+        const unsubCircle = onSnapshot(circleRef, (snap) => {
+            if (snap.exists()) {
+                setCircle({ id: snap.id, ...snap.data() });
+            }
+            setInitialLoading(false);
+        }, (error) => {
+            console.error('Failed to subscribe to circle settings updates', error);
+            setInitialLoading(false);
+        });
 
         // Listen for requests (if private)
         const qReq = query(collection(db, 'circles', circleId, 'requests'), orderBy('createdAt', 'desc'));
@@ -274,6 +284,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         });
 
         return () => {
+            unsubCircle();
             unsubReq();
             unsubMem();
             unsubRep();
@@ -365,7 +376,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         // Uses top-level myRole
 
 
-        const options = [{ text: 'Cancel', style: 'cancel' }];
+        const options = [];
 
         // ADMIN/CREATOR ACTIONS
         if (myRole === 'creator' || (myRole === 'admin' && member.role !== 'admin')) {
@@ -394,9 +405,12 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             });
         }
 
-        // Alert.alert replacement
         console.log('Options for member:', member.name, options);
-        showModal({ type: 'info', title: 'Member Options', message: 'Member management actions are being updated.' });
+        setMemberActionSheet({
+            visible: true,
+            title: member.name || 'Member Options',
+            options
+        });
     };
 
     const handleSubmitReport = async () => {
@@ -404,7 +418,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             showModal({ type: 'error', title: 'Required', message: 'Please provide a reason.' });
             return;
         }
-        setLoading(true);
+        setActionLoading(true);
         try {
             await circleService.submitReport(
                 circleId,
@@ -421,20 +435,28 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         } catch (error) {
             showModal({ type: 'error', title: 'Error', message: 'Failed to submit report.' });
         } finally {
-            setLoading(false);
+            setActionLoading(false);
         }
     };
 
     const performMemberAction = async (member, action) => {
-        setLoading(true);
+        setActionLoading(true);
         try {
             await circleService.manageMember(circleId, member.uid, action);
             showModal({ type: 'success', title: 'Success', message: 'Member updated.' });
             // List updates automatically via onSnapshot
         } catch (error) {
-            showModal({ type: 'error', title: 'Error', message: 'Action failed.' });
+            const backendMessage = error?.message?.replace(/^functions\/[a-z-]+\s*/i, '') || 'Action failed.';
+            showModal({ type: 'error', title: 'Error', message: backendMessage });
         } finally {
-            setLoading(false);
+            setActionLoading(false);
+        }
+    };
+
+    const runMemberAction = (actionOption) => {
+        setMemberActionSheet({ visible: false, title: '', options: [] });
+        if (typeof actionOption?.onPress === 'function') {
+            actionOption.onPress();
         }
     };
 
@@ -444,7 +466,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             return;
         }
         try {
-            setLoading(true);
+            setActionLoading(true);
             await circleService.scheduleHuddle(circleId, eventTitle, eventDate);
             setShowScheduleModal(false);
             setEventTitle('');
@@ -452,7 +474,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         } catch (error) {
             showModal({ type: 'error', title: 'Error', message: 'Failed to schedule huddle.' });
         } finally {
-            setLoading(false);
+            setActionLoading(false);
         }
     };
 
@@ -518,7 +540,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             message: `Are you sure you want to ${action} this report?`,
             confirmText: 'Confirm',
             onConfirm: async () => {
-                setLoading(true);
+                setActionLoading(true);
                 try {
                     await circleService.resolveCircleReport(circleId, report.id, action, `Action taken by ${user.uid}`);
                     setTimeout(() => {
@@ -529,7 +551,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         showModal({ type: 'error', title: 'Error', message: 'Failed to resolve report.' });
                     }, 500);
                 } finally {
-                    setLoading(false);
+                    setActionLoading(false);
                 }
             }
         });
@@ -596,7 +618,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         </View>
     );
 
-    if (loading || !circle) {
+    if (initialLoading || !circle) {
         return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
     }
 
@@ -650,6 +672,15 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 {activeTab === 'Events' && <EventsTab />}
             </ScrollView>
 
+            {actionLoading && (
+                <View style={styles.actionLoadingOverlay}>
+                    <View style={styles.actionLoadingCard}>
+                        <ActivityIndicator size="large" color={COLORS.primary} />
+                        <Text style={styles.actionLoadingText}>Updating...</Text>
+                    </View>
+                </View>
+            )}
+
             <Modal visible={showScheduleModal} animationType="slide" transparent>
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -679,7 +710,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                                 <Text style={styles.modalCancelText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity onPress={handleScheduleEvent} style={styles.modalConfirm}>
-                                <Text style={styles.modalConfirmText}>{loading ? 'Saving...' : 'Schedule'}</Text>
+                                <Text style={styles.modalConfirmText}>{actionLoading ? 'Saving...' : 'Schedule'}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -762,6 +793,47 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 </KeyboardAvoidingView>
             </Modal>
 
+            <Modal
+                visible={memberActionSheet.visible}
+                animationType="fade"
+                transparent
+                onRequestClose={() => setMemberActionSheet({ visible: false, title: '', options: [] })}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Member Options</Text>
+                        <Text style={styles.memberActionSubTitle}>{memberActionSheet.title}</Text>
+                        <View style={styles.memberActionsWrap}>
+                            {memberActionSheet.options.map((option, index) => (
+                                <TouchableOpacity
+                                    key={`${option.text}-${index}`}
+                                    style={[
+                                        styles.memberActionButton,
+                                        option.style === 'destructive' && styles.memberActionButtonDestructive
+                                    ]}
+                                    onPress={() => runMemberAction(option)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.memberActionText,
+                                            option.style === 'destructive' && styles.memberActionTextDestructive
+                                        ]}
+                                    >
+                                        {option.text}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
+                                style={[styles.memberActionButton, styles.memberActionCancel]}
+                                onPress={() => setMemberActionSheet({ visible: false, title: '', options: [] })}
+                            >
+                                <Text style={styles.memberActionCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
 
             <ImageCropper
                 visible={cropperVisible}
@@ -769,7 +841,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 onClose={() => setCropperVisible(false)}
                 onCrop={async (uri, cropData) => {
                     setCropperVisible(false);
-                    setLoading(true); // Block UI
+                    setActionLoading(true); // Block UI
                     try {
                         const uploadedUrl = await mediaService.uploadAsset(uri, 'circles');
                         // Apply standard header transformation
@@ -786,7 +858,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         console.error("Upload failed", error);
                         showModal({ type: 'error', title: 'Error', message: 'Failed to upload photo.' });
                     } finally {
-                        setLoading(false);
+                        setActionLoading(false);
                     }
                 }}
             />
@@ -797,6 +869,30 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F5F7FA' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    actionLoadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255,255,255,0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 20
+    },
+    actionLoadingCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 14,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        minWidth: 140,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4
+    },
+    actionLoadingText: {
+        marginTop: 10,
+        color: '#555',
+        fontWeight: '600'
+    },
     backButtonSimple: { padding: 16 },
     emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
     emptyStateText: { color: '#666', fontSize: 14, textAlign: 'center' },
@@ -889,6 +985,36 @@ const styles = StyleSheet.create({
     modalConfirm: { flex: 1, padding: 14, alignItems: 'center', marginLeft: 8, backgroundColor: COLORS.primary, borderRadius: 12 },
     modalCancelText: { color: '#757575', fontWeight: '700' },
     modalConfirmText: { color: '#FFF', fontWeight: '700' },
+    memberActionSubTitle: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 16
+    },
+    memberActionsWrap: { gap: 10 },
+    memberActionButton: {
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: '#E0F2F1',
+        alignItems: 'center'
+    },
+    memberActionButtonDestructive: {
+        backgroundColor: '#FFEBEE'
+    },
+    memberActionText: {
+        color: COLORS.primary,
+        fontWeight: '700'
+    },
+    memberActionTextDestructive: {
+        color: '#D32F2F'
+    },
+    memberActionCancel: {
+        backgroundColor: '#F5F5F5'
+    },
+    memberActionCancelText: {
+        color: '#666',
+        fontWeight: '700'
+    },
     chip: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#E0F2F1', borderRadius: 20, marginRight: 8 },
     addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primary, padding: 12, borderRadius: 12 },
     addButtonText: { color: '#FFF', fontWeight: '600', marginLeft: 8 },

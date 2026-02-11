@@ -12,8 +12,10 @@ const MainTabs = () => {
   return (
     <Tab.Navigator
       tabBar={(props) => <BottomNavigation {...props} />}
+      lazy={false}
       screenOptions={{
         headerShown: false,
+        sceneStyle: { backgroundColor: '#F8F9FA' },
       }}
       initialRouteName="Dashboard"
     >

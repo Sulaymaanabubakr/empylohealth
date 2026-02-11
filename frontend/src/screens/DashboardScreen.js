@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import Svg, { Circle, G, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -44,6 +45,13 @@ const calculateCircleRating = (circle) => {
     }
 
     return Math.min(score, 5.0).toFixed(1); // Cap at 5.0
+};
+
+const getWellbeingRingColor = (score) => {
+    if (typeof score !== 'number') return '#BDBDBD';
+    if (score >= 70) return '#2E7D32'; // green
+    if (score >= 40) return '#F9A825'; // amber
+    return '#C62828'; // red
 };
 
 const CircularProgress = ({ score, label }) => {
@@ -173,17 +181,18 @@ const DashboardScreen = ({ navigation }) => {
         }
     };
 
-    const onRefresh = React.useCallback(() => {
-        setRefreshing(true);
-        fetchDashboardData();
-        checkAssessments();
-    }, []);
-
-    const checkAssessments = async () => {
+    const checkAssessments = useCallback(async () => {
         try {
             const today = new Date();
+            const pendingWeekly = await AsyncStorage.getItem('pendingWeeklyAssessment');
             const lastWeekly = await AsyncStorage.getItem('lastWeeklyAssessmentDate');
             const lastDaily = await AsyncStorage.getItem('lastDailyCheckInDate');
+
+            if (pendingWeekly === 'true') {
+                setAssessmentType('weekly');
+                setTimeout(() => setShowAssessment(true), 1500);
+                return;
+            }
 
             // Check Weekly (every 7 days)
             let weeklyDue = true;
@@ -209,7 +218,19 @@ const DashboardScreen = ({ navigation }) => {
         } catch (error) {
             console.error('Error checking assessment dates:', error);
         }
-    };
+    }, []);
+
+    const onRefresh = React.useCallback(() => {
+        setRefreshing(true);
+        fetchDashboardData();
+        checkAssessments();
+    }, [checkAssessments]);
+
+    useFocusEffect(
+        useCallback(() => {
+            checkAssessments();
+        }, [checkAssessments])
+    );
 
     const handleTakeAssessment = async () => {
         try {
@@ -218,9 +239,7 @@ const DashboardScreen = ({ navigation }) => {
             setShowAssessment(false);
 
             if (assessmentType === 'weekly') {
-                await AsyncStorage.setItem('lastWeeklyAssessmentDate', today.toISOString()); // Store full ISO for 7-day calc
-                // Also mark daily as done for today so we don't double prompt
-                await AsyncStorage.setItem('lastDailyCheckInDate', todayStr);
+                await AsyncStorage.setItem('pendingWeeklyAssessment', 'true');
                 navigation.navigate('Assessment'); // Navigate to Weekly Flow (AssessmentScreen -> NineIndex)
             } else {
                 await AsyncStorage.setItem('lastDailyCheckInDate', todayStr);
@@ -390,7 +409,8 @@ const DashboardScreen = ({ navigation }) => {
                                                         styles.memberAvatarContainer,
                                                         {
                                                             zIndex: 10 - index,
-                                                            marginLeft: index === 0 ? 0 : -18
+                                                            marginLeft: index === 0 ? 0 : -18,
+                                                            borderColor: getWellbeingRingColor(profile.wellbeingScore)
                                                         }
                                                     ]}
                                                 >
@@ -435,15 +455,19 @@ const DashboardScreen = ({ navigation }) => {
                 <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Key Challenges</Text>
 
                 <View style={styles.challengeRow}>
-                    {challenges.length > 0 ? challenges.slice(0, 2).map((challenge, index) => (
+                    {challenges.length > 0 ? challenges.slice(0, 2).map((challenge, index) => {
+                        const iconName = challenge.icon || 'alert-circle-outline';
+                        const safeIconName = MaterialCommunityIcons?.glyphMap?.[iconName] ? iconName : 'alert-circle-outline';
+                        return (
                         <View key={index} style={[styles.challengeCard, { marginRight: index === 0 ? 10 : 0, marginLeft: index === 1 ? 10 : 0, flex: 1 }]}>
                             <View style={[styles.challengeIcon, { backgroundColor: challenge.bg || '#FFF3E0' }]}>
-                                <MaterialCommunityIcons name={challenge.icon || 'alert-circle-outline'} size={28} color={challenge.color || '#FF9800'} />
+                                <MaterialCommunityIcons name={safeIconName} size={28} color={challenge.color || '#FF9800'} />
                             </View>
                             <Text style={styles.challengeTitle}>{challenge.title}</Text>
                             <Text style={styles.challengeLevel}>Level: {challenge.level}</Text>
                         </View>
-                    )) : (
+                        );
+                    }) : (
                         <Text style={{ color: '#999', fontStyle: 'italic', padding: 10 }}>No specific challenges flagged.</Text>
                     )}
                 </View>
@@ -773,7 +797,7 @@ const styles = StyleSheet.create({
     },
     memberAvatarContainer: {
         borderWidth: 3,
-        borderColor: '#FFF',
+        borderColor: '#BDBDBD',
         borderRadius: 24,
         elevation: 6,
         shadowColor: "#000",

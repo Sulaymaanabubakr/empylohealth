@@ -38,6 +38,7 @@ export const getKeyChallenges = coreApi.getKeyChallenges;
 export const seedChallenges = coreApi.seedChallenges;
 export const seedResources = coreApi.seedResources;
 export const seedAssessmentQuestions = coreApi.seedAssessmentQuestions;
+export const fixAssessmentQuestionsText = coreApi.fixAssessmentQuestionsText;
 export const seedAffirmations = coreApi.seedAffirmations;
 export const backfillAffirmationImages = coreApi.backfillAffirmationImages;
 export const seedAll = coreApi.seedAll;
