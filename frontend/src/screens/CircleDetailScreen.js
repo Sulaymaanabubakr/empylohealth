@@ -9,7 +9,6 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
-import { huddleService } from '../services/api/huddleService';
 import { circleService } from '../services/api/circleService';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -366,7 +365,8 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                             navigation.navigate('Huddle', {
                                                 chat: { id: circle.chatId, name: circle.name, isGroup: true },
                                                 huddleId: circle.activeHuddle.huddleId,
-                                                roomUrl: circle.activeHuddle.roomUrl
+                                                mode: 'join',
+                                                callTapTs: Date.now()
                                             });
                                             return;
                                         }
@@ -380,17 +380,11 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                             return;
                                         }
 
-                                        try {
-                                            const result = await huddleService.startHuddle(circle.chatId, true);
-                                            // Optimistic update handles logic, or wait for refresh
-                                            navigation.navigate('Huddle', {
-                                                chat: { id: circle.chatId, name: circle.name, isGroup: true },
-                                                huddleId: result.huddleId,
-                                                roomUrl: result.roomUrl
-                                            });
-                                        } catch (error) {
-                                            showModal({ type: 'error', title: 'Unable to start huddle', message: 'Please try again later.' });
-                                        }
+                                        navigation.navigate('Huddle', {
+                                            chat: { id: circle.chatId, name: circle.name, isGroup: true },
+                                            mode: 'start',
+                                            callTapTs: Date.now()
+                                        });
                                     }}
                                 >
                                     <View style={[

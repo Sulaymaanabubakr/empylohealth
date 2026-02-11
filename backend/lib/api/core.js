@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const cloudinary_1 = require("cloudinary");
@@ -1111,6 +1111,138 @@ exports.updateSubscription = functions.https.onCall(async (data, context) => {
 // ==========================================
 // HUDDLE (CALL) FUNCTIONS
 // ==========================================
+const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUrl, title, body, dedupePerRecipient = false }) => {
+    if (!recipientUids.length)
+        return;
+    const uniqueRecipients = [...new Set(recipientUids)];
+    const expoTokens = [];
+    const fcmTokens = [];
+    for (const ruid of uniqueRecipients) {
+        const userDoc = await db.collection('users').doc(ruid).get();
+        const userData = userDoc.data() || {};
+        expoTokens.push(...(userData.expoPushTokens || []));
+        fcmTokens.push(...(userData.fcmTokens || []));
+    }
+    const notificationBatch = db.batch();
+    uniqueRecipients.forEach((ruid) => {
+        const notifRef = dedupePerRecipient
+            ? db.collection('notifications').doc(`huddle_${huddleId}_${ruid}`)
+            : db.collection('notifications').doc();
+        notificationBatch.set(notifRef, {
+            uid: ruid,
+            title,
+            subtitle: body,
+            type: 'HUDDLE_STARTED',
+            chatId,
+            huddleId,
+            roomUrl,
+            read: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: dedupePerRecipient });
+    });
+    await notificationBatch.commit();
+    const payload = {
+        title,
+        body,
+        data: { chatId, huddleId, roomUrl, type: 'HUDDLE_STARTED' }
+    };
+    if (fcmTokens.length > 0) {
+        const messagePayload = {
+            tokens: fcmTokens,
+            notification: { title: payload.title, body: payload.body },
+            data: payload.data
+        };
+        await admin.messaging().sendEachForMulticast(messagePayload);
+    }
+    if (expoTokens.length > 0) {
+        const expoMessages = expoTokens.map((token) => ({
+            to: token,
+            title: payload.title,
+            body: payload.body,
+            sound: 'default',
+            data: payload.data
+        }));
+        await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(expoMessages)
+        });
+    }
+};
+const getDailyApiKey = () => {
+    const key = process.env.DAILY_API_KEY;
+    if (!key) {
+        throw new functions.https.HttpsError('failed-precondition', 'Video service is not configured.');
+    }
+    return key;
+};
+const extractRoomNameFromUrl = (roomUrl) => {
+    try {
+        const parsed = new URL(roomUrl);
+        return parsed.pathname.replace('/', '').trim();
+    }
+    catch {
+        return '';
+    }
+};
+const createDailyMeetingToken = async ({ roomName, isOwner, userName }) => {
+    const DAILY_API_KEY = getDailyApiKey();
+    const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 6; // 6h
+    const tokenRes = await fetch('https://api.daily.co/v1/meeting-tokens', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${DAILY_API_KEY}`
+        },
+        body: JSON.stringify({
+            properties: {
+                room_name: roomName,
+                is_owner: isOwner,
+                user_name: userName || 'Member',
+                exp
+            }
+        })
+    });
+    const tokenData = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !tokenData?.token) {
+        throw new functions.https.HttpsError('internal', 'Unable to mint meeting token.');
+    }
+    return tokenData.token;
+};
+const createDailyRoomAndToken = async ({ chatId, uid, userName }) => {
+    const DAILY_API_KEY = getDailyApiKey();
+    const roomName = `huddle_${chatId}_${uid}_${Date.now()}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 95);
+    const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 6; // 6h
+    const roomRes = await fetch('https://api.daily.co/v1/rooms', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${DAILY_API_KEY}`
+        },
+        body: JSON.stringify({
+            name: roomName,
+            privacy: 'private',
+            properties: {
+                exp,
+                enable_chat: false,
+                start_video_off: true,
+                start_audio_off: false
+            }
+        })
+    });
+    const roomData = await roomRes.json().catch(() => ({}));
+    const roomUrl = roomData?.url;
+    if (!roomRes.ok || !roomUrl) {
+        throw new functions.https.HttpsError('internal', 'Unable to create room.');
+    }
+    const token = await createDailyMeetingToken({
+        roomName,
+        isOwner: true,
+        userName
+    });
+    return { roomUrl, roomName, token };
+};
 /**
  * Start a Huddle (Video Call Session)
  * Callable Function: 'startHuddle'
@@ -1127,8 +1259,6 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
     if (!chatId)
         throw new functions.https.HttpsError('invalid-argument', 'Chat ID required.');
     try {
-        let roomUrl = null;
-        const DAILY_API_KEY = process.env.DAILY_API_KEY;
         const chatRef = db.collection('chats').doc(chatId);
         const chatDoc = await chatRef.get();
         if (!chatDoc.exists) {
@@ -1151,44 +1281,61 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
                 throw new functions.https.HttpsError('permission-denied', 'Only moderators or admins can start a huddle.');
             }
         }
-        // 1. Create Room via Daily.co API if Key exists
-        if (DAILY_API_KEY) {
-            try {
-                const response = await fetch('https://api.daily.co/v1/rooms', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${DAILY_API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        properties: {
-                            exp: Math.round(Date.now() / 1000) + 3600, // Expires in 1 hour
-                            enable_chat: true,
-                        }
-                    })
-                });
-                const roomData = await response.json();
-                if (roomData.url) {
-                    roomUrl = roomData.url;
-                }
+        // Re-use active huddle for this chat if one exists.
+        const existingSnap = await db.collection('huddles')
+            .where('chatId', '==', chatId)
+            .where('isActive', '==', true)
+            .limit(1)
+            .get();
+        const existing = existingSnap.empty ? null : existingSnap.docs[0];
+        if (existing) {
+            const existingData = existing.data() || {};
+            const roomUrl = existingData.roomUrl;
+            const roomName = existingData.roomName || extractRoomNameFromUrl(roomUrl);
+            if (!roomUrl || !roomName) {
+                throw new functions.https.HttpsError('failed-precondition', 'Huddle room data is invalid.');
             }
-            catch (e) {
-                console.error("Daily API Error", e);
-            }
+            const callerName = context.auth.token?.name;
+            const token = await createDailyMeetingToken({
+                roomName,
+                isOwner: existingData.startedBy === uid,
+                ...(callerName ? { userName: callerName } : {})
+            });
+            return {
+                success: true,
+                huddleId: existing.id,
+                roomUrl,
+                token,
+                roomName
+            };
         }
-        if (!roomUrl) {
-            throw new functions.https.HttpsError('failed-precondition', 'Video service is not configured.');
-        }
+        const callerName = context.auth.token?.name;
+        const { roomUrl, roomName, token } = await createDailyRoomAndToken({
+            chatId,
+            uid,
+            ...(callerName ? { userName: callerName } : {})
+        });
         const huddleRef = db.collection('huddles').doc();
         const huddleData = {
             id: huddleRef.id,
             chatId,
             circleId: chatData?.circleId || null,
             roomUrl, // The actual video link
+            roomName,
             startedBy: uid,
             isGroup: !!isGroup,
             isActive: true,
             participants: [uid],
+            participantStates: {
+                [uid]: {
+                    role: 'host',
+                    muted: false,
+                    joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    leftAt: null
+                }
+            },
+            status: 'ringing',
+            ringStartedAt: admin.firestore.FieldValue.serverTimestamp(),
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
         await huddleRef.set(huddleData);
@@ -1207,70 +1354,29 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
                     huddleId: huddleRef.id,
                     roomUrl,
                     startedBy: uid,
-                    startedAt: admin.firestore.FieldValue.serverTimestamp()
+                    startedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    status: 'ringing',
+                    isRinging: true
                 }
             });
         }
         // Notify other participants (push + in-app)
         try {
             const recipients = participants.filter((p) => p !== uid);
-            if (recipients.length > 0) {
-                const expoTokens = [];
-                const fcmTokens = [];
-                for (const ruid of recipients) {
-                    const userDoc = await db.collection('users').doc(ruid).get();
-                    const userData = userDoc.data() || {};
-                    expoTokens.push(...(userData.expoPushTokens || []));
-                    fcmTokens.push(...(userData.fcmTokens || []));
-                }
-                const notificationBatch = db.batch();
-                recipients.forEach((ruid) => {
-                    const notifRef = db.collection('notifications').doc();
-                    notificationBatch.set(notifRef, {
-                        uid: ruid,
-                        title: 'Incoming Huddle',
-                        subtitle: 'A call has started. Tap to join.',
-                        type: 'HUDDLE_STARTED',
-                        chatId,
-                        huddleId: huddleRef.id,
-                        roomUrl,
-                        read: false,
-                        createdAt: admin.firestore.FieldValue.serverTimestamp()
-                    });
-                });
-                await notificationBatch.commit();
-                const payload = {
-                    title: 'Incoming Huddle',
-                    body: 'A call has started. Tap to join.',
-                    data: { chatId, huddleId: huddleRef.id, roomUrl, type: 'HUDDLE_STARTED' }
-                };
-                if (fcmTokens.length > 0) {
-                    const messagePayload = {
-                        tokens: fcmTokens,
-                        notification: { title: payload.title, body: payload.body },
-                        data: payload.data
-                    };
-                    await admin.messaging().sendEachForMulticast(messagePayload);
-                }
-                if (expoTokens.length > 0) {
-                    const expoMessages = expoTokens.map((token) => ({
-                        to: token,
-                        title: payload.title,
-                        body: payload.body,
-                        data: payload.data
-                    }));
-                    await fetch('https://exp.host/--/api/v2/push/send', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(expoMessages)
-                    });
-                }
-            }
+            await sendHuddleNotifications({
+                recipientUids: recipients,
+                chatId,
+                huddleId: huddleRef.id,
+                roomUrl,
+                title: 'Incoming Huddle',
+                body: 'Calling... Tap to join.',
+                dedupePerRecipient: true
+            });
         }
         catch (notifyError) {
             console.error("Error sending huddle notifications:", notifyError);
         }
-        return { success: true, huddleId: huddleRef.id, roomUrl };
+        return { success: true, huddleId: huddleRef.id, roomUrl, token, roomName };
     }
     catch (error) {
         console.error("Error starting huddle:", error);
@@ -1281,13 +1387,244 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
     }
 });
 /**
+ * Join an existing huddle and mint participant token
+ * Callable Function: 'joinHuddle'
+ */
+exports.joinHuddle = functions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const { huddleId } = data || {};
+    const uid = context.auth.uid;
+    if (!huddleId)
+        throw new functions.https.HttpsError('invalid-argument', 'Huddle ID required.');
+    try {
+        const huddleRef = db.collection('huddles').doc(huddleId);
+        const huddleDoc = await huddleRef.get();
+        if (!huddleDoc.exists)
+            throw new functions.https.HttpsError('not-found', 'Huddle not found.');
+        const huddle = huddleDoc.data() || {};
+        if (huddle.isActive === false || huddle.status === 'ended') {
+            throw new functions.https.HttpsError('failed-precondition', 'This huddle has already ended.');
+        }
+        const chatId = huddle.chatId;
+        const roomUrl = huddle.roomUrl;
+        const roomName = huddle.roomName || extractRoomNameFromUrl(roomUrl || '');
+        if (!chatId || !roomUrl || !roomName) {
+            throw new functions.https.HttpsError('failed-precondition', 'Huddle is missing room info.');
+        }
+        const chatDoc = await db.collection('chats').doc(chatId).get();
+        const chatParticipants = chatDoc.data()?.participants || [];
+        if (!chatParticipants.includes(uid)) {
+            throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
+        }
+        const updates = {
+            participants: admin.firestore.FieldValue.arrayUnion(uid),
+            [`participantStates.${uid}.joinedAt`]: admin.firestore.FieldValue.serverTimestamp(),
+            [`participantStates.${uid}.leftAt`]: null,
+            [`participantStates.${uid}.role`]: uid === huddle.startedBy ? 'host' : 'member'
+        };
+        if (uid !== huddle.startedBy && huddle.status === 'ringing') {
+            updates.status = 'active';
+            updates.answeredBy = uid;
+            updates.answeredAt = admin.firestore.FieldValue.serverTimestamp();
+        }
+        await huddleRef.update(updates);
+        if (uid !== huddle.startedBy && huddle.status === 'ringing' && huddle.circleId) {
+            await db.collection('circles').doc(huddle.circleId).update({
+                'activeHuddle.status': 'active',
+                'activeHuddle.isRinging': false,
+                'activeHuddle.answeredBy': uid,
+                'activeHuddle.answeredAt': admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        const callerName = context.auth.token?.name;
+        const token = await createDailyMeetingToken({
+            roomName,
+            isOwner: false,
+            ...(callerName ? { userName: callerName } : {})
+        });
+        return { success: true, huddleId, roomUrl, token, roomName };
+    }
+    catch (error) {
+        console.error('Error joining huddle:', error);
+        if (error instanceof functions.https.HttpsError)
+            throw error;
+        throw new functions.https.HttpsError('internal', 'Unable to join huddle.');
+    }
+});
+/**
+ * End huddle (host only)
+ * Callable Function: 'endHuddle'
+ */
+exports.endHuddle = functions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const { huddleId } = data || {};
+    const uid = context.auth.uid;
+    if (!huddleId)
+        throw new functions.https.HttpsError('invalid-argument', 'Huddle ID required.');
+    try {
+        const huddleRef = db.collection('huddles').doc(huddleId);
+        const huddleDoc = await huddleRef.get();
+        if (!huddleDoc.exists)
+            throw new functions.https.HttpsError('not-found', 'Huddle not found.');
+        const huddle = huddleDoc.data() || {};
+        if (huddle.startedBy !== uid) {
+            throw new functions.https.HttpsError('permission-denied', 'Only the host can end this huddle.');
+        }
+        await huddleRef.update({
+            isActive: false,
+            status: 'ended',
+            endedBy: uid,
+            endedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        if (huddle.circleId) {
+            await db.collection('circles').doc(huddle.circleId).update({
+                activeHuddle: admin.firestore.FieldValue.delete()
+            });
+        }
+        // Best-effort cleanup of Daily room.
+        const roomName = huddle.roomName || extractRoomNameFromUrl(huddle.roomUrl || '');
+        if (roomName) {
+            try {
+                const DAILY_API_KEY = getDailyApiKey();
+                await fetch(`https://api.daily.co/v1/rooms/${roomName}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${DAILY_API_KEY}`
+                    }
+                });
+            }
+            catch (cleanupError) {
+                console.warn('Daily room cleanup failed', cleanupError);
+            }
+        }
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error ending huddle:', error);
+        if (error instanceof functions.https.HttpsError)
+            throw error;
+        throw new functions.https.HttpsError('internal', 'Unable to end huddle.');
+    }
+});
+/**
+ * Re-ring a Huddle while still waiting for participants
+ * Callable Function: 'ringHuddleParticipants'
+ */
+exports.ringHuddleParticipants = functions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const { huddleId } = data || {};
+    const uid = context.auth.uid;
+    if (!huddleId)
+        throw new functions.https.HttpsError('invalid-argument', 'Huddle ID required.');
+    try {
+        const huddleRef = db.collection('huddles').doc(huddleId);
+        const huddleDoc = await huddleRef.get();
+        if (!huddleDoc.exists)
+            throw new functions.https.HttpsError('not-found', 'Huddle not found.');
+        const huddle = huddleDoc.data() || {};
+        if (huddle.startedBy !== uid) {
+            throw new functions.https.HttpsError('permission-denied', 'Only the caller can trigger ringing.');
+        }
+        if (huddle.isActive === false || !['ringing', 'active'].includes(huddle.status)) {
+            return { success: true, skipped: true, reason: 'not-ringable' };
+        }
+        const lastRingAt = huddle.lastRingSentAt?.toMillis?.() || 0;
+        if (Date.now() - lastRingAt < 8000) {
+            return { success: true, skipped: true, reason: 'rate-limited' };
+        }
+        const chatId = huddle.chatId;
+        const roomUrl = huddle.roomUrl;
+        if (!chatId || !roomUrl) {
+            throw new functions.https.HttpsError('failed-precondition', 'Huddle is missing required fields.');
+        }
+        const chatDoc = await db.collection('chats').doc(chatId).get();
+        const chatParticipants = chatDoc.data()?.participants || [];
+        const joined = huddle.participants || [];
+        const recipients = chatParticipants.filter((pid) => pid !== uid && !joined.includes(pid));
+        await sendHuddleNotifications({
+            recipientUids: recipients,
+            chatId,
+            huddleId,
+            roomUrl,
+            title: 'Incoming Huddle',
+            body: huddle.status === 'active' ? 'Call in progress... Tap to join.' : 'Still ringing... Tap to join.',
+            dedupePerRecipient: true
+        });
+        await huddleRef.update({
+            lastRingSentAt: admin.firestore.FieldValue.serverTimestamp(),
+            ringCount: admin.firestore.FieldValue.increment(1)
+        });
+        return { success: true, notified: recipients.length };
+    }
+    catch (error) {
+        console.error("Error ringing huddle participants:", error);
+        if (error instanceof functions.https.HttpsError)
+            throw error;
+        throw new functions.https.HttpsError('internal', 'Unable to ring participants.');
+    }
+});
+exports.ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').onRun(async () => {
+    try {
+        const snapshot = await db.collection('huddles').where('isActive', '==', true).limit(200).get();
+        let processed = 0;
+        let notified = 0;
+        for (const huddleDoc of snapshot.docs) {
+            const huddle = huddleDoc.data() || {};
+            if (!['ringing', 'active'].includes(huddle.status)) {
+                continue;
+            }
+            const lastRingAt = huddle.lastRingSentAt?.toMillis?.() || 0;
+            if (Date.now() - lastRingAt < 45000) {
+                continue;
+            }
+            const chatId = huddle.chatId;
+            const roomUrl = huddle.roomUrl;
+            const startedBy = huddle.startedBy;
+            if (!chatId || !roomUrl || !startedBy) {
+                continue;
+            }
+            const chatDoc = await db.collection('chats').doc(chatId).get();
+            const chatParticipants = chatDoc.data()?.participants || [];
+            const joined = huddle.participants || [];
+            const recipients = chatParticipants.filter((pid) => pid !== startedBy && !joined.includes(pid));
+            if (!recipients.length) {
+                continue;
+            }
+            await sendHuddleNotifications({
+                recipientUids: recipients,
+                chatId,
+                huddleId: huddleDoc.id,
+                roomUrl,
+                title: 'Incoming Huddle',
+                body: huddle.status === 'active' ? 'Call in progress... Tap to join.' : 'Still ringing... Tap to join.',
+                dedupePerRecipient: true
+            });
+            await huddleDoc.ref.update({
+                lastRingSentAt: admin.firestore.FieldValue.serverTimestamp(),
+                ringCount: admin.firestore.FieldValue.increment(1)
+            });
+            processed += 1;
+            notified += recipients.length;
+        }
+        console.log('[ringPendingHuddles] processed:', processed, 'notified:', notified);
+        return null;
+    }
+    catch (error) {
+        console.error('[ringPendingHuddles] failed', error);
+        return null;
+    }
+});
+/**
  * Join/Leave Huddle
  * Callable Function: 'updateHuddleState'
  */
 exports.updateHuddleState = functions.https.onCall(async (data, context) => {
     if (!context.auth)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    const { huddleId, action } = data; // action: 'join' | 'leave'
+    const { huddleId, action } = data; // action: 'join' | 'leave' | 'mute' | 'unmute'
     const uid = context.auth.uid;
     try {
         const huddleRef = db.collection('huddles').doc(huddleId);
@@ -1295,7 +1632,8 @@ exports.updateHuddleState = functions.https.onCall(async (data, context) => {
         if (!huddleDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Huddle not found.');
         }
-        const chatId = huddleDoc.data()?.chatId;
+        const huddleData = huddleDoc.data() || {};
+        const chatId = huddleData.chatId;
         if (!chatId) {
             throw new functions.https.HttpsError('failed-precondition', 'Huddle is missing chat reference.');
         }
@@ -1305,13 +1643,31 @@ exports.updateHuddleState = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
         }
         if (action === 'join') {
-            await huddleRef.update({
-                participants: admin.firestore.FieldValue.arrayUnion(uid)
-            });
+            const joinUpdate = {
+                participants: admin.firestore.FieldValue.arrayUnion(uid),
+                [`participantStates.${uid}.joinedAt`]: admin.firestore.FieldValue.serverTimestamp(),
+                [`participantStates.${uid}.leftAt`]: null,
+                [`participantStates.${uid}.role`]: uid === huddleData.startedBy ? 'host' : 'member'
+            };
+            if (uid !== huddleData.startedBy && huddleData.status === 'ringing') {
+                joinUpdate.status = 'active';
+                joinUpdate.answeredBy = uid;
+                joinUpdate.answeredAt = admin.firestore.FieldValue.serverTimestamp();
+            }
+            await huddleRef.update(joinUpdate);
+            if (uid !== huddleData.startedBy && huddleData.status === 'ringing' && huddleData.circleId) {
+                await db.collection('circles').doc(huddleData.circleId).update({
+                    'activeHuddle.status': 'active',
+                    'activeHuddle.isRinging': false,
+                    'activeHuddle.answeredBy': uid,
+                    'activeHuddle.answeredAt': admin.firestore.FieldValue.serverTimestamp()
+                });
+            }
         }
         else if (action === 'leave') {
             await huddleRef.update({
-                participants: admin.firestore.FieldValue.arrayRemove(uid)
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
+                [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
             });
             // If empty, close huddle or keep active? Logic depends. 
             // Simple: If 0 participants, set isActive false.
@@ -1331,10 +1687,22 @@ exports.updateHuddleState = functions.https.onCall(async (data, context) => {
                 }
             }
         }
+        else if (action === 'mute' || action === 'unmute') {
+            await huddleRef.update({
+                [`participantStates.${uid}.muted`]: action === 'mute',
+                [`participantStates.${uid}.updatedAt`]: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        else {
+            throw new functions.https.HttpsError('invalid-argument', 'Invalid action.');
+        }
         return { success: true };
     }
     catch (error) {
         console.error("Error updating huddle state:", error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
         throw new functions.https.HttpsError('internal', 'Unable to update huddle.');
     }
 });

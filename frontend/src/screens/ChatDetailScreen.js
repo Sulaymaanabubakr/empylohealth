@@ -6,7 +6,6 @@ import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { chatService } from '../services/api/chatService';
-import { huddleService } from '../services/api/huddleService';
 import { circleService } from '../services/api/circleService';
 import Avatar from '../components/Avatar';
 
@@ -96,13 +95,11 @@ const ChatDetailScreen = ({ navigation, route }) => {
     };
 
     const handleCall = async () => {
-        try {
-            const result = await huddleService.startHuddle(chat.id, !!chat.isGroup);
-            navigation.navigate('Huddle', { chat, huddleId: result.huddleId, roomUrl: result.roomUrl });
-        } catch (error) {
-            console.error('Failed to start huddle', error);
-            navigation.navigate('Huddle', { chat });
-        }
+        navigation.navigate('Huddle', {
+            chat,
+            mode: 'start',
+            callTapTs: Date.now()
+        });
     };
 
     const handleMessageLongPress = (message) => {

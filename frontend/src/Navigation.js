@@ -41,6 +41,7 @@ import PersonalInformationScreen from './screens/PersonalInformationScreen';
 import SecurityScreen from './screens/SecurityScreen';
 import TellAFriendScreen from './screens/TellAFriendScreen';
 import FAQScreen from './screens/FAQScreen';
+import { navigationRef, flushPendingNavigation } from './navigation/navigationRef';
 
 const PERSISTENCE_KEY = 'NAVIGATION_STATE_V1';
 const Stack = createNativeStackNavigator();
@@ -123,7 +124,9 @@ export default function Navigation() {
 
     return (
         <NavigationContainer
+            ref={navigationRef}
             initialState={initialState}
+            onReady={flushPendingNavigation}
             onStateChange={(state) => {
                 // Only persist navigation state when user is authenticated
                 // This prevents saving unauthenticated "flicker" states

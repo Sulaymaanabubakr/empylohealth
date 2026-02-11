@@ -3,8 +3,62 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { db } from '../firebaseConfig';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { navigate } from '../../navigation/navigationRef';
+
+let notificationRoutingInitialized = false;
+let responseSubscription = null;
+
+const navigateFromNotificationData = (payload) => {
+    const data = payload?.notification?.request?.content?.data || payload?.data || {};
+    const type = data?.type;
+    const huddleId = data?.huddleId;
+    const chatId = data?.chatId;
+
+    if (type === 'HUDDLE_STARTED' && huddleId) {
+        navigate('Huddle', {
+            chat: { id: chatId || 'chat', name: 'Huddle', isGroup: true },
+            huddleId,
+            mode: 'join',
+            callTapTs: Date.now()
+        });
+        return true;
+    }
+
+    return false;
+};
 
 export const notificationService = {
+    initializeNotificationRouting: () => {
+        if (notificationRoutingInitialized) return;
+        notificationRoutingInitialized = true;
+
+        Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+                shouldShowAlert: true,
+                shouldPlaySound: true,
+                shouldSetBadge: false
+            })
+        });
+
+        responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+            navigateFromNotificationData(response);
+        });
+
+        Notifications.getLastNotificationResponseAsync().then((response) => {
+            if (response) {
+                navigateFromNotificationData(response);
+            }
+        }).catch(() => {});
+    },
+
+    cleanupNotificationRouting: () => {
+        if (responseSubscription) {
+            responseSubscription.remove();
+            responseSubscription = null;
+        }
+        notificationRoutingInitialized = false;
+    },
+
     /**
      * Register for Push Notifications
      * @param {string} uid User ID to save token for

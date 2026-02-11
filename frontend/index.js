@@ -1,4 +1,5 @@
 import { registerRootComponent } from 'expo';
+import 'react-native-get-random-values';
 console.log('[PERF] index.js: Module evaluating');
 
 import App from './App';

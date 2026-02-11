@@ -107,6 +107,22 @@ export declare const updateSubscription: functions.HttpsFunction & functions.Run
  */
 export declare const startHuddle: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Join an existing huddle and mint participant token
+ * Callable Function: 'joinHuddle'
+ */
+export declare const joinHuddle: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * End huddle (host only)
+ * Callable Function: 'endHuddle'
+ */
+export declare const endHuddle: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Re-ring a Huddle while still waiting for participants
+ * Callable Function: 'ringHuddleParticipants'
+ */
+export declare const ringHuddleParticipants: functions.HttpsFunction & functions.Runnable<any>;
+export declare const ringPendingHuddles: functions.CloudFunction<unknown>;
+/**
  * Join/Leave Huddle
  * Callable Function: 'updateHuddleState'
  */

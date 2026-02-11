@@ -26,6 +26,13 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
     const userUnsubscribeRef = React.useRef(null);
 
+    useEffect(() => {
+        notificationService.initializeNotificationRouting();
+        return () => {
+            notificationService.cleanupNotificationRouting();
+        };
+    }, []);
+
     // Listen for auth state changes
     useEffect(() => {
         console.log('[PERF] AuthContext: Initializing...');

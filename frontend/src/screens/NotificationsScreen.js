@@ -41,13 +41,26 @@ const NotificationsScreen = ({ navigation }) => {
   }, [notifications]);
 
   const NotificationCard = ({ item }) => (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.9}
+      onPress={() => {
+        if (item.type === 'HUDDLE_STARTED' && item.huddleId) {
+          navigation.navigate('Huddle', {
+            chat: { id: item.chatId || 'chat', name: 'Huddle', isGroup: true },
+            huddleId: item.huddleId,
+            mode: 'join',
+            callTapTs: Date.now()
+          });
+        }
+      }}
+    >
       <View style={[styles.iconCircle, { backgroundColor: item.color || '#B2DFDB' }]} />
       <View style={styles.textContainer}>
         <Text style={styles.cardTitle}>{item.title || 'Notification'}</Text>
         <Text style={styles.cardSubtitle}>{item.subtitle || item.body || ''}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
