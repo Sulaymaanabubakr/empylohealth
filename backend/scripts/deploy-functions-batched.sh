@@ -23,6 +23,36 @@ if [ "${#FUNCTIONS[@]}" -eq 0 ]; then
   exit 1
 fi
 
+if [ -n "${FUNCTIONS_FILTER:-}" ]; then
+  FILTERED_FUNCTIONS=()
+  IFS=',' read -r -a REQUESTED <<< "$FUNCTIONS_FILTER"
+  for raw in "${REQUESTED[@]}"; do
+    fn="$(echo "$raw" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [ -z "$fn" ] && continue
+
+    found=0
+    for exported in "${FUNCTIONS[@]}"; do
+      if [ "$exported" = "$fn" ]; then
+        FILTERED_FUNCTIONS+=("$fn")
+        found=1
+        break
+      fi
+    done
+
+    if [ "$found" -eq 0 ]; then
+      echo "Requested function '$fn' is not exported from src/index.ts"
+      exit 1
+    fi
+  done
+
+  if [ "${#FILTERED_FUNCTIONS[@]}" -eq 0 ]; then
+    echo "FUNCTIONS_FILTER was provided but no valid functions were selected."
+    exit 1
+  fi
+
+  FUNCTIONS=("${FILTERED_FUNCTIONS[@]}")
+fi
+
 echo "Building functions..."
 npm run build
 
