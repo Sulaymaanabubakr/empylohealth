@@ -267,6 +267,10 @@ const CircleDetailScreen = ({ navigation, route }) => {
         </View>
     );
 
+    const hasActiveHuddle = Boolean(circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl);
+    const canStartHuddle = ['creator', 'admin', 'moderator'].includes(role);
+    const canSeeHuddleAction = hasActiveHuddle || canStartHuddle;
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -352,58 +356,54 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     <Text style={styles.actionLabel}>Chat</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={async () => {
-                                        if (!circle.chatId) {
-                                            showModal({ type: 'info', title: 'Huddle unavailable', message: 'This circle does not have a chat yet.' });
-                                            return;
-                                        }
+                                {canSeeHuddleAction && (
+                                    <TouchableOpacity
+                                        style={styles.actionItem}
+                                        onPress={async () => {
+                                            if (!circle.chatId) {
+                                                showModal({ type: 'info', title: 'Huddle unavailable', message: 'This circle does not have a chat yet.' });
+                                                return;
+                                            }
 
-                                        // JOIN EXISTING HUDDLE
-                                        if (circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl) {
+                                            if (hasActiveHuddle) {
+                                                navigation.navigate('Huddle', {
+                                                    chat: { id: circle.chatId, name: circle.name, isGroup: true },
+                                                    huddleId: circle.activeHuddle.huddleId,
+                                                    mode: 'join',
+                                                    callTapTs: Date.now()
+                                                });
+                                                return;
+                                            }
+
+                                            if (!canStartHuddle) {
+                                                return;
+                                            }
+
                                             navigation.navigate('Huddle', {
                                                 chat: { id: circle.chatId, name: circle.name, isGroup: true },
-                                                huddleId: circle.activeHuddle.huddleId,
-                                                mode: 'join',
+                                                mode: 'start',
                                                 callTapTs: Date.now()
                                             });
-                                            return;
-                                        }
-
-                                        // START NEW HUDDLE (Admins/Mods Only)
-                                        // START NEW HUDDLE
-                                        // Permission Logic: Creator/Admin/Mod OR specific setting
-                                        const allowMemberHuddles = circle.settings?.allowMemberHuddles;
-                                        if (!['creator', 'admin', 'moderator'].includes(role) && !allowMemberHuddles) {
-                                            showModal({ type: 'error', title: 'Permission Denied', message: 'Starting huddles is restricted to Admins and Moderators.' });
-                                            return;
-                                        }
-
-                                        navigation.navigate('Huddle', {
-                                            chat: { id: circle.chatId, name: circle.name, isGroup: true },
-                                            mode: 'start',
-                                            callTapTs: Date.now()
-                                        });
-                                    }}
-                                >
-                                    <View style={[
-                                        styles.actionIconCircle,
-                                        { backgroundColor: (circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl) ? '#E8F5E9' : '#F3E5F5' }
-                                    ]}>
-                                        <Ionicons
-                                            name={(circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl) ? "videocam" : "videocam-outline"}
-                                            size={22}
-                                            color={(circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl) ? "#4CAF50" : "#8E24AA"}
-                                        />
-                                    </View>
-                                    <Text style={[
-                                        styles.actionLabel,
-                                        (circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl) && { color: '#4CAF50', fontWeight: '700' }
-                                    ]}>
-                                        {(circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl) ? 'Join Huddle' : 'Start Huddle'}
-                                    </Text>
-                                </TouchableOpacity>
+                                        }}
+                                    >
+                                        <View style={[
+                                            styles.actionIconCircle,
+                                            { backgroundColor: hasActiveHuddle ? '#E8F5E9' : '#F3E5F5' }
+                                        ]}>
+                                            <Ionicons
+                                                name={hasActiveHuddle ? "videocam" : "videocam-outline"}
+                                                size={22}
+                                                color={hasActiveHuddle ? "#4CAF50" : "#8E24AA"}
+                                            />
+                                        </View>
+                                        <Text style={[
+                                            styles.actionLabel,
+                                            hasActiveHuddle && { color: '#4CAF50', fontWeight: '700' }
+                                        ]}>
+                                            {hasActiveHuddle ? 'Join Huddle' : 'Start Huddle'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                             <View style={styles.divider} />
                         </>
