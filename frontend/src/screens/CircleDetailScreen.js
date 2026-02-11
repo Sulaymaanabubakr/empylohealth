@@ -268,7 +268,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
     );
 
     const hasActiveHuddle = Boolean(circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl);
-    const canStartHuddle = ['creator', 'admin', 'moderator'].includes(role);
+    const canStartHuddle = ['admin', 'moderator'].includes(role);
     const canSeeHuddleAction = hasActiveHuddle || canStartHuddle;
 
     return (

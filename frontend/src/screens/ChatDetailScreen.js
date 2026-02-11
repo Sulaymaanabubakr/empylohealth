@@ -190,7 +190,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
     };
 
     const hasActiveHuddle = Boolean(activeHuddle?.isActive !== false && activeHuddle?.roomUrl);
-    const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
+    const canStartHuddleInCircle = ['admin', 'moderator'].includes(circleRole);
     const canShowCallButton = !chat?.isGroup || hasActiveHuddle || canStartHuddleInCircle;
 
     const handleCall = async () => {
