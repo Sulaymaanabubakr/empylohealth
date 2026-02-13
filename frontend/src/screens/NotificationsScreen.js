@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 
 const NotificationsScreen = ({ navigation }) => {
@@ -16,16 +16,32 @@ const NotificationsScreen = ({ navigation }) => {
   if (!user?.uid) return null;
     const q = query(
       collection(db, 'notifications'),
-      where('uid', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('uid', '==', user.uid)
     );
     return onSnapshot(q, (snapshot) => {
       const items = snapshot.docs.map((doc) => {
         const data = doc.data();
         return { id: doc.id, ...data };
       });
+      items.sort((a, b) => {
+        const aMs = a.createdAt?.toMillis?.() || 0;
+        const bMs = b.createdAt?.toMillis?.() || 0;
+        return bMs - aMs;
+      });
       setNotifications(items);
-    }, () => setNotifications([]));
+
+      const unreadDocs = snapshot.docs.filter((d) => d.data()?.read !== true);
+      if (unreadDocs.length > 0) {
+        const batch = writeBatch(db);
+        unreadDocs.forEach((d) => {
+          batch.update(d.ref, { read: true });
+        });
+        batch.commit().catch(() => {});
+      }
+    }, (error) => {
+      console.log('Notifications query failed:', error);
+      setNotifications([]);
+    });
   }, [user?.uid]);
 
   const { todayNotifications, earlierNotifications } = useMemo(() => {

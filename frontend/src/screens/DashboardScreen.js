@@ -162,17 +162,19 @@ const DashboardScreen = ({ navigation }) => {
 
         const q = query(
             collection(db, 'notifications'),
-            where('uid', '==', user.uid)
+            where('uid', '==', user.uid),
+            where('read', '==', false)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setHasUnreadNotifications(!snapshot.empty);
         }, (error) => {
             console.log("Error fetching notifications:", error);
+            setHasUnreadNotifications(false);
         });
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user?.uid]);
 
     useEffect(() => {
         console.log('DashboardScreen mounted. User:', user?.email);

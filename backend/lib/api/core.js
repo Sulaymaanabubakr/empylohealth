@@ -32,10 +32,14 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
+const apn_1 = __importDefault(require("apn"));
 const cloudinary_1 = require("cloudinary");
 const seedData_1 = require("../seedData");
 if (admin.apps.length === 0) {
@@ -1111,17 +1115,50 @@ exports.updateSubscription = functions.https.onCall(async (data, context) => {
 // ==========================================
 // HUDDLE (CALL) FUNCTIONS
 // ==========================================
-const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUrl, title, body, dedupePerRecipient = false }) => {
+const IOS_APP_BUNDLE_ID = process.env.IOS_BUNDLE_ID || 'com.empylo.circlesapp';
+const IOS_VOIP_TOPIC = `${IOS_APP_BUNDLE_ID}.voip`;
+let apnVoipProviderCache;
+const getApnVoipProvider = () => {
+    if (apnVoipProviderCache !== undefined)
+        return apnVoipProviderCache;
+    const keyId = process.env.APNS_KEY_ID;
+    const teamId = process.env.APNS_TEAM_ID;
+    const p8Inline = process.env.APNS_KEY_P8;
+    const p8Base64 = process.env.APNS_KEY_P8_BASE64;
+    if (!keyId || !teamId || (!p8Inline && !p8Base64)) {
+        apnVoipProviderCache = null;
+        return apnVoipProviderCache;
+    }
+    let key = p8Inline || '';
+    if (!key && p8Base64) {
+        key = Buffer.from(p8Base64, 'base64').toString('utf8');
+    }
+    key = key.replace(/\\n/g, '\n');
+    try {
+        apnVoipProviderCache = new apn_1.default.Provider({
+            token: { key, keyId, teamId },
+            production: process.env.APNS_PRODUCTION !== 'false'
+        });
+    }
+    catch (error) {
+        console.error('[VoIP] Failed to initialize APNs provider:', error);
+        apnVoipProviderCache = null;
+    }
+    return apnVoipProviderCache;
+};
+const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUrl, title, body, chatName = 'Huddle', callerName = 'Incoming Huddle', dedupePerRecipient = false }) => {
     if (!recipientUids.length)
         return;
     const uniqueRecipients = [...new Set(recipientUids)];
     const expoTokens = [];
     const fcmTokens = [];
+    const voipTokens = [];
     for (const ruid of uniqueRecipients) {
         const userDoc = await db.collection('users').doc(ruid).get();
         const userData = userDoc.data() || {};
         expoTokens.push(...(userData.expoPushTokens || []));
         fcmTokens.push(...(userData.fcmTokens || []));
+        voipTokens.push(...(userData.voipPushTokens || []));
     }
     const notificationBatch = db.batch();
     uniqueRecipients.forEach((ruid) => {
@@ -1145,13 +1182,35 @@ const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUr
     const payload = {
         title,
         body,
-        data: { chatId, huddleId, roomUrl, type: 'HUDDLE_STARTED' }
+        data: { chatId, huddleId, roomUrl, type: 'HUDDLE_STARTED', chatName, callerName }
     };
     if (fcmTokens.length > 0) {
         const messagePayload = {
             tokens: fcmTokens,
             notification: { title: payload.title, body: payload.body },
-            data: payload.data
+            data: payload.data,
+            android: {
+                priority: 'high',
+                notification: {
+                    channelId: 'huddle-calls',
+                    sound: 'default',
+                    priority: 'max',
+                    defaultVibrateTimings: true
+                }
+            },
+            apns: {
+                headers: {
+                    'apns-push-type': 'alert',
+                    'apns-priority': '10',
+                    'apns-topic': 'com.empylo.circlesapp'
+                },
+                payload: {
+                    aps: {
+                        sound: 'default',
+                        'interruption-level': 'time-sensitive'
+                    }
+                }
+            }
         };
         await admin.messaging().sendEachForMulticast(messagePayload);
     }
@@ -1161,6 +1220,9 @@ const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUr
             title: payload.title,
             body: payload.body,
             sound: 'default',
+            priority: 'high',
+            channelId: 'huddle-calls',
+            interruptionLevel: 'time-sensitive',
             data: payload.data
         }));
         await fetch('https://exp.host/--/api/v2/push/send', {
@@ -1168,6 +1230,33 @@ const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUr
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(expoMessages)
         });
+    }
+    const uniqueVoipTokens = [...new Set(voipTokens)].filter(Boolean);
+    const apnProvider = getApnVoipProvider();
+    if (apnProvider && uniqueVoipTokens.length > 0) {
+        const voipNotification = new apn_1.default.Notification();
+        voipNotification.topic = IOS_VOIP_TOPIC;
+        voipNotification.pushType = 'voip';
+        voipNotification.priority = 10;
+        voipNotification.expiry = Math.floor(Date.now() / 1000) + 60;
+        voipNotification.contentAvailable = true;
+        voipNotification.payload = {
+            type: 'HUDDLE_STARTED',
+            chatId,
+            huddleId,
+            roomUrl,
+            chatName,
+            callerName
+        };
+        try {
+            const result = await apnProvider.send(voipNotification, uniqueVoipTokens);
+            if (result.failed.length > 0) {
+                console.warn('[VoIP] APNs failed sends:', result.failed.length);
+            }
+        }
+        catch (error) {
+            console.error('[VoIP] APNs send error:', error);
+        }
     }
 };
 const getDailyApiKey = () => {
@@ -1186,7 +1275,7 @@ const extractRoomNameFromUrl = (roomUrl) => {
         return '';
     }
 };
-const createDailyMeetingToken = async ({ roomName, isOwner, userName }) => {
+const createDailyMeetingToken = async ({ roomName, isOwner, userName, userId }) => {
     const DAILY_API_KEY = getDailyApiKey();
     const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 6; // 6h
     const tokenRes = await fetch('https://api.daily.co/v1/meeting-tokens', {
@@ -1200,6 +1289,7 @@ const createDailyMeetingToken = async ({ roomName, isOwner, userName }) => {
                 room_name: roomName,
                 is_owner: isOwner,
                 user_name: userName || 'Member',
+                user_id: userId || undefined,
                 exp
             }
         })
@@ -1239,7 +1329,8 @@ const createDailyRoomAndToken = async ({ chatId, uid, userName }) => {
     const token = await createDailyMeetingToken({
         roomName,
         isOwner: true,
-        userName
+        userName,
+        userId: uid
     });
     return { roomUrl, roomName, token };
 };
@@ -1281,7 +1372,7 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
                 throw new functions.https.HttpsError('permission-denied', 'Only moderators or admins can start a huddle.');
             }
         }
-        // Re-use active huddle for this chat if one exists.
+        // Re-use active huddle for this chat if one exists and is not stale.
         const existingSnap = await db.collection('huddles')
             .where('chatId', '==', chatId)
             .where('isActive', '==', true)
@@ -1290,24 +1381,39 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
         const existing = existingSnap.empty ? null : existingSnap.docs[0];
         if (existing) {
             const existingData = existing.data() || {};
-            const roomUrl = existingData.roomUrl;
-            const roomName = existingData.roomName || extractRoomNameFromUrl(roomUrl);
-            if (!roomUrl || !roomName) {
-                throw new functions.https.HttpsError('failed-precondition', 'Huddle room data is invalid.');
+            const ringStartedAtMs = existingData.ringStartedAt?.toMillis?.() || existingData.createdAt?.toMillis?.() || 0;
+            const ageMs = ringStartedAtMs > 0 ? (Date.now() - ringStartedAtMs) : Number.MAX_SAFE_INTEGER;
+            const isStale = ageMs > (15 * 60 * 1000);
+            if (isStale) {
+                await existing.ref.update({
+                    isActive: false,
+                    status: 'ended',
+                    endedBy: uid,
+                    endedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
             }
-            const callerName = context.auth.token?.name;
-            const token = await createDailyMeetingToken({
-                roomName,
-                isOwner: existingData.startedBy === uid,
-                ...(callerName ? { userName: callerName } : {})
-            });
-            return {
-                success: true,
-                huddleId: existing.id,
-                roomUrl,
-                token,
-                roomName
-            };
+            else {
+                const roomUrl = existingData.roomUrl;
+                const roomName = existingData.roomName || extractRoomNameFromUrl(roomUrl);
+                if (!roomUrl || !roomName) {
+                    throw new functions.https.HttpsError('failed-precondition', 'Huddle room data is invalid.');
+                }
+                const callerName = context.auth.token?.name;
+                const token = await createDailyMeetingToken({
+                    roomName,
+                    isOwner: existingData.startedBy === uid,
+                    ...(callerName ? { userName: callerName } : {}),
+                    userId: uid
+                });
+                return {
+                    success: true,
+                    huddleId: existing.id,
+                    roomUrl,
+                    token,
+                    roomName,
+                    startedBy: existingData.startedBy || null
+                };
+            }
         }
         const callerName = context.auth.token?.name;
         const { roomUrl, roomName, token } = await createDailyRoomAndToken({
@@ -1370,13 +1476,15 @@ exports.startHuddle = functions.https.onCall(async (data, context) => {
                 roomUrl,
                 title: 'Incoming Huddle',
                 body: 'Calling... Tap to join.',
+                chatName: chatData?.name || 'Huddle',
+                callerName: callerName || 'Incoming Huddle',
                 dedupePerRecipient: true
             });
         }
         catch (notifyError) {
             console.error("Error sending huddle notifications:", notifyError);
         }
-        return { success: true, huddleId: huddleRef.id, roomUrl, token, roomName };
+        return { success: true, huddleId: huddleRef.id, roomUrl, token, roomName, startedBy: uid };
     }
     catch (error) {
         console.error("Error starting huddle:", error);
@@ -1441,9 +1549,10 @@ exports.joinHuddle = functions.https.onCall(async (data, context) => {
         const token = await createDailyMeetingToken({
             roomName,
             isOwner: false,
-            ...(callerName ? { userName: callerName } : {})
+            ...(callerName ? { userName: callerName } : {}),
+            userId: uid
         });
-        return { success: true, huddleId, roomUrl, token, roomName };
+        return { success: true, huddleId, roomUrl, token, roomName, startedBy: huddle.startedBy || null };
     }
     catch (error) {
         console.error('Error joining huddle:', error);
@@ -1528,7 +1637,7 @@ exports.ringHuddleParticipants = functions.https.onCall(async (data, context) =>
         if (huddle.startedBy !== uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the caller can trigger ringing.');
         }
-        if (huddle.isActive === false || !['ringing', 'active'].includes(huddle.status)) {
+        if (huddle.isActive === false || huddle.status !== 'ringing') {
             return { success: true, skipped: true, reason: 'not-ringable' };
         }
         const lastRingAt = huddle.lastRingSentAt?.toMillis?.() || 0;
@@ -1541,6 +1650,7 @@ exports.ringHuddleParticipants = functions.https.onCall(async (data, context) =>
             throw new functions.https.HttpsError('failed-precondition', 'Huddle is missing required fields.');
         }
         const chatDoc = await db.collection('chats').doc(chatId).get();
+        const chatData = chatDoc.data() || {};
         const chatParticipants = chatDoc.data()?.participants || [];
         const joined = huddle.participants || [];
         const recipients = chatParticipants.filter((pid) => pid !== uid && !joined.includes(pid));
@@ -1550,7 +1660,8 @@ exports.ringHuddleParticipants = functions.https.onCall(async (data, context) =>
             huddleId,
             roomUrl,
             title: 'Incoming Huddle',
-            body: huddle.status === 'active' ? 'Call in progress... Tap to join.' : 'Still ringing... Tap to join.',
+            body: 'Still ringing... Tap to join.',
+            chatName: chatData?.name || 'Huddle',
             dedupePerRecipient: true
         });
         await huddleRef.update({
@@ -1573,7 +1684,7 @@ exports.ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').onRun(
         let notified = 0;
         for (const huddleDoc of snapshot.docs) {
             const huddle = huddleDoc.data() || {};
-            if (!['ringing', 'active'].includes(huddle.status)) {
+            if (huddle.status !== 'ringing') {
                 continue;
             }
             const lastRingAt = huddle.lastRingSentAt?.toMillis?.() || 0;
@@ -1587,6 +1698,7 @@ exports.ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').onRun(
                 continue;
             }
             const chatDoc = await db.collection('chats').doc(chatId).get();
+            const chatData = chatDoc.data() || {};
             const chatParticipants = chatDoc.data()?.participants || [];
             const joined = huddle.participants || [];
             const recipients = chatParticipants.filter((pid) => pid !== startedBy && !joined.includes(pid));
@@ -1599,7 +1711,8 @@ exports.ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').onRun(
                 huddleId: huddleDoc.id,
                 roomUrl,
                 title: 'Incoming Huddle',
-                body: huddle.status === 'active' ? 'Call in progress... Tap to join.' : 'Still ringing... Tap to join.',
+                body: 'Still ringing... Tap to join.',
+                chatName: chatData?.name || 'Huddle',
                 dedupePerRecipient: true
             });
             await huddleDoc.ref.update({
@@ -2011,7 +2124,9 @@ const sendDailyAffirmationsNotification = async (slotIndex, title) => {
                 type: 'DAILY_AFFIRMATION',
                 slot: slotIndex,
                 affirmationId: pickId,
-                createdAt: admin.firestore.FieldValue.serverTimestamp()
+                read: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
         });
         await batch.commit();

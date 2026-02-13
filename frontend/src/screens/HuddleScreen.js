@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, BackHandler, Dimensions, PermissionsAndroid, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View, Vibration } from 'react-native';
+import { ActivityIndicator, Animated, BackHandler, Dimensions, PermissionsAndroid, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View, Vibration, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import Daily from '@daily-co/react-native-daily-js';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../theme/theme';
 import { huddleService } from '../services/api/huddleService';
+import { nativeCallService } from '../services/native/nativeCallService';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
+import { db } from '../services/firebaseConfig';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
 const MAX_VISIBLE_PARTICIPANTS = 8;
 const JOIN_TIMEOUT_MS = 45000;
@@ -51,6 +54,7 @@ const HuddleScreen = ({ navigation, route }) => {
     const [isMuted, setIsMuted] = useState(false);
     const [isSpeakerOn, setIsSpeakerOn] = useState(true);
     const [isHost, setIsHost] = useState(mode === 'start');
+    const [expectedParticipants, setExpectedParticipants] = useState([]);
     const [seconds, setSeconds] = useState(0);
     const [layoutSize, setLayoutSize] = useState({
         width: Dimensions.get('window').width,
@@ -71,6 +75,33 @@ const HuddleScreen = ({ navigation, route }) => {
             setIsMuted(local.audio === false);
         }
     }, []);
+
+    useEffect(() => {
+        if (!chat?.id) return undefined;
+
+        const chatRef = doc(db, 'chats', chat.id);
+        const unsubscribe = onSnapshot(chatRef, async (chatSnap) => {
+            const ids = chatSnap.data()?.participants || [];
+            if (!Array.isArray(ids) || ids.length === 0) {
+                setExpectedParticipants([]);
+                return;
+            }
+            const rows = await Promise.all(ids.map(async (uid) => {
+                const userSnap = await getDoc(doc(db, 'users', uid));
+                const data = userSnap.exists() ? userSnap.data() : {};
+                return {
+                    uid,
+                    name: data?.name || data?.displayName || 'Member',
+                    photoURL: data?.photoURL || ''
+                };
+            }));
+            setExpectedParticipants(rows);
+        }, () => {
+            setExpectedParticipants([]);
+        });
+
+        return unsubscribe;
+    }, [chat?.id]);
 
     const requestMicPermission = useCallback(async () => {
         if (Platform.OS !== 'android') return true;
@@ -206,7 +237,11 @@ const HuddleScreen = ({ navigation, route }) => {
         }
 
         if (navigateBack) {
-            navigation.goBack();
+            if (navigation.canGoBack()) {
+                navigation.goBack();
+            } else {
+                navigation.navigate('MainTabs');
+            }
         }
 
         // Clean up async in background so UI doesn't feel stuck on hangup.
@@ -220,6 +255,7 @@ const HuddleScreen = ({ navigation, route }) => {
             }
 
             if (currentHuddleId) {
+                nativeCallService.endHuddleCall(currentHuddleId);
                 if (endForEveryone && isHost) {
                     await safeCall(() => huddleService.endHuddle(currentHuddleId));
                 } else {
@@ -314,14 +350,6 @@ const HuddleScreen = ({ navigation, route }) => {
                 return;
             }
 
-            const callObject = Daily.createCallObject({
-                startVideoOff: true,
-                startAudioOff: false,
-                subscribeToTracksAutomatically: true
-            });
-            callObjectRef.current = callObject;
-            attachCallHandlers(callObject);
-
             try {
                 const callableStartAt = Date.now();
                 let huddleSession;
@@ -341,17 +369,27 @@ const HuddleScreen = ({ navigation, route }) => {
                 const resolvedHostUid = huddleSession?.startedBy || (mode === 'start' ? user?.uid : null) || null;
                 const hostStatus = Boolean(resolvedHostUid && resolvedHostUid === user?.uid);
                 setIsHost(Boolean(hostStatus));
+                if (hostStatus && resolvedHuddleId) {
+                    nativeCallService.startOutgoingHuddleCall({
+                        huddleId: resolvedHuddleId,
+                        chatName: chat?.name || 'Huddle'
+                    });
+                }
                 if (hostStatus) {
                     // Show ringing immediately for caller while connection/join settles.
                     setPhase('ringing');
                 }
-                if (joinFlowCancelledRef.current || isLeavingRef.current || callObjectRef.current !== callObject) {
+                if (joinFlowCancelledRef.current || isLeavingRef.current) {
                     return;
                 }
                 const joinOptions = {
                     url: huddleSession?.roomUrl,
                     token: huddleSession?.token,
                     userName: userData?.name || user?.displayName || 'Member',
+                    userData: {
+                        uid: user?.uid || '',
+                        photoURL: userData?.photoURL || user?.photoURL || ''
+                    },
                     startVideoOff: true,
                     startAudioOff: false
                 };
@@ -360,30 +398,48 @@ const HuddleScreen = ({ navigation, route }) => {
                 if (metricsRef.current.callableResolvedAt) {
                     logMetric('callable_resolved_to_join_started', metricsRef.current.joinStartedAt - metricsRef.current.callableResolvedAt);
                 }
+                let activeCallObject = null;
                 let joinAttempt = 0;
-                while (joinAttempt < JOIN_MAX_ATTEMPTS) {
+                while (joinAttempt < JOIN_MAX_ATTEMPTS && !activeCallObject) {
                     joinAttempt += 1;
+                    const attemptCallObject = Daily.createCallObject({
+                        startVideoOff: true,
+                        startAudioOff: false,
+                        subscribeToTracksAutomatically: true
+                    });
+                    callObjectRef.current = attemptCallObject;
+                    attachCallHandlers(attemptCallObject);
                     try {
                         await Promise.race([
-                            callObject.join(joinOptions),
+                            attemptCallObject.join(joinOptions),
                             new Promise((_, reject) => setTimeout(() => reject(new Error('join-timeout')), JOIN_TIMEOUT_MS))
                         ]);
-                        break;
+                        activeCallObject = attemptCallObject;
                     } catch (joinError) {
                         const isTimeout = String(joinError?.message || '').toLowerCase().includes('join-timeout');
                         const shouldRetry = isTimeout && joinAttempt < JOIN_MAX_ATTEMPTS;
+                        detachCallHandlers();
+                        await safeCall(() => attemptCallObject.leave());
+                        await safeCall(() => attemptCallObject.destroy());
+                        if (callObjectRef.current === attemptCallObject) {
+                            callObjectRef.current = null;
+                        }
                         if (!shouldRetry) {
                             throw joinError;
                         }
                         console.warn(`[HUDDLE] join attempt ${joinAttempt} timed out. Retrying...`);
                     }
                 }
-                if (joinFlowCancelledRef.current || isLeavingRef.current || callObjectRef.current !== callObject) {
+                if (!activeCallObject) {
+                    throw new Error('join-timeout');
+                }
+                if (joinFlowCancelledRef.current || isLeavingRef.current || callObjectRef.current !== activeCallObject) {
                     return;
                 }
 
-                callObject.setLocalVideo(false);
-                callObject.setNativeInCallAudioMode('video');
+                activeCallObject.setLocalVideo(false);
+                activeCallObject.setNativeInCallAudioMode('video');
+                nativeCallService.setHuddleCallActive(resolvedHuddleId);
                 setIsSpeakerOn(true);
                 refreshParticipants();
                 huddleService.setActiveLocalSession({
@@ -392,7 +448,7 @@ const HuddleScreen = ({ navigation, route }) => {
                     chatName: chat?.name || 'Huddle',
                     startedBy: resolvedHostUid,
                     isHost: Boolean(hostStatus),
-                    callObject
+                    callObject: activeCallObject
                 });
             } catch (error) {
                 const isExpectedCancellation =
@@ -471,6 +527,32 @@ const HuddleScreen = ({ navigation, route }) => {
         return { visible, overflowCount: Math.max(sorted.length - MAX_VISIBLE_PARTICIPANTS, 0) };
     }, [participants]);
 
+    const rosterParticipants = useMemo(() => {
+        const normalize = (value) => String(value || '').trim().toLowerCase();
+        const joinedUidSet = new Set();
+        const joinedNameSet = new Set();
+        participants.forEach((p) => {
+            const uid = p?.userData?.uid;
+            if (uid) joinedUidSet.add(uid);
+            const name = normalize(p?.user_name);
+            if (name) joinedNameSet.add(name);
+        });
+
+        const expected = expectedParticipants.map((member) => ({
+            ...member,
+            joined: joinedUidSet.has(member.uid) || joinedNameSet.has(normalize(member.name))
+        }));
+
+        if (expected.length > 0) return expected;
+
+        return participants.map((p) => ({
+            uid: p?.userData?.uid || p?.session_id || p?.user_name || Math.random().toString(36),
+            name: p?.local ? 'You' : (p?.user_name || 'Member'),
+            photoURL: p?.userData?.photoURL || '',
+            joined: true
+        }));
+    }, [expectedParticipants, participants]);
+
     const circleNodes = useMemo(() => {
         const { visible } = participantsForUI;
         const count = Math.max(visible.length, 1);
@@ -518,8 +600,8 @@ const HuddleScreen = ({ navigation, route }) => {
     }
 
     return (
-        <ExpoLinearGradient colors={['#F6FAFF', '#EEF5FF']} style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#F6FAFF" />
+        <ExpoLinearGradient colors={[COLORS.background, '#EAF7F5']} style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.header}>
                     <TouchableOpacity
@@ -605,6 +687,26 @@ const HuddleScreen = ({ navigation, route }) => {
                         <MaterialIcons name={isHost ? 'call-end' : 'logout'} size={28} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
+
+                <View style={styles.rosterCard}>
+                    <Text style={styles.rosterTitle}>Participants</Text>
+                    <ScrollView style={styles.rosterList} showsVerticalScrollIndicator={false}>
+                        {rosterParticipants.map((member) => (
+                            <View key={member.uid} style={styles.rosterItem}>
+                                <View style={styles.rosterIdentity}>
+                                    <Avatar uri={member.photoURL} name={member.name} size={32} />
+                                    <Text style={styles.rosterName} numberOfLines={1}>{member.name}</Text>
+                                </View>
+                                <View style={[styles.rosterStatusPill, member.joined ? styles.rosterJoined : styles.rosterPending]}>
+                                    <View style={[styles.rosterDot, member.joined ? styles.rosterDotJoined : styles.rosterDotPending]} />
+                                    <Text style={[styles.rosterStatusText, member.joined ? styles.rosterStatusTextJoined : styles.rosterStatusTextPending]}>
+                                        {member.joined ? 'Joined' : 'Not joined yet'}
+                                    </Text>
+                                </View>
+                            </View>
+                        ))}
+                    </ScrollView>
+                </View>
             </SafeAreaView>
         </ExpoLinearGradient>
     );
@@ -613,7 +715,7 @@ const HuddleScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F6FAFF'
+        backgroundColor: COLORS.background
     },
     safeArea: {
         flex: 1
@@ -631,7 +733,7 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
-        borderColor: '#DCE6F3',
+        borderColor: COLORS.border,
         justifyContent: 'center',
         alignItems: 'center'
     },
@@ -639,12 +741,12 @@ const styles = StyleSheet.create({
         alignItems: 'center'
     },
     headerTitle: {
-        color: '#1E2A3D',
+        color: COLORS.text,
         fontSize: 18,
         fontWeight: '700'
     },
     headerSubtitle: {
-        color: '#5D6B82',
+        color: COLORS.gray,
         fontSize: 13,
         marginTop: 2
     },
@@ -665,7 +767,7 @@ const styles = StyleSheet.create({
         zIndex: 20
     },
     connectingText: {
-        color: '#1E2A3D',
+        color: COLORS.text,
         marginTop: 10,
         fontWeight: '600'
     },
@@ -684,7 +786,7 @@ const styles = StyleSheet.create({
     },
     participantName: {
         marginTop: 6,
-        color: '#1E2A3D',
+        color: COLORS.text,
         fontSize: 11,
         fontWeight: '600',
         maxWidth: 84,
@@ -698,7 +800,7 @@ const styles = StyleSheet.create({
         borderColor: '#D3E1F2'
     },
     overflowText: {
-        color: '#1E2A3D',
+        color: COLORS.text,
         fontWeight: '700'
     },
     controlsContainer: {
@@ -716,29 +818,103 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
-        borderColor: '#D3E1F2'
+        borderColor: COLORS.border
     },
     controlButtonActive: {
         backgroundColor: COLORS.primary
     },
     endButton: {
-        backgroundColor: '#E53935'
+        backgroundColor: COLORS.error
+    },
+    rosterCard: {
+        marginHorizontal: 14,
+        marginBottom: 10,
+        borderRadius: 14,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        paddingHorizontal: 12,
+        paddingTop: 10,
+        paddingBottom: 8
+    },
+    rosterTitle: {
+        color: COLORS.text,
+        fontSize: 14,
+        fontWeight: '700',
+        marginBottom: 8
+    },
+    rosterList: {
+        maxHeight: 132
+    },
+    rosterItem: {
+        height: 40,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 6
+    },
+    rosterIdentity: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        marginRight: 10
+    },
+    rosterName: {
+        marginLeft: 8,
+        color: COLORS.text,
+        fontWeight: '600',
+        flexShrink: 1
+    },
+    rosterStatusPill: {
+        height: 24,
+        paddingHorizontal: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    rosterJoined: {
+        backgroundColor: '#E7F7EF'
+    },
+    rosterPending: {
+        backgroundColor: '#F2F4F7'
+    },
+    rosterDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+        marginRight: 6
+    },
+    rosterDotJoined: {
+        backgroundColor: COLORS.success
+    },
+    rosterDotPending: {
+        backgroundColor: '#98A2B3'
+    },
+    rosterStatusText: {
+        fontSize: 11,
+        fontWeight: '700'
+    },
+    rosterStatusTextJoined: {
+        color: '#1A7F4B'
+    },
+    rosterStatusTextPending: {
+        color: '#667085'
     },
     errorScreen: {
         flex: 1,
-        backgroundColor: '#111111',
+        backgroundColor: COLORS.background,
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 22
     },
     errorTitle: {
-        color: '#FFFFFF',
+        color: COLORS.text,
         fontSize: 22,
         fontWeight: '700',
         marginBottom: 10
     },
     errorSubtitle: {
-        color: '#D0D0D0',
+        color: COLORS.gray,
         textAlign: 'center',
         marginBottom: 20
     },

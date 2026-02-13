@@ -21,6 +21,10 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": false
         },
+        "UIBackgroundModes": [
+          "remote-notification",
+          "voip"
+        ],
         "NSMicrophoneUsageDescription": "Empylo uses the microphone for voice and video calls.",
         "NSCameraUsageDescription": "Empylo uses the camera for video calls.",
         "NSPhotoLibraryUsageDescription": "Empylo needs access to your photos to upload images."
@@ -32,6 +36,12 @@
         "backgroundColor": "#01a89e"
       },
       "package": "com.empylo.circlesapp",
+      "permissions": [
+        "RECORD_AUDIO",
+        "READ_PHONE_STATE",
+        "CALL_PHONE",
+        "READ_CALL_LOG"
+      ],
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true
     },
@@ -42,6 +52,7 @@
       "expo-font",
       "expo-apple-authentication",
       "@daily-co/config-plugin-rn-daily-js",
+      "./plugins/withVoipCallkit",
       [
         "@react-native-google-signin/google-signin",
         {

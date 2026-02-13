@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
+import apn from 'apn';
 import { v2 as cloudinary } from 'cloudinary';
 import { seedChallengeData, seedResourceData, seedAffirmationData, seedAffirmationImages } from '../seedData';
 
@@ -1205,6 +1206,42 @@ export const updateSubscription = functions.https.onCall(async (data, context) =
 // HUDDLE (CALL) FUNCTIONS
 // ==========================================
 
+const IOS_APP_BUNDLE_ID = process.env.IOS_BUNDLE_ID || 'com.empylo.circlesapp';
+const IOS_VOIP_TOPIC = `${IOS_APP_BUNDLE_ID}.voip`;
+
+let apnVoipProviderCache: apn.Provider | null | undefined;
+
+const getApnVoipProvider = () => {
+    if (apnVoipProviderCache !== undefined) return apnVoipProviderCache;
+
+    const keyId = process.env.APNS_KEY_ID;
+    const teamId = process.env.APNS_TEAM_ID;
+    const p8Inline = process.env.APNS_KEY_P8;
+    const p8Base64 = process.env.APNS_KEY_P8_BASE64;
+
+    if (!keyId || !teamId || (!p8Inline && !p8Base64)) {
+        apnVoipProviderCache = null;
+        return apnVoipProviderCache;
+    }
+
+    let key = p8Inline || '';
+    if (!key && p8Base64) {
+        key = Buffer.from(p8Base64, 'base64').toString('utf8');
+    }
+    key = key.replace(/\\n/g, '\n');
+
+    try {
+        apnVoipProviderCache = new apn.Provider({
+            token: { key, keyId, teamId },
+            production: process.env.APNS_PRODUCTION !== 'false'
+        });
+    } catch (error) {
+        console.error('[VoIP] Failed to initialize APNs provider:', error);
+        apnVoipProviderCache = null;
+    }
+    return apnVoipProviderCache;
+};
+
 const sendHuddleNotifications = async ({
     recipientUids,
     chatId,
@@ -1212,6 +1249,8 @@ const sendHuddleNotifications = async ({
     roomUrl,
     title,
     body,
+    chatName = 'Huddle',
+    callerName = 'Incoming Huddle',
     dedupePerRecipient = false
 }: {
     recipientUids: string[];
@@ -1220,6 +1259,8 @@ const sendHuddleNotifications = async ({
     roomUrl: string;
     title: string;
     body: string;
+    chatName?: string;
+    callerName?: string;
     dedupePerRecipient?: boolean;
 }) => {
     if (!recipientUids.length) return;
@@ -1227,12 +1268,14 @@ const sendHuddleNotifications = async ({
     const uniqueRecipients = [...new Set(recipientUids)];
     const expoTokens: string[] = [];
     const fcmTokens: string[] = [];
+    const voipTokens: string[] = [];
 
     for (const ruid of uniqueRecipients) {
         const userDoc = await db.collection('users').doc(ruid).get();
         const userData = userDoc.data() || {};
         expoTokens.push(...(userData.expoPushTokens || []));
         fcmTokens.push(...(userData.fcmTokens || []));
+        voipTokens.push(...(userData.voipPushTokens || []));
     }
 
     const notificationBatch = db.batch();
@@ -1258,14 +1301,36 @@ const sendHuddleNotifications = async ({
     const payload = {
         title,
         body,
-        data: { chatId, huddleId, roomUrl, type: 'HUDDLE_STARTED' }
+        data: { chatId, huddleId, roomUrl, type: 'HUDDLE_STARTED', chatName, callerName }
     };
 
     if (fcmTokens.length > 0) {
         const messagePayload: admin.messaging.MulticastMessage = {
             tokens: fcmTokens,
             notification: { title: payload.title, body: payload.body },
-            data: payload.data
+            data: payload.data,
+            android: {
+                priority: 'high',
+                notification: {
+                    channelId: 'huddle-calls',
+                    sound: 'default',
+                    priority: 'max',
+                    defaultVibrateTimings: true
+                }
+            },
+            apns: {
+                headers: {
+                    'apns-push-type': 'alert',
+                    'apns-priority': '10',
+                    'apns-topic': 'com.empylo.circlesapp'
+                },
+                payload: {
+                    aps: {
+                        sound: 'default',
+                        'interruption-level': 'time-sensitive'
+                    }
+                }
+            }
         };
         await admin.messaging().sendEachForMulticast(messagePayload);
     }
@@ -1276,6 +1341,9 @@ const sendHuddleNotifications = async ({
             title: payload.title,
             body: payload.body,
             sound: 'default',
+            priority: 'high',
+            channelId: 'huddle-calls',
+            interruptionLevel: 'time-sensitive',
             data: payload.data
         }));
         await fetch('https://exp.host/--/api/v2/push/send', {
@@ -1283,6 +1351,34 @@ const sendHuddleNotifications = async ({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(expoMessages)
         });
+    }
+
+    const uniqueVoipTokens = [...new Set(voipTokens)].filter(Boolean);
+    const apnProvider = getApnVoipProvider();
+    if (apnProvider && uniqueVoipTokens.length > 0) {
+        const voipNotification = new apn.Notification();
+        voipNotification.topic = IOS_VOIP_TOPIC;
+        (voipNotification as any).pushType = 'voip';
+        voipNotification.priority = 10;
+        voipNotification.expiry = Math.floor(Date.now() / 1000) + 60;
+        voipNotification.contentAvailable = true;
+        voipNotification.payload = {
+            type: 'HUDDLE_STARTED',
+            chatId,
+            huddleId,
+            roomUrl,
+            chatName,
+            callerName
+        };
+
+        try {
+            const result = await apnProvider.send(voipNotification, uniqueVoipTokens);
+            if (result.failed.length > 0) {
+                console.warn('[VoIP] APNs failed sends:', result.failed.length);
+            }
+        } catch (error) {
+            console.error('[VoIP] APNs send error:', error);
+        }
     }
 };
 
@@ -1306,11 +1402,13 @@ const extractRoomNameFromUrl = (roomUrl: string) => {
 const createDailyMeetingToken = async ({
     roomName,
     isOwner,
-    userName
+    userName,
+    userId
 }: {
     roomName: string;
     isOwner: boolean;
     userName?: string | undefined;
+    userId?: string | undefined;
 }) => {
     const DAILY_API_KEY = getDailyApiKey();
     const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 6; // 6h
@@ -1325,6 +1423,7 @@ const createDailyMeetingToken = async ({
                 room_name: roomName,
                 is_owner: isOwner,
                 user_name: userName || 'Member',
+                user_id: userId || undefined,
                 exp
             }
         })
@@ -1376,7 +1475,8 @@ const createDailyRoomAndToken = async ({
     const token = await createDailyMeetingToken({
         roomName,
         isOwner: true,
-        userName
+        userName,
+        userId: uid
     });
 
     return { roomUrl, roomName, token };
@@ -1424,7 +1524,7 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
             }
         }
 
-        // Re-use active huddle for this chat if one exists.
+        // Re-use active huddle for this chat if one exists and is not stale.
         const existingSnap = await db.collection('huddles')
             .where('chatId', '==', chatId)
             .where('isActive', '==', true)
@@ -1433,25 +1533,39 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
         const existing = existingSnap.empty ? null : existingSnap.docs[0]!;
         if (existing) {
             const existingData = existing.data() || {};
-            const roomUrl = existingData.roomUrl;
-            const roomName = existingData.roomName || extractRoomNameFromUrl(roomUrl);
-            if (!roomUrl || !roomName) {
-                throw new functions.https.HttpsError('failed-precondition', 'Huddle room data is invalid.');
+            const ringStartedAtMs = existingData.ringStartedAt?.toMillis?.() || existingData.createdAt?.toMillis?.() || 0;
+            const ageMs = ringStartedAtMs > 0 ? (Date.now() - ringStartedAtMs) : Number.MAX_SAFE_INTEGER;
+            const isStale = ageMs > (15 * 60 * 1000);
+
+            if (isStale) {
+                await existing.ref.update({
+                    isActive: false,
+                    status: 'ended',
+                    endedBy: uid,
+                    endedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+            } else {
+                const roomUrl = existingData.roomUrl;
+                const roomName = existingData.roomName || extractRoomNameFromUrl(roomUrl);
+                if (!roomUrl || !roomName) {
+                    throw new functions.https.HttpsError('failed-precondition', 'Huddle room data is invalid.');
+                }
+                const callerName = context.auth.token?.name as string | undefined;
+                const token = await createDailyMeetingToken({
+                    roomName,
+                    isOwner: existingData.startedBy === uid,
+                    ...(callerName ? { userName: callerName } : {}),
+                    userId: uid
+                });
+                return {
+                    success: true,
+                    huddleId: existing.id,
+                    roomUrl,
+                    token,
+                    roomName,
+                    startedBy: existingData.startedBy || null
+                };
             }
-            const callerName = context.auth.token?.name as string | undefined;
-            const token = await createDailyMeetingToken({
-                roomName,
-                isOwner: existingData.startedBy === uid,
-                ...(callerName ? { userName: callerName } : {})
-            });
-            return {
-                success: true,
-                huddleId: existing.id,
-                roomUrl,
-                token,
-                roomName,
-                startedBy: existingData.startedBy || null
-            };
         }
 
         const callerName = context.auth.token?.name as string | undefined;
@@ -1519,6 +1633,8 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
                 roomUrl,
                 title: 'Incoming Huddle',
                 body: 'Calling... Tap to join.',
+                chatName: chatData?.name || 'Huddle',
+                callerName: callerName || 'Incoming Huddle',
                 dedupePerRecipient: true
             });
         } catch (notifyError) {
@@ -1595,7 +1711,8 @@ export const joinHuddle = functions.https.onCall(async (data, context) => {
         const token = await createDailyMeetingToken({
             roomName,
             isOwner: false,
-            ...(callerName ? { userName: callerName } : {})
+            ...(callerName ? { userName: callerName } : {}),
+            userId: uid
         });
 
         return { success: true, huddleId, roomUrl, token, roomName, startedBy: huddle.startedBy || null };
@@ -1699,6 +1816,7 @@ export const ringHuddleParticipants = functions.https.onCall(async (data, contex
         }
 
         const chatDoc = await db.collection('chats').doc(chatId).get();
+        const chatData = chatDoc.data() || {};
         const chatParticipants: string[] = chatDoc.data()?.participants || [];
         const joined: string[] = huddle.participants || [];
         const recipients = chatParticipants.filter((pid: string) => pid !== uid && !joined.includes(pid));
@@ -1710,6 +1828,7 @@ export const ringHuddleParticipants = functions.https.onCall(async (data, contex
             roomUrl,
             title: 'Incoming Huddle',
             body: 'Still ringing... Tap to join.',
+            chatName: chatData?.name || 'Huddle',
             dedupePerRecipient: true
         });
 
@@ -1751,6 +1870,7 @@ export const ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').o
             }
 
             const chatDoc = await db.collection('chats').doc(chatId).get();
+            const chatData = chatDoc.data() || {};
             const chatParticipants: string[] = chatDoc.data()?.participants || [];
             const joined: string[] = huddle.participants || [];
             const recipients = chatParticipants.filter((pid: string) => pid !== startedBy && !joined.includes(pid));
@@ -1765,6 +1885,7 @@ export const ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').o
                 roomUrl,
                 title: 'Incoming Huddle',
                 body: 'Still ringing... Tap to join.',
+                chatName: chatData?.name || 'Huddle',
                 dedupePerRecipient: true
             });
 
@@ -2214,7 +2335,9 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
                 type: 'DAILY_AFFIRMATION',
                 slot: slotIndex,
                 affirmationId: pickId,
-                createdAt: admin.firestore.FieldValue.serverTimestamp()
+                read: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
         });
         await batch.commit();
