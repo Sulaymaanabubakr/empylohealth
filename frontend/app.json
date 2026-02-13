@@ -17,6 +17,10 @@
       "bundleIdentifier": "com.empylo.circlesapp",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false
+        },
         "NSMicrophoneUsageDescription": "Empylo uses the microphone for voice and video calls.",
         "NSCameraUsageDescription": "Empylo uses the camera for video calls.",
         "NSPhotoLibraryUsageDescription": "Empylo needs access to your photos to upload images."

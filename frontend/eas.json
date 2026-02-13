@@ -7,24 +7,40 @@
         "development": {
             "developmentClient": true,
             "distribution": "internal",
+            "ios": {
+                "simulator": false
+            },
             "android": {
                 "gradleCommand": ":app:assembleDebug"
             }
         },
         "preview": {
             "distribution": "internal",
+            "ios": {
+                "simulator": false
+            },
             "android": {
                 "buildType": "apk",
                 "gradleCommand": ":app:assembleRelease"
             }
         },
         "production": {
+            "ios": {
+                "simulator": false,
+                "autoIncrement": "buildNumber"
+            },
             "android": {
                 "buildType": "apk"
             }
         }
     },
     "submit": {
-        "production": {}
+        "production": {
+            "ios": {
+                "appleId": "fredr7457@gmail.com",
+                "ascAppId": "126937675",
+                "bundleIdentifier": "com.empylo.circlesapp"
+            }
+        }
     }
 }

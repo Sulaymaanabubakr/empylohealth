@@ -9,9 +9,9 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@daily-co/config-plugin-rn-daily-js": "^0.0.11",
-    "@daily-co/react-native-daily-js": "^0.83.0",
-    "@daily-co/react-native-webrtc": "^124.0.6-daily.1",
+    "@daily-co/config-plugin-rn-daily-js": "0.0.11",
+    "@daily-co/react-native-daily-js": "0.82.0",
+    "@daily-co/react-native-webrtc": "124.0.6-daily.1",
     "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -54,11 +54,19 @@
     "doctor": {
       "appConfigFieldsNotSyncedCheck": {
         "enabled": false
+      },
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-background-timer",
+          "@daily-co/react-native-daily-js",
+          "@daily-co/react-native-webrtc"
+        ]
       }
     }
   },
   "devDependencies": {
     "babel-preset-expo": "^54.0.9",
+    "expo-doctor": "^1.17.14",
     "react-native-svg-transformer": "^1.5.2"
   }
 }
