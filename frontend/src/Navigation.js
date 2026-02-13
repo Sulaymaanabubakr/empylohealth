@@ -36,6 +36,7 @@ import LearningSessionScreen from './screens/LearningSessionScreen';
 import CreateCircleScreen from './screens/CreateCircleScreen';
 import CircleDetailScreen from './screens/CircleDetailScreen';
 import CircleAnalysisScreen from './screens/CircleAnalysisScreen';
+import PublicProfileScreen from './screens/PublicProfileScreen';
 import NotificationsSettingsScreen from './screens/NotificationsSettingsScreen';
 import PersonalInformationScreen from './screens/PersonalInformationScreen';
 import SecurityScreen from './screens/SecurityScreen';
@@ -168,6 +169,7 @@ export default function Navigation() {
                     <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
                     <Stack.Screen name="CircleDetail" component={CircleDetailScreen} />
                     <Stack.Screen name="CircleAnalysis" component={CircleAnalysisScreen} />
+                    <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
                     <Stack.Screen name="CircleSettings" component={require('./screens/CircleSettingsScreen').default} />
                     <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
                     <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />

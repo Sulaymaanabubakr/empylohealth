@@ -190,7 +190,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
     };
 
     const hasActiveHuddle = Boolean(activeHuddle?.isActive !== false && activeHuddle?.roomUrl);
-    const canStartHuddleInCircle = ['admin', 'moderator'].includes(circleRole);
+    const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
     const canShowCallButton = !chat?.isGroup || hasActiveHuddle || canStartHuddleInCircle;
 
     const handleCall = async () => {
@@ -246,6 +246,31 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 }
             }
         });
+    };
+
+    const openOrCreateDirectChat = async () => {
+        if (!selectedProfile?.uid || selectedProfile.uid === user?.uid) {
+            return null;
+        }
+
+        if (!chat?.isGroup && selectedProfile.uid === getOtherParticipantId()) {
+            return {
+                id: chat.id,
+                name: chat.name,
+                avatar: chat.avatar || chat.photoURL || chat.image || selectedProfile.photoURL || '',
+                isGroup: false,
+                participants: chat.participants || [user?.uid, selectedProfile.uid]
+            };
+        }
+
+        const result = await chatService.createDirectChat(selectedProfile.uid);
+        return {
+            id: result?.chatId,
+            name: selectedProfile.name || 'Member',
+            avatar: selectedProfile.photoURL || '',
+            isGroup: false,
+            participants: [user?.uid, selectedProfile.uid]
+        };
     };
 
     const renderMessage = ({ item }) => {
@@ -393,11 +418,58 @@ const ChatDetailScreen = ({ navigation, route }) => {
                         </Text>
 
                         <View style={styles.profileActions}>
+                            {selectedProfile?.uid !== user?.uid && (
+                                <>
+                                    <TouchableOpacity
+                                        style={[styles.profileActionBtn, styles.profileActionPrimary]}
+                                        onPress={async () => {
+                                            try {
+                                                const directChat = await openOrCreateDirectChat();
+                                                if (!directChat) return;
+                                                setProfileModalVisible(false);
+                                                navigation.navigate('ChatDetail', { chat: directChat });
+                                            } catch (error) {
+                                                showModal({ type: 'error', title: 'Error', message: 'Unable to open chat right now.' });
+                                            }
+                                        }}
+                                    >
+                                        <Text style={styles.profileActionPrimaryText}>Message</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.profileActionBtn, styles.profileActionSecondary]}
+                                        onPress={async () => {
+                                            try {
+                                                const directChat = await openOrCreateDirectChat();
+                                                if (!directChat) return;
+                                                setProfileModalVisible(false);
+                                                navigation.navigate('Huddle', {
+                                                    chat: directChat,
+                                                    mode: 'start',
+                                                    callTapTs: Date.now()
+                                                });
+                                            } catch (error) {
+                                                showModal({ type: 'error', title: 'Error', message: 'Unable to start call right now.' });
+                                            }
+                                        }}
+                                    >
+                                        <Text style={styles.profileActionSecondaryText}>Call</Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
                             <TouchableOpacity
-                                style={[styles.profileActionBtn, styles.profileActionPrimary]}
+                                style={[styles.profileActionBtn, styles.profileActionSecondary]}
+                                onPress={() => {
+                                    setProfileModalVisible(false);
+                                    navigation.navigate('PublicProfile', { uid: selectedProfile?.uid });
+                                }}
+                            >
+                                <Text style={styles.profileActionSecondaryText}>View Profile</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.profileActionBtn, styles.profileActionGhost]}
                                 onPress={() => setProfileModalVisible(false)}
                             >
-                                <Text style={styles.profileActionPrimaryText}>Close</Text>
+                                <Text style={styles.profileActionGhostText}>Close</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -616,7 +688,8 @@ const styles = StyleSheet.create({
     },
     profileActions: {
         width: '100%',
-        marginTop: 18
+        marginTop: 18,
+        gap: 10
     },
     profileActionBtn: {
         borderRadius: 12,
@@ -626,6 +699,20 @@ const styles = StyleSheet.create({
     },
     profileActionPrimary: {
         backgroundColor: COLORS.primary
+    },
+    profileActionSecondary: {
+        backgroundColor: '#E9F7F6'
+    },
+    profileActionSecondaryText: {
+        color: COLORS.primary,
+        fontWeight: '700'
+    },
+    profileActionGhost: {
+        backgroundColor: '#F3F6FA'
+    },
+    profileActionGhostText: {
+        color: '#6A7385',
+        fontWeight: '700'
     },
     profileActionPrimaryText: {
         color: '#FFFFFF',

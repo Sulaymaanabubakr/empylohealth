@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Share, Dimensions, ImageBackground, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Share, Dimensions, ImageBackground, ActivityIndicator, Image, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
+import { chatService } from '../services/api/chatService';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
@@ -30,6 +31,8 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const [requestStatus, setRequestStatus] = useState('none'); // 'none' | 'pending'
     const [events, setEvents] = useState([]);
     const [showAllMembers, setShowAllMembers] = useState(false);
+    const [memberModalVisible, setMemberModalVisible] = useState(false);
+    const [selectedMember, setSelectedMember] = useState(null);
 
     // Refresh circle data locally to keep member list updated
     const refreshCircle = async () => {
@@ -229,6 +232,42 @@ const CircleDetailScreen = ({ navigation, route }) => {
         }
     };
 
+    const openMemberModal = (member) => {
+        setSelectedMember(member);
+        setMemberModalVisible(true);
+    };
+
+    const openDirectChatWithMember = async (startCall = false) => {
+        if (!selectedMember?.id || selectedMember.id === user?.uid) {
+            setMemberModalVisible(false);
+            return;
+        }
+
+        try {
+            const result = await chatService.createDirectChat(selectedMember.id);
+            const directChat = {
+                id: result?.chatId,
+                name: selectedMember.name || 'Member',
+                avatar: selectedMember.image || '',
+                isGroup: false,
+                participants: [user?.uid, selectedMember.id]
+            };
+            setMemberModalVisible(false);
+            if (startCall) {
+                navigation.navigate('Huddle', {
+                    chat: directChat,
+                    mode: 'start',
+                    callTapTs: Date.now()
+                });
+                return;
+            }
+            navigation.navigate('ChatDetail', { chat: directChat });
+        } catch (error) {
+            setMemberModalVisible(false);
+            showModal({ type: 'error', title: 'Error', message: 'Unable to open chat right now.' });
+        }
+    };
+
     if (!circle) {
         return (
             <View style={styles.container}>
@@ -268,7 +307,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
     );
 
     const hasActiveHuddle = Boolean(circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl);
-    const canStartHuddle = ['admin', 'moderator'].includes(role);
+    const canStartHuddle = ['creator', 'admin', 'moderator'].includes(role);
     const canSeeHuddleAction = hasActiveHuddle || canStartHuddle;
 
     return (
@@ -476,7 +515,12 @@ const CircleDetailScreen = ({ navigation, route }) => {
                             {memberProfiles
                                 .slice(0, isMember ? (showAllMembers ? undefined : 5) : 5)
                                 .map((member) => (
-                                <View key={member.id} style={styles.memberRow}>
+                                <TouchableOpacity
+                                    key={member.id}
+                                    style={styles.memberRow}
+                                    activeOpacity={0.85}
+                                    onPress={() => openMemberModal(member)}
+                                >
                                     <Avatar uri={member.image} name={member.name} size={48} />
                                     <View style={styles.memberInfo}>
                                         <Text style={styles.memberName}>{member.name}</Text>
@@ -507,7 +551,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                             </Text>
                                         </View>
                                     )}
-                                </View>
+                                </TouchableOpacity>
                                 ))}
                             {!isMember && memberProfiles.length > 5 && (
                                 <Text style={styles.moreMembersText}>+ {(memberProfiles.length - 5)} more members</Text>
@@ -572,6 +616,56 @@ const CircleDetailScreen = ({ navigation, route }) => {
                 </View>
             )}
 
+            <Modal
+                visible={memberModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setMemberModalVisible(false)}
+            >
+                <View style={styles.profileOverlay}>
+                    <TouchableOpacity style={styles.profileBackdrop} onPress={() => setMemberModalVisible(false)} />
+                    <View style={styles.profileModal}>
+                        <Avatar uri={selectedMember?.image || ''} name={selectedMember?.name || 'Member'} size={76} />
+                        <Text style={styles.profileName}>{selectedMember?.name || 'Member'}</Text>
+                        <Text style={styles.profileRole}>{selectedMember?.role || 'Member'}</Text>
+
+                        <View style={styles.profileActions}>
+                            {selectedMember?.id !== user?.uid && (
+                                <>
+                                    <TouchableOpacity
+                                        style={[styles.profileActionBtn, styles.profileActionPrimary]}
+                                        onPress={() => openDirectChatWithMember(false)}
+                                    >
+                                        <Text style={styles.profileActionPrimaryText}>Message</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.profileActionBtn, styles.profileActionSecondary]}
+                                        onPress={() => openDirectChatWithMember(true)}
+                                    >
+                                        <Text style={styles.profileActionSecondaryText}>Call</Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
+                            <TouchableOpacity
+                                style={[styles.profileActionBtn, styles.profileActionSecondary]}
+                                onPress={() => {
+                                    setMemberModalVisible(false);
+                                    navigation.navigate('PublicProfile', { uid: selectedMember?.id });
+                                }}
+                            >
+                                <Text style={styles.profileActionSecondaryText}>View Profile</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.profileActionBtn, styles.profileActionGhost]}
+                                onPress={() => setMemberModalVisible(false)}
+                            >
+                                <Text style={styles.profileActionGhostText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
 
         </View>
     );
@@ -616,6 +710,72 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    profileOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24
+    },
+    profileBackdrop: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0
+    },
+    profileModal: {
+        width: '100%',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 18,
+        paddingHorizontal: 20,
+        paddingVertical: 22,
+        alignItems: 'center'
+    },
+    profileName: {
+        fontSize: 19,
+        fontWeight: '700',
+        color: '#1A1A1A',
+        marginTop: 12
+    },
+    profileRole: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: COLORS.primary,
+        marginTop: 4
+    },
+    profileActions: {
+        width: '100%',
+        marginTop: 18,
+        gap: 10
+    },
+    profileActionBtn: {
+        borderRadius: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    profileActionPrimary: {
+        backgroundColor: COLORS.primary
+    },
+    profileActionPrimaryText: {
+        color: '#FFFFFF',
+        fontWeight: '700'
+    },
+    profileActionSecondary: {
+        backgroundColor: '#E9F7F6'
+    },
+    profileActionSecondaryText: {
+        color: COLORS.primary,
+        fontWeight: '700'
+    },
+    profileActionGhost: {
+        backgroundColor: '#F3F6FA'
+    },
+    profileActionGhostText: {
+        color: '#6A7385',
+        fontWeight: '700'
     },
     headerContent: {
         alignItems: 'center',
