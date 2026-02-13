@@ -33,8 +33,12 @@ yarn-error.*
 # local env files
 .env*.local
 .env
+.env.backup
+.env.backup.*
 backend/.env
 backend/.env.yaml
+backend/.env.backup
+backend/.env.backup.*
 *.env.yaml
 
 # typescript
@@ -42,4 +46,3 @@ backend/.env.yaml
 
 # generated native folders
 /ios
-
