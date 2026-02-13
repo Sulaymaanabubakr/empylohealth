@@ -64,10 +64,10 @@ const SignUpScreen = ({ navigation }) => {
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                     <View style={styles.header}>
                         <Image
                             source={require('../assets/images/header_shape.png')}

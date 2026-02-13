@@ -1449,7 +1449,8 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
                 huddleId: existing.id,
                 roomUrl,
                 token,
-                roomName
+                roomName,
+                startedBy: existingData.startedBy || null
             };
         }
 
@@ -1524,7 +1525,7 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
             console.error("Error sending huddle notifications:", notifyError);
         }
 
-        return { success: true, huddleId: huddleRef.id, roomUrl, token, roomName };
+        return { success: true, huddleId: huddleRef.id, roomUrl, token, roomName, startedBy: uid };
     } catch (error) {
         console.error("Error starting huddle:", error);
         if (error instanceof functions.https.HttpsError) {
@@ -1597,7 +1598,7 @@ export const joinHuddle = functions.https.onCall(async (data, context) => {
             ...(callerName ? { userName: callerName } : {})
         });
 
-        return { success: true, huddleId, roomUrl, token, roomName };
+        return { success: true, huddleId, roomUrl, token, roomName, startedBy: huddle.startedBy || null };
     } catch (error) {
         console.error('Error joining huddle:', error);
         if (error instanceof functions.https.HttpsError) throw error;
@@ -1682,7 +1683,7 @@ export const ringHuddleParticipants = functions.https.onCall(async (data, contex
         if (huddle.startedBy !== uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the caller can trigger ringing.');
         }
-        if (huddle.isActive === false || !['ringing', 'active'].includes(huddle.status)) {
+        if (huddle.isActive === false || huddle.status !== 'ringing') {
             return { success: true, skipped: true, reason: 'not-ringable' };
         }
 
@@ -1708,7 +1709,7 @@ export const ringHuddleParticipants = functions.https.onCall(async (data, contex
             huddleId,
             roomUrl,
             title: 'Incoming Huddle',
-            body: huddle.status === 'active' ? 'Call in progress... Tap to join.' : 'Still ringing... Tap to join.',
+            body: 'Still ringing... Tap to join.',
             dedupePerRecipient: true
         });
 
@@ -1733,7 +1734,7 @@ export const ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').o
 
         for (const huddleDoc of snapshot.docs) {
             const huddle = huddleDoc.data() || {};
-            if (!['ringing', 'active'].includes(huddle.status)) {
+            if (huddle.status !== 'ringing') {
                 continue;
             }
 
@@ -1763,7 +1764,7 @@ export const ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').o
                 huddleId: huddleDoc.id,
                 roomUrl,
                 title: 'Incoming Huddle',
-                body: huddle.status === 'active' ? 'Call in progress... Tap to join.' : 'Still ringing... Tap to join.',
+                body: 'Still ringing... Tap to join.',
                 dedupePerRecipient: true
             });
 

@@ -138,7 +138,7 @@ const SupportGroupsScreen = () => {
 
             {/* Groups List */}
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
                 <FlatList
@@ -146,6 +146,7 @@ const SupportGroupsScreen = () => {
                     renderItem={renderGroupCard}
                     keyExtractor={item => item.id}
                     contentContainerStyle={styles.listContent}
+                    keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={() => (
                         <View style={styles.emptyState}>

@@ -22,6 +22,7 @@
     "@react-navigation/native-stack": "^7.9.0",
     "expo": "~54.0.33",
     "expo-apple-authentication": "~8.0.8",
+    "expo-av": "~16.0.8",
     "expo-crypto": "~15.0.8",
     "expo-dev-client": "~6.0.20",
     "expo-device": "~8.0.10",
@@ -67,6 +68,7 @@
   "devDependencies": {
     "babel-preset-expo": "^54.0.9",
     "expo-doctor": "^1.17.14",
-    "react-native-svg-transformer": "^1.5.2"
+    "react-native-svg-transformer": "^1.5.2",
+    "react-refresh": "^0.14.2"
   }
 }

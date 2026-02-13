@@ -683,7 +683,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
             <Modal visible={showScheduleModal} animationType="slide" transparent>
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={styles.modalOverlay}
                 >
                     <View style={styles.modalContent}>
@@ -719,7 +719,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
             <Modal visible={showEditModal} animationType="fade" transparent>
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={styles.modalOverlay}
                 >
                     <View style={styles.modalContent}>
@@ -757,7 +757,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             {/* Report Modal */}
             <Modal visible={showReportModal} animationType="slide" transparent>
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={styles.modalOverlay}
                 >
                     <View style={styles.modalContent}>

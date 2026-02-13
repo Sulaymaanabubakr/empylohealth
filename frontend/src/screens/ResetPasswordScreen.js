@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
@@ -49,8 +49,12 @@ const ResetPasswordScreen = ({ navigation, route }) => {
                 <Ionicons name="chevron-back" size={24} color="black" />
             </TouchableOpacity>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <Text style={styles.title}>Reset Password</Text>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+            >
+                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                    <Text style={styles.title}>Reset Password</Text>
 
                 <Text style={styles.infoText}>
                     Your new password must be different from previously used password
@@ -74,13 +78,14 @@ const ResetPasswordScreen = ({ navigation, route }) => {
                     onChangeText={setConfirmPassword}
                 />
 
-                <Button
-                    title={isSubmitting ? "Resetting..." : "Reset Password"}
-                    onPress={handleReset}
-                    style={styles.resetButton}
-                    disabled={isSubmitting}
-                />
-            </ScrollView>
+                    <Button
+                        title={isSubmitting ? "Resetting..." : "Reset Password"}
+                        onPress={handleReset}
+                        style={styles.resetButton}
+                        disabled={isSubmitting}
+                    />
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };

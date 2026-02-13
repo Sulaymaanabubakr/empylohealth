@@ -38,10 +38,10 @@ const ForgotPasswordScreen = ({ navigation }) => {
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
-                <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+                <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                     <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('SignIn')}

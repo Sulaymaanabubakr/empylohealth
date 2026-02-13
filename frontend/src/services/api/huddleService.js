@@ -2,6 +2,19 @@
 import { functions } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 
+let activeLocalSession = null;
+const sessionListeners = new Set();
+
+const emitSessionChange = () => {
+    sessionListeners.forEach((listener) => {
+        try {
+            listener(activeLocalSession);
+        } catch {
+            // ignore listener errors
+        }
+    });
+};
+
 export const huddleService = {
     /**
      * Start a new Call/Huddle
@@ -70,5 +83,26 @@ export const huddleService = {
             console.error("Error updating huddle:", error);
             throw error;
         }
+    },
+
+    setActiveLocalSession: (session) => {
+        activeLocalSession = session || null;
+        emitSessionChange();
+    },
+
+    getActiveLocalSession: () => activeLocalSession,
+
+    clearActiveLocalSession: () => {
+        activeLocalSession = null;
+        emitSessionChange();
+    },
+
+    subscribeToActiveLocalSession: (listener) => {
+        if (typeof listener !== 'function') return () => {};
+        sessionListeners.add(listener);
+        listener(activeLocalSession);
+        return () => {
+            sessionListeners.delete(listener);
+        };
     }
 };

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
-import { Linking, Platform, View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Pressable, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import MainTabs from './navigation/MainTabs';
 
 import SplashScreen from './screens/SplashScreen';
@@ -43,61 +42,31 @@ import SecurityScreen from './screens/SecurityScreen';
 import TellAFriendScreen from './screens/TellAFriendScreen';
 import FAQScreen from './screens/FAQScreen';
 import { navigationRef, flushPendingNavigation } from './navigation/navigationRef';
+import { huddleService } from './services/api/huddleService';
 
-const PERSISTENCE_KEY = 'NAVIGATION_STATE_V1';
 const Stack = createNativeStackNavigator();
 
 export default function Navigation() {
     const { user, userData, loading } = useAuth();
     const [isReady, setIsReady] = useState(false);
-    const [initialState, setInitialState] = useState();
-
-    // Helper: Check if saved state belongs to authenticated navigator
-    const isAuthenticatedState = (state) => {
-        if (!state?.routes) return false;
-        const authRoutes = ['Dashboard', 'Profile', 'Explore', 'ChatList', 'Notifications',
-            'CheckIn', 'CircleDetail', 'Affirmations', 'Stats', 'Assessment'];
-        return state.routes.some(r => authRoutes.includes(r.name));
-    };
+    const [activeHuddleSession, setActiveHuddleSession] = useState(null);
+    const [currentRouteName, setCurrentRouteName] = useState('');
 
     useEffect(() => {
-        const restoreState = async () => {
-            try {
-                const initialUrl = await Linking.getInitialURL();
+        const unsubscribe = huddleService.subscribeToActiveLocalSession((session) => {
+            setActiveHuddleSession(session || null);
+        });
+        return unsubscribe;
+    }, []);
 
-                if (Platform.OS !== 'web' && initialUrl == null) {
-                    const savedStateString = await AsyncStorage.getItem(PERSISTENCE_KEY);
-                    const state = savedStateString ? JSON.parse(savedStateString) : undefined;
-
-                    if (state !== undefined) {
-                        // Only restore state if it matches current auth context
-                        // This prevents restoring Onboarding routes when user is logged in
-                        const savedIsAuth = isAuthenticatedState(state);
-                        const userIsLoggedIn = !!user;
-
-                        if (savedIsAuth === userIsLoggedIn) {
-                            console.log('[PERF] Navigation: Restoring compatible state');
-                            setInitialState(state);
-                        } else {
-                            // Mismatch: don't restore, but DON'T delete either.
-                            // A valid state will be saved once user navigates in the correct stack.
-                            console.log('[PERF] Navigation: Skipping incompatible state (saved:', savedIsAuth, 'current:', userIsLoggedIn, ')');
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to restore navigation state', e);
-            } finally {
-                console.log('[PERF] Navigation: isReady set to true');
-                setIsReady(true);
-            }
-        };
-
-        // Wait for auth to resolve definitively before restoring state
-        if (!isReady && !loading) {
-            restoreState();
+    useEffect(() => {
+        // Do not restore persisted navigation state on cold launch.
+        // Warm resume (app minimized) naturally preserves the in-memory screen.
+        if (!loading && !isReady) {
+            console.log('[PERF] Navigation: isReady set to true');
+            setIsReady(true);
         }
-    }, [isReady, user, loading]);
+    }, [isReady, loading]);
 
     if (!isReady) {
         console.log('[PERF] Navigation: Waiting for isReady...');
@@ -123,64 +92,115 @@ export default function Navigation() {
 
     console.log('[Navigation] Rendering. User:', user?.email, 'ProfileComplete:', isProfileComplete);
 
+    const showHuddleBanner = !!activeHuddleSession && currentRouteName !== 'Huddle';
+
     return (
-        <NavigationContainer
-            ref={navigationRef}
-            initialState={initialState}
-            onReady={flushPendingNavigation}
-            onStateChange={(state) => {
-                // Only persist navigation state when user is authenticated
-                // This prevents saving unauthenticated "flicker" states
-                if (user) {
-                    AsyncStorage.setItem(PERSISTENCE_KEY, JSON.stringify(state));
-                }
-            }}
-        >
-            {!user ? (
-                <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
-                    <Stack.Screen name="Splash" component={SplashScreen} />
-                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                    <Stack.Screen name="SignIn" component={SignInScreen} />
-                    <Stack.Screen name="SignUp" component={SignUpScreen} />
-                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-                    <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-                </Stack.Navigator>
-            ) : !isProfileComplete ? (
-                <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
-                    <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-                </Stack.Navigator>
-            ) : (
-                <Stack.Navigator initialRouteName="MainTabs" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
-                    <Stack.Screen name="MainTabs" component={MainTabs} />
-                    {/* Dashboard, Explore, ChatList, Profile moved to MainTabs */}
+        <View style={styles.root}>
+            <NavigationContainer
+                ref={navigationRef}
+                onReady={() => {
+                    flushPendingNavigation();
+                    setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
+                }}
+                onStateChange={() => {
+                    setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
+                }}
+            >
+                {!user ? (
+                    <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
+                        <Stack.Screen name="Splash" component={SplashScreen} />
+                        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                        <Stack.Screen name="SignIn" component={SignInScreen} />
+                        <Stack.Screen name="SignUp" component={SignUpScreen} />
+                        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+                        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+                    </Stack.Navigator>
+                ) : !isProfileComplete ? (
+                    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
+                        <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+                    </Stack.Navigator>
+                ) : (
+                    <Stack.Navigator initialRouteName="MainTabs" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
+                        <Stack.Screen name="MainTabs" component={MainTabs} />
+                        {/* Dashboard, Explore, ChatList, Profile moved to MainTabs */}
 
-                    <Stack.Screen name="Notifications" component={NotificationsScreen} />
-                    <Stack.Screen name="CheckIn" component={CheckInScreen} />
-                    {/* <Stack.Screen name="Explore" component={ExploreScreen} /> Removing duplicate */}
-                    <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
-                    <Stack.Screen name="Affirmations" component={AffirmationsScreen} />
-                    <Stack.Screen name="SupportGroups" component={SupportGroupsScreen} />
-                    {/* <Stack.Screen name="ChatList" component={ChatListScreen} /> Removing duplicate */}
-                    <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
-                    <Stack.Screen name="Huddle" component={HuddleScreen} options={{ presentation: 'modal' }} />
-                    {/* <Stack.Screen name="Profile" component={ProfileScreen} /> Removing duplicate */}
-                    <Stack.Screen name="LearningSession" component={LearningSessionScreen} />
+                        <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                        <Stack.Screen name="CheckIn" component={CheckInScreen} />
+                        {/* <Stack.Screen name="Explore" component={ExploreScreen} /> Removing duplicate */}
+                        <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
+                        <Stack.Screen name="Affirmations" component={AffirmationsScreen} />
+                        <Stack.Screen name="SupportGroups" component={SupportGroupsScreen} />
+                        {/* <Stack.Screen name="ChatList" component={ChatListScreen} /> Removing duplicate */}
+                        <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+                        <Stack.Screen name="Huddle" component={HuddleScreen} options={{ presentation: 'modal' }} />
+                        {/* <Stack.Screen name="Profile" component={ProfileScreen} /> Removing duplicate */}
+                        <Stack.Screen name="LearningSession" component={LearningSessionScreen} />
 
-                    <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
-                    <Stack.Screen name="CircleDetail" component={CircleDetailScreen} />
-                    <Stack.Screen name="CircleAnalysis" component={CircleAnalysisScreen} />
-                    <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
-                    <Stack.Screen name="CircleSettings" component={require('./screens/CircleSettingsScreen').default} />
-                    <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
-                    <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />
-                    <Stack.Screen name="Security" component={SecurityScreen} />
-                    <Stack.Screen name="TellAFriend" component={TellAFriendScreen} />
-                    <Stack.Screen name="FAQ" component={FAQScreen} />
-                    <Stack.Screen name="Assessment" component={AssessmentScreen} />
-                    <Stack.Screen name="NineIndex" component={NineIndexScreen} />
-                    <Stack.Screen name="Stats" component={StatsScreen} />
-                </Stack.Navigator>
+                        <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
+                        <Stack.Screen name="CircleDetail" component={CircleDetailScreen} />
+                        <Stack.Screen name="CircleAnalysis" component={CircleAnalysisScreen} />
+                        <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
+                        <Stack.Screen name="CircleSettings" component={require('./screens/CircleSettingsScreen').default} />
+                        <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
+                        <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />
+                        <Stack.Screen name="Security" component={SecurityScreen} />
+                        <Stack.Screen name="TellAFriend" component={TellAFriendScreen} />
+                        <Stack.Screen name="FAQ" component={FAQScreen} />
+                        <Stack.Screen name="Assessment" component={AssessmentScreen} />
+                        <Stack.Screen name="NineIndex" component={NineIndexScreen} />
+                        <Stack.Screen name="Stats" component={StatsScreen} />
+                    </Stack.Navigator>
+                )}
+            </NavigationContainer>
+
+            {showHuddleBanner && (
+                <Pressable
+                    style={styles.huddleBanner}
+                    onPress={() => {
+                        navigationRef.navigate('Huddle', {
+                            mode: 'join',
+                            chatId: activeHuddleSession?.chatId,
+                            huddleId: activeHuddleSession?.huddleId,
+                            chat: {
+                                id: activeHuddleSession?.chatId,
+                                name: activeHuddleSession?.chatName || 'Huddle',
+                                isGroup: true
+                            }
+                        });
+                    }}
+                >
+                    <Text style={styles.huddleBannerTitle}>Huddle in progress</Text>
+                    <Text style={styles.huddleBannerSubtitle}>Tap to return to call</Text>
+                </Pressable>
             )}
-        </NavigationContainer>
+        </View>
     );
 };
+
+const styles = StyleSheet.create({
+    root: {
+        flex: 1
+    },
+    huddleBanner: {
+        position: 'absolute',
+        left: 14,
+        right: 14,
+        bottom: 26,
+        backgroundColor: '#111111',
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderWidth: 1,
+        borderColor: '#2E2E2E'
+    },
+    huddleBannerTitle: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700'
+    },
+    huddleBannerSubtitle: {
+        color: '#D0D0D0',
+        fontSize: 12,
+        marginTop: 2
+    }
+});

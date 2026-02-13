@@ -87,11 +87,12 @@ const ExploreScreen = ({ navigation }) => {
             </View>
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
                 <ScrollView
                     showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
                     contentContainerStyle={styles.scrollContent}
                     refreshControl={
                         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />

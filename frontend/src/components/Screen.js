@@ -12,10 +12,15 @@ export const Screen = ({ children, hero }) => {
       <View style={styles.backgroundBlobTwo} />
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
-          <ScrollView contentContainerStyle={styles.scroll}>
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          >
             {hero}
             {children}
           </ScrollView>

@@ -47,11 +47,48 @@ const calculateCircleRating = (circle) => {
     return Math.min(score, 5.0).toFixed(1); // Cap at 5.0
 };
 
-const getWellbeingRingColor = (score) => {
-    if (typeof score !== 'number') return '#BDBDBD';
-    if (score >= 70) return '#2E7D32'; // green
-    if (score >= 40) return '#F9A825'; // amber
-    return '#C62828'; // red
+const getWellbeingRingColor = (memberWellbeing) => {
+    const rawScore = memberWellbeing?.wellbeingScore;
+    const score =
+        typeof rawScore === 'number'
+            ? rawScore
+            : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
+    const label = String(memberWellbeing?.wellbeingLabel || memberWellbeing?.wellbeingStatus || '').toLowerCase();
+
+    // Prefer explicit labels/status where available.
+    if (label.includes('struggl')) return '#C62828'; // red
+    if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32'; // green
+
+    // Fall back to score if present.
+    if (Number.isFinite(score)) {
+        if (score >= 70) return '#2E7D32'; // green
+        return '#C62828'; // red
+    }
+
+    // Unknown/no recent wellbeing data.
+    return '#BDBDBD';
+};
+
+const resolveMemberWellbeing = (userData = {}) => {
+    const directScore = userData?.wellbeingScore;
+    const statsScore = userData?.stats?.overallScore;
+    const rawScore = directScore ?? statsScore;
+    const parsedScore =
+        typeof rawScore === 'number'
+            ? rawScore
+            : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
+
+    const directLabel = userData?.wellbeingLabel || userData?.wellbeingStatus;
+    let label = directLabel || '';
+    if (!label && Number.isFinite(parsedScore)) {
+        if (parsedScore >= 70) label = 'Doing Well';
+        else label = 'Struggling';
+    }
+
+    return {
+        score: Number.isFinite(parsedScore) ? parsedScore : null,
+        label
+    };
 };
 
 const CircularProgress = ({ score, label }) => {
@@ -266,10 +303,13 @@ const DashboardScreen = ({ navigation }) => {
                 const memberDoc = await getDoc(doc(db, 'users', memberId));
                 if (memberDoc.exists()) {
                     const data = memberDoc.data();
+                    const wellbeing = resolveMemberWellbeing(data);
                     profiles[memberId] = {
                         name: data.name || data.displayName || 'Member',
                         photoURL: data.photoURL || '',
-                        wellbeingScore: data.wellbeingScore || 0
+                        wellbeingScore: wellbeing.score,
+                        wellbeingLabel: wellbeing.label,
+                        wellbeingStatus: data.wellbeingStatus || ''
                     };
                 }
             }
@@ -410,14 +450,14 @@ const DashboardScreen = ({ navigation }) => {
                                                         {
                                                             zIndex: 10 - index,
                                                             marginLeft: index === 0 ? 0 : -18,
-                                                            borderColor: getWellbeingRingColor(profile.wellbeingScore)
+                                                            borderColor: getWellbeingRingColor(profile)
                                                         }
                                                     ]}
                                                 >
                                                     <Avatar
                                                         uri={profile.photoURL}
                                                         name={profile.name}
-                                                        size={42}
+                                                        size={40}
                                                     />
                                                 </View>
                                             );
@@ -796,9 +836,14 @@ const styles = StyleSheet.create({
         // Removed paddingLeft to ensure true center
     },
     memberAvatarContainer: {
+        width: 48,
+        height: 48,
         borderWidth: 3,
         borderColor: '#BDBDBD',
         borderRadius: 24,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center',
         elevation: 6,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 3 },

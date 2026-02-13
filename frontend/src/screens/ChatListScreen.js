@@ -109,7 +109,7 @@ const ChatListScreen = ({ navigation }) => {
                 )}
             </View>
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                 <FlatList
                     data={filteredChats}
                     renderItem={renderItem}
@@ -119,6 +119,7 @@ const ChatListScreen = ({ navigation }) => {
                         filteredChats.length === 0 && styles.listContentEmpty
                     ]}
                     showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
                     ListEmptyComponent={
                         <View style={styles.emptyWrap}>
