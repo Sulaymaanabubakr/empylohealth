@@ -8,6 +8,7 @@ import Svg, { Circle, G, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AssessmentModal from '../components/AssessmentModal';
+import { weeklyAssessment } from '../services/assessments/weeklyAssessment';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
 import { db } from '../services/firebaseConfig';
@@ -225,6 +226,7 @@ const DashboardScreen = ({ navigation }) => {
             const today = new Date();
             const pendingWeekly = await AsyncStorage.getItem('pendingWeeklyAssessment');
             const lastWeekly = await AsyncStorage.getItem('lastWeeklyAssessmentDate');
+            const lastWeeklyKey = await AsyncStorage.getItem('lastWeeklyAssessmentWeekKey');
             const lastDaily = await AsyncStorage.getItem('lastDailyCheckInDate');
 
             if (pendingWeekly === 'true') {
@@ -233,14 +235,18 @@ const DashboardScreen = ({ navigation }) => {
                 return;
             }
 
-            // Check Weekly (every 7 days)
-            let weeklyDue = true;
-            if (lastWeekly) {
-                const lastWeeklyDate = new Date(lastWeekly);
-                const diffTime = Math.abs(today - lastWeeklyDate);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                if (diffDays < 7) weeklyDue = false;
+            // Weekly resets on Monday (ISO week), consistent for everyone (fixed timezone).
+            // Migration: if legacy lastWeeklyAssessmentDate exists, derive and store its week key once.
+            let storedKey = lastWeeklyKey;
+            if (!storedKey && lastWeekly) {
+                const migratedKey = weeklyAssessment.getWeekKeyForIsoString(lastWeekly);
+                if (migratedKey) {
+                    await AsyncStorage.setItem('lastWeeklyAssessmentWeekKey', migratedKey);
+                    storedKey = migratedKey;
+                }
             }
+            const currentKey = weeklyAssessment.getCurrentWeekKey(today);
+            const weeklyDue = !storedKey || storedKey !== currentKey;
 
             if (weeklyDue) {
                 setAssessmentType('weekly');

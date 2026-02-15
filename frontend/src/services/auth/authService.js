@@ -86,6 +86,7 @@ export const authService = {
             await AsyncStorage.multiRemove([
                 'pendingWeeklyAssessment',
                 'lastWeeklyAssessmentDate',
+                'lastWeeklyAssessmentWeekKey',
                 'lastDailyCheckInDate'
             ]);
             await signOut(auth);

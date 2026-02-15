@@ -5,6 +5,7 @@ import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Button from '../components/Button';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { assessmentService } from '../services/api/assessmentService';
+import { weeklyAssessment } from '../services/assessments/weeklyAssessment';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NineIndexScreen = ({ navigation }) => {
@@ -95,6 +96,7 @@ const NineIndexScreen = ({ navigation }) => {
             const now = new Date();
             await AsyncStorage.multiSet([
                 ['lastWeeklyAssessmentDate', now.toISOString()],
+                ['lastWeeklyAssessmentWeekKey', weeklyAssessment.getCurrentWeekKey(now)],
                 ['lastDailyCheckInDate', now.toDateString()]
             ]);
             await AsyncStorage.removeItem('pendingWeeklyAssessment');
