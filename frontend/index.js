@@ -1,47 +1,43 @@
-import { registerRootComponent } from 'expo';
-import 'react-native-get-random-values';
-import { NativeModules, LogBox } from 'react-native';
+// IMPORTANT:
+// Keep this file CommonJS-only. Metro hoists ESM imports which can cause Daily/WebRTC
+// to evaluate before we can patch NativeModules for RN's NativeEventEmitter checks.
 console.log('[PERF] index.js: Module evaluating');
 
-// Some native dependencies used by huddles don't implement listener stubs expected by RN 0.81.
-// Add no-op methods to all loaded native modules that miss these methods.
-const ensureNativeEventEmitterStubs = () => {
+require('react-native-get-random-values');
+
+const { NativeModules } = require('react-native');
+
+const ensureEventEmitterCompatibility = () => {
   const modules = NativeModules || {};
 
-  const ensureModule = (nativeModule) => {
-    if (!nativeModule || typeof nativeModule !== 'object') return;
-    if (typeof nativeModule.addListener !== 'function') {
-      nativeModule.addListener = () => {};
-    }
-    if (typeof nativeModule.removeListeners !== 'function') {
-      nativeModule.removeListeners = () => {};
-    }
+  const wrapForEventEmitter = (nativeModule) => {
+    if (!nativeModule || (typeof nativeModule !== 'object' && typeof nativeModule !== 'function')) return nativeModule;
+    const hasAdd = typeof nativeModule.addListener === 'function';
+    const hasRemove = typeof nativeModule.removeListeners === 'function';
+    if (hasAdd && hasRemove) return nativeModule;
+
+    // TurboModules/HostObjects can be non-extensible; use a Proxy wrapper so NativeEventEmitter
+    // sees addListener/removeListeners without mutating the native module object.
+    return new Proxy(nativeModule, {
+      get(target, prop) {
+        if (prop === 'addListener') return () => {};
+        if (prop === 'removeListeners') return () => {};
+        return Reflect.get(target, prop);
+      }
+    });
   };
 
-  // Some modules (notably WebRTCModule) may not be enumerable yet. Force-load them first.
-  // Daily initializes a NativeEventEmitter with WebRTCModule very early.
-  ensureModule(modules.WebRTCModule);
-  ensureModule(modules.DailyNativeUtils);
+  if (modules.WebRTCModule) modules.WebRTCModule = wrapForEventEmitter(modules.WebRTCModule);
+  if (modules.DailyNativeUtils) modules.DailyNativeUtils = wrapForEventEmitter(modules.DailyNativeUtils);
 
-  Object.keys(modules).forEach((moduleName) => {
-    const nativeModule = modules[moduleName];
-    ensureModule(nativeModule);
+  // Best-effort: wrap any other modules that might be passed into NativeEventEmitter.
+  Object.keys(modules).forEach((k) => {
+    modules[k] = wrapForEventEmitter(modules[k]);
   });
 };
 
-ensureNativeEventEmitterStubs();
+ensureEventEmitterCompatibility();
 
-// Backstop for third-party native packages that still warn in dev.
-LogBox.ignoreLogs([
-  '`new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.',
-  '`new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.'
-]);
-
-// IMPORTANT: use require() so we can run stubs/LogBox setup before App (and its transitive
-// imports like Daily/WebRTC) evaluate. Metro hoists ESM imports.
+const { registerRootComponent } = require('expo');
 const App = require('./App').default;
-
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
 registerRootComponent(App);
