@@ -7,12 +7,20 @@ export const liveStateRepository = {
         const typingRef = ref(rtdb, `typing/${chatId}/${uid}`);
 
         if (!isTyping) {
-            return remove(typingRef);
+            return remove(typingRef).catch((e) => {
+                if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                    console.warn('[RTDB] setTyping remove failed', e?.message || e);
+                }
+            });
         }
 
         return set(typingRef, {
             state: 'typing',
             updatedAt: serverTimestamp()
+        }).catch((e) => {
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                console.warn('[RTDB] setTyping failed', e?.message || e);
+            }
         });
     },
 
@@ -30,6 +38,10 @@ export const liveStateRepository = {
         return update(roomRef, {
             ...patch,
             updatedAt: serverTimestamp()
+        }).catch((e) => {
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                console.warn('[RTDB] upsertHuddleLiveState failed', e?.message || e);
+            }
         });
     },
 

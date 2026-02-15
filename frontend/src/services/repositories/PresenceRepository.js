@@ -28,8 +28,14 @@ export const presenceRepository = {
                 return;
             }
 
-            await onDisconnect(userStatusRef).set(buildPresencePayload('offline'));
-            await set(userStatusRef, buildPresencePayload('online'));
+            try {
+                await onDisconnect(userStatusRef).set(buildPresencePayload('offline'));
+                await set(userStatusRef, buildPresencePayload('online'));
+            } catch (e) {
+                if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                    console.warn('[RTDB] startPresence write failed', e?.message || e);
+                }
+            }
         };
 
         onValue(connectedRef, handler);
@@ -61,6 +67,12 @@ export const presenceRepository = {
 
     async markOffline(uid = auth.currentUser?.uid) {
         if (!uid) return;
-        await set(ref(rtdb, `status/${uid}`), buildPresencePayload('offline'));
+        try {
+            await set(ref(rtdb, `status/${uid}`), buildPresencePayload('offline'));
+        } catch (e) {
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                console.warn('[RTDB] markOffline failed', e?.message || e);
+            }
+        }
     }
 };
