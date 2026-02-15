@@ -2930,7 +2930,8 @@ export const getSeedStatus = regionalFunctions.https.onRequest(async (req, res) 
     }
 });
 
-const AFFIRMATION_TIMEZONE = process.env.AFFIRMATION_TIMEZONE || 'UTC';
+// Defaults to Lagos time (UTC+1). Override per environment via AFFIRMATION_TIMEZONE if needed.
+const AFFIRMATION_TIMEZONE = process.env.AFFIRMATION_TIMEZONE || 'Africa/Lagos';
 
 export const sendAffirmationsMorning = regionalFunctions.pubsub.schedule('0 8 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
     await sendDailyAffirmationsNotification(0, 'Morning Affirmation');
@@ -2940,7 +2941,7 @@ export const sendAffirmationsAfternoon = regionalFunctions.pubsub.schedule('0 13
     await sendDailyAffirmationsNotification(1, 'Afternoon Affirmation');
 });
 
-export const sendAffirmationsEvening = regionalFunctions.pubsub.schedule('0 21 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
+export const sendAffirmationsEvening = regionalFunctions.pubsub.schedule('0 19 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
     await sendDailyAffirmationsNotification(2, 'Evening Affirmation');
 });
 
