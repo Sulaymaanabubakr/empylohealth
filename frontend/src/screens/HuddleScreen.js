@@ -11,10 +11,13 @@ import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { callDiagnostics } from '../services/calling/callDiagnostics';
 
 const MAX_VISIBLE_PARTICIPANTS = 8;
-const JOIN_TIMEOUT_MS = 45000;
-const JOIN_MAX_ATTEMPTS = 2;
+const INVITE_TIMEOUT_MS = 40000; // 30-45s
+const JOIN_TIMEOUT_MS = 15000; // 10-15s
+const JOIN_MAX_ATTEMPTS = 1;
+const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 20000;
 let ExpoAudio = null;
 try {
     ExpoAudio = require('expo-av').Audio;
@@ -43,12 +46,19 @@ const HuddleScreen = ({ navigation, route }) => {
     });
     const keepAliveOnUnmountRef = useRef(false);
     const eventHandlersRef = useRef(null);
+    const inviteTimeoutRef = useRef(null);
+    const joinTimeoutRef = useRef(null);
+    const aloneAfterAcceptTimeoutRef = useRef(null);
+    const joinStartedSessionRef = useRef(0);
+    const lastFirebaseStatusRef = useRef(null);
 
-    const chat = route?.params?.chat || { id: route?.params?.chatId, name: 'Huddle', isGroup: true };
-    const mode = route?.params?.mode || (route?.params?.huddleId ? 'join' : 'start');
-    const [huddleId, setHuddleId] = useState(route?.params?.huddleId || null);
-    const [phase, setPhase] = useState('connecting'); // connecting | ringing | joined | ending | error | ended
-    const [errorMessage, setErrorMessage] = useState('');
+	const chat = route?.params?.chat || { id: route?.params?.chatId, name: 'Huddle', isGroup: true };
+	const mode = route?.params?.mode || (route?.params?.huddleId ? 'join' : 'start');
+	const [huddleId, setHuddleId] = useState(route?.params?.huddleId || null);
+	const huddleIdRef = useRef(huddleId);
+	const [phase, setPhase] = useState('joining'); // joining | ringing | ongoing | ending | error | ended
+	const [firebaseStatus, setFirebaseStatus] = useState(null); // ringing | accepted | ongoing | ended
+	const [errorMessage, setErrorMessage] = useState('');
     const [participants, setParticipants] = useState([]);
     const [activeSpeakerSessionId, setActiveSpeakerSessionId] = useState(null);
     const [isMuted, setIsMuted] = useState(false);
@@ -75,6 +85,10 @@ const HuddleScreen = ({ navigation, route }) => {
             setIsMuted(local.audio === false);
         }
     }, []);
+
+    useEffect(() => {
+        huddleIdRef.current = huddleId;
+    }, [huddleId]);
 
     useEffect(() => {
         if (!chat?.id) return undefined;
@@ -120,6 +134,21 @@ const HuddleScreen = ({ navigation, route }) => {
             return null;
         }
     };
+
+    const clearAllTimeouts = useCallback(() => {
+        if (inviteTimeoutRef.current) {
+            clearTimeout(inviteTimeoutRef.current);
+            inviteTimeoutRef.current = null;
+        }
+        if (joinTimeoutRef.current) {
+            clearTimeout(joinTimeoutRef.current);
+            joinTimeoutRef.current = null;
+        }
+        if (aloneAfterAcceptTimeoutRef.current) {
+            clearTimeout(aloneAfterAcceptTimeoutRef.current);
+            aloneAfterAcceptTimeoutRef.current = null;
+        }
+    }, []);
 
     const stopRingbackTone = useCallback(async () => {
         ringbackSessionRef.current += 1;
@@ -189,16 +218,24 @@ const HuddleScreen = ({ navigation, route }) => {
             fn(...args);
         };
 
-        const handlers = {
-            'joined-meeting': guarded(() => {
-                metricsRef.current.joinedEventAt = Date.now();
-                if (metricsRef.current.joinStartedAt) {
-                    logMetric('join_started_to_joined_event', metricsRef.current.joinedEventAt - metricsRef.current.joinStartedAt);
-                }
-                setPhase('joined');
-                refreshParticipants();
-                callObject.startRemoteParticipantsAudioLevelObserver(250).catch(() => { });
-            }),
+	        const handlers = {
+	            'joined-meeting': guarded(() => {
+	                metricsRef.current.joinedEventAt = Date.now();
+	                if (metricsRef.current.joinStartedAt) {
+	                    logMetric('join_started_to_joined_event', metricsRef.current.joinedEventAt - metricsRef.current.joinStartedAt);
+	                }
+	                callDiagnostics.log(huddleIdRef.current, 'daily_joined_meeting');
+	                if (joinTimeoutRef.current) {
+	                    clearTimeout(joinTimeoutRef.current);
+	                    joinTimeoutRef.current = null;
+	                }
+	                const activeHuddleId = huddleIdRef.current;
+	                if (activeHuddleId) {
+	                    huddleService.updateHuddleConnection(activeHuddleId, 'daily_joined').catch(() => { });
+	                }
+	                refreshParticipants();
+	                callObject.startRemoteParticipantsAudioLevelObserver(250).catch(() => { });
+	            }),
             'participant-joined': guarded(() => refreshParticipants()),
             'participant-updated': guarded(() => refreshParticipants()),
             'participant-left': guarded(() => refreshParticipants()),
@@ -214,25 +251,27 @@ const HuddleScreen = ({ navigation, route }) => {
                     }
                 }
             }),
-            error: guarded(() => {
-                stopRingbackTone();
-                setPhase('error');
-                setErrorMessage('Call error. Please try again.');
-            })
-        };
+	            error: guarded((ev) => {
+	                console.warn('[HUDDLE] Daily error:', ev);
+	                stopRingbackTone();
+	                clearAllTimeouts();
+	                leaveCall(isHost, true, true, 'failed_to_connect');
+	            })
+	        };
 
         Object.entries(handlers).forEach(([eventName, handler]) => {
             callObject.on(eventName, handler);
         });
         eventHandlersRef.current = handlers;
-    }, [detachCallHandlers, logMetric, refreshParticipants, stopRingbackTone]);
+	    }, [clearAllTimeouts, detachCallHandlers, isHost, leaveCall, logMetric, refreshParticipants, stopRingbackTone]);
 
-    const leaveCall = useCallback(async (endForEveryone = false, navigateBack = true, clearLocalSession = true) => {
+    const leaveCall = useCallback(async (endForEveryone = false, navigateBack = true, clearLocalSession = true, endedReason = 'hangup') => {
         if (isLeavingRef.current) return;
         isLeavingRef.current = true;
         joinFlowCancelledRef.current = true;
+        clearAllTimeouts();
+        callDiagnostics.log(huddleId, 'leave_call', { endForEveryone, endedReason });
 
-        // Show "Ending call..." overlay while cleanup runs
         setPhase('ending');
 
         const callObject = callObjectRef.current;
@@ -244,30 +283,13 @@ const HuddleScreen = ({ navigation, route }) => {
             huddleService.clearActiveLocalSession();
         }
 
-        // Do backend + media cleanup BEFORE navigating, with a 3s safety timeout
-        const cleanup = async () => {
-            await stopRingbackTone();
-
-            // Backend cleanup first so Firestore doc updates for the other party
-            if (currentHuddleId) {
-                nativeCallService.endHuddleCall(currentHuddleId);
-                // endHuddle now works for any participant (not just host)
-                await safeCall(() => huddleService.endHuddle(currentHuddleId));
-            }
-
-            // Then tear down media
-            if (callObject) {
-                await safeCall(() => callObject.stopRemoteParticipantsAudioLevelObserver());
-                await safeCall(() => callObject.leave());
-                await safeCall(() => callObject.destroy());
-            }
-        };
-
-        // Race cleanup against a 3s timeout so the user is never stuck
-        await Promise.race([
-            cleanup(),
-            new Promise((resolve) => setTimeout(resolve, 3000))
-        ]);
+        // Local teardown first (must not depend on backend).
+        await safeCall(() => stopRingbackTone());
+        if (callObject) {
+            safeCall(() => callObject.stopRemoteParticipantsAudioLevelObserver());
+            safeCall(() => callObject.leave());
+            safeCall(() => callObject.destroy());
+        }
 
         setPhase('ended');
 
@@ -278,7 +300,14 @@ const HuddleScreen = ({ navigation, route }) => {
                 navigation.navigate('MainTabs');
             }
         }
-    }, [detachCallHandlers, huddleId, navigation, stopRingbackTone]);
+
+        // Best-effort backend cleanup AFTER UI exit.
+        if (currentHuddleId) {
+            nativeCallService.endHuddleCall(currentHuddleId);
+            huddleService.updateHuddleConnection(currentHuddleId, 'daily_left').catch(() => { });
+            safeCall(() => huddleService.endHuddleWithReason(currentHuddleId, endedReason));
+        }
+    }, [clearAllTimeouts, detachCallHandlers, huddleId, navigation, stopRingbackTone]);
 
     useEffect(() => {
         if (!metricsRef.current.tapTs) return;
@@ -297,14 +326,15 @@ const HuddleScreen = ({ navigation, route }) => {
     }, [pulseAnim]);
 
     useEffect(() => {
-        if (phase !== 'joined') return undefined;
+        if (phase !== 'ongoing') return undefined;
         const timer = setInterval(() => setSeconds((prev) => prev + 1), 1000);
         return () => clearInterval(timer);
     }, [phase]);
 
     useEffect(() => () => {
         stopRingbackTone();
-    }, [stopRingbackTone]);
+        clearAllTimeouts();
+    }, [clearAllTimeouts, stopRingbackTone]);
 
     useEffect(() => {
         return () => {
@@ -319,7 +349,7 @@ const HuddleScreen = ({ navigation, route }) => {
     useEffect(() => {
         const unsubscribe = navigation.addListener('beforeRemove', () => {
             if (isLeavingRef.current) return;
-            if (callObjectRef.current && phase === 'joined') {
+            if (callObjectRef.current && phase === 'ongoing') {
                 keepAliveOnUnmountRef.current = true;
             }
         });
@@ -344,16 +374,25 @@ const HuddleScreen = ({ navigation, route }) => {
         const unsubscribe = onSnapshot(huddleDocRef, (snap) => {
             if (!snap.exists() || isLeavingRef.current) return;
             const data = snap.data();
+            const status = data?.status || null;
+            setFirebaseStatus(status);
+            if (lastFirebaseStatusRef.current !== status) {
+                callDiagnostics.log(huddleId, 'firebase_status', { from: lastFirebaseStatusRef.current, to: status });
+                lastFirebaseStatusRef.current = status;
+            }
 
             // If huddle ended remotely, tear down locally
-            if (data.status === 'ended' || data.isActive === false) {
+            if (status === 'ended' || data.isActive === false) {
                 leaveCall(false, true, true);
                 return;
             }
 
-            // If callee answered (status went to 'active'), stop ringback for the caller
-            if (data.status === 'active' && isHost) {
+            // If callee accepted (status went to 'accepted' or 'ongoing'), stop ringback for the caller
+            if ((status === 'accepted' || status === 'ongoing') && isHost) {
                 stopRingbackTone();
+                if (phase === 'ringing') {
+                    setPhase('joining');
+                }
             }
 
             // Debug: log participant array changes from Firestore
@@ -364,7 +403,27 @@ const HuddleScreen = ({ navigation, route }) => {
         });
 
         return unsubscribe;
-    }, [huddleId, isHost, leaveCall, stopRingbackTone]);
+    }, [huddleId, isHost, leaveCall, phase, stopRingbackTone]);
+
+    // Caller: hard invite timeout so we never ring forever.
+    useEffect(() => {
+        if (!isHost || !huddleId) return undefined;
+        if (firebaseStatus !== 'ringing') return undefined;
+        if (inviteTimeoutRef.current) return undefined;
+
+        inviteTimeoutRef.current = setTimeout(() => {
+            console.warn('[HUDDLE] invite timeout');
+            callDiagnostics.log(huddleId, 'timeout_invite');
+            leaveCall(true, true, true, 'timeout');
+        }, INVITE_TIMEOUT_MS);
+
+        return () => {
+            if (inviteTimeoutRef.current) {
+                clearTimeout(inviteTimeoutRef.current);
+                inviteTimeoutRef.current = null;
+            }
+        };
+    }, [firebaseStatus, huddleId, isHost, leaveCall]);
 
     useEffect(() => {
         if (hasStartedJoinRef.current) return;
@@ -376,7 +435,7 @@ const HuddleScreen = ({ navigation, route }) => {
             if (mode === 'start') {
                 setPhase('ringing');
             } else {
-                setPhase('connecting');
+                setPhase('joining');
             }
             setErrorMessage('');
             setSeconds(0);
@@ -390,16 +449,19 @@ const HuddleScreen = ({ navigation, route }) => {
             }
 
             const existingSession = huddleService.getActiveLocalSession();
-            if (existingSession?.callObject && existingSession?.chatId === chat.id) {
-                callObjectRef.current = existingSession.callObject;
-                setHuddleId(existingSession.huddleId || huddleId || route?.params?.huddleId || null);
-                const sessionHostUid = existingSession.startedBy || null;
-                setIsHost(Boolean(sessionHostUid && sessionHostUid === user?.uid));
-                setPhase('joined');
-                attachCallHandlers(existingSession.callObject);
-                refreshParticipants();
-                return;
-            }
+	            if (existingSession?.callObject && existingSession?.chatId === chat.id) {
+	                callObjectRef.current = existingSession.callObject;
+	                setHuddleId(existingSession.huddleId || huddleId || route?.params?.huddleId || null);
+	                const sessionHostUid = existingSession.startedBy || null;
+	                setIsHost(Boolean(sessionHostUid && sessionHostUid === user?.uid));
+	                setPhase('ongoing');
+	                attachCallHandlers(existingSession.callObject);
+	                refreshParticipants();
+	                if (existingSession?.huddleId) {
+	                    huddleService.updateHuddleConnection(existingSession.huddleId, 'daily_joined').catch(() => { });
+	                }
+	                return;
+	            }
 
             try {
                 const callableStartAt = Date.now();
@@ -420,6 +482,12 @@ const HuddleScreen = ({ navigation, route }) => {
                 const resolvedHostUid = huddleSession?.startedBy || (mode === 'start' ? user?.uid : null) || null;
                 const hostStatus = Boolean(resolvedHostUid && resolvedHostUid === user?.uid);
                 setIsHost(Boolean(hostStatus));
+                callDiagnostics.log(resolvedHuddleId, 'callable_resolved', {
+                    mode,
+                    isHost: hostStatus,
+                    roomUrl: huddleSession?.roomUrl,
+                    hasToken: !!huddleSession?.token
+                });
                 if (hostStatus && resolvedHuddleId) {
                     nativeCallService.startOutgoingHuddleCall({
                         huddleId: resolvedHuddleId,
@@ -446,6 +514,20 @@ const HuddleScreen = ({ navigation, route }) => {
                 if (metricsRef.current.callableResolvedAt) {
                     logMetric('callable_resolved_to_join_started', metricsRef.current.joinStartedAt - metricsRef.current.callableResolvedAt);
                 }
+
+                const joinSession = joinStartedSessionRef.current + 1;
+                joinStartedSessionRef.current = joinSession;
+                if (joinTimeoutRef.current) {
+                    clearTimeout(joinTimeoutRef.current);
+                }
+                joinTimeoutRef.current = setTimeout(() => {
+                    if (isLeavingRef.current || joinFlowCancelledRef.current) return;
+                    if (joinStartedSessionRef.current !== joinSession) return;
+                    console.warn('[HUDDLE] join timeout');
+                    callDiagnostics.log(resolvedHuddleId, 'timeout_join');
+                    leaveCall(isHost, true, true, 'failed_to_connect');
+                }, JOIN_TIMEOUT_MS);
+
                 let activeCallObject = null;
                 let joinAttempt = 0;
                 while (joinAttempt < JOIN_MAX_ATTEMPTS && !activeCallObject) {
@@ -458,10 +540,7 @@ const HuddleScreen = ({ navigation, route }) => {
                     callObjectRef.current = attemptCallObject;
                     attachCallHandlers(attemptCallObject);
                     try {
-                        await Promise.race([
-                            attemptCallObject.join(joinOptions),
-                            new Promise((_, reject) => setTimeout(() => reject(new Error('join-timeout')), JOIN_TIMEOUT_MS))
-                        ]);
+                        await attemptCallObject.join(joinOptions);
                         activeCallObject = attemptCallObject;
                     } catch (joinError) {
                         const isTimeout = String(joinError?.message || '').toLowerCase().includes('join-timeout');
@@ -508,23 +587,57 @@ const HuddleScreen = ({ navigation, route }) => {
                 }
                 await stopRingbackTone();
                 console.error('Huddle join failed', error);
-                setPhase('error');
-                const isTimeout = String(error?.message || '').toLowerCase().includes('join-timeout');
-                setErrorMessage(
-                    isTimeout
-                        ? 'Huddle is not connecting to the call server right now. This is not caused by other members not joining.'
-                        : 'Unable to connect huddle. Please try again.'
-                );
+                clearAllTimeouts();
+                leaveCall(isHost, true, true, 'failed_to_connect');
             }
         };
 
         start();
-    }, [attachCallHandlers, chat.id, chat.isGroup, huddleId, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, user?.displayName, user?.uid, userData?.name]);
+    }, [attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, huddleId, leaveCall, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, user?.displayName, user?.uid, userData?.name]);
 
     const remoteParticipantCount = useMemo(
         () => participants.filter((p) => !p.local).length,
         [participants]
     );
+
+    useEffect(() => {
+        if (phase === 'ending' || phase === 'ended' || phase === 'error') return;
+        if (remoteParticipantCount > 0) {
+            callDiagnostics.log(huddleId, 'remote_participant_connected', { remoteCount: remoteParticipantCount });
+            if (joinTimeoutRef.current) {
+                clearTimeout(joinTimeoutRef.current);
+                joinTimeoutRef.current = null;
+            }
+            if (aloneAfterAcceptTimeoutRef.current) {
+                clearTimeout(aloneAfterAcceptTimeoutRef.current);
+                aloneAfterAcceptTimeoutRef.current = null;
+            }
+            if (phase !== 'ongoing') {
+                setPhase('ongoing');
+            }
+        }
+    }, [phase, remoteParticipantCount]);
+
+    useEffect(() => {
+        if (!huddleId) return undefined;
+        if (firebaseStatus !== 'accepted') return undefined;
+        if (aloneAfterAcceptTimeoutRef.current) return undefined;
+
+        aloneAfterAcceptTimeoutRef.current = setTimeout(() => {
+            if (isLeavingRef.current) return;
+            if (remoteParticipantCount > 0) return;
+            console.warn('[HUDDLE] accepted-but-alone timeout');
+            callDiagnostics.log(huddleId, 'timeout_accepted_alone');
+            leaveCall(isHost, true, true, 'failed_to_connect');
+        }, ALONE_AFTER_ACCEPT_TIMEOUT_MS);
+
+        return () => {
+            if (aloneAfterAcceptTimeoutRef.current) {
+                clearTimeout(aloneAfterAcceptTimeoutRef.current);
+                aloneAfterAcceptTimeoutRef.current = null;
+            }
+        };
+    }, [firebaseStatus, huddleId, isHost, leaveCall, remoteParticipantCount]);
 
     useEffect(() => {
         if (!isHost || !huddleId || phase === 'error' || remoteParticipantCount > 0) return undefined;
@@ -537,14 +650,18 @@ const HuddleScreen = ({ navigation, route }) => {
     }, [huddleId, isHost, phase, remoteParticipantCount]);
 
     useEffect(() => {
-        const shouldPlayRingback = (phase === 'joined' || phase === 'ringing') && isHost && remoteParticipantCount === 0;
+        const shouldPlayRingback =
+            phase === 'ringing' &&
+            isHost &&
+            remoteParticipantCount === 0 &&
+            (firebaseStatus === 'ringing' || firebaseStatus == null);
         if (shouldPlayRingback) {
             startRingbackTone();
             return undefined;
         }
         stopRingbackTone();
         return undefined;
-    }, [isHost, phase, remoteParticipantCount, startRingbackTone, stopRingbackTone]);
+    }, [firebaseStatus, isHost, phase, remoteParticipantCount, startRingbackTone, stopRingbackTone]);
 
     const toggleMute = async () => {
         const callObject = callObjectRef.current;
@@ -626,15 +743,15 @@ const HuddleScreen = ({ navigation, route }) => {
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
-    const statusText = phase === 'ending'
-        ? 'Ending call...'
-        : phase === 'ringing'
-            ? 'Ringing...'
-            : phase === 'joined'
-                ? (isHost && remoteParticipantCount === 0 ? 'Ringing...' : formatTime(seconds))
-                : phase === 'error'
-                    ? 'Connection failed'
-                    : 'Connecting...';
+	    const statusText = phase === 'ending'
+	        ? 'Ending call...'
+	        : phase === 'ringing'
+	            ? 'Ringing...'
+	            : phase === 'ongoing'
+	                ? formatTime(seconds)
+	                : phase === 'error'
+	                    ? 'Connection failed'
+	                    : 'Connecting...';
 
     if (phase === 'ending') {
         return (
@@ -687,7 +804,7 @@ const HuddleScreen = ({ navigation, route }) => {
                         setLayoutSize({ width, height });
                     }}
                 >
-                    {phase === 'connecting' && (
+                    {phase === 'joining' && (
                         <View style={styles.connectingOverlay}>
                             <ActivityIndicator size="large" color={COLORS.primary} />
                             <Text style={styles.connectingText}>Connecting call...</Text>
@@ -742,7 +859,7 @@ const HuddleScreen = ({ navigation, route }) => {
 
                     <TouchableOpacity
                         style={[styles.controlButton, styles.endButton]}
-                        onPress={() => leaveCall(isHost, true)}
+                        onPress={() => leaveCall(isHost, true, true, 'hangup')}
                     >
                         <MaterialIcons name={isHost ? 'call-end' : 'logout'} size={28} color="#FFFFFF" />
                     </TouchableOpacity>

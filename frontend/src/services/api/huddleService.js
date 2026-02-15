@@ -54,6 +54,18 @@ export const huddleService = {
         }
     },
 
+    declineHuddle: async (huddleId) => {
+        try {
+            const fn = httpsCallable(functions, 'declineHuddle');
+            const result = await fn({ huddleId });
+            await liveStateRepository.upsertHuddleLiveState(huddleId, { state: 'idle' }).catch(() => {});
+            return result.data || { success: true };
+        } catch (error) {
+            console.error("Error declining huddle:", error);
+            throw error;
+        }
+    },
+
     endHuddle: async (huddleId) => {
         try {
             const endFn = httpsCallable(functions, 'endHuddle');
@@ -64,6 +76,29 @@ export const huddleService = {
             return result.data;
         } catch (error) {
             console.error("Error ending huddle:", error);
+            throw error;
+        }
+    },
+
+    endHuddleWithReason: async (huddleId, reason) => {
+        try {
+            const endFn = httpsCallable(functions, 'endHuddle');
+            const result = await endFn({ huddleId, reason });
+            await liveStateRepository.upsertHuddleLiveState(huddleId, { state: 'ended' }).catch(() => {});
+            return result.data;
+        } catch (error) {
+            console.error("Error ending huddle:", error);
+            throw error;
+        }
+    },
+
+    updateHuddleConnection: async (huddleId, action) => {
+        try {
+            const fn = httpsCallable(functions, 'updateHuddleConnection');
+            const result = await fn({ huddleId, action }); // action: 'daily_joined' | 'daily_left'
+            return result.data || { success: true };
+        } catch (error) {
+            console.error("Error updating huddle connection:", error);
             throw error;
         }
     },
