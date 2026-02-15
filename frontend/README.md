@@ -8,3 +8,6 @@ Please refer to [DEPLOYMENT_NOTES.md](./DEPLOYMENT_NOTES.md) for critical inform
 -   Start dev client: `npx expo start --dev-client`
 -   Run on Android: `npx expo run:android`
 -   Run on iOS: `npx expo run:ios`
+
+## Environment
+- `EXPO_PUBLIC_FIREBASE_RTDB_URL=https://<your-belgium-rtdb-instance>.europe-west1.firebasedatabase.app`

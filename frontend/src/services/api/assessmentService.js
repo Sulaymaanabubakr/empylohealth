@@ -1,60 +1,26 @@
-// TypeScript conversion in progress
-import { functions, db, auth } from '../firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
+import { db, auth } from '../firebaseConfig';
 import { collection, query, where, orderBy, limit, getDocs, doc, onSnapshot } from 'firebase/firestore';
+import { assessmentRepository } from '../repositories/AssessmentRepository';
+import { contentRepository } from '../repositories/ContentRepository';
 
 export const assessmentService = {
-    /**
-     * Submit Check-in or Questionnaire
-     * @param {string} type 'daily' | 'questionnaire'
-     * @param {number} score 
-     * @param {object} answers 
-     * @param {string} mood 
-     */
     submitAssessment: async (type, score, answers = {}, mood = '') => {
-        try {
-            const submitFn = httpsCallable(functions, 'submitAssessment');
-            await submitFn({ type, score, answers, mood });
-            return { success: true };
-        } catch (error) {
-            console.error("Error submitting assessment:", error);
-            throw error;
-        }
+        await assessmentRepository.submitAssessment({ type, score, answers, mood });
+        return { success: true };
     },
 
-    /**
-     * Get latest User Wellbeing Stats
-     */
     getWellbeingStats: async () => {
-        try {
-            // For now, if backend is not ready, we can simulate or call a generic 'getUserStats'
-            // assuming 'getUserStats' function exists or we create it.
-            const getFn = httpsCallable(functions, 'getUserStats');
-            const result = await getFn();
-            return result.data || { score: null, label: 'No data' };
-        } catch (error) {
-            console.log("Error fetching stats", error);
-            throw error;
-        }
+        return assessmentRepository.getUserStats();
     },
 
-    /**
-     * Subscribe to User Wellbeing Stats (Real-time)
-     * @param {string} uid
-     * @param {function} callback
-     */
     subscribeToWellbeingStats: (uid, callback) => {
-        if (!uid) return () => { };
+        if (!uid) return () => {};
 
-        // Listen to the user document where wellbeingScore is stored
-        // Note: The 'label' logic here is client-side approximation or stored in user doc
-        // Ideally, 'stats' should be a subcollection or field on user doc.
         const userRef = doc(db, 'users', uid);
         return onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const score = data.wellbeingScore || 0;
-                // Simple client-side catch for label if not in DB
                 let label = 'Neutral';
                 if (score >= 80) label = 'Thriving';
                 else if (score >= 60) label = 'Doing Well';
@@ -63,7 +29,7 @@ export const assessmentService = {
                 else label = 'Needs Attention';
 
                 callback({
-                    score: score,
+                    score,
                     label: data.wellbeingLabel || label,
                     streak: data.streak || 0
                 });
@@ -71,68 +37,37 @@ export const assessmentService = {
                 callback(null);
             }
         }, (error) => {
-            console.error("Error subscribing to wellbeing stats:", error);
+            console.error('Error subscribing to wellbeing stats:', error);
         });
     },
 
-    /**
-     * Get Key Challenges
-     */
     getKeyChallenges: async () => {
-        try {
-            const getFn = httpsCallable(functions, 'getKeyChallenges');
-            const result = await getFn();
-            return result.data || [];
-        } catch (error) {
-            console.log("Error fetching challenges", error);
-            throw error;
-        }
+        return contentRepository.getKeyChallenges(5);
     },
 
-    /**
-     * Get Recommended Content matching user themes
-     */
     getRecommendedContent: async () => {
-        try {
-            const getFn = httpsCallable(functions, 'getRecommendedContent');
-            const result = await getFn();
-            return result.data.items || [];
-        } catch (error) {
-            console.log("Error fetching recommendations", error);
-            throw error; // or return empty array
-        }
+        const user = auth.currentUser;
+        if (!user) return [];
+
+        const userSnap = await getDocs(query(collection(db, 'assessments'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1)));
+        const latest = userSnap.docs[0]?.data();
+        const challengeTags = Object.keys(latest?.answers || {}).filter((key) => latest.answers[key]);
+
+        const allContent = await contentRepository.getExploreContent(40);
+        if (!challengeTags.length) return allContent.slice(0, 10);
+
+        return allContent
+            .filter((item) => {
+                const tags = item.tags || item.themes || [];
+                return tags.some((tag) => challengeTags.includes(tag));
+            })
+            .slice(0, 10);
     },
-    /**
-     * Get Assessment History directly from Firestore
-     * @param {number} limitCount Number of records to fetch
-     */
+
     getAssessmentHistory: async (limitCount = 7) => {
-        try {
-            const user = auth.currentUser;
-            if (!user) return [];
-
-            const q = query(
-                collection(db, 'assessments'),
-                where('uid', '==', user.uid),
-                orderBy('createdAt', 'desc'),
-                limit(limitCount)
-            );
-
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt) // Handle Firestore Timestamp
-            }));
-        } catch (error) {
-            console.error("Error fetching assessment history:", error);
-            return [];
-        }
+        return assessmentRepository.getAssessmentHistory(limitCount);
     },
 
-    /**
-     * Get Dynamic Assessment Questions
-     */
     getQuestions: async () => {
         try {
             const q = query(
@@ -141,12 +76,9 @@ export const assessmentService = {
                 orderBy('order', 'asc')
             );
             const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
         } catch (error) {
-            console.error("Error fetching questions:", error);
+            console.error('Error fetching questions:', error);
             return [];
         }
     }

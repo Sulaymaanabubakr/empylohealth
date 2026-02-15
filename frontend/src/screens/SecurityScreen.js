@@ -5,8 +5,6 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { userService } from '../services/api/userService';
-import { functions } from '../services/firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
 
 const SecurityScreen = ({ navigation }) => {
     const { user, userData, deleteAccount } = useAuth();
@@ -45,8 +43,7 @@ const SecurityScreen = ({ navigation }) => {
             cancelText: 'Cancel',
             onConfirm: async () => {
                 try {
-                    const deleteFn = httpsCallable(functions, 'deleteUserAccount');
-                    await deleteFn();
+                    await deleteAccount();
                     showModal({
                         type: 'success',
                         title: 'Deleted',

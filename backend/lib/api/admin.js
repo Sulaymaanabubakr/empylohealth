@@ -41,6 +41,7 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const db = admin.firestore();
+const regionalFunctions = functions.region('europe-west1');
 const auth = admin.auth();
 // Helper to enforce admin permissions
 const requireAdmin = (context) => {
@@ -57,7 +58,7 @@ const requireAdmin = (context) => {
 /**
  * Get Dashboard Stats
  */
-exports.getDashboardStats = functions.https.onCall(async (data, context) => {
+exports.getDashboardStats = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     try {
         const usersCount = (await db.collection('users').count().get()).data().count;
@@ -80,7 +81,7 @@ exports.getDashboardStats = functions.https.onCall(async (data, context) => {
 /**
  * Get All Users (Paginated)
  */
-exports.getAllUsers = functions.https.onCall(async (data, context) => {
+exports.getAllUsers = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { limit = 20, startAfterId, roles } = data; // roles: string[]
     try {
@@ -118,7 +119,7 @@ exports.getAllUsers = functions.https.onCall(async (data, context) => {
 /**
  * Get Pending Circles/Content
  */
-exports.getPendingContent = functions.https.onCall(async (data, context) => {
+exports.getPendingContent = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     try {
         const circlesSnap = await db.collection('circles')
@@ -141,7 +142,7 @@ exports.getPendingContent = functions.https.onCall(async (data, context) => {
 /**
  * Get All Content (Circles/Resources)
  */
-exports.getAllContent = functions.https.onCall(async (data, context) => {
+exports.getAllContent = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { type = 'circles', limit = 20, startAfterId } = data;
     if (!['circles', 'resources'].includes(type)) {
@@ -171,7 +172,7 @@ exports.getAllContent = functions.https.onCall(async (data, context) => {
 /**
  * Approve or Reject Content
  */
-exports.updateContentStatus = functions.https.onCall(async (data, context) => {
+exports.updateContentStatus = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { collection, docId, status } = data; // status: 'active' | 'rejected' | 'suspended'
     if (!['circles', 'resources'].includes(collection)) {
@@ -193,7 +194,7 @@ exports.updateContentStatus = functions.https.onCall(async (data, context) => {
 /**
  * Suspend/Activate User
  */
-exports.toggleUserStatus = functions.https.onCall(async (data, context) => {
+exports.toggleUserStatus = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { uid, status } = data; // 'active' | 'suspended'
     if (!uid || !status) {
@@ -214,7 +215,7 @@ exports.toggleUserStatus = functions.https.onCall(async (data, context) => {
 /**
  * Delete Item (User, Circle, Resource)
  */
-exports.deleteItem = functions.https.onCall(async (data, context) => {
+exports.deleteItem = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { collection, id } = data;
     if (!collection || !id) {
@@ -239,7 +240,7 @@ exports.deleteItem = functions.https.onCall(async (data, context) => {
 /**
  * Get Admin Affirmations
  */
-exports.getAdminAffirmations = functions.https.onCall(async (data, context) => {
+exports.getAdminAffirmations = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { limit = 50, startAfterId } = data || {};
     try {
@@ -267,7 +268,7 @@ exports.getAdminAffirmations = functions.https.onCall(async (data, context) => {
 /**
  * Create Admin Affirmation
  */
-exports.createAffirmation = functions.https.onCall(async (data, context) => {
+exports.createAffirmation = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { content, scheduledDate } = data || {};
     if (!content) {
@@ -292,7 +293,7 @@ exports.createAffirmation = functions.https.onCall(async (data, context) => {
 /**
  * Delete Admin Affirmation
  */
-exports.deleteAffirmation = functions.https.onCall(async (data, context) => {
+exports.deleteAffirmation = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { id } = data || {};
     if (!id) {
@@ -310,7 +311,7 @@ exports.deleteAffirmation = functions.https.onCall(async (data, context) => {
 /**
  * Get Transactions (Admin)
  */
-exports.getTransactions = functions.https.onCall(async (data, context) => {
+exports.getTransactions = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { limit = 50, startAfterId } = data || {};
     try {
@@ -337,7 +338,7 @@ exports.getTransactions = functions.https.onCall(async (data, context) => {
 /**
  * Get Reports (Moderation)
  */
-exports.getReports = functions.https.onCall(async (data, context) => {
+exports.getReports = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { limit = 50, startAfterId, status } = data; // status: 'pending' | 'resolved'
     try {
@@ -366,7 +367,7 @@ exports.getReports = functions.https.onCall(async (data, context) => {
 /**
  * Resolve Report
  */
-exports.resolveReport = functions.https.onCall(async (data, context) => {
+exports.resolveReport = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { reportId, action, notes } = data;
     // action: 'dismiss' | 'warning' | 'suspend_user' | 'delete_content'
@@ -409,7 +410,7 @@ exports.resolveReport = functions.https.onCall(async (data, context) => {
 /**
  * Get Support Tickets
  */
-exports.getSupportTickets = functions.https.onCall(async (data, context) => {
+exports.getSupportTickets = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { limit = 50, startAfterId, status } = data;
     try {
@@ -438,7 +439,7 @@ exports.getSupportTickets = functions.https.onCall(async (data, context) => {
 /**
  * Update Ticket Status
  */
-exports.updateTicketStatus = functions.https.onCall(async (data, context) => {
+exports.updateTicketStatus = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { ticketId, status, reply } = data; // status: 'open' | 'resolved' | 'pending'
     try {
@@ -458,7 +459,7 @@ exports.updateTicketStatus = functions.https.onCall(async (data, context) => {
  * Backfill userCircles index from circles.members arrays
  * Callable Function: 'backfillUserCircles'
  */
-exports.backfillUserCircles = functions.https.onCall(async (data, context) => {
+exports.backfillUserCircles = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
     const { limit = 100, startAfterId = null } = data || {};
     try {

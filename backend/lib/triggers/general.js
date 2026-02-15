@@ -41,11 +41,12 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const db = admin.firestore();
+const regionalFunctions = functions.region('europe-west1');
 /**
  * Trigger: Auth User OnCreate
  * Goal: Create a User Profile in Firestore when a new Auth user is created.
  */
-exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
+exports.onUserCreate = regionalFunctions.auth.user().onCreate(async (user) => {
     try {
         const { uid, email, displayName, photoURL } = user;
         const userDoc = {
@@ -74,7 +75,7 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
  * Trigger: Firestore Message OnCreate
  * Goal: Send Push Notification to chat participants when a new message arrives.
  */
-exports.onMessageCreate = functions.firestore.document('chats/{chatId}/messages/{messageId}')
+exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/messages/{messageId}')
     .onCreate(async (snapshot, context) => {
     const message = snapshot.data();
     const { chatId } = context.params;

@@ -25,6 +25,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [profileCache, setProfileCache] = useState({});
     const [circleRole, setCircleRole] = useState(null);
     const [activeHuddle, setActiveHuddle] = useState(null);
+    const [typingUsers, setTypingUsers] = useState({});
 
     // Keyboard Visibility management for bottom insets
     useEffect(() => {
@@ -83,6 +84,22 @@ const ChatDetailScreen = ({ navigation, route }) => {
             return () => unsubscribe();
         }
     }, [chat.id, user]);
+
+    useEffect(() => {
+        if (!chat?.id) return undefined;
+        return chatService.subscribeTyping(chat.id, (typingState) => {
+            setTypingUsers(typingState || {});
+        });
+    }, [chat?.id]);
+
+    useEffect(() => {
+        if (!chat?.id || !user?.uid) return undefined;
+        const shouldSetTyping = Boolean(inputText?.trim());
+        chatService.setTyping(chat.id, shouldSetTyping).catch(() => {});
+        return () => {
+            chatService.setTyping(chat.id, false).catch(() => {});
+        };
+    }, [chat?.id, inputText, user?.uid]);
 
     useEffect(() => {
         if (!chat?.isGroup || !chat?.circleId || !user?.uid) {
@@ -188,6 +205,11 @@ const ChatDetailScreen = ({ navigation, route }) => {
             // Optionally restore text or show error
         }
     };
+
+    const activeTypingCount = Object.keys(typingUsers || {}).filter((uid) => uid !== user?.uid).length;
+    const headerStatusText = activeTypingCount > 0
+        ? 'Typing...'
+        : (chat.members ? `${chat.members} members active` : (chat.isOnline ? 'Online now' : 'Last seen recently'));
 
     const hasActiveHuddle = Boolean(activeHuddle?.isActive !== false && activeHuddle?.roomUrl);
     const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
@@ -343,7 +365,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerName}>{chat.name}</Text>
-                    <Text style={styles.headerStatus}>{chat.members ? `${chat.members} members active` : (chat.isOnline ? 'Online now' : 'Last seen recently')}</Text>
+                    <Text style={styles.headerStatus}>{headerStatusText}</Text>
                 </View>
                 {canShowCallButton ? (
                     <TouchableOpacity style={styles.callButton} onPress={handleCall}>

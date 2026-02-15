@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
 import { View, ActivityIndicator, Pressable, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -47,10 +47,11 @@ import { huddleService } from './services/api/huddleService';
 const Stack = createNativeStackNavigator();
 
 export default function Navigation() {
-    const { user, userData, loading } = useAuth();
+    const { loading, routeTarget } = useAuth();
     const [isReady, setIsReady] = useState(false);
     const [activeHuddleSession, setActiveHuddleSession] = useState(null);
     const [currentRouteName, setCurrentRouteName] = useState('');
+    const firstRenderLoggedRef = useRef(false);
 
     useEffect(() => {
         const unsubscribe = huddleService.subscribeToActiveLocalSession((session) => {
@@ -77,20 +78,12 @@ export default function Navigation() {
         );
     }
 
-    // If user is logged in but userData is still null, we are in a loading state.
-    // We should not optimistically assume profile is complete to prevent flickering.
-    if (user && userData === null) {
-        console.log('[PERF] Navigation: User logged in, waiting for userData...');
-        return (
-            <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#FFFFFF" />
-            </View>
-        );
+    if (!firstRenderLoggedRef.current) {
+        firstRenderLoggedRef.current = true;
+        console.log('[PERF] time_to_first_render: navigation tree mounted');
     }
 
-    const isProfileComplete = !!userData?.onboardingCompleted;
-
-    console.log('[Navigation] Rendering. User:', user?.email, 'ProfileComplete:', isProfileComplete);
+    console.log('[Navigation] Route target:', routeTarget);
 
     const showHuddleBanner = !!activeHuddleSession && currentRouteName !== 'Huddle';
 
@@ -106,7 +99,7 @@ export default function Navigation() {
                     setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
                 }}
             >
-                {!user ? (
+                {routeTarget === 'UNAUTH' ? (
                     <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
                         <Stack.Screen name="Splash" component={SplashScreen} />
                         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -115,7 +108,7 @@ export default function Navigation() {
                         <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
                         <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
                     </Stack.Navigator>
-                ) : !isProfileComplete ? (
+                ) : routeTarget === 'PROFILE_SETUP' ? (
                     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
                         <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
                     </Stack.Navigator>

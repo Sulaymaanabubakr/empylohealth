@@ -1,30 +1,65 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
-console.log('[PERF] AuthContext.js: Module evaluating');
+import React, { createContext, useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { View, Image, ActivityIndicator, Text } from 'react-native';
 import { TYPOGRAPHY } from '../theme/theme';
 import { authService } from '../services/auth/authService';
-import { userService } from '../services/api/userService';
-import { db } from '../services/firebaseConfig';
-import { doc, onSnapshot } from 'firebase/firestore';
 import { notificationService } from '../services/api/notificationService';
+import { profileRepository } from '../services/repositories/ProfileRepository';
+import { profileCache } from '../services/bootstrap/profileCache';
+import { perfLogger } from '../services/diagnostics/perfLogger';
+import { logNetworkRegionDebug } from '../services/diagnostics/networkRegionDebug';
+import { presenceRepository } from '../services/repositories/PresenceRepository';
 
 export const AuthContext = createContext(undefined);
+
+const BOOT_PHASES = {
+    AUTH_RESOLVING: 'AUTH_RESOLVING',
+    PROFILE_RESOLVING: 'PROFILE_RESOLVING',
+    READY: 'READY'
+};
+
+const ROUTE_TARGETS = {
+    UNAUTH: 'UNAUTH',
+    PROFILE_SETUP: 'PROFILE_SETUP',
+    APP: 'APP'
+};
+
+const isProfileComplete = (profile) => {
+    if (!profile) return false;
+    if (profile.onboardingCompleted === true) return true;
+    return Boolean(profile.name && profile.role);
+};
+
+const decideInitialRoute = (user, profile) => {
+    if (!user) return ROUTE_TARGETS.UNAUTH;
+    return isProfileComplete(profile) ? ROUTE_TARGETS.APP : ROUTE_TARGETS.PROFILE_SETUP;
+};
 
 export const AuthProvider = ({ children, onAuthReady }) => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [bootPhase, setBootPhase] = useState(BOOT_PHASES.AUTH_RESOLVING);
+    const [routeTarget, setRouteTarget] = useState(ROUTE_TARGETS.UNAUTH);
     const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-    // Notify parent when auth state is determined (fast - from cache)
+    const profileUnsubscribeRef = useRef(null);
+    const presenceCleanupRef = useRef(null);
+    const authStartRef = useRef(Date.now());
+    const hasNotifiedAuthReadyRef = useRef(false);
+
+    const loading = bootPhase !== BOOT_PHASES.READY;
+
     useEffect(() => {
-        if (!loading) {
-            console.log('[PERF] AuthContext: Auth resolved, calling onAuthReady');
+        logNetworkRegionDebug();
+        perfLogger.mark('app_boot');
+        perfLogger.mark('auth_resolve_start');
+    }, []);
+
+    useEffect(() => {
+        if (bootPhase === BOOT_PHASES.READY && !hasNotifiedAuthReadyRef.current) {
+            hasNotifiedAuthReadyRef.current = true;
             onAuthReady?.();
         }
-    }, [loading, onAuthReady]);
-
-    const userUnsubscribeRef = React.useRef(null);
+    }, [bootPhase, onAuthReady]);
 
     useEffect(() => {
         notificationService.initializeNotificationRouting();
@@ -33,80 +68,106 @@ export const AuthProvider = ({ children, onAuthReady }) => {
         };
     }, []);
 
-    // Listen for auth state changes
     useEffect(() => {
-        console.log('[PERF] AuthContext: Initializing...');
-        const initStartTime = Date.now();
-
-        // Initialize Google Sign In
-        try {
-            console.log('[PERF] AuthContext: calling authService.init');
-            authService.init('433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com');
-            console.log('[PERF] AuthContext: authService.init complete');
-        } catch (e) {
-            console.error('[PERF] AuthContext: authService.init FAILED', e);
-        }
+        authService.init('433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com');
 
         const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
-            console.log('[PERF] AuthContext: Auth state changed', currentUser ? 'Authenticated' : 'Not authenticated', `${Date.now() - initStartTime}ms`);
+            perfLogger.log('time_to_auth_resolve', Date.now() - authStartRef.current);
 
-            // Cleanup previous user listener if it exists
-            if (userUnsubscribeRef.current) {
-                userUnsubscribeRef.current();
-                userUnsubscribeRef.current = null;
+            if (profileUnsubscribeRef.current) {
+                profileUnsubscribeRef.current();
+                profileUnsubscribeRef.current = null;
+            }
+            if (presenceCleanupRef.current) {
+                await presenceCleanupRef.current();
+                presenceCleanupRef.current = null;
             }
 
             setUser(currentUser);
 
-            // Set loading=false immediately to unblock UI rendering
-            setLoading(false);
+            if (!currentUser) {
+                setUserData(null);
+                setRouteTarget(ROUTE_TARGETS.UNAUTH);
+                setBootPhase(BOOT_PHASES.READY);
+                return;
+            }
 
-            if (currentUser) {
-                // Subscribe to user document changes (background load)
-                const userRef = doc(db, 'users', currentUser.uid);
-                userUnsubscribeRef.current = onSnapshot(userRef, (doc) => {
-                    console.log('[PERF] AuthContext: User data loaded', `${Date.now() - initStartTime}ms`);
-                    if (doc.exists()) {
-                        setUserData(doc.data());
-                    } else {
-                        // If doc doesn't exist yet (very fresh account), use auth profile
-                        setUserData({
+            setBootPhase(BOOT_PHASES.PROFILE_RESOLVING);
+
+            const cachedProfile = await profileCache.load(currentUser.uid);
+            if (cachedProfile) {
+                setUserData(cachedProfile);
+                setRouteTarget(decideInitialRoute(currentUser, cachedProfile));
+                setBootPhase(BOOT_PHASES.READY);
+                console.log('[BOOT] Route decision from cached profile:', decideInitialRoute(currentUser, cachedProfile));
+            }
+
+            profileUnsubscribeRef.current = profileRepository.subscribeToProfile(
+                currentUser.uid,
+                async (profile) => {
+                    let normalizedProfile = profile;
+
+                    if (!profile) {
+                        normalizedProfile = {
                             uid: currentUser.uid,
                             email: currentUser.email || '',
-                            name: currentUser.displayName || ''
-                        });
+                            name: currentUser.displayName || '',
+                            photoURL: currentUser.photoURL || '',
+                            role: 'personal',
+                            onboardingCompleted: false
+                        };
+                        await profileRepository.ensureProfile(currentUser.uid, normalizedProfile);
                     }
-                }, (error) => {
-                    console.error("AuthContext: User listener error", error);
-                    // Fallback
-                    setUserData({
+
+                    setUserData(normalizedProfile);
+                    await profileCache.save(currentUser.uid, normalizedProfile);
+
+                    const decidedRoute = decideInitialRoute(currentUser, normalizedProfile);
+                    setRouteTarget(decidedRoute);
+                    setBootPhase(BOOT_PHASES.READY);
+
+                    perfLogger.log('time_to_profile_ready', perfLogger.elapsedSince('auth_resolve_start'));
+                    console.log('[BOOT] Route decision from network profile:', decidedRoute);
+                },
+                (error) => {
+                    console.error('[BOOT] Profile listener failed:', error);
+                    const fallbackProfile = {
                         uid: currentUser.uid,
                         email: currentUser.email || '',
-                        name: currentUser.displayName || ''
-                    });
-                });
+                        name: currentUser.displayName || '',
+                        photoURL: currentUser.photoURL || '',
+                        role: 'personal',
+                        onboardingCompleted: false
+                    };
+                    setUserData(fallbackProfile);
+                    setRouteTarget(decideInitialRoute(currentUser, fallbackProfile));
+                    setBootPhase(BOOT_PHASES.READY);
+                }
+            );
 
-                // Register push tokens once per session
-                notificationService.registerForPushNotificationsAsync(currentUser.uid).catch((e) => {
-                    console.warn('[AuthContext] Push registration failed', e?.message || e);
-                });
-            } else {
-                setUserData(null);
-            }
+            presenceCleanupRef.current = presenceRepository.startPresence(currentUser.uid);
+
+            notificationService.registerForPushNotificationsAsync(currentUser.uid).catch((e) => {
+                console.warn('[AuthContext] Push registration failed', e?.message || e);
+            });
         });
 
-        // Safety timeout in case auth listener never fires (rare but possible offline/error)
         const safetyTimer = setTimeout(() => {
-            setLoading((prev) => {
-                if (prev) console.warn("[PERF] AuthContext: Loading timed out, forcing app entry.");
-                return false;
+            setBootPhase((prev) => {
+                if (prev !== BOOT_PHASES.READY) {
+                    console.warn('[BOOT] Timeout reached. Forcing app bootstrap readiness.');
+                }
+                return BOOT_PHASES.READY;
             });
-        }, 10000); // Increased to 10s for production reliability
+        }, 12000);
 
         return () => {
             unsubscribe();
-            if (userUnsubscribeRef.current) {
-                userUnsubscribeRef.current();
+            if (profileUnsubscribeRef.current) {
+                profileUnsubscribeRef.current();
+            }
+            if (presenceCleanupRef.current) {
+                presenceCleanupRef.current().catch(() => {});
             }
             clearTimeout(safetyTimer);
         };
@@ -130,6 +191,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
             if (result.success) {
                 return { success: true };
             }
+            return { success: false, error: 'Registration failed' };
         } catch (error) {
             return { success: false, error: error.message };
         } finally {
@@ -138,7 +200,12 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     };
 
     const logout = async () => {
-        return await authService.logout();
+        const uid = user?.uid;
+        if (uid) {
+            await profileCache.clear(uid);
+            await presenceRepository.markOffline(uid).catch(() => {});
+        }
+        return authService.logout();
     };
 
     const loginWithGoogle = async () => {
@@ -163,12 +230,42 @@ export const AuthProvider = ({ children, onAuthReady }) => {
         const currentUser = authService.getCurrentUser();
         if (currentUser) {
             await currentUser.reload();
-            setUser({ ...authService.getCurrentUser() }); // Spread to trigger state update
+            setUser({ ...authService.getCurrentUser() });
         }
     };
 
+    const deleteAccount = async () => {
+        // Still Functions-backed (privileged + cascade deletes).
+        // Implemented in backend as deleteUserAccount callable.
+        const { httpsCallable } = require('firebase/functions');
+        const { functions } = require('../services/firebaseConfig');
+        const deleteFn = httpsCallable(functions, 'deleteUserAccount');
+        await deleteFn();
+        await logout();
+        return { success: true };
+    };
+
+    const contextValue = useMemo(
+        () => ({
+            user,
+            userData,
+            loading,
+            isAuthenticating,
+            routeTarget,
+            bootPhase,
+            login,
+            register,
+            logout,
+            deleteAccount,
+            loginWithGoogle,
+            loginWithApple,
+            refreshUser
+        }),
+        [user, userData, loading, isAuthenticating, routeTarget, bootPhase]
+    );
+
     return (
-        <AuthContext.Provider value={{ user, userData, loading, isAuthenticating, login, register, logout, loginWithGoogle, loginWithApple, refreshUser }}>
+        <AuthContext.Provider value={contextValue}>
             {(loading || isAuthenticating) ? (
                 <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
                     <Image
@@ -177,11 +274,9 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                         resizeMode="contain"
                     />
                     <ActivityIndicator size="large" color="#FFFFFF" />
-                    {isAuthenticating && (
-                        <Text style={{ color: '#FFFFFF', marginTop: 20, ...TYPOGRAPHY.body, fontWeight: '600' }}>
-                            Processing...
-                        </Text>
-                    )}
+                    <Text style={{ color: '#FFFFFF', marginTop: 16, ...TYPOGRAPHY.body, fontWeight: '600' }}>
+                        {isAuthenticating ? 'Processing...' : 'Preparing your workspace...'}
+                    </Text>
                 </View>
             ) : (
                 children

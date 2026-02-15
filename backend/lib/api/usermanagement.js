@@ -41,6 +41,7 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const db = admin.firestore();
+const regionalFunctions = functions.region('europe-west1');
 // Super Admins allowed to create employees
 const SUPER_ADMINS = [
     'sulaymaanabubakr@gmail.com',
@@ -50,7 +51,7 @@ const SUPER_ADMINS = [
  * Create Employee Account
  * Creates a new user in Firebase Auth and sets admin claims.
  */
-exports.createEmployee = functions.https.onCall(async (data, context) => {
+exports.createEmployee = regionalFunctions.https.onCall(async (data, context) => {
     // 1. Auth Check: Must be logged in
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');

@@ -12,6 +12,7 @@ import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
 import { chatService } from '../services/api/chatService';
 import { LinearGradient } from 'expo-linear-gradient';
+import { presenceRepository } from '../services/repositories/PresenceRepository';
 
 const { width } = Dimensions.get('window');
 
@@ -108,8 +109,11 @@ const CircleDetailScreen = ({ navigation, route }) => {
             try {
                 const docs = await Promise.all(
                     circle.members.map(async (uid) => {
-                        const userDoc = await getDoc(doc(db, 'users', uid));
-                        const memberDoc = await getDoc(doc(db, 'circles', circle.id, 'members', uid));
+                        const [userDoc, memberDoc, presence] = await Promise.all([
+                            getDoc(doc(db, 'users', uid)),
+                            getDoc(doc(db, 'circles', circle.id, 'members', uid)),
+                            presenceRepository.getPresence(uid).catch(() => ({ state: 'offline' }))
+                        ]);
                         const data = userDoc.exists() ? userDoc.data() : {};
                         const memberData = memberDoc.exists() ? memberDoc.data() : {};
                         const memberRole = memberData?.role || (uid === circle.adminId ? 'admin' : 'member');
@@ -118,7 +122,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                             name: data?.name || data?.displayName || 'Member',
                             image: data?.photoURL || '',
                             role: memberRole,
-                            status: uid === user?.uid ? 'online' : 'offline',
+                            status: presence?.state === 'online' ? 'online' : 'offline',
                             score: data?.wellbeingScore || 0
                         };
                     })

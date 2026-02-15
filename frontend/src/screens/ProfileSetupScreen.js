@@ -89,7 +89,7 @@ const ProfileSetupScreen = ({ navigation }) => {
             ]);
 
             showToast('Profile saved successfully!', 'success');
-            navigation.replace('Dashboard');
+            // Navigation is now controlled by bootstrap route decision in AuthContext.
         } catch (error) {
             console.error('Profile setup failed', error);
             showToast('Unable to save profile. Please try again.', 'error');

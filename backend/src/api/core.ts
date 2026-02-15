@@ -8,6 +8,7 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const db = admin.firestore();
+const regionalFunctions = functions.region('europe-west1');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -43,7 +44,7 @@ const requireAdmin = (context: functions.https.CallableContext) => {
  * Generate a signature for client-side uploads.
  * Callable Function: 'generateUploadSignature'
  */
-export const generateUploadSignature = functions.https.onCall((data, context) => {
+export const generateUploadSignature = regionalFunctions.https.onCall((data, context) => {
     // Ensure user is authenticated
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
@@ -79,7 +80,7 @@ export const generateUploadSignature = functions.https.onCall((data, context) =>
  * Create a new Circle
  * Callable Function: 'createCircle'
  */
-export const createCircle = functions.https.onCall(async (data, context) => {
+export const createCircle = regionalFunctions.https.onCall(async (data, context) => {
     // 1. Auth Check
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
@@ -176,7 +177,7 @@ export const createCircle = functions.https.onCall(async (data, context) => {
  * Update Circle Details (Creator/Admin Only)
  * Callable Function: 'updateCircle'
  */
-export const updateCircle = functions.https.onCall(async (data, context) => {
+export const updateCircle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     const { circleId, name, description, type, settings, image, category, visibility } = data;
@@ -232,7 +233,7 @@ export const updateCircle = functions.https.onCall(async (data, context) => {
  * Join an existing Circle
  * Callable Function: 'joinCircle'
  */
-export const joinCircle = functions.https.onCall(async (data, context) => {
+export const joinCircle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
@@ -344,7 +345,7 @@ export const joinCircle = functions.https.onCall(async (data, context) => {
  * Leave an existing Circle
  * Callable Function: 'leaveCircle'
  */
-export const leaveCircle = functions.https.onCall(async (data, context) => {
+export const leaveCircle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
@@ -417,7 +418,7 @@ export const leaveCircle = functions.https.onCall(async (data, context) => {
  * Manage Member (Promote/Demote/Kick/Ban)
  * Callable Function: 'manageMember'
  */
-export const manageMember = functions.https.onCall(async (data, context) => {
+export const manageMember = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     const { circleId, targetUid, action } = data; // action: 'promote_admin' | 'promote_mod' | 'demote' | 'kick' | 'ban' | 'mute'
@@ -511,7 +512,7 @@ export const manageMember = functions.https.onCall(async (data, context) => {
  * Handle Join Request (Accept/Reject)
  * Callable Function: 'handleJoinRequest'
  */
-export const handleJoinRequest = functions.https.onCall(async (data, context) => {
+export const handleJoinRequest = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     const { circleId, targetUid, action } = data; // action: 'accept' | 'reject'
@@ -591,7 +592,7 @@ export const handleJoinRequest = functions.https.onCall(async (data, context) =>
  * Create or Get Direct Chat
  * Callable Function: 'createDirectChat'
  */
-export const createDirectChat = functions.https.onCall(async (data, context) => {
+export const createDirectChat = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
@@ -644,7 +645,7 @@ export const createDirectChat = functions.https.onCall(async (data, context) => 
  * Send a Message
  * Callable Function: 'sendMessage'
  */
-export const sendMessage = functions.https.onCall(async (data, context) => {
+export const sendMessage = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
@@ -714,7 +715,7 @@ export const sendMessage = functions.https.onCall(async (data, context) => {
  * Submit Daily Check-in / Assessment
  * Callable Function: 'submitAssessment'
  */
-export const submitAssessment = functions.https.onCall(async (data, context) => {
+export const submitAssessment = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     const { type, score, answers, mood } = data; // type: 'daily' | 'questionnaire'
@@ -848,7 +849,7 @@ const normalizeAssessmentQuestionText = (text: string): string => {
     return text;
 };
 
-export const seedAssessmentQuestions = functions.https.onCall(async (data, context) => {
+export const seedAssessmentQuestions = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
 
     // Explicit list of default questions
@@ -907,7 +908,7 @@ export const seedAssessmentQuestions = functions.https.onCall(async (data, conte
  * Fix Assessment Question Text (Admin Utility)
  * Callable Function: 'fixAssessmentQuestionsText'
  */
-export const fixAssessmentQuestionsText = functions.https.onCall(async (_data, context) => {
+export const fixAssessmentQuestionsText = regionalFunctions.https.onCall(async (_data, context) => {
     requireAdmin(context);
 
     try {
@@ -939,7 +940,7 @@ export const fixAssessmentQuestionsText = functions.https.onCall(async (_data, c
  * Seed Challenges (Admin Utility)
  * Callable Function: 'seedChallenges'
  */
-export const seedChallenges = functions.https.onCall(async (data, context) => {
+export const seedChallenges = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
 
     const challenges = seedChallengeData.map((challenge) => ({
@@ -974,7 +975,7 @@ export const seedChallenges = functions.https.onCall(async (data, context) => {
  * Seed Resources (Admin Utility)
  * Callable Function: 'seedResources'
  */
-export const seedResources = functions.https.onCall(async (data, context) => {
+export const seedResources = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
 
     const resources = seedResourceData.map((resource) => ({
@@ -1009,7 +1010,7 @@ export const seedResources = functions.https.onCall(async (data, context) => {
  * Get User Wellbeing Stats
  * Callable Function: 'getUserStats'
  */
-export const getUserStats = functions.https.onCall(async (data, context) => {
+export const getUserStats = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const uid = context.auth.uid;
 
@@ -1058,7 +1059,7 @@ export const getUserStats = functions.https.onCall(async (data, context) => {
  * Get Key Challenges
  * Callable Function: 'getKeyChallenges'
  */
-export const getKeyChallenges = functions.https.onCall(async (data, context) => {
+export const getKeyChallenges = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const uid = context.auth.uid;
 
@@ -1139,7 +1140,7 @@ export const getKeyChallenges = functions.https.onCall(async (data, context) => 
  * Get Recommended Content
  * Callable Function: 'getRecommendedContent'
  */
-export const getRecommendedContent = functions.https.onCall(async (data, context) => {
+export const getRecommendedContent = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const uid = context.auth.uid;
 
@@ -1193,7 +1194,7 @@ export const getRecommendedContent = functions.https.onCall(async (data, context
  * Update Subscription Plan
  * Callable Function: 'updateSubscription'
  */
-export const updateSubscription = functions.https.onCall(async (data, context) => {
+export const updateSubscription = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     throw new functions.https.HttpsError(
@@ -1490,7 +1491,7 @@ const createDailyRoomAndToken = async ({
  * Start a Huddle (Video Call Session)
  * Callable Function: 'startHuddle'
  */
-export const startHuddle = functions.https.onCall(async (data, context) => {
+export const startHuddle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     const { chatId, isGroup } = data;
@@ -1654,7 +1655,7 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
  * Join an existing huddle and mint participant token
  * Callable Function: 'joinHuddle'
  */
-export const joinHuddle = functions.https.onCall(async (data, context) => {
+export const joinHuddle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const { huddleId } = data || {};
     const uid = context.auth.uid;
@@ -1729,7 +1730,7 @@ export const joinHuddle = functions.https.onCall(async (data, context) => {
  * - Idempotent: if huddle is already ended, returns success
  * Callable Function: 'endHuddle'
  */
-export const endHuddle = functions.https.onCall(async (data, context) => {
+export const endHuddle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const { huddleId } = data || {};
     const uid = context.auth.uid;
@@ -1803,7 +1804,7 @@ export const endHuddle = functions.https.onCall(async (data, context) => {
  * Re-ring a Huddle while still waiting for participants
  * Callable Function: 'ringHuddleParticipants'
  */
-export const ringHuddleParticipants = functions.https.onCall(async (data, context) => {
+export const ringHuddleParticipants = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     const { huddleId } = data || {};
@@ -1864,7 +1865,7 @@ export const ringHuddleParticipants = functions.https.onCall(async (data, contex
     }
 });
 
-export const ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').onRun(async () => {
+export const ringPendingHuddles = regionalFunctions.pubsub.schedule('every 1 minutes').onRun(async () => {
     try {
         const snapshot = await db.collection('huddles').where('isActive', '==', true).limit(200).get();
         let processed = 0;
@@ -1929,7 +1930,7 @@ export const ringPendingHuddles = functions.pubsub.schedule('every 1 minutes').o
  * Join/Leave Huddle
  * Callable Function: 'updateHuddleState'
  */
-export const updateHuddleState = functions.https.onCall(async (data, context) => {
+export const updateHuddleState = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     const { huddleId, action } = data; // action: 'join' | 'leave' | 'mute' | 'unmute'
@@ -2023,7 +2024,7 @@ export const updateHuddleState = functions.https.onCall(async (data, context) =>
  * Schedule a Huddle
  * Callable Function: 'scheduleHuddle'
  */
-export const scheduleHuddle = functions.https.onCall(async (data, context) => {
+export const scheduleHuddle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     const { circleId, title, scheduledAt } = data;
@@ -2062,7 +2063,7 @@ export const scheduleHuddle = functions.https.onCall(async (data, context) => {
  * Delete a Scheduled Huddle
  * Callable Function: 'deleteScheduledHuddle'
  */
-export const deleteScheduledHuddle = functions.https.onCall(async (data, context) => {
+export const deleteScheduledHuddle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const { circleId, eventId } = data;
     const uid = context.auth.uid;
@@ -2091,7 +2092,7 @@ export const deleteScheduledHuddle = functions.https.onCall(async (data, context
 /**
  * Submit a Report (Circle Context)
  */
-export const submitReport = functions.https.onCall(async (data, context) => {
+export const submitReport = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in.');
     const { circleId, targetId, targetType, reason, description } = data;
     // targetType: 'member' | 'message' | 'huddle'
@@ -2141,7 +2142,7 @@ export const submitReport = functions.https.onCall(async (data, context) => {
  * Resolve Circle Report (Admin/Mod Only)
  * Callable Function: 'resolveCircleReport'
  */
-export const resolveCircleReport = functions.https.onCall(async (data, context) => {
+export const resolveCircleReport = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in.');
 
     const { circleId, reportId, action, resolutionNote } = data;
@@ -2232,7 +2233,7 @@ export const resolveCircleReport = functions.https.onCall(async (data, context) 
  * Callable Function: 'getExploreContent'
  * (Can initially just return curated lists, or complex querying)
  */
-export const getExploreContent = functions.https.onCall(async (data, context) => {
+export const getExploreContent = regionalFunctions.https.onCall(async (data, context) => {
     // Authenticated optional? Let's require it.
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
@@ -2254,7 +2255,7 @@ export const getExploreContent = functions.https.onCall(async (data, context) =>
  * Get Daily Affirmations
  * Callable Function: 'getAffirmations'
  */
-export const getAffirmations = functions.https.onCall(async (data, context) => {
+export const getAffirmations = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
 
     try {
@@ -2409,7 +2410,7 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
     }
 };
 
-export const seedAffirmations = functions.https.onCall(async (data, context) => {
+export const seedAffirmations = regionalFunctions.https.onCall(async (data, context) => {
     requireAdmin(context);
 
     const affirmations = seedAffirmationData.map((affirmation, index) => ({
@@ -2526,7 +2527,7 @@ const backfillAffirmationImagesInternal = async () => {
     return { updated, total };
 };
 
-export const backfillAffirmationImages = functions.https.onRequest(async (req, res) => {
+export const backfillAffirmationImages = regionalFunctions.https.onRequest(async (req, res) => {
     allowSeedOrigin(req, res);
     if (req.method === 'OPTIONS') {
         res.status(204).send('');
@@ -2554,7 +2555,7 @@ export const backfillAffirmationImages = functions.https.onRequest(async (req, r
     }
 });
 
-export const seedAll = functions.https.onRequest(async (req, res) => {
+export const seedAll = regionalFunctions.https.onRequest(async (req, res) => {
     allowSeedOrigin(req, res);
     if (req.method === 'OPTIONS') {
         res.status(204).send('');
@@ -2608,7 +2609,7 @@ export const seedAll = functions.https.onRequest(async (req, res) => {
     }
 });
 
-export const getSeedStatus = functions.https.onRequest(async (req, res) => {
+export const getSeedStatus = regionalFunctions.https.onRequest(async (req, res) => {
     allowSeedOrigin(req, res);
     if (req.method === 'OPTIONS') {
         res.status(204).send('');
@@ -2632,15 +2633,15 @@ export const getSeedStatus = functions.https.onRequest(async (req, res) => {
 
 const AFFIRMATION_TIMEZONE = process.env.AFFIRMATION_TIMEZONE || 'UTC';
 
-export const sendAffirmationsMorning = functions.pubsub.schedule('0 8 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
+export const sendAffirmationsMorning = regionalFunctions.pubsub.schedule('0 8 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
     await sendDailyAffirmationsNotification(0, 'Morning Affirmation');
 });
 
-export const sendAffirmationsAfternoon = functions.pubsub.schedule('0 13 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
+export const sendAffirmationsAfternoon = regionalFunctions.pubsub.schedule('0 13 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
     await sendDailyAffirmationsNotification(1, 'Afternoon Affirmation');
 });
 
-export const sendAffirmationsEvening = functions.pubsub.schedule('0 21 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
+export const sendAffirmationsEvening = regionalFunctions.pubsub.schedule('0 21 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
     await sendDailyAffirmationsNotification(2, 'Evening Affirmation');
 });
 
@@ -2648,7 +2649,7 @@ export const sendAffirmationsEvening = functions.pubsub.schedule('0 21 * * *').t
 // CONTACT (WEB) FUNCTIONS
 // ==========================================
 
-export const submitContactForm = functions.https.onRequest(async (req, res) => {
+export const submitContactForm = regionalFunctions.https.onRequest(async (req, res) => {
     const allowedOrigins = (process.env.CONTACT_ALLOWED_ORIGINS || '*')
         .split(',')
         .map(origin => origin.trim())
@@ -2714,7 +2715,7 @@ export const submitContactForm = functions.https.onRequest(async (req, res) => {
 // ACCOUNT MANAGEMENT
 // ==========================================
 
-export const deleteUserAccount = functions.https.onCall(async (data, context) => {
+export const deleteUserAccount = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const uid = context.auth.uid;
 

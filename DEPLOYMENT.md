@@ -10,6 +10,9 @@ This document provides instructions for deploying all components of the Empylo C
 
 ## Backend Cloud Functions
 
+### Region
+Functions are deployed in `europe-west1` (Belgium) by definition in source code (`functions.region('europe-west1')`).
+
 ### Full Deployment
 
 Deploy all functions at once:

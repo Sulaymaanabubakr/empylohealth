@@ -12,6 +12,7 @@ import * as Font from 'expo-font';
 
 import { View, Platform, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { perfLogger } from './src/services/diagnostics/perfLogger';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -36,6 +37,7 @@ SplashScreen.preventAutoHideAsync();
 
 export default function App() {
   console.log('[PERF] App: Starting...');
+  perfLogger.mark('app_process_start');
   const fontLoadStart = Date.now();
   const splashHidden = useRef(false);
   const authReady = useRef(false);
@@ -63,6 +65,7 @@ export default function App() {
   // Called by AuthProvider when auth is fully resolved
   const onAuthReady = useCallback(() => {
     console.log('[PERF] App: Auth ready callback received');
+    perfLogger.log('time_to_auth_ready', perfLogger.elapsedSince('app_process_start'));
     authReady.current = true;
     tryHideSplash();
   }, [tryHideSplash]);
@@ -71,6 +74,7 @@ export default function App() {
   useEffect(() => {
     if (fontsLoaded) {
       console.log('[PERF] App: Fonts loaded', `${Date.now() - fontLoadStart}ms`);
+      perfLogger.log('time_to_first_render_fonts_ready', perfLogger.elapsedSince('app_process_start'));
       tryHideSplash();
     }
   }, [fontsLoaded, tryHideSplash]);

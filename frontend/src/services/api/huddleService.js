@@ -1,6 +1,7 @@
 // TypeScript conversion in progress
 import { functions } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
+import { liveStateRepository } from '../repositories/LiveStateRepository';
 
 let activeLocalSession = null;
 const sessionListeners = new Set();
@@ -25,6 +26,13 @@ export const huddleService = {
         try {
             const startFn = httpsCallable(functions, 'startHuddle');
             const result = await startFn({ chatId, isGroup });
+            if (result?.data?.huddleId) {
+                await liveStateRepository.upsertHuddleLiveState(result.data.huddleId, {
+                    state: 'ringing',
+                    chatId,
+                    hostUid: result.data.startedBy || null
+                }).catch(() => {});
+            }
             return result.data;
         } catch (error) {
             console.error("Error starting huddle:", error);
@@ -36,6 +44,9 @@ export const huddleService = {
         try {
             const joinFn = httpsCallable(functions, 'joinHuddle');
             const result = await joinFn({ huddleId });
+            await liveStateRepository.upsertHuddleLiveState(huddleId, {
+                state: 'in-call'
+            }).catch(() => {});
             return result.data;
         } catch (error) {
             console.error("Error joining huddle:", error);
@@ -47,6 +58,9 @@ export const huddleService = {
         try {
             const endFn = httpsCallable(functions, 'endHuddle');
             const result = await endFn({ huddleId });
+            await liveStateRepository.upsertHuddleLiveState(huddleId, {
+                state: 'ended'
+            }).catch(() => {});
             return result.data;
         } catch (error) {
             console.error("Error ending huddle:", error);
@@ -78,6 +92,10 @@ export const huddleService = {
         try {
             const updateFn = httpsCallable(functions, 'updateHuddleState');
             await updateFn({ huddleId, action });
+            await liveStateRepository.upsertHuddleLiveState(huddleId, {
+                state: action === 'join' ? 'in-call' : (action === 'leave' ? 'idle' : action),
+                lastAction: action
+            }).catch(() => {});
             return { success: true };
         } catch (error) {
             console.error("Error updating huddle:", error);
@@ -93,6 +111,11 @@ export const huddleService = {
     getActiveLocalSession: () => activeLocalSession,
 
     clearActiveLocalSession: () => {
+        if (activeLocalSession?.huddleId) {
+            liveStateRepository.upsertHuddleLiveState(activeLocalSession.huddleId, {
+                state: 'idle'
+            }).catch(() => {});
+        }
         activeLocalSession = null;
         emitSessionChange();
     },

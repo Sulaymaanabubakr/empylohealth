@@ -1,47 +1,19 @@
-import { functions, db } from '../firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
+import { db, auth } from '../firebaseConfig';
 import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc } from 'firebase/firestore';
-
+import { chatRepository } from '../repositories/ChatRepository';
+import { liveStateRepository } from '../repositories/LiveStateRepository';
+import { presenceRepository } from '../repositories/PresenceRepository';
 
 export const chatService = {
-    /**
-     * Create or Get existing Direct Chat
-     * @param {string} recipientId 
-     */
     createDirectChat: async (recipientId) => {
-        try {
-            const createFn = httpsCallable(functions, 'createDirectChat');
-            const result = await createFn({ recipientId });
-            return result.data; // { success: true, chatId: '...', isNew: boolean }
-        } catch (error) {
-            console.error("Error creating chat:", error);
-            throw error;
-        }
+        return chatRepository.createOrGetDirectChat(recipientId);
     },
 
-    /**
-     * Send Message via Backend
-     * @param {string} chatId 
-     * @param {string} text 
-     * @param {string} type 
-     * @param {string} mediaUrl 
-     */
     sendMessage: async (chatId, text, type = 'text', mediaUrl = null) => {
-        try {
-            const sendFn = httpsCallable(functions, 'sendMessage');
-            await sendFn({ chatId, text, type, mediaUrl });
-            return { success: true };
-        } catch (error) {
-            console.error("Error sending message:", error);
-            throw error;
-        }
+        await chatRepository.sendMessage(chatId, text, type, mediaUrl);
+        return { success: true };
     },
 
-    /**
-     * Subscribe to specific Chat Messages
-     * @param {string} chatId 
-     * @param {function} callback 
-     */
     subscribeToMessages: (chatId, callback) => {
         const q = query(
             collection(db, 'chats', chatId, 'messages'),
@@ -49,15 +21,14 @@ export const chatService = {
             limit(50)
         );
         return onSnapshot(q, (snapshot) => {
-            const messages = snapshot.docs.map(doc => {
-                const data = doc.data();
+            const messages = snapshot.docs.map((docSnap) => {
+                const data = docSnap.data();
                 return {
-                    _id: doc.id,
+                    _id: docSnap.id,
                     text: data.text,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
                     user: {
-                        _id: data.senderId,
-                        // name/avatar would need to be fetched or stored in msg if simple
+                        _id: data.senderId
                     },
                     image: data.mediaUrl || undefined
                 };
@@ -66,11 +37,6 @@ export const chatService = {
         });
     },
 
-    /**
-     * Subscribe to User's Chat List
-     * @param {string} uid 
-     * @param {function} callback 
-     */
     subscribeToChatList: (uid, callback) => {
         const q = query(
             collection(db, 'chats'),
@@ -84,60 +50,52 @@ export const chatService = {
                 const isGroup = data.type === 'group' || participants.length > 2;
                 let name = data.name || 'Chat';
                 let avatar = data.avatar || null;
+                let isOnline = false;
 
                 if (!isGroup) {
                     const otherId = participants.find((id) => id !== uid);
                     if (otherId) {
                         try {
-                            const userDoc = await getDoc(doc(db, 'users', otherId));
+                            const [userDoc, presence] = await Promise.all([
+                                getDoc(doc(db, 'users', otherId)),
+                                presenceRepository.getPresence(otherId).catch(() => ({ state: 'offline' }))
+                            ]);
                             const userData = userDoc.exists() ? userDoc.data() : {};
                             name = userData?.name || userData?.displayName || 'Anonymous';
                             avatar = userData?.photoURL || null;
-                            console.log(`[ChatService] Fetched user ${otherId}:`, { name, hasPhoto: !!avatar, photoURL: avatar });
-                        } catch (err) {
-                            console.error(`[ChatService] Error fetching user ${otherId}:`, err);
+                            isOnline = presence?.state === 'online';
+                        } catch {
+                            // Ignore enrichment errors.
                         }
-                    } else {
-                        console.log('[ChatService] No other participant found in direct chat', participants);
                     }
                 }
 
                 const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
                 const time = updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
-                let circlePhoto = null;
-                if (isGroup && data.circleId && !avatar) {
-                    try {
-                        const circleDoc = await getDoc(doc(db, 'circles', data.circleId));
-                        if (circleDoc.exists()) {
-                            const circleData = circleDoc.data();
-                            circlePhoto = circleData.photoURL || circleData.image || null;
-                            // Also fallback name if chat name is generic
-                            if (!name || name === 'Chat') {
-                                name = circleData.name || 'Circle Chat';
-                            }
-                        }
-                    } catch (err) {
-                        console.error('Error fetching circle for chat:', err);
-                    }
-                }
-
-                // Final avatar fallback: data.avatar -> direct user photo -> circle photo
-                const finalAvatar = avatar || circlePhoto || null;
-
                 return {
                     id: docSnap.id,
                     ...data,
                     name,
-                    avatar: finalAvatar,
+                    avatar,
                     time,
                     members: participants.length,
                     unread: 0,
-                    isOnline: false,
-                    isGroup
+                    isOnline,
+                    isGroup,
+                    me: auth.currentUser?.uid || uid
                 };
             }));
             callback(chats);
         });
+    },
+
+    setTyping: (chatId, isTyping) => {
+        const uid = auth.currentUser?.uid;
+        return liveStateRepository.setTyping(chatId, uid, isTyping);
+    },
+
+    subscribeTyping: (chatId, callback) => {
+        return liveStateRepository.subscribeTyping(chatId, callback);
     }
 };
