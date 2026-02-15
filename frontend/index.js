@@ -27,7 +27,9 @@ LogBox.ignoreLogs([
   '`new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.'
 ]);
 
-import App from './App';
+// IMPORTANT: use require() so we can run stubs/LogBox setup before App (and its transitive
+// imports like Daily/WebRTC) evaluate. Metro hoists ESM imports.
+const App = require('./App').default;
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,
