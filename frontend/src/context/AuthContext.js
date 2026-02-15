@@ -266,7 +266,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
     return (
         <AuthContext.Provider value={contextValue}>
-            {(loading || isAuthenticating) ? (
+            {loading ? (
                 <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
                     <Image
                         source={require('../assets/images/logo_white.png')}
@@ -275,7 +275,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                     />
                     <ActivityIndicator size="large" color="#FFFFFF" />
                     <Text style={{ color: '#FFFFFF', marginTop: 16, ...TYPOGRAPHY.body, fontWeight: '600' }}>
-                        {isAuthenticating ? 'Processing...' : 'Preparing your workspace...'}
+                        Preparing your workspace...
                     </Text>
                 </View>
             ) : (
