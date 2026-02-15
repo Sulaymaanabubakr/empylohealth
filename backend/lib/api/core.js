@@ -99,6 +99,15 @@ exports.generateUploadSignature = regionalFunctions.https.onCall((data, context)
 // ==========================================
 // CIRCLE FUNCTIONS
 // ==========================================
+const MAX_PRIVATE_CIRCLES_PER_CREATOR = 4;
+const MAX_CIRCLE_MEMBERS = 6;
+const getCircleMemberCount = (circleData) => {
+    const byCount = Number(circleData?.memberCount ?? circleData?.membersCount ?? NaN);
+    if (Number.isFinite(byCount))
+        return byCount;
+    const members = Array.isArray(circleData?.members) ? circleData.members : [];
+    return members.length;
+};
 /**
  * Create a new Circle
  * Callable Function: 'createCircle'
@@ -119,6 +128,17 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'Circle name is required.');
     }
     try {
+        if (type === 'private') {
+            const existing = await db.collection('circles')
+                .where('adminId', '==', uid)
+                .where('type', '==', 'private')
+                .where('status', '==', 'active')
+                .limit(MAX_PRIVATE_CIRCLES_PER_CREATOR + 1)
+                .get();
+            if (existing.size >= MAX_PRIVATE_CIRCLES_PER_CREATOR) {
+                throw new functions.https.HttpsError('failed-precondition', `You can only create up to ${MAX_PRIVATE_CIRCLES_PER_CREATOR} private circles.`);
+            }
+        }
         const batch = db.batch();
         // 3. Create Circle Doc
         const circleRef = db.collection('circles').doc();
@@ -135,10 +155,13 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
                 requiresApproval: type === 'private',
                 questions: []
             },
+            createdBy: uid,
             adminId: uid,
             members: [uid], // Kept for backward compatibility / quick checks (limit ~20k in array)
             memberCount: 1,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            membersCount: 1, // Back-compat with older clients
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
         batch.set(circleRef, circleData);
         // 4. Create Creator Member in Subcollection (The Scalable Source of Truth)
@@ -172,12 +195,6 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         batch.update(circleRef, { chatId: chatRef.id });
-        // Remove userCircles index
-        const userCirclesSnap = await db.collection('userCircles').doc(uid).collection('circles').get();
-        userCirclesSnap.docs.forEach((docSnap) => {
-            batch.delete(docSnap.ref);
-        });
-        batch.delete(db.collection('userCircles').doc(uid));
         await batch.commit();
         console.log(`[Circles] Circle created: ${name} (${circleRef.id}) by ${uid}`);
         return { success: true, circleId: circleRef.id };
@@ -266,6 +283,10 @@ exports.joinCircle = regionalFunctions.https.onCall(async (data, context) => {
         const isPrivate = circleData.type === 'private';
         const requiresApproval = circleData.joinSettings?.requiresApproval || isPrivate;
         const members = circleData.members || [];
+        const currentCount = getCircleMemberCount(circleData);
+        if (!members.includes(uid) && currentCount >= MAX_CIRCLE_MEMBERS) {
+            throw new functions.https.HttpsError('failed-precondition', `This circle is full (max ${MAX_CIRCLE_MEMBERS} members).`);
+        }
         // Already a member check
         if (members.includes(uid)) {
             // Check subcollection to be sure (and sync if needed)
@@ -292,42 +313,58 @@ exports.joinCircle = regionalFunctions.https.onCall(async (data, context) => {
             });
             return { success: true, status: 'pending', message: 'Join request sent' };
         }
-        // Direct Join (Public)
-        const batch = db.batch();
-        // 1. Add to Members Subcollection
-        const memberRef = circleRef.collection('members').doc(uid);
-        batch.set(memberRef, {
-            uid,
-            role: 'member',
-            status: 'active',
-            joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        // Maintain userCircles index
-        const userCirclesRef = db.collection('userCircles').doc(uid);
-        batch.set(userCirclesRef, {
-            circleIds: admin.firestore.FieldValue.arrayUnion(circleId)
-        }, { merge: true });
-        batch.set(userCirclesRef.collection('circles').doc(circleId), {
-            circleId,
-            role: 'member',
-            status: 'member',
-            joinedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-        // 2. Update Circle Doc (Array + Count) for compatibility
-        batch.update(circleRef, {
-            members: admin.firestore.FieldValue.arrayUnion(uid),
-            memberCount: admin.firestore.FieldValue.increment(1)
-        });
-        // 3. Add to Chat Participants
-        if (circleData.chatId) {
-            const chatRef = db.collection('chats').doc(circleData.chatId);
-            batch.update(chatRef, {
-                participants: admin.firestore.FieldValue.arrayUnion(uid),
+        // Direct Join (Public): transaction for capacity + idempotency.
+        await db.runTransaction(async (tx) => {
+            const snap = await tx.get(circleRef);
+            if (!snap.exists) {
+                throw new functions.https.HttpsError('not-found', 'Circle not found.');
+            }
+            const c = snap.data() || {};
+            const m = Array.isArray(c.members) ? c.members : [];
+            if (m.includes(uid)) {
+                return;
+            }
+            const count = getCircleMemberCount(c);
+            if (count >= MAX_CIRCLE_MEMBERS) {
+                throw new functions.https.HttpsError('failed-precondition', `This circle is full (max ${MAX_CIRCLE_MEMBERS} members).`);
+            }
+            // 1. Add to Members Subcollection
+            const memberRef = circleRef.collection('members').doc(uid);
+            tx.set(memberRef, {
+                uid,
+                role: 'member',
+                status: 'active',
+                joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            // 2. Update Circle Doc (Array + Count) for compatibility
+            tx.update(circleRef, {
+                members: admin.firestore.FieldValue.arrayUnion(uid),
+                memberCount: admin.firestore.FieldValue.increment(1),
+                membersCount: admin.firestore.FieldValue.increment(1),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
-        }
-        await batch.commit();
+            // Maintain userCircles index
+            const userCirclesRef = db.collection('userCircles').doc(uid);
+            tx.set(userCirclesRef, {
+                circleIds: admin.firestore.FieldValue.arrayUnion(circleId),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            tx.set(userCirclesRef.collection('circles').doc(circleId), {
+                circleId,
+                role: 'member',
+                status: 'member',
+                joinedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            // Add to Chat Participants
+            if (c.chatId) {
+                const chatRef = db.collection('chats').doc(c.chatId);
+                tx.update(chatRef, {
+                    participants: admin.firestore.FieldValue.arrayUnion(uid),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+            }
+        });
         console.log(`[Circles] User ${uid} joined circle ${circleId} (Public)`);
         return { success: true, status: 'joined' };
     }
@@ -372,6 +409,7 @@ exports.leaveCircle = regionalFunctions.https.onCall(async (data, context) => {
         batch.update(circleRef, {
             members: admin.firestore.FieldValue.arrayRemove(uid),
             memberCount: admin.firestore.FieldValue.increment(-1),
+            membersCount: admin.firestore.FieldValue.increment(-1),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         // 2b. Remove from userCircles index
@@ -443,7 +481,8 @@ exports.manageMember = regionalFunctions.https.onCall(async (data, context) => {
                 batch.delete(targetRef);
                 batch.update(circleRef, {
                     members: admin.firestore.FieldValue.arrayRemove(targetUid),
-                    memberCount: admin.firestore.FieldValue.increment(-1)
+                    memberCount: admin.firestore.FieldValue.increment(-1),
+                    membersCount: admin.firestore.FieldValue.increment(-1)
                 });
                 batch.set(db.collection('userCircles').doc(targetUid), {
                     circleIds: admin.firestore.FieldValue.arrayRemove(circleId)
@@ -461,7 +500,8 @@ exports.manageMember = regionalFunctions.https.onCall(async (data, context) => {
                 batch.update(targetRef, { status: 'banned', role: 'member' }); // Keep record but banned
                 batch.update(circleRef, {
                     members: admin.firestore.FieldValue.arrayRemove(targetUid), // Remove from quick access array
-                    memberCount: admin.firestore.FieldValue.increment(-1)
+                    memberCount: admin.firestore.FieldValue.increment(-1),
+                    membersCount: admin.firestore.FieldValue.increment(-1)
                 });
                 batch.set(db.collection('userCircles').doc(targetUid), {
                     circleIds: admin.firestore.FieldValue.arrayRemove(circleId)
@@ -506,47 +546,61 @@ exports.handleJoinRequest = regionalFunctions.https.onCall(async (data, context)
         const requestDoc = await requestRef.get();
         if (!requestDoc.exists)
             throw new functions.https.HttpsError('not-found', 'Request not found.');
-        const batch = db.batch();
         if (action === 'accept') {
-            // Move to Members
-            batch.set(circleRef.collection('members').doc(targetUid), {
-                uid: targetUid,
-                role: 'member',
-                status: 'active',
-                joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-                approvedBy: uid
+            await db.runTransaction(async (tx) => {
+                const circleSnap = await tx.get(circleRef);
+                if (!circleSnap.exists)
+                    throw new functions.https.HttpsError('not-found', 'Circle not found.');
+                const c = circleSnap.data() || {};
+                const count = getCircleMemberCount(c);
+                const membersArr = Array.isArray(c.members) ? c.members : [];
+                if (!membersArr.includes(targetUid) && count >= MAX_CIRCLE_MEMBERS) {
+                    throw new functions.https.HttpsError('failed-precondition', `This circle is full (max ${MAX_CIRCLE_MEMBERS} members).`);
+                }
+                // Move to Members
+                tx.set(circleRef.collection('members').doc(targetUid), {
+                    uid: targetUid,
+                    role: 'member',
+                    status: 'active',
+                    joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    approvedBy: uid,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                // Maintain userCircles index
+                const userCirclesRef = db.collection('userCircles').doc(targetUid);
+                tx.set(userCirclesRef, {
+                    circleIds: admin.firestore.FieldValue.arrayUnion(circleId),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                tx.set(userCirclesRef.collection('circles').doc(circleId), {
+                    circleId,
+                    role: 'member',
+                    status: 'member',
+                    joinedAt: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                // Update Circle Stats
+                if (!membersArr.includes(targetUid)) {
+                    tx.update(circleRef, {
+                        members: admin.firestore.FieldValue.arrayUnion(targetUid),
+                        memberCount: admin.firestore.FieldValue.increment(1),
+                        membersCount: admin.firestore.FieldValue.increment(1),
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                // Add to Chat
+                if (c.chatId) {
+                    tx.update(db.collection('chats').doc(c.chatId), {
+                        participants: admin.firestore.FieldValue.arrayUnion(targetUid),
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                // Delete Request
+                tx.delete(requestRef);
             });
-            // Maintain userCircles index
-            const userCirclesRef = db.collection('userCircles').doc(targetUid);
-            batch.set(userCirclesRef, {
-                circleIds: admin.firestore.FieldValue.arrayUnion(circleId)
-            }, { merge: true });
-            batch.set(userCirclesRef.collection('circles').doc(circleId), {
-                circleId,
-                role: 'member',
-                status: 'member',
-                joinedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-            // Update Circle Stats
-            batch.update(circleRef, {
-                members: admin.firestore.FieldValue.arrayUnion(targetUid),
-                memberCount: admin.firestore.FieldValue.increment(1)
-            });
-            // Add to Chat
-            const circleData = (await circleRef.get()).data();
-            if (circleData?.chatId) {
-                batch.update(db.collection('chats').doc(circleData.chatId), {
-                    participants: admin.firestore.FieldValue.arrayUnion(targetUid)
-                });
-            }
-            // Delete Request
-            batch.delete(requestRef);
         }
         else if (action === 'reject') {
-            batch.delete(requestRef);
-            // Optionally keep a rejection record? For now, delete.
+            await requestRef.delete();
         }
-        await batch.commit();
         return { success: true };
     }
     catch (error) {
