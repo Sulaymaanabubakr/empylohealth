@@ -110,6 +110,9 @@ export const nativeCallService = {
     initialized = true;
 
     try {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[CallKeep] native module present:', true);
+      }
       await RNCallKeep.setup(getSetupOptions());
       if (Platform.OS === 'android') {
         RNCallKeep.setAvailable?.(true);
@@ -119,6 +122,9 @@ export const nativeCallService = {
       subscriptions.push(RNCallKeep.addEventListener('endCall', handleEndCall));
     } catch (error) {
       // keep app functional without native call UI.
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[CallKeep] setup failed; using in-app IncomingHuddle fallback');
+      }
       initialized = false;
       subscriptions = [];
     }

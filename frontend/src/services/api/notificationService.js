@@ -111,6 +111,9 @@ export const notificationService = {
     initializeNotificationRouting: () => {
         if (notificationRoutingInitialized) return;
         notificationRoutingInitialized = true;
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.log('[Calls] CallKeep supported:', nativeCallService.isSupported());
+        }
         nativeCallService.initialize();
         registerVoipListeners();
 
