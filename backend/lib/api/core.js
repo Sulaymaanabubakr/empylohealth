@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const apn_1 = __importDefault(require("apn"));
@@ -1569,6 +1569,82 @@ exports.joinHuddle = regionalFunctions.https.onCall(async (data, context) => {
         if (error instanceof functions.https.HttpsError)
             throw error;
         throw new functions.https.HttpsError('internal', 'Unable to join huddle.');
+    }
+});
+/**
+ * Decline an incoming huddle.
+ * Callable Function: 'declineHuddle'
+ *
+ * - For p2p: ends the huddle for everyone with endedReason=declined
+ * - For group: records the decline and only ends if nobody else can accept anymore
+ */
+exports.declineHuddle = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const { huddleId } = data || {};
+    const uid = context.auth.uid;
+    if (!huddleId)
+        throw new functions.https.HttpsError('invalid-argument', 'Huddle ID required.');
+    try {
+        const huddleRef = db.collection('huddles').doc(huddleId);
+        await db.runTransaction(async (tx) => {
+            const snap = await tx.get(huddleRef);
+            if (!snap.exists)
+                throw new functions.https.HttpsError('not-found', 'Huddle not found.');
+            const h = snap.data() || {};
+            if (h.status === 'ended' || h.isActive === false)
+                return;
+            const type = (h.type || (h.isGroup ? 'group' : 'p2p'));
+            const status = (h.status || 'ringing');
+            // Host declining is effectively a hangup.
+            if (h.startedBy === uid) {
+                tx.update(huddleRef, {
+                    isActive: false,
+                    status: 'ended',
+                    endedBy: uid,
+                    endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    endedReason: 'hangup'
+                });
+                return;
+            }
+            if (type === 'p2p') {
+                tx.update(huddleRef, {
+                    isActive: false,
+                    status: 'ended',
+                    endedBy: uid,
+                    endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    endedReason: 'declined'
+                });
+                return;
+            }
+            const prevInvited = Array.isArray(h.invitedUserIds) ? h.invitedUserIds : [];
+            const prevDeclined = Array.isArray(h.declinedUserIds) ? h.declinedUserIds : [];
+            const accepted = Array.isArray(h.acceptedUserIds) ? h.acceptedUserIds : [];
+            const nextInvited = prevInvited.filter((id) => id !== uid);
+            const nextDeclined = Array.from(new Set([...prevDeclined, uid]));
+            const updates = {
+                invitedUserIds: nextInvited,
+                declinedUserIds: nextDeclined,
+                [`participantStates.${uid}.declinedAt`]: admin.firestore.FieldValue.serverTimestamp()
+            };
+            const noOtherInviteesLeft = nextInvited.length === 0;
+            const onlyHostAccepted = accepted.filter(Boolean).length <= 1;
+            if (status === 'ringing' && noOtherInviteesLeft && onlyHostAccepted) {
+                updates.isActive = false;
+                updates.status = 'ended';
+                updates.endedBy = uid;
+                updates.endedAt = admin.firestore.FieldValue.serverTimestamp();
+                updates.endedReason = 'declined';
+            }
+            tx.update(huddleRef, updates);
+        });
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error declining huddle:', error);
+        if (error instanceof functions.https.HttpsError)
+            throw error;
+        throw new functions.https.HttpsError('internal', 'Unable to decline huddle.');
     }
 });
 /**

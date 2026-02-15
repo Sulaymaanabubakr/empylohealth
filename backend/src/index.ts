@@ -28,6 +28,7 @@ export const resolveCircleReport = coreApi.resolveCircleReport;
 export const submitReport = coreApi.submitReport;
 export const startHuddle = coreApi.startHuddle;
 export const joinHuddle = coreApi.joinHuddle;
+export const declineHuddle = coreApi.declineHuddle;
 export const endHuddle = coreApi.endHuddle;
 export const ringHuddleParticipants = coreApi.ringHuddleParticipants;
 export const ringPendingHuddles = coreApi.ringPendingHuddles;

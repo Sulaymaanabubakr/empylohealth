@@ -1741,6 +1741,88 @@ export const joinHuddle = regionalFunctions.https.onCall(async (data, context) =
 });
 
 /**
+ * Decline an incoming huddle.
+ * Callable Function: 'declineHuddle'
+ *
+ * - For p2p: ends the huddle for everyone with endedReason=declined
+ * - For group: records the decline and only ends if nobody else can accept anymore
+ */
+export const declineHuddle = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const { huddleId } = data || {};
+    const uid = context.auth.uid;
+    if (!huddleId) throw new functions.https.HttpsError('invalid-argument', 'Huddle ID required.');
+
+    try {
+        const huddleRef = db.collection('huddles').doc(huddleId);
+        await db.runTransaction(async (tx) => {
+            const snap = await tx.get(huddleRef);
+            if (!snap.exists) throw new functions.https.HttpsError('not-found', 'Huddle not found.');
+            const h = snap.data() || {};
+
+            if (h.status === 'ended' || h.isActive === false) return;
+
+            const type = (h.type || (h.isGroup ? 'group' : 'p2p')) as 'p2p' | 'group';
+            const status = (h.status || 'ringing') as HuddleStatus | string;
+
+            // Host declining is effectively a hangup.
+            if (h.startedBy === uid) {
+                tx.update(huddleRef, {
+                    isActive: false,
+                    status: 'ended',
+                    endedBy: uid,
+                    endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    endedReason: 'hangup'
+                });
+                return;
+            }
+
+            if (type === 'p2p') {
+                tx.update(huddleRef, {
+                    isActive: false,
+                    status: 'ended',
+                    endedBy: uid,
+                    endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    endedReason: 'declined'
+                });
+                return;
+            }
+
+            const prevInvited: string[] = Array.isArray(h.invitedUserIds) ? h.invitedUserIds : [];
+            const prevDeclined: string[] = Array.isArray(h.declinedUserIds) ? h.declinedUserIds : [];
+            const accepted: string[] = Array.isArray(h.acceptedUserIds) ? h.acceptedUserIds : [];
+
+            const nextInvited = prevInvited.filter((id) => id !== uid);
+            const nextDeclined = Array.from(new Set([...prevDeclined, uid]));
+
+            const updates: Record<string, any> = {
+                invitedUserIds: nextInvited,
+                declinedUserIds: nextDeclined,
+                [`participantStates.${uid}.declinedAt`]: admin.firestore.FieldValue.serverTimestamp()
+            };
+
+            const noOtherInviteesLeft = nextInvited.length === 0;
+            const onlyHostAccepted = accepted.filter(Boolean).length <= 1;
+            if (status === 'ringing' && noOtherInviteesLeft && onlyHostAccepted) {
+                updates.isActive = false;
+                updates.status = 'ended';
+                updates.endedBy = uid;
+                updates.endedAt = admin.firestore.FieldValue.serverTimestamp();
+                updates.endedReason = 'declined';
+            }
+
+            tx.update(huddleRef, updates);
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error declining huddle:', error);
+        if (error instanceof functions.https.HttpsError) throw error;
+        throw new functions.https.HttpsError('internal', 'Unable to decline huddle.');
+    }
+});
+
+/**
  * Update huddle connection presence from clients (Daily events)
  * Callable Function: 'updateHuddleConnection'
  *

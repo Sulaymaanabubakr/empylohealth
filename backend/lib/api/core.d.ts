@@ -111,6 +111,14 @@ export declare const startHuddle: functions.HttpsFunction & functions.Runnable<a
  * Callable Function: 'joinHuddle'
  */
 export declare const joinHuddle: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Decline an incoming huddle.
+ * Callable Function: 'declineHuddle'
+ *
+ * - For p2p: ends the huddle for everyone with endedReason=declined
+ * - For group: records the decline and only ends if nobody else can accept anymore
+ */
+export declare const declineHuddle: functions.HttpsFunction & functions.Runnable<any>;
 export declare const updateHuddleConnection: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * End/leave huddle (any participant)
