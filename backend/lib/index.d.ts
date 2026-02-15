@@ -15,6 +15,8 @@ export declare const endHuddle: import("firebase-functions/v1").HttpsFunction & 
 export declare const ringHuddleParticipants: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const ringPendingHuddles: import("firebase-functions/v1").CloudFunction<unknown>;
 export declare const updateHuddleState: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const updateHuddleConnection: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const cleanupStaleHuddles: import("firebase-functions/v1").CloudFunction<unknown>;
 export declare const scheduleHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const deleteScheduledHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const createDirectChat: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

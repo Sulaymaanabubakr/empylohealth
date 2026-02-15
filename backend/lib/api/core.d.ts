@@ -111,6 +111,7 @@ export declare const startHuddle: functions.HttpsFunction & functions.Runnable<a
  * Callable Function: 'joinHuddle'
  */
 export declare const joinHuddle: functions.HttpsFunction & functions.Runnable<any>;
+export declare const updateHuddleConnection: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * End/leave huddle (any participant)
  * - If the caller is the host OR is the last participant: ends the huddle for everyone
@@ -130,6 +131,12 @@ export declare const ringPendingHuddles: functions.CloudFunction<unknown>;
  * Callable Function: 'updateHuddleState'
  */
 export declare const updateHuddleState: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Scheduled cleanup: auto-end huddles stuck in ringing/accepted too long.
+ * - ringing: end as timeout after 45s
+ * - accepted (but not ongoing): end as failed_to_connect after 30s
+ */
+export declare const cleanupStaleHuddles: functions.CloudFunction<unknown>;
 /**
  * Schedule a Huddle
  * Callable Function: 'scheduleHuddle'

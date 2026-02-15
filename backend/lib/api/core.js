@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const apn_1 = __importDefault(require("apn"));
@@ -1113,9 +1113,6 @@ exports.updateSubscription = regionalFunctions.https.onCall(async (data, context
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     throw new functions.https.HttpsError('failed-precondition', 'Direct subscription updates are disabled. Use verified in-app purchase receipts.');
 });
-// ==========================================
-// HUDDLE (CALL) FUNCTIONS
-// ==========================================
 const IOS_APP_BUNDLE_ID = process.env.IOS_BUNDLE_ID || 'com.empylo.circlesapp';
 const IOS_VOIP_TOPIC = `${IOS_APP_BUNDLE_ID}.voip`;
 let apnVoipProviderCache;
@@ -1423,16 +1420,24 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
             ...(callerName ? { userName: callerName } : {})
         });
         const huddleRef = db.collection('huddles').doc();
+        const recipients = participants.filter((p) => p !== uid);
         const huddleData = {
             id: huddleRef.id,
             chatId,
             circleId: chatData?.circleId || null,
             roomUrl, // The actual video link
             roomName,
+            type: isGroup ? 'group' : 'p2p',
+            createdBy: uid,
             startedBy: uid,
             isGroup: !!isGroup,
             isActive: true,
+            // Back-compat: "participants" historically meant accepted users.
+            // Keep it, but also track invited/accepted/active explicitly.
             participants: [uid],
+            invitedUserIds: recipients,
+            acceptedUserIds: [uid],
+            activeUserIds: [],
             participantStates: {
                 [uid]: {
                     role: 'host',
@@ -1443,6 +1448,9 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
             },
             status: 'ringing',
             ringStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+            acceptedAt: null,
+            endedAt: null,
+            endedReason: null,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
         await huddleRef.set(huddleData);
@@ -1469,7 +1477,6 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
         }
         // Fire-and-forget: send notifications without blocking the response.
         // This shaves ~1-2s off the caller's perceived latency.
-        const recipients = participants.filter((p) => p !== uid);
         sendHuddleNotifications({
             recipientUids: recipients,
             chatId,
@@ -1526,22 +1533,26 @@ exports.joinHuddle = regionalFunctions.https.onCall(async (data, context) => {
         }
         const updates = {
             participants: admin.firestore.FieldValue.arrayUnion(uid),
+            acceptedUserIds: admin.firestore.FieldValue.arrayUnion(uid),
             [`participantStates.${uid}.joinedAt`]: admin.firestore.FieldValue.serverTimestamp(),
             [`participantStates.${uid}.leftAt`]: null,
             [`participantStates.${uid}.role`]: uid === huddle.startedBy ? 'host' : 'member'
         };
-        if (uid !== huddle.startedBy && huddle.status === 'ringing') {
-            updates.status = 'active';
-            updates.answeredBy = uid;
-            updates.answeredAt = admin.firestore.FieldValue.serverTimestamp();
+        // First non-host accept transitions ringing -> accepted.
+        // Do NOT mark ongoing here; only clients should mark ongoing once Daily has >= 2 connected participants.
+        const currentStatus = (huddle.status || 'ringing');
+        if (uid !== huddle.startedBy && currentStatus === 'ringing') {
+            updates.status = 'accepted';
+            updates.acceptedBy = uid;
+            updates.acceptedAt = admin.firestore.FieldValue.serverTimestamp();
         }
         await huddleRef.update(updates);
-        if (uid !== huddle.startedBy && huddle.status === 'ringing' && huddle.circleId) {
+        if (uid !== huddle.startedBy && currentStatus === 'ringing' && huddle.circleId) {
             await db.collection('circles').doc(huddle.circleId).update({
-                'activeHuddle.status': 'active',
+                'activeHuddle.status': 'accepted',
                 'activeHuddle.isRinging': false,
-                'activeHuddle.answeredBy': uid,
-                'activeHuddle.answeredAt': admin.firestore.FieldValue.serverTimestamp()
+                'activeHuddle.acceptedBy': uid,
+                'activeHuddle.acceptedAt': admin.firestore.FieldValue.serverTimestamp()
             });
         }
         const callerName = context.auth.token?.name;
@@ -1561,6 +1572,67 @@ exports.joinHuddle = regionalFunctions.https.onCall(async (data, context) => {
     }
 });
 /**
+ * Update huddle connection presence from clients (Daily events)
+ * Callable Function: 'updateHuddleConnection'
+ *
+ * - action: 'daily_joined' | 'daily_left'
+ * - Marks uid in activeUserIds, and moves accepted->ongoing once >=2 are active.
+ */
+const updateHuddleConnectionInternal = async ({ huddleId, uid, action }) => {
+    await db.runTransaction(async (tx) => {
+        const ref = db.collection('huddles').doc(huddleId);
+        const snap = await tx.get(ref);
+        if (!snap.exists)
+            throw new functions.https.HttpsError('not-found', 'Huddle not found.');
+        const h = snap.data() || {};
+        if (h.isActive === false || h.status === 'ended') {
+            return;
+        }
+        const prevActive = Array.isArray(h.activeUserIds) ? h.activeUserIds : [];
+        const nextActive = action === 'daily_joined'
+            ? Array.from(new Set([...prevActive, uid]))
+            : prevActive.filter((id) => id !== uid);
+        const updates = {
+            activeUserIds: nextActive,
+            [`participantStates.${uid}.updatedAt`]: admin.firestore.FieldValue.serverTimestamp()
+        };
+        const status = (h.status || 'ringing');
+        if (status !== 'ended' && nextActive.length >= 2 && (status === 'accepted' || status === 'ringing')) {
+            updates.status = 'ongoing';
+            updates.ongoingAt = admin.firestore.FieldValue.serverTimestamp();
+        }
+        // If everyone left, end the huddle to avoid stuck active docs.
+        if (nextActive.length === 0 && status === 'ongoing') {
+            updates.status = 'ended';
+            updates.isActive = false;
+            updates.endedAt = admin.firestore.FieldValue.serverTimestamp();
+            updates.endedReason = (h.endedReason || 'hangup');
+        }
+        tx.update(ref, updates);
+    });
+};
+exports.updateHuddleConnection = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const { huddleId, action } = data || {};
+    const uid = context.auth.uid;
+    if (!huddleId)
+        throw new functions.https.HttpsError('invalid-argument', 'Huddle ID required.');
+    if (action !== 'daily_joined' && action !== 'daily_left') {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid action.');
+    }
+    try {
+        await updateHuddleConnectionInternal({ huddleId, uid, action });
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error updating huddle connection:', error);
+        if (error instanceof functions.https.HttpsError)
+            throw error;
+        throw new functions.https.HttpsError('internal', 'Unable to update connection.');
+    }
+});
+/**
  * End/leave huddle (any participant)
  * - If the caller is the host OR is the last participant: ends the huddle for everyone
  * - Otherwise: removes the caller from the huddle (like a leave)
@@ -1570,7 +1642,7 @@ exports.joinHuddle = regionalFunctions.https.onCall(async (data, context) => {
 exports.endHuddle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    const { huddleId } = data || {};
+    const { huddleId, reason } = data || {};
     const uid = context.auth.uid;
     if (!huddleId)
         throw new functions.https.HttpsError('invalid-argument', 'Huddle ID required.');
@@ -1589,13 +1661,16 @@ exports.endHuddle = regionalFunctions.https.onCall(async (data, context) => {
         const remainingAfterLeave = currentParticipants.filter((p) => p !== uid);
         const shouldEndForEveryone = isHost || remainingAfterLeave.length === 0;
         if (shouldEndForEveryone) {
+            const endedReason = reason || 'hangup';
             // End the entire huddle
             await huddleRef.update({
                 isActive: false,
                 status: 'ended',
                 endedBy: uid,
                 endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                endedReason,
                 participants: admin.firestore.FieldValue.arrayRemove(uid),
+                activeUserIds: admin.firestore.FieldValue.arrayRemove(uid),
                 [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
             });
             if (huddle.circleId) {
@@ -1624,6 +1699,7 @@ exports.endHuddle = regionalFunctions.https.onCall(async (data, context) => {
             // Non-host leaving: just remove themselves
             await huddleRef.update({
                 participants: admin.firestore.FieldValue.arrayRemove(uid),
+                activeUserIds: admin.firestore.FieldValue.arrayRemove(uid),
                 [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
             });
         }
@@ -1756,7 +1832,7 @@ exports.ringPendingHuddles = regionalFunctions.pubsub.schedule('every 1 minutes'
 exports.updateHuddleState = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    const { huddleId, action } = data; // action: 'join' | 'leave' | 'mute' | 'unmute'
+    const { huddleId, action } = data; // action: 'join' | 'leave' | 'mute' | 'unmute' | 'daily_joined' | 'daily_left'
     const uid = context.auth.uid;
     try {
         const huddleRef = db.collection('huddles').doc(huddleId);
@@ -1774,31 +1850,36 @@ exports.updateHuddleState = regionalFunctions.https.onCall(async (data, context)
         if (!participants.includes(uid)) {
             throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
         }
-        if (action === 'join') {
+        if (action === 'daily_joined' || action === 'daily_left') {
+            await updateHuddleConnectionInternal({ huddleId, uid, action });
+        }
+        else if (action === 'join') {
             const joinUpdate = {
                 participants: admin.firestore.FieldValue.arrayUnion(uid),
+                acceptedUserIds: admin.firestore.FieldValue.arrayUnion(uid),
                 [`participantStates.${uid}.joinedAt`]: admin.firestore.FieldValue.serverTimestamp(),
                 [`participantStates.${uid}.leftAt`]: null,
                 [`participantStates.${uid}.role`]: uid === huddleData.startedBy ? 'host' : 'member'
             };
             if (uid !== huddleData.startedBy && huddleData.status === 'ringing') {
-                joinUpdate.status = 'active';
-                joinUpdate.answeredBy = uid;
-                joinUpdate.answeredAt = admin.firestore.FieldValue.serverTimestamp();
+                joinUpdate.status = 'accepted';
+                joinUpdate.acceptedBy = uid;
+                joinUpdate.acceptedAt = admin.firestore.FieldValue.serverTimestamp();
             }
             await huddleRef.update(joinUpdate);
             if (uid !== huddleData.startedBy && huddleData.status === 'ringing' && huddleData.circleId) {
                 await db.collection('circles').doc(huddleData.circleId).update({
-                    'activeHuddle.status': 'active',
+                    'activeHuddle.status': 'accepted',
                     'activeHuddle.isRinging': false,
-                    'activeHuddle.answeredBy': uid,
-                    'activeHuddle.answeredAt': admin.firestore.FieldValue.serverTimestamp()
+                    'activeHuddle.acceptedBy': uid,
+                    'activeHuddle.acceptedAt': admin.firestore.FieldValue.serverTimestamp()
                 });
             }
         }
         else if (action === 'leave') {
             await huddleRef.update({
                 participants: admin.firestore.FieldValue.arrayRemove(uid),
+                activeUserIds: admin.firestore.FieldValue.arrayRemove(uid),
                 [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
             });
             // If empty, fully end the huddle so Firestore listeners fire
@@ -1808,7 +1889,8 @@ exports.updateHuddleState = regionalFunctions.https.onCall(async (data, context)
                     isActive: false,
                     status: 'ended',
                     endedBy: uid,
-                    endedAt: admin.firestore.FieldValue.serverTimestamp()
+                    endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    endedReason: 'hangup'
                 });
                 // Clear active huddle on circle if any
                 const hData = doc.data() || {};
@@ -1840,6 +1922,53 @@ exports.updateHuddleState = regionalFunctions.https.onCall(async (data, context)
             throw error;
         }
         throw new functions.https.HttpsError('internal', 'Unable to update huddle.');
+    }
+});
+/**
+ * Scheduled cleanup: auto-end huddles stuck in ringing/accepted too long.
+ * - ringing: end as timeout after 45s
+ * - accepted (but not ongoing): end as failed_to_connect after 30s
+ */
+exports.cleanupStaleHuddles = regionalFunctions.pubsub.schedule('every 1 minutes').onRun(async () => {
+    const now = Date.now();
+    const RINGING_MAX_MS = 45 * 1000;
+    const ACCEPTED_MAX_MS = 30 * 1000;
+    try {
+        const snap = await db.collection('huddles')
+            .where('isActive', '==', true)
+            .where('status', 'in', ['ringing', 'accepted'])
+            .limit(200)
+            .get();
+        let ended = 0;
+        for (const docSnap of snap.docs) {
+            const h = docSnap.data() || {};
+            const status = (h.status || 'ringing');
+            const ringAtMs = h.ringStartedAt?.toMillis?.() || h.createdAt?.toMillis?.() || 0;
+            const acceptedAtMs = h.acceptedAt?.toMillis?.() || 0;
+            const shouldTimeout = status === 'ringing' && ringAtMs > 0 && (now - ringAtMs) > RINGING_MAX_MS;
+            const shouldFailConnect = status === 'accepted' && acceptedAtMs > 0 && (now - acceptedAtMs) > ACCEPTED_MAX_MS;
+            if (!shouldTimeout && !shouldFailConnect)
+                continue;
+            const endedReason = shouldTimeout ? 'timeout' : 'failed_to_connect';
+            await docSnap.ref.update({
+                isActive: false,
+                status: 'ended',
+                endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                endedReason
+            });
+            ended += 1;
+            if (h.circleId) {
+                await db.collection('circles').doc(h.circleId).update({
+                    activeHuddle: admin.firestore.FieldValue.delete()
+                }).catch(() => { });
+            }
+        }
+        console.log('[cleanupStaleHuddles] ended:', ended);
+        return null;
+    }
+    catch (error) {
+        console.error('[cleanupStaleHuddles] failed', error);
+        return null;
     }
 });
 /**
