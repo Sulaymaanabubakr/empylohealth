@@ -228,14 +228,14 @@ export const updateCircle = regionalFunctions.https.onCall(async (data, context)
         if (image !== undefined) updates.image = image;
         if (category !== undefined) updates.category = category;
         if (visibility !== undefined) updates.visibility = visibility;
-        if (type) {
-            updates.type = type; // 'public' | 'private'
-            updates['joinSettings.requiresApproval'] = (type === 'private');
-        }
-        if (settings) {
-            // merge settings (e.g. allowMemberHuddles)
-            updates.settings = settings;
-        }
+	        if (type) {
+	            updates.type = type; // 'public' | 'private'
+	            updates['joinSettings.requiresApproval'] = (type === 'private');
+	        }
+	        if (settings) {
+	            // merge settings
+	            updates.settings = settings;
+	        }
 
         await circleRef.update(updates);
 
@@ -1582,19 +1582,25 @@ export const startHuddle = regionalFunctions.https.onCall(async (data, context) 
             throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
         }
 
-        // PERMISSION CHECK: If it's a circle chat, only Creator/Admin/Moderator can start
-        if (chatData?.circleId) {
-            const circleId = chatData.circleId;
-            const circleDoc = await db.collection('circles').doc(circleId).get();
-            const circleData = circleDoc.exists ? circleDoc.data() : {};
-            const memberDoc = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
-            const role = memberDoc.data()?.role;
-            const allowMemberHuddles = circleData?.settings?.allowMemberHuddles === true;
+	        // PERMISSION CHECK: If it's a circle chat, only Creator/Admin/Moderator can start
+	        if (chatData?.circleId) {
+	            const circleId = chatData.circleId;
+	            const circleDoc = await db.collection('circles').doc(circleId).get();
+	            const circleData = circleDoc.exists ? circleDoc.data() : {};
+	            const memberDoc = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
+	            const memberData = memberDoc.exists ? (memberDoc.data() || {}) : {};
+	            const role = memberData?.role;
+	            const status = memberData?.status;
 
-            if (!['creator', 'admin', 'moderator'].includes(role) && !allowMemberHuddles) {
-                throw new functions.https.HttpsError('permission-denied', 'Only moderators or admins can start a huddle.');
-            }
-        }
+	            // Non-negotiable: circle huddles can only be started by creator/admin/moderator.
+	            // Personal chats remain callable by any participant.
+	            if (status !== 'active' || !['creator', 'admin', 'moderator'].includes(role)) {
+	                throw new functions.https.HttpsError(
+	                    'permission-denied',
+	                    'Only the circle creator/admin/moderator can start a huddle in this circle.'
+	                );
+	            }
+	        }
 
         // Re-use active huddle for this chat if one exists and is not stale.
         const existingSnap = await db.collection('huddles')

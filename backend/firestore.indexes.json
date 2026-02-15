@@ -55,6 +55,34 @@
                     "order": "DESCENDING"
                 }
             ]
+        },
+        {
+            "collectionGroup": "huddles",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "isActive",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "huddles",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "chatId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "isActive",
+                    "order": "ASCENDING"
+                }
+            ]
         }
     ],
     "fieldOverrides": []

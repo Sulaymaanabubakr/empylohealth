@@ -7,8 +7,8 @@ console.log('[PERF] index.js: Module evaluating');
 // Add no-op methods to all loaded native modules that miss these methods.
 const ensureNativeEventEmitterStubs = () => {
   const modules = NativeModules || {};
-  Object.keys(modules).forEach((moduleName) => {
-    const nativeModule = modules[moduleName];
+
+  const ensureModule = (nativeModule) => {
     if (!nativeModule || typeof nativeModule !== 'object') return;
     if (typeof nativeModule.addListener !== 'function') {
       nativeModule.addListener = () => {};
@@ -16,6 +16,16 @@ const ensureNativeEventEmitterStubs = () => {
     if (typeof nativeModule.removeListeners !== 'function') {
       nativeModule.removeListeners = () => {};
     }
+  };
+
+  // Some modules (notably WebRTCModule) may not be enumerable yet. Force-load them first.
+  // Daily initializes a NativeEventEmitter with WebRTCModule very early.
+  ensureModule(modules.WebRTCModule);
+  ensureModule(modules.DailyNativeUtils);
+
+  Object.keys(modules).forEach((moduleName) => {
+    const nativeModule = modules[moduleName];
+    ensureModule(nativeModule);
   });
 };
 

@@ -245,7 +245,7 @@ exports.updateCircle = regionalFunctions.https.onCall(async (data, context) => {
             updates['joinSettings.requiresApproval'] = (type === 'private');
         }
         if (settings) {
-            // merge settings (e.g. allowMemberHuddles)
+            // merge settings
             updates.settings = settings;
         }
         await circleRef.update(updates);
@@ -1418,10 +1418,13 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
             const circleDoc = await db.collection('circles').doc(circleId).get();
             const circleData = circleDoc.exists ? circleDoc.data() : {};
             const memberDoc = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
-            const role = memberDoc.data()?.role;
-            const allowMemberHuddles = circleData?.settings?.allowMemberHuddles === true;
-            if (!['creator', 'admin', 'moderator'].includes(role) && !allowMemberHuddles) {
-                throw new functions.https.HttpsError('permission-denied', 'Only moderators or admins can start a huddle.');
+            const memberData = memberDoc.exists ? (memberDoc.data() || {}) : {};
+            const role = memberData?.role;
+            const status = memberData?.status;
+            // Non-negotiable: circle huddles can only be started by creator/admin/moderator.
+            // Personal chats remain callable by any participant.
+            if (status !== 'active' || !['creator', 'admin', 'moderator'].includes(role)) {
+                throw new functions.https.HttpsError('permission-denied', 'Only the circle creator/admin/moderator can start a huddle in this circle.');
             }
         }
         // Re-use active huddle for this chat if one exists and is not stale.
