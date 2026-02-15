@@ -6,6 +6,8 @@ import { COLORS, SPACING } from '../theme/theme';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
+import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
 
 const { width } = Dimensions.get('window');
 
@@ -14,6 +16,7 @@ const FILTERS = ['All', 'Connect', 'Culture', 'Enablement', 'Green Activities', 
 const SupportGroupsScreen = () => {
     const navigation = useNavigation();
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
     const [activeFilter, setActiveFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [groups, setGroups] = useState([]);
@@ -25,24 +28,33 @@ const SupportGroupsScreen = () => {
                 try {
                     // Only show loading on initial load or if empty
                     if (groups.length === 0) setLoading(true);
-                    const circles = await circleService.getAllCircles();
-                    setGroups(circles);
-                } catch (error) {
-                    console.error('Failed to load support groups', error);
-                    setGroups([]);
-                } finally {
-                    setLoading(false);
-                }
-            };
-            loadGroups();
-        }, [])
+            const circles = await circleService.getAllCircles();
+            // Hide full circles from browse unless you're already a member.
+            const visible = (circles || []).filter((c) => {
+                const isMember = !!user?.uid && Array.isArray(c.members) && c.members.includes(user.uid);
+                const isFull = !isMember && getCircleMemberCount(c) >= MAX_CIRCLE_MEMBERS;
+                return !isFull;
+            });
+            setGroups(visible);
+        } catch (error) {
+            console.error('Failed to load support groups', error);
+            setGroups([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+    loadGroups();
+        }, [user?.uid])
     );
 
     const filteredGroups = groups.filter(group => {
         const matchesSearch = (group.name || '').toLowerCase().includes(searchQuery.toLowerCase());
         const tags = group.tags || (group.category ? [group.category] : []);
         const matchesFilter = activeFilter === 'All' || tags.includes(activeFilter);
-        return matchesSearch && matchesFilter;
+        const isMember = !!user?.uid && Array.isArray(group.members) && group.members.includes(user.uid);
+        const isFull = !isMember && getCircleMemberCount(group) >= MAX_CIRCLE_MEMBERS;
+        // Hide full circles from browse unless you're already a member.
+        return matchesSearch && matchesFilter && !isFull;
     });
 
     const renderGroupCard = ({ item }) => (

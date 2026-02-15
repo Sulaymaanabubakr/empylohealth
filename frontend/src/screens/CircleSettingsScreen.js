@@ -354,7 +354,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             await circleService.handleJoinRequest(circleId, req.uid, 'accept');
             showModal({ type: 'success', title: 'Approved', message: `${req.displayName} has gathered to the circle.` });
         } catch (error) {
-            showModal({ type: 'error', title: 'Error', message: 'Failed to approve request.' });
+            showModal({ type: 'error', title: 'Error', message: error?.message || 'Failed to approve request.' });
         } finally {
             setProcessingId(null);
         }

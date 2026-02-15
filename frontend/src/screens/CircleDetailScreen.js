@@ -13,6 +13,7 @@ import { circleService } from '../services/api/circleService';
 import { chatService } from '../services/api/chatService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
+import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +35,9 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const [showAllMembers, setShowAllMembers] = useState(false);
     const [memberModalVisible, setMemberModalVisible] = useState(false);
     const [selectedMember, setSelectedMember] = useState(null);
+
+    const memberCount = getCircleMemberCount(circle);
+    const isFullForNonMembers = !isMember && memberCount >= MAX_CIRCLE_MEMBERS;
 
     // Refresh circle data locally to keep member list updated
     const refreshCircle = async () => {
@@ -163,6 +167,16 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     const handleJoinCircle = async () => {
         if (!circle?.id) return;
+        const count = getCircleMemberCount(circle);
+        const isFull = count >= MAX_CIRCLE_MEMBERS;
+        if (isFull) {
+            showModal({
+                type: 'error',
+                title: 'Circle Full',
+                message: `This circle already has ${MAX_CIRCLE_MEMBERS} members.`
+            });
+            return;
+        }
         try {
             setIsJoining(true);
             const result = await circleService.joinCircle(circle.id);
@@ -185,7 +199,11 @@ const CircleDetailScreen = ({ navigation, route }) => {
             }
         } catch (error) {
             console.error('Failed to join circle', error);
-            showModal({ type: 'error', title: 'Error', message: 'Failed to join circle. Please try again.' });
+            showModal({
+                type: 'error',
+                title: 'Error',
+                message: error?.message || 'Failed to join circle. Please try again.'
+            });
         } finally {
             setIsJoining(false);
         }
@@ -580,9 +598,12 @@ const CircleDetailScreen = ({ navigation, route }) => {
             {!isMember && requestStatus !== 'pending' && (
                 <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + 10 }]}>
                     <TouchableOpacity
-                        style={styles.joinButtonLarge}
+                        style={[
+                            styles.joinButtonLarge,
+                            isFullForNonMembers && { backgroundColor: '#9E9E9E' }
+                        ]}
                         onPress={handleJoinCircle}
-                        disabled={isJoining}
+                        disabled={isJoining || isFullForNonMembers}
                         activeOpacity={0.9}
                     >
                         {isJoining ? (
@@ -590,13 +611,15 @@ const CircleDetailScreen = ({ navigation, route }) => {
                         ) : (
                             <>
                                 <Text style={styles.joinButtonTextLarge}>
-                                    {circle.type === 'private' ? 'Request to Join' : `Join ${circle.name}`}
+                                    {isFullForNonMembers ? 'Circle Full' : (circle.type === 'private' ? 'Request to Join' : `Join ${circle.name}`)}
                                 </Text>
-                                <Ionicons name="arrow-forward" size={22} color="#FFF" />
+                                {!isFullForNonMembers && <Ionicons name="arrow-forward" size={22} color="#FFF" />}
                             </>
                         )}
                     </TouchableOpacity>
-                    <Text style={styles.joinButtonSubtext}>Join the conversation and connect with others!</Text>
+                    <Text style={styles.joinButtonSubtext}>
+                        {isFullForNonMembers ? `This circle is at capacity (${MAX_CIRCLE_MEMBERS}).` : 'Join the conversation and connect with others!'}
+                    </Text>
                 </View>
             )}
 

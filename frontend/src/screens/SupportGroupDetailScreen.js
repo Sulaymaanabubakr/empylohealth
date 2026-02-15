@@ -6,6 +6,7 @@ import { COLORS, SPACING } from '../theme/theme';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
 import { useAuth } from '../context/AuthContext';
+import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
 
 const SupportGroupDetailScreen = ({ navigation, route }) => {
     const group = route.params?.group;
@@ -22,6 +23,8 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
         return false;
     }, [group.members, joinedOverride, user?.uid]);
     const tags = group?.tags || (group?.category ? [group.category] : []);
+    const memberCount = getCircleMemberCount(group);
+    const isFull = !isJoined && memberCount >= MAX_CIRCLE_MEMBERS;
 
     if (!group) {
         return (
@@ -40,7 +43,7 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
     }
 
     const handleConnect = async () => {
-        if (isJoined || !group.id || !user?.uid) return;
+        if (isJoined || isFull || !group.id || !user?.uid) return;
         try {
             setIsJoining(true);
             await circleService.joinCircle(group.id);
@@ -90,10 +93,10 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                         style={[styles.connectButton, isJoined && styles.connectButtonJoined]}
                         onPress={handleConnect}
                         activeOpacity={0.8}
-                        disabled={isJoined || isJoining}
+                        disabled={isJoined || isJoining || isFull}
                     >
                         <Text style={[styles.connectButtonText, isJoined && styles.connectButtonTextJoined]}>
-                            {isJoined ? 'Joined' : (isJoining ? 'Joining...' : 'Connect me')}
+                            {isJoined ? 'Joined' : (isFull ? 'Full' : (isJoining ? 'Joining...' : 'Connect me'))}
                         </Text>
                     </TouchableOpacity>
                 </View>
