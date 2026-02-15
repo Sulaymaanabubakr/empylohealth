@@ -30,6 +30,7 @@ import SupportGroupsScreen from './screens/SupportGroupsScreen';
 import ChatListScreen from './screens/ChatListScreen';
 import ChatDetailScreen from './screens/ChatDetailScreen';
 import HuddleScreen from './screens/HuddleScreen';
+import IncomingHuddleScreen from './screens/IncomingHuddleScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import LearningSessionScreen from './screens/LearningSessionScreen';
 import CreateCircleScreen from './screens/CreateCircleScreen';
@@ -125,6 +126,7 @@ export default function Navigation() {
                         <Stack.Screen name="SupportGroups" component={SupportGroupsScreen} />
                         {/* <Stack.Screen name="ChatList" component={ChatListScreen} /> Removing duplicate */}
                         <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+                        <Stack.Screen name="IncomingHuddle" component={IncomingHuddleScreen} options={{ presentation: 'modal' }} />
                         <Stack.Screen name="Huddle" component={HuddleScreen} options={{ presentation: 'modal' }} />
                         {/* <Stack.Screen name="Profile" component={ProfileScreen} /> Removing duplicate */}
                         <Stack.Screen name="LearningSession" component={LearningSessionScreen} />

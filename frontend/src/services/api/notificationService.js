@@ -11,6 +11,7 @@ let responseSubscription = null;
 let receiveSubscription = null;
 let voipListenersRegistered = false;
 let voipTokenUserId = null;
+let lastInAppIncoming = { huddleId: null, ts: 0 };
 
 let VoipPushNotification = null;
 try {
@@ -48,12 +49,26 @@ const navigateFromNotificationData = (payload) => {
 const maybeShowNativeIncomingCall = async (payload) => {
     const data = payload?.request?.content?.data || payload?.notification?.request?.content?.data || payload?.data || {};
     if (data?.type !== 'HUDDLE_STARTED' || !data?.huddleId) return false;
-    return nativeCallService.presentIncomingHuddleCall({
+    const shown = await nativeCallService.presentIncomingHuddleCall({
         huddleId: data.huddleId,
         chatId: data.chatId,
         chatName: data.chatName || 'Huddle',
         callerName: data.callerName || data.chatName || 'Incoming Huddle'
     });
+    if (shown) return true;
+
+    // In-app fallback for builds without CallKeep: show accept/decline UI + ringtone.
+    const now = Date.now();
+    if (lastInAppIncoming.huddleId !== data.huddleId || (now - lastInAppIncoming.ts) > 15000) {
+        lastInAppIncoming = { huddleId: data.huddleId, ts: now };
+        navigate('IncomingHuddle', {
+            huddleId: data.huddleId,
+            chatId: data.chatId,
+            chatName: data.chatName || 'Huddle',
+            callerName: data.callerName || data.chatName || 'Incoming Huddle'
+        });
+    }
+    return true;
 };
 
 const normalizeVoipNotificationData = (notification) => {

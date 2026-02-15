@@ -89,6 +89,16 @@ const handleEndCall = (event) => {
   uuidToPayload.delete(callUUID);
   if (payload?.huddleId) {
     huddleIdToUuid.delete(payload.huddleId);
+
+    // Best-effort: if user declined from native UI before opening the in-app screen,
+    // reflect it in Firebase so the caller doesn't ring forever.
+    try {
+      // eslint-disable-next-line global-require
+      const { huddleService } = require('../api/huddleService');
+      huddleService.declineHuddle(payload.huddleId).catch(() => {});
+    } catch {
+      // ignore if services aren't available yet
+    }
   }
 };
 
@@ -197,4 +207,3 @@ export const nativeCallService = {
     }
   }
 };
-
