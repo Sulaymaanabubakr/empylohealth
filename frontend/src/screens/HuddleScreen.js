@@ -20,7 +20,7 @@ const JOIN_MAX_ATTEMPTS = 1;
 const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 20000;
 let ExpoAudio = null;
 try {
-    ExpoAudio = require('expo-av').Audio;
+    ExpoAudio = require('expo-audio');
 } catch {
     ExpoAudio = null;
 }
@@ -157,11 +157,12 @@ const HuddleScreen = ({ navigation, route }) => {
             ringbackVibrationIntervalRef.current = null;
         }
         Vibration.cancel();
-        const sound = ringbackSoundRef.current;
+        const player = ringbackSoundRef.current;
         ringbackSoundRef.current = null;
-        if (!sound) return;
-        await safeCall(() => sound.stopAsync());
-        await safeCall(() => sound.unloadAsync());
+        if (!player) return;
+        await safeCall(() => player.pause?.());
+        await safeCall(() => player.seekTo?.(0));
+        await safeCall(() => player.remove?.());
     }, []);
 
     const startRingbackTone = useCallback(async () => {
@@ -169,26 +170,25 @@ const HuddleScreen = ({ navigation, route }) => {
         ringbackSessionRef.current = sessionId;
         await stopRingbackTone();
 
-        if (ExpoAudio) {
-            await safeCall(() => ExpoAudio.setAudioModeAsync({
-                playsInSilentModeIOS: true,
-                shouldDuckAndroid: true,
-                staysActiveInBackground: false
+        if (ExpoAudio?.createAudioPlayer) {
+            // expo-audio (Expo SDK 54+)
+            await safeCall(() => ExpoAudio.setAudioModeAsync?.({
+                playsInSilentMode: true,
+                shouldPlayInBackground: false
             }));
-            const created = await safeCall(() => ExpoAudio.Sound.createAsync(
-                require('../assets/sounds/ringback.wav'),
-                { isLooping: true, shouldPlay: true, volume: 1.0 }
-            ));
-            if (!created?.sound) return;
+            const player = ExpoAudio.createAudioPlayer(require('../assets/sounds/ringback.wav'));
+            player.loop = true;
+            player.volume = 1.0;
             if (ringbackSessionRef.current !== sessionId) {
-                await safeCall(() => created.sound.unloadAsync());
+                await safeCall(() => player.remove?.());
                 return;
             }
-            ringbackSoundRef.current = created.sound;
+            ringbackSoundRef.current = player;
+            await safeCall(() => player.play?.());
             return;
         }
 
-        // Fallback for binaries without expo-av.
+        // Fallback for binaries without expo-audio.
         Vibration.vibrate(350);
         ringbackVibrationIntervalRef.current = setInterval(() => {
             Vibration.vibrate(350);

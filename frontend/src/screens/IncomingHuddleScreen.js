@@ -10,7 +10,7 @@ import { callDiagnostics } from '../services/calling/callDiagnostics';
 
 let ExpoAudio = null;
 try {
-  ExpoAudio = require('expo-av').Audio;
+  ExpoAudio = require('expo-audio');
 } catch {
   ExpoAudio = null;
 }
@@ -37,11 +37,12 @@ export default function IncomingHuddleScreen({ navigation, route }) {
 
   const stopRingtone = useCallback(async () => {
     ringtoneSessionRef.current += 1;
-    const sound = ringtoneRef.current;
+    const player = ringtoneRef.current;
     ringtoneRef.current = null;
-    if (!sound) return;
-    await safeCall(() => sound.stopAsync());
-    await safeCall(() => sound.unloadAsync());
+    if (!player) return;
+    await safeCall(() => player.pause?.());
+    await safeCall(() => player.seekTo?.(0));
+    await safeCall(() => player.remove?.());
   }, []);
 
   const startRingtone = useCallback(async () => {
@@ -49,23 +50,21 @@ export default function IncomingHuddleScreen({ navigation, route }) {
     ringtoneSessionRef.current = sessionId;
     await stopRingtone();
 
-    if (!ExpoAudio) return;
-    await safeCall(() => ExpoAudio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: false,
-      staysActiveInBackground: false
+    if (!ExpoAudio?.createAudioPlayer) return;
+    await safeCall(() => ExpoAudio.setAudioModeAsync?.({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false
     }));
 
-    const created = await safeCall(() => ExpoAudio.Sound.createAsync(
-      require('../assets/sounds/ringback.wav'),
-      { isLooping: true, shouldPlay: true, volume: 1.0 }
-    ));
-    if (!created?.sound) return;
+    const player = ExpoAudio.createAudioPlayer(require('../assets/sounds/ringback.wav'));
+    player.loop = true;
+    player.volume = 1.0;
     if (ringtoneSessionRef.current !== sessionId) {
-      await safeCall(() => created.sound.unloadAsync());
+      await safeCall(() => player.remove?.());
       return;
     }
-    ringtoneRef.current = created.sound;
+    ringtoneRef.current = player;
+    await safeCall(() => player.play?.());
   }, [stopRingtone]);
 
   useEffect(() => {
@@ -217,4 +216,3 @@ const styles = StyleSheet.create({
     fontSize: 16
   }
 });
-
