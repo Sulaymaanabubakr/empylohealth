@@ -112,7 +112,10 @@ export declare const startHuddle: functions.HttpsFunction & functions.Runnable<a
  */
 export declare const joinHuddle: functions.HttpsFunction & functions.Runnable<any>;
 /**
- * End huddle (host only)
+ * End/leave huddle (any participant)
+ * - If the caller is the host OR is the last participant: ends the huddle for everyone
+ * - Otherwise: removes the caller from the huddle (like a leave)
+ * - Idempotent: if huddle is already ended, returns success
  * Callable Function: 'endHuddle'
  */
 export declare const endHuddle: functions.HttpsFunction & functions.Runnable<any>;

@@ -47,7 +47,7 @@ const HuddleScreen = ({ navigation, route }) => {
     const chat = route?.params?.chat || { id: route?.params?.chatId, name: 'Huddle', isGroup: true };
     const mode = route?.params?.mode || (route?.params?.huddleId ? 'join' : 'start');
     const [huddleId, setHuddleId] = useState(route?.params?.huddleId || null);
-    const [phase, setPhase] = useState('connecting'); // connecting | ringing | joined | error | ended
+    const [phase, setPhase] = useState('connecting'); // connecting | ringing | joined | ending | error | ended
     const [errorMessage, setErrorMessage] = useState('');
     const [participants, setParticipants] = useState([]);
     const [activeSpeakerSessionId, setActiveSpeakerSessionId] = useState(null);
@@ -183,23 +183,29 @@ const HuddleScreen = ({ navigation, route }) => {
     const attachCallHandlers = useCallback((callObject) => {
         detachCallHandlers();
 
+        // Guard: ignore all Daily events once we're leaving to prevent ghost updates
+        const guarded = (fn) => (...args) => {
+            if (isLeavingRef.current) return;
+            fn(...args);
+        };
+
         const handlers = {
-            'joined-meeting': () => {
+            'joined-meeting': guarded(() => {
                 metricsRef.current.joinedEventAt = Date.now();
                 if (metricsRef.current.joinStartedAt) {
                     logMetric('join_started_to_joined_event', metricsRef.current.joinedEventAt - metricsRef.current.joinStartedAt);
                 }
                 setPhase('joined');
                 refreshParticipants();
-                callObject.startRemoteParticipantsAudioLevelObserver(250).catch(() => {});
-            },
-            'participant-joined': () => refreshParticipants(),
-            'participant-updated': () => refreshParticipants(),
-            'participant-left': () => refreshParticipants(),
-            'active-speaker-change': (ev) => {
+                callObject.startRemoteParticipantsAudioLevelObserver(250).catch(() => { });
+            }),
+            'participant-joined': guarded(() => refreshParticipants()),
+            'participant-updated': guarded(() => refreshParticipants()),
+            'participant-left': guarded(() => refreshParticipants()),
+            'active-speaker-change': guarded((ev) => {
                 setActiveSpeakerSessionId(ev?.activeSpeaker?.peerId || null);
-            },
-            'track-started': (ev) => {
+            }),
+            'track-started': guarded((ev) => {
                 const isFirstRemoteAudio = ev?.type === 'audio' && ev?.participant && !ev.participant.local && !firstRemoteAudioLoggedRef.current;
                 if (isFirstRemoteAudio) {
                     firstRemoteAudioLoggedRef.current = true;
@@ -207,12 +213,12 @@ const HuddleScreen = ({ navigation, route }) => {
                         logMetric('joined_event_to_first_remote_audio', Date.now() - metricsRef.current.joinedEventAt);
                     }
                 }
-            },
-            error: () => {
+            }),
+            error: guarded(() => {
                 stopRingbackTone();
                 setPhase('error');
                 setErrorMessage('Call error. Please try again.');
-            }
+            })
         };
 
         Object.entries(handlers).forEach(([eventName, handler]) => {
@@ -225,7 +231,9 @@ const HuddleScreen = ({ navigation, route }) => {
         if (isLeavingRef.current) return;
         isLeavingRef.current = true;
         joinFlowCancelledRef.current = true;
-        setPhase('ended');
+
+        // Show "Ending call..." overlay while cleanup runs
+        setPhase('ending');
 
         const callObject = callObjectRef.current;
         const currentHuddleId = huddleId;
@@ -236,6 +244,33 @@ const HuddleScreen = ({ navigation, route }) => {
             huddleService.clearActiveLocalSession();
         }
 
+        // Do backend + media cleanup BEFORE navigating, with a 3s safety timeout
+        const cleanup = async () => {
+            await stopRingbackTone();
+
+            // Backend cleanup first so Firestore doc updates for the other party
+            if (currentHuddleId) {
+                nativeCallService.endHuddleCall(currentHuddleId);
+                // endHuddle now works for any participant (not just host)
+                await safeCall(() => huddleService.endHuddle(currentHuddleId));
+            }
+
+            // Then tear down media
+            if (callObject) {
+                await safeCall(() => callObject.stopRemoteParticipantsAudioLevelObserver());
+                await safeCall(() => callObject.leave());
+                await safeCall(() => callObject.destroy());
+            }
+        };
+
+        // Race cleanup against a 3s timeout so the user is never stuck
+        await Promise.race([
+            cleanup(),
+            new Promise((resolve) => setTimeout(resolve, 3000))
+        ]);
+
+        setPhase('ended');
+
         if (navigateBack) {
             if (navigation.canGoBack()) {
                 navigation.goBack();
@@ -243,27 +278,7 @@ const HuddleScreen = ({ navigation, route }) => {
                 navigation.navigate('MainTabs');
             }
         }
-
-        // Clean up async in background so UI doesn't feel stuck on hangup.
-        (async () => {
-            await stopRingbackTone();
-
-            if (callObject) {
-                await safeCall(() => callObject.stopRemoteParticipantsAudioLevelObserver());
-                await safeCall(() => callObject.leave());
-                await safeCall(() => callObject.destroy());
-            }
-
-            if (currentHuddleId) {
-                nativeCallService.endHuddleCall(currentHuddleId);
-                if (endForEveryone && isHost) {
-                    await safeCall(() => huddleService.endHuddle(currentHuddleId));
-                } else {
-                    await safeCall(() => huddleService.updateHuddleState(currentHuddleId, 'leave'));
-                }
-            }
-        })();
-    }, [detachCallHandlers, huddleId, isHost, navigation, stopRingbackTone]);
+    }, [detachCallHandlers, huddleId, navigation, stopRingbackTone]);
 
     useEffect(() => {
         if (!metricsRef.current.tapTs) return;
@@ -320,13 +335,49 @@ const HuddleScreen = ({ navigation, route }) => {
         return () => backSub.remove();
     }, [navigation]);
 
+    // Phase 2 + 1: Firestore real-time listener on the huddle document
+    useEffect(() => {
+        if (!huddleId) return undefined;
+        if (isLeavingRef.current) return undefined;
+
+        const huddleDocRef = doc(db, 'huddles', huddleId);
+        const unsubscribe = onSnapshot(huddleDocRef, (snap) => {
+            if (!snap.exists() || isLeavingRef.current) return;
+            const data = snap.data();
+
+            // If huddle ended remotely, tear down locally
+            if (data.status === 'ended' || data.isActive === false) {
+                leaveCall(false, true, true);
+                return;
+            }
+
+            // If callee answered (status went to 'active'), stop ringback for the caller
+            if (data.status === 'active' && isHost) {
+                stopRingbackTone();
+            }
+
+            // Debug: log participant array changes from Firestore
+            const firestoreParticipants = data.participants || [];
+            console.log('[Huddle] Firestore participants updated:', firestoreParticipants.length, firestoreParticipants);
+        }, (err) => {
+            console.warn('[Huddle] onSnapshot error:', err);
+        });
+
+        return unsubscribe;
+    }, [huddleId, isHost, leaveCall, stopRingbackTone]);
+
     useEffect(() => {
         if (hasStartedJoinRef.current) return;
         hasStartedJoinRef.current = true;
         joinFlowCancelledRef.current = false;
 
         const start = async () => {
-            setPhase('connecting');
+            // Phase 3: Show ringing immediately for caller before the callable resolves
+            if (mode === 'start') {
+                setPhase('ringing');
+            } else {
+                setPhase('connecting');
+            }
             setErrorMessage('');
             setSeconds(0);
             firstRemoteAudioLoggedRef.current = false;
@@ -375,10 +426,7 @@ const HuddleScreen = ({ navigation, route }) => {
                         chatName: chat?.name || 'Huddle'
                     });
                 }
-                if (hostStatus) {
-                    // Show ringing immediately for caller while connection/join settles.
-                    setPhase('ringing');
-                }
+                // Phase is already 'ringing' for caller (set before callable) — no need to set again
                 if (joinFlowCancelledRef.current || isLeavingRef.current) {
                     return;
                 }
@@ -482,7 +530,7 @@ const HuddleScreen = ({ navigation, route }) => {
         if (!isHost || !huddleId || phase === 'error' || remoteParticipantCount > 0) return undefined;
 
         const interval = setInterval(() => {
-            huddleService.ringHuddleParticipants(huddleId).catch(() => {});
+            huddleService.ringHuddleParticipants(huddleId).catch(() => { });
         }, 12000);
 
         return () => clearInterval(interval);
@@ -505,7 +553,7 @@ const HuddleScreen = ({ navigation, route }) => {
         callObject.setLocalAudio(!next);
         setIsMuted(next);
         if (huddleId) {
-            huddleService.updateHuddleState(huddleId, next ? 'mute' : 'unmute').catch(() => {});
+            huddleService.updateHuddleState(huddleId, next ? 'mute' : 'unmute').catch(() => { });
         }
     };
 
@@ -578,13 +626,25 @@ const HuddleScreen = ({ navigation, route }) => {
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
-    const statusText = phase === 'ringing'
-        ? 'Ringing...'
-        : phase === 'joined'
-        ? (isHost && remoteParticipantCount === 0 ? 'Ringing...' : formatTime(seconds))
-        : phase === 'error'
-            ? 'Connection failed'
-            : 'Connecting...';
+    const statusText = phase === 'ending'
+        ? 'Ending call...'
+        : phase === 'ringing'
+            ? 'Ringing...'
+            : phase === 'joined'
+                ? (isHost && remoteParticipantCount === 0 ? 'Ringing...' : formatTime(seconds))
+                : phase === 'error'
+                    ? 'Connection failed'
+                    : 'Connecting...';
+
+    if (phase === 'ending') {
+        return (
+            <View style={styles.errorScreen}>
+                <StatusBar barStyle="light-content" backgroundColor="#111111" />
+                <ActivityIndicator size="large" color="#FFFFFF" />
+                <Text style={[styles.errorTitle, { marginTop: 16 }]}>Ending call...</Text>
+            </View>
+        );
+    }
 
     if (phase === 'error') {
         return (

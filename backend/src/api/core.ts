@@ -1623,23 +1623,22 @@ export const startHuddle = functions.https.onCall(async (data, context) => {
             });
         }
 
-        // Notify other participants (push + in-app)
-        try {
-            const recipients = participants.filter((p: string) => p !== uid);
-            await sendHuddleNotifications({
-                recipientUids: recipients,
-                chatId,
-                huddleId: huddleRef.id,
-                roomUrl,
-                title: 'Incoming Huddle',
-                body: 'Calling... Tap to join.',
-                chatName: chatData?.name || 'Huddle',
-                callerName: callerName || 'Incoming Huddle',
-                dedupePerRecipient: true
-            });
-        } catch (notifyError) {
+        // Fire-and-forget: send notifications without blocking the response.
+        // This shaves ~1-2s off the caller's perceived latency.
+        const recipients = participants.filter((p: string) => p !== uid);
+        sendHuddleNotifications({
+            recipientUids: recipients,
+            chatId,
+            huddleId: huddleRef.id,
+            roomUrl,
+            title: 'Incoming Huddle',
+            body: 'Calling... Tap to join.',
+            chatName: chatData?.name || 'Huddle',
+            callerName: callerName || 'Incoming Huddle',
+            dedupePerRecipient: true
+        }).catch((notifyError: any) => {
             console.error("Error sending huddle notifications:", notifyError);
-        }
+        });
 
         return { success: true, huddleId: huddleRef.id, roomUrl, token, roomName, startedBy: uid };
     } catch (error) {
@@ -1724,7 +1723,10 @@ export const joinHuddle = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * End huddle (host only)
+ * End/leave huddle (any participant)
+ * - If the caller is the host OR is the last participant: ends the huddle for everyone
+ * - Otherwise: removes the caller from the huddle (like a leave)
+ * - Idempotent: if huddle is already ended, returns success
  * Callable Function: 'endHuddle'
  */
 export const endHuddle = functions.https.onCall(async (data, context) => {
@@ -1739,37 +1741,54 @@ export const endHuddle = functions.https.onCall(async (data, context) => {
         if (!huddleDoc.exists) throw new functions.https.HttpsError('not-found', 'Huddle not found.');
         const huddle = huddleDoc.data() || {};
 
-        if (huddle.startedBy !== uid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the host can end this huddle.');
+        // Idempotency: already ended → return success
+        if (huddle.status === 'ended' || huddle.isActive === false) {
+            return { success: true, alreadyEnded: true };
         }
 
-        await huddleRef.update({
-            isActive: false,
-            status: 'ended',
-            endedBy: uid,
-            endedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        const isHost = huddle.startedBy === uid;
+        const currentParticipants: string[] = huddle.participants || [];
+        const remainingAfterLeave = currentParticipants.filter((p: string) => p !== uid);
+        const shouldEndForEveryone = isHost || remainingAfterLeave.length === 0;
 
-        if (huddle.circleId) {
-            await db.collection('circles').doc(huddle.circleId).update({
-                activeHuddle: admin.firestore.FieldValue.delete()
+        if (shouldEndForEveryone) {
+            // End the entire huddle
+            await huddleRef.update({
+                isActive: false,
+                status: 'ended',
+                endedBy: uid,
+                endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
+                [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
             });
-        }
 
-        // Best-effort cleanup of Daily room.
-        const roomName = huddle.roomName || extractRoomNameFromUrl(huddle.roomUrl || '');
-        if (roomName) {
-            try {
-                const DAILY_API_KEY = getDailyApiKey();
-                await fetch(`https://api.daily.co/v1/rooms/${roomName}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${DAILY_API_KEY}`
-                    }
+            if (huddle.circleId) {
+                await db.collection('circles').doc(huddle.circleId).update({
+                    activeHuddle: admin.firestore.FieldValue.delete()
                 });
-            } catch (cleanupError) {
-                console.warn('Daily room cleanup failed', cleanupError);
             }
+
+            // Best-effort cleanup of Daily room.
+            const roomName = huddle.roomName || extractRoomNameFromUrl(huddle.roomUrl || '');
+            if (roomName) {
+                try {
+                    const DAILY_API_KEY = getDailyApiKey();
+                    await fetch(`https://api.daily.co/v1/rooms/${roomName}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${DAILY_API_KEY}`
+                        }
+                    });
+                } catch (cleanupError) {
+                    console.warn('Daily room cleanup failed', cleanupError);
+                }
+            }
+        } else {
+            // Non-host leaving: just remove themselves
+            await huddleRef.update({
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
+                [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
+            });
         }
 
         return { success: true };
@@ -1960,11 +1979,15 @@ export const updateHuddleState = functions.https.onCall(async (data, context) =>
                 participants: admin.firestore.FieldValue.arrayRemove(uid),
                 [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
             });
-            // If empty, close huddle or keep active? Logic depends. 
-            // Simple: If 0 participants, set isActive false.
+            // If empty, fully end the huddle so Firestore listeners fire
             const doc = await huddleRef.get();
             if (doc.exists && doc.data()?.participants.length === 0) {
-                await huddleRef.update({ isActive: false, endedAt: admin.firestore.FieldValue.serverTimestamp() });
+                await huddleRef.update({
+                    isActive: false,
+                    status: 'ended',
+                    endedBy: uid,
+                    endedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
                 // Clear active huddle on circle if any
                 const hData = doc.data() || {};
                 if (hData.chatId) {
