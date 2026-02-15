@@ -2660,9 +2660,8 @@ exports.getSeedStatus = regionalFunctions.https.onRequest(async (req, res) => {
         res.status(500).json({ error: error.message || 'Status failed' });
     }
 });
-// Default to UK time. Cloud Scheduler will handle DST transitions for Europe/London.
-// Override per environment via AFFIRMATION_TIMEZONE if needed.
-const AFFIRMATION_TIMEZONE = process.env.AFFIRMATION_TIMEZONE || 'Europe/London';
+// UK time (DST-safe). Intentionally not configurable: app-wide scheduling is UK-local.
+const AFFIRMATION_TIMEZONE = 'Europe/London';
 exports.sendAffirmationsMorning = regionalFunctions.pubsub.schedule('0 8 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
     await sendDailyAffirmationsNotification(0, 'Morning Affirmation');
 });
