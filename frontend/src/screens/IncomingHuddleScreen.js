@@ -7,13 +7,9 @@ import { db } from '../services/firebaseConfig';
 import { COLORS } from '../theme/theme';
 import { huddleService } from '../services/api/huddleService';
 import { callDiagnostics } from '../services/calling/callDiagnostics';
+import { loopingSound } from '../services/audio/loopingSound';
 
-let ExpoAudio = null;
-try {
-  ExpoAudio = require('expo-audio');
-} catch {
-  ExpoAudio = null;
-}
+// Audio playback is handled via loopingSound (expo-audio preferred, expo-av fallback).
 
 const safeCall = async (fn) => {
   try {
@@ -37,12 +33,10 @@ export default function IncomingHuddleScreen({ navigation, route }) {
 
   const stopRingtone = useCallback(async () => {
     ringtoneSessionRef.current += 1;
-    const player = ringtoneRef.current;
+    const instance = ringtoneRef.current;
     ringtoneRef.current = null;
-    if (!player) return;
-    await safeCall(() => player.pause?.());
-    await safeCall(() => player.seekTo?.(0));
-    await safeCall(() => player.remove?.());
+    if (!instance) return;
+    await safeCall(() => loopingSound.stopAndUnload(instance));
   }, []);
 
   const startRingtone = useCallback(async () => {
@@ -50,21 +44,16 @@ export default function IncomingHuddleScreen({ navigation, route }) {
     ringtoneSessionRef.current = sessionId;
     await stopRingtone();
 
-    if (!ExpoAudio?.createAudioPlayer) return;
-    await safeCall(() => ExpoAudio.setAudioModeAsync?.({
-      playsInSilentMode: true,
-      shouldPlayInBackground: false
-    }));
-
-    const player = ExpoAudio.createAudioPlayer(require('../assets/sounds/ringback.wav'));
-    player.loop = true;
-    player.volume = 1.0;
+    const instance = await safeCall(() => loopingSound.createAndPlay(
+      require('../assets/sounds/ringback.wav'),
+      { volume: 1.0 }
+    ));
+    if (!instance?.handle) return;
     if (ringtoneSessionRef.current !== sessionId) {
-      await safeCall(() => player.remove?.());
+      await safeCall(() => loopingSound.stopAndUnload(instance));
       return;
     }
-    ringtoneRef.current = player;
-    await safeCall(() => player.play?.());
+    ringtoneRef.current = instance;
   }, [stopRingtone]);
 
   useEffect(() => {

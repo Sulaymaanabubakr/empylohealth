@@ -6,6 +6,12 @@ console.log('[PERF] index.js: Module evaluating');
 require('react-native-get-random-values');
 
 const { NativeModules } = require('react-native');
+const { LogBox } = require('react-native');
+
+// Keep dev console readable while we maintain compatibility with older dev clients.
+LogBox.ignoreLogs([
+  '[expo-av]: Expo AV has been deprecated and will be removed in SDK 54.'
+]);
 
 const ensureEventEmitterCompatibility = () => {
   const modules = NativeModules || {};

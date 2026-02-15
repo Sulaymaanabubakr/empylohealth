@@ -12,18 +12,14 @@ import Avatar from '../components/Avatar';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { callDiagnostics } from '../services/calling/callDiagnostics';
+import { loopingSound } from '../services/audio/loopingSound';
 
 const MAX_VISIBLE_PARTICIPANTS = 8;
 const INVITE_TIMEOUT_MS = 40000; // 30-45s
 const JOIN_TIMEOUT_MS = 15000; // 10-15s
 const JOIN_MAX_ATTEMPTS = 1;
 const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 20000;
-let ExpoAudio = null;
-try {
-    ExpoAudio = require('expo-audio');
-} catch {
-    ExpoAudio = null;
-}
+// Audio playback is handled via loopingSound (expo-audio preferred, expo-av fallback).
 
 const HuddleScreen = ({ navigation, route }) => {
     const { user, userData } = useAuth();
@@ -157,12 +153,10 @@ const HuddleScreen = ({ navigation, route }) => {
             ringbackVibrationIntervalRef.current = null;
         }
         Vibration.cancel();
-        const player = ringbackSoundRef.current;
+        const instance = ringbackSoundRef.current;
         ringbackSoundRef.current = null;
-        if (!player) return;
-        await safeCall(() => player.pause?.());
-        await safeCall(() => player.seekTo?.(0));
-        await safeCall(() => player.remove?.());
+        if (!instance) return;
+        await safeCall(() => loopingSound.stopAndUnload(instance));
     }, []);
 
     const startRingbackTone = useCallback(async () => {
@@ -170,25 +164,20 @@ const HuddleScreen = ({ navigation, route }) => {
         ringbackSessionRef.current = sessionId;
         await stopRingbackTone();
 
-        if (ExpoAudio?.createAudioPlayer) {
-            // expo-audio (Expo SDK 54+)
-            await safeCall(() => ExpoAudio.setAudioModeAsync?.({
-                playsInSilentMode: true,
-                shouldPlayInBackground: false
-            }));
-            const player = ExpoAudio.createAudioPlayer(require('../assets/sounds/ringback.wav'));
-            player.loop = true;
-            player.volume = 1.0;
+        const instance = await safeCall(() => loopingSound.createAndPlay(
+            require('../assets/sounds/ringback.wav'),
+            { volume: 1.0 }
+        ));
+        if (instance?.handle) {
             if (ringbackSessionRef.current !== sessionId) {
-                await safeCall(() => player.remove?.());
+                await safeCall(() => loopingSound.stopAndUnload(instance));
                 return;
             }
-            ringbackSoundRef.current = player;
-            await safeCall(() => player.play?.());
+            ringbackSoundRef.current = instance;
             return;
         }
 
-        // Fallback for binaries without expo-audio.
+        // Fallback for runtimes without expo-audio/expo-av.
         Vibration.vibrate(350);
         ringbackVibrationIntervalRef.current = setInterval(() => {
             Vibration.vibrate(350);
