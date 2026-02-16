@@ -41,7 +41,7 @@ service cloud.firestore {
         'role', 'dob', 'gender', 'location', 'settings',
         'onboardingCompleted', 'wellbeingScore', 'wellbeingLabel', 'streak',
         'lastAssessmentAt', 'subscription', 'createdAt', 'updatedAt',
-        'expoPushTokens', 'fcmTokens', 'status'
+        'expoPushTokens', 'fcmTokens', 'voipPushTokens', 'status'
       ]);
     }
 
