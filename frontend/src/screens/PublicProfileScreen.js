@@ -7,9 +7,34 @@ import { doc, getDoc } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import { db } from '../services/firebaseConfig';
 import { chatService } from '../services/api/chatService';
+import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { COLORS, SPACING } from '../theme/theme';
+
+const labelFromScore = (score) => {
+    const n = Number(score);
+    if (Number.isNaN(n)) return 'No data';
+    if (n >= 80) return 'Thriving';
+    if (n >= 60) return 'Doing Well';
+    if (n >= 40) return 'Okay';
+    if (n >= 20) return 'Struggling';
+    return 'Needs Attention';
+};
+
+const fmtDate = (value) => {
+    if (!value) return 'Unknown';
+    try {
+        if (typeof value?.toDate === 'function') {
+            return value.toDate().toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return 'Unknown';
+        return d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+        return 'Unknown';
+    }
+};
 
 const PublicProfileScreen = ({ navigation, route }) => {
     const uid = route?.params?.uid;
@@ -17,6 +42,7 @@ const PublicProfileScreen = ({ navigation, route }) => {
     const { showModal } = useModal();
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState(null);
+    const [presence, setPresence] = useState({ state: 'offline', lastChanged: null });
 
     useEffect(() => {
         let mounted = true;
@@ -27,19 +53,31 @@ const PublicProfileScreen = ({ navigation, route }) => {
             }
 
             try {
-                const snap = await getDoc(doc(db, 'users', uid));
+                const [snap, circlesSnap] = await Promise.all([
+                    getDoc(doc(db, 'users', uid)),
+                    getDoc(doc(db, 'userCircles', uid))
+                ]);
                 if (!mounted) return;
                 if (!snap.exists()) {
                     setProfile(null);
                     return;
                 }
                 const data = snap.data();
+                const circleIds = Array.isArray(circlesSnap.data()?.circleIds) ? circlesSnap.data().circleIds : [];
                 setProfile({
                     uid,
                     name: data?.name || data?.displayName || 'Member',
+                    email: data?.email || '',
                     photoURL: data?.photoURL || '',
                     bio: data?.bio || data?.about || 'No bio available yet.',
-                    wellbeingScore: data?.wellbeingScore ?? null
+                    wellbeingScore: data?.wellbeingScore ?? null,
+                    wellbeingLabel: data?.wellbeingLabel || labelFromScore(data?.wellbeingScore),
+                    streak: Number(data?.streak || 0),
+                    role: data?.role || 'personal',
+                    location: data?.location || '',
+                    gender: data?.gender || '',
+                    createdAt: data?.createdAt || null,
+                    circlesCount: circleIds.length
                 });
             } finally {
                 if (mounted) setLoading(false);
@@ -49,6 +87,13 @@ const PublicProfileScreen = ({ navigation, route }) => {
         return () => {
             mounted = false;
         };
+    }, [uid]);
+
+    useEffect(() => {
+        if (!uid) return undefined;
+        return presenceRepository.subscribeToPresence(uid, (state) => {
+            setPresence(state || { state: 'offline', lastChanged: null });
+        });
     }, [uid]);
 
     const handleMessage = async () => {
@@ -113,10 +158,59 @@ const PublicProfileScreen = ({ navigation, route }) => {
                     <LinearGradient colors={[COLORS.primary, '#00C9B1']} style={styles.heroCard}>
                         <Avatar uri={profile.photoURL} name={profile.name} size={88} />
                         <Text style={styles.name}>{profile.name}</Text>
-                        {typeof profile.wellbeingScore === 'number' && (
-                            <Text style={styles.score}>Wellbeing Score: {profile.wellbeingScore}</Text>
-                        )}
+                        <View style={styles.statusRow}>
+                            <View style={[styles.presenceDot, presence?.state === 'online' ? styles.presenceOnline : styles.presenceOffline]} />
+                            <Text style={styles.statusText}>{presence?.state === 'online' ? 'Online' : 'Offline'}</Text>
+                        </View>
+                        <Text style={styles.scoreLine}>{profile.wellbeingLabel}</Text>
                     </LinearGradient>
+
+                    <View style={styles.metricsGrid}>
+                        <View style={styles.metricCard}>
+                            <Text style={styles.metricLabel}>Wellbeing</Text>
+                            <Text style={styles.metricValue}>
+                                {typeof profile.wellbeingScore === 'number' ? Math.round(profile.wellbeingScore) : '—'}
+                            </Text>
+                        </View>
+                        <View style={styles.metricCard}>
+                            <Text style={styles.metricLabel}>Streak</Text>
+                            <Text style={styles.metricValue}>{profile.streak || 0} days</Text>
+                        </View>
+                        <View style={styles.metricCard}>
+                            <Text style={styles.metricLabel}>Circles</Text>
+                            <Text style={styles.metricValue}>{profile.circlesCount || 0}</Text>
+                        </View>
+                        <View style={styles.metricCard}>
+                            <Text style={styles.metricLabel}>Role</Text>
+                            <Text style={styles.metricValue}>{String(profile.role || 'member')}</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.bioCard}>
+                        <Text style={styles.bioTitle}>Profile Details</Text>
+                        <View style={styles.detailRow}>
+                            <Text style={styles.detailKey}>Joined</Text>
+                            <Text style={styles.detailValue}>{fmtDate(profile.createdAt)}</Text>
+                        </View>
+                        {profile.location ? (
+                            <View style={styles.detailRow}>
+                                <Text style={styles.detailKey}>Location</Text>
+                                <Text style={styles.detailValue}>{profile.location}</Text>
+                            </View>
+                        ) : null}
+                        {profile.gender ? (
+                            <View style={styles.detailRow}>
+                                <Text style={styles.detailKey}>Gender</Text>
+                                <Text style={styles.detailValue}>{profile.gender}</Text>
+                            </View>
+                        ) : null}
+                        {profile.email ? (
+                            <View style={styles.detailRow}>
+                                <Text style={styles.detailKey}>Email</Text>
+                                <Text style={styles.detailValue}>{profile.email}</Text>
+                            </View>
+                        ) : null}
+                    </View>
 
                     <View style={styles.bioCard}>
                         <Text style={styles.bioTitle}>About</Text>
@@ -207,6 +301,58 @@ const styles = StyleSheet.create({
         color: '#E8FFFB',
         fontWeight: '700'
     },
+    statusRow: {
+        marginTop: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8
+    },
+    presenceDot: {
+        width: 9,
+        height: 9,
+        borderRadius: 4.5
+    },
+    presenceOnline: {
+        backgroundColor: '#22C55E'
+    },
+    presenceOffline: {
+        backgroundColor: '#9CA3AF'
+    },
+    statusText: {
+        color: '#E8FFFB',
+        fontWeight: '700'
+    },
+    scoreLine: {
+        marginTop: 6,
+        color: '#E8FFFB',
+        fontWeight: '700'
+    },
+    metricsGrid: {
+        marginTop: 14,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        gap: 10
+    },
+    metricCard: {
+        width: '48%',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E9ECEF',
+        padding: 14
+    },
+    metricLabel: {
+        fontSize: 12,
+        color: '#6A7385',
+        fontFamily: 'DMSans_500Medium'
+    },
+    metricValue: {
+        marginTop: 6,
+        fontSize: 16,
+        color: '#1A1A1A',
+        fontFamily: 'SpaceGrotesk_700Bold'
+    },
     bioCard: {
         marginTop: 14,
         backgroundColor: '#FFFFFF',
@@ -226,6 +372,24 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         color: '#4A5565',
         fontFamily: 'DMSans_400Regular'
+    },
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 6
+    },
+    detailKey: {
+        color: '#6A7385',
+        fontSize: 13,
+        fontFamily: 'DMSans_500Medium'
+    },
+    detailValue: {
+        color: '#1A1A1A',
+        fontSize: 13,
+        fontFamily: 'DMSans_500Medium',
+        maxWidth: '62%',
+        textAlign: 'right'
     },
     actions: {
         width: '100%',
