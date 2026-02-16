@@ -1,7 +1,7 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { db } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { doc, arrayUnion, setDoc } from 'firebase/firestore';
 import { navigate } from '../../navigation/navigationRef';
 import { nativeCallService } from '../native/nativeCallService';
@@ -24,7 +24,26 @@ try {
 const saveUserPushToken = async (uid, field, token) => {
     if (!uid || !token) return;
     const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, { [field]: arrayUnion(token) }, { merge: true });
+    try {
+        await setDoc(userRef, { [field]: arrayUnion(token) }, { merge: true });
+    } catch (error) {
+        const code = String(error?.code || '');
+        const message = String(error?.message || '').toLowerCase();
+        const isAuthError = code.includes('permission-denied') || code.includes('unauthenticated') || message.includes('permission') || message.includes('unauthenticated');
+        if (!isAuthError || !auth.currentUser) throw error;
+
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn('[FirestoreAuthRetry] saveUserPushToken failed; refreshing token and retrying once', {
+                code: error?.code,
+                message: error?.message,
+                uid: auth.currentUser?.uid || null,
+                field
+            });
+        }
+
+        await auth.currentUser.getIdToken(true).catch(() => null);
+        await setDoc(userRef, { [field]: arrayUnion(token) }, { merge: true });
+    }
 };
 
 const navigateFromNotificationData = (payload) => {
