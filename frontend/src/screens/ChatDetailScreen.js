@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, StatusBar, KeyboardAvoidingView, Platform, Keyboard, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
@@ -47,6 +48,8 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [resolvedChatName, setResolvedChatName] = useState(chat?.name || 'Chat');
     const [resolvedChatAvatar, setResolvedChatAvatar] = useState(chat?.avatar || chat?.photoURL || chat?.image || '');
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+    const [lastSeenRequestsAt, setLastSeenRequestsAt] = useState(0);
+    const [latestRequestCreatedAt, setLatestRequestCreatedAt] = useState(0);
     const typingDebounceRef = useRef(null);
     const presenceIntervalRef = useRef(null);
     const pendingMessagesRef = useRef(new Map());
@@ -241,16 +244,39 @@ const ChatDetailScreen = ({ navigation, route }) => {
     useEffect(() => {
         if (!chat?.isGroup || !chat?.circleId || !['creator', 'admin', 'moderator'].includes(circleRole)) {
             setPendingRequestsCount(0);
+            setLatestRequestCreatedAt(0);
             return undefined;
         }
         const requestsRef = collection(db, 'circles', chat.circleId, 'requests');
         const unsubscribe = onSnapshot(requestsRef, (snap) => {
             setPendingRequestsCount(snap.size);
+            let latest = 0;
+            snap.docs.forEach((docSnap) => {
+                const createdAt = docSnap.data()?.createdAt;
+                const ms = typeof createdAt?.toMillis === 'function' ? createdAt.toMillis() : 0;
+                if (ms > latest) latest = ms;
+            });
+            setLatestRequestCreatedAt(latest);
         }, () => {
             setPendingRequestsCount(0);
+            setLatestRequestCreatedAt(0);
         });
         return () => unsubscribe();
     }, [chat?.circleId, chat?.isGroup, circleRole]);
+
+    useEffect(() => {
+        const loadLastSeenRequestsAt = async () => {
+            if (!chat?.circleId || !user?.uid || !['creator', 'admin', 'moderator'].includes(circleRole)) {
+                setLastSeenRequestsAt(0);
+                return;
+            }
+            const key = `join_requests_seen_${user.uid}_${chat.circleId}`;
+            const raw = await AsyncStorage.getItem(key);
+            const parsed = Number(raw || 0);
+            setLastSeenRequestsAt(Number.isFinite(parsed) ? parsed : 0);
+        };
+        loadLastSeenRequestsAt().catch(() => setLastSeenRequestsAt(0));
+    }, [chat?.circleId, circleRole, user?.uid]);
 
     const getOtherParticipantId = () => {
         if (!Array.isArray(chat?.participants) || !user?.uid) return null;
@@ -415,6 +441,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const hasActiveHuddle = Boolean(activeHuddle?.isActive !== false && activeHuddle?.roomUrl);
     const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
     const canShowCallButton = !chat?.isGroup || hasActiveHuddle || canStartHuddleInCircle;
+    const hasNewJoinRequests = pendingRequestsCount > 0 && latestRequestCreatedAt > lastSeenRequestsAt;
 
     const handleCall = async () => {
         if (chat?.isGroup) {
@@ -469,6 +496,15 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 }
             }
         });
+    };
+
+    const handleOpenRequests = async () => {
+        if (!chat?.circleId || !user?.uid) return;
+        const now = Date.now();
+        setLastSeenRequestsAt(now);
+        const key = `join_requests_seen_${user.uid}_${chat.circleId}`;
+        await AsyncStorage.setItem(key, String(now)).catch(() => {});
+        navigation.navigate('CircleSettings', { circleId: chat.circleId, initialTab: 'Requests' });
     };
 
     const openOrCreateDirectChat = async () => {
@@ -595,13 +631,17 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 <View style={styles.headerActions}>
                     {chat?.isGroup && ['creator', 'admin', 'moderator'].includes(circleRole) && (
                         <TouchableOpacity
-                            style={styles.requestsButton}
-                            onPress={() => navigation.navigate('CircleSettings', { circleId: chat.circleId, initialTab: 'Requests' })}
+                            style={[styles.requestsButton, hasNewJoinRequests && styles.requestsButtonNew]}
+                            onPress={handleOpenRequests}
                         >
-                            <Ionicons name="mail-unread-outline" size={18} color="#EF6C00" />
+                            <Ionicons
+                                name={hasNewJoinRequests ? 'mail-unread-outline' : 'mail-outline'}
+                                size={18}
+                                color={hasNewJoinRequests ? '#EF6C00' : '#6A7385'}
+                            />
                             {pendingRequestsCount > 0 && (
-                                <View style={styles.requestsBadge}>
-                                    <Text style={styles.requestsBadgeText}>{pendingRequestsCount}</Text>
+                                <View style={[styles.requestsBadge, hasNewJoinRequests ? styles.requestsBadgeNew : styles.requestsBadgeSeen]}>
+                                    <Text style={styles.requestsBadgeText}>{pendingRequestsCount > 99 ? '99+' : pendingRequestsCount}</Text>
                                 </View>
                             )}
                         </TouchableOpacity>
@@ -830,6 +870,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         backgroundColor: '#FFF3E0'
     },
+    requestsButtonNew: {
+        borderWidth: 1,
+        borderColor: '#EF6C00'
+    },
     requestsBadge: {
         position: 'absolute',
         top: -3,
@@ -841,6 +885,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 4
+    },
+    requestsBadgeNew: {
+        backgroundColor: '#D32F2F'
+    },
+    requestsBadgeSeen: {
+        backgroundColor: '#9CA3AF'
     },
     requestsBadgeText: {
         color: '#FFFFFF',

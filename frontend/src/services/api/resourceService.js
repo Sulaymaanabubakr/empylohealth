@@ -7,7 +7,9 @@ export const resourceService = {
     },
 
     getAffirmations: async () => {
-        return contentRepository.getAffirmations();
+        const result = await callableClient.invokeWithAuth('getAffirmations', {});
+        const items = Array.isArray(result?.items) ? result.items : [];
+        return items;
     },
 
     // Kept for admin/dev background seeding.

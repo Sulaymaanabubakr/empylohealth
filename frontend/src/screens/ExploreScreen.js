@@ -69,6 +69,7 @@ const ExploreScreen = ({ navigation }) => {
         if (tags.length === 0) return false;
         return tags.includes(activeFilter);
     });
+    const visibleAffirmations = filteredAffirmations.slice(0, 3);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -182,41 +183,42 @@ const ExploreScreen = ({ navigation }) => {
                         <Text style={styles.emptyStateText}>No activities yet.</Text>
                     )}
 
-                    {/* Support Groups Preview (Only for Group activities tab) */}
-                    {activeTab === 'Group activities' && (
-                        <View style={{ marginTop: 24 }}>
-                            <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionTitle}>Circles</Text>
-                                <TouchableOpacity onPress={() => navigation.navigate('SupportGroups')}>
-                                    <Text style={styles.seeAllText}>See all</Text>
-                                </TouchableOpacity>
-                            </View>
-                            <View style={{ paddingHorizontal: SPACING.lg }}>
-                                <Text style={{ color: '#757575', marginBottom: 12 }}>Showing circles near you</Text>
-                                {supportGroups.slice(0, 3).map((group) => (
-                                    <View key={group.id} style={styles.groupCardPreview}>
-                                        <Image
-                                            source={group.image ? { uri: group.image } : require('../assets/images/icon_support_community.png')}
-                                            style={styles.groupImagePreview}
-                                        />
-                                        <View style={{ flex: 1 }}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                <Text style={styles.groupNamePreview}>{group.name}</Text>
-                                                {/* {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />} */}
-                                            </View>
-                                            <Text style={styles.groupMembersPreview}>{group.members?.length || 0} members</Text>
-                                        </View>
-                                        <TouchableOpacity
-                                            style={styles.viewButtonPreview}
-                                            onPress={() => navigation.navigate('CircleDetail', { circle: group })}
-                                        >
-                                            <Text style={styles.viewButtonTextPreview}>VIEW</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                ))}
-                            </View>
+                    {/* Support Groups Preview */}
+                    <View style={{ marginTop: 24 }}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Circles</Text>
+                            <TouchableOpacity onPress={() => navigation.navigate('SupportGroups')}>
+                                <Text style={styles.seeAllText}>See all</Text>
+                            </TouchableOpacity>
                         </View>
-                    )}
+                        <View style={{ paddingHorizontal: SPACING.lg }}>
+                            <Text style={{ color: '#757575', marginBottom: 12 }}>Showing circles near you</Text>
+                            {supportGroups.slice(0, 3).map((group) => (
+                                <View key={group.id} style={styles.groupCardPreview}>
+                                    <Image
+                                        source={group.image ? { uri: group.image } : require('../assets/images/icon_support_community.png')}
+                                        style={styles.groupImagePreview}
+                                    />
+                                    <View style={{ flex: 1 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Text style={styles.groupNamePreview}>{group.name}</Text>
+                                            {/* {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />} */}
+                                        </View>
+                                        <Text style={styles.groupMembersPreview}>{group.members?.length || 0} members</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.viewButtonPreview}
+                                        onPress={() => navigation.navigate('CircleDetail', { circle: group })}
+                                    >
+                                        <Text style={styles.viewButtonTextPreview}>VIEW</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                            {!loading && supportGroups.length === 0 && (
+                                <Text style={styles.emptyStateText}>No circles available right now.</Text>
+                            )}
+                        </View>
+                    </View>
 
                     {/* Daily Affirmations */}
                     <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Daily Affirmations</Text>
@@ -239,7 +241,7 @@ const ExploreScreen = ({ navigation }) => {
                         showsHorizontalScrollIndicator={false}
                         style={styles.horizontalScroll}
                     >
-                        {filteredAffirmations.map((item) => (
+                        {visibleAffirmations.map((item) => (
                             <TouchableOpacity
                                 key={item.id}
                                 style={styles.affirmationCard}
@@ -261,7 +263,7 @@ const ExploreScreen = ({ navigation }) => {
                         ))}
                     </ScrollView>
 
-                    {!loading && filteredAffirmations.length === 0 && (
+                    {!loading && visibleAffirmations.length === 0 && (
                         <Text style={styles.emptyStateText}>No affirmations yet.</Text>
                     )}
 

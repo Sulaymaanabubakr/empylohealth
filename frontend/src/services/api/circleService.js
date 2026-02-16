@@ -86,14 +86,36 @@ export const circleService = {
     },
 
     getAllCircles: async () => {
-        // Discover feed should only query public circles to satisfy Firestore rules.
-        const q = query(
+        const resultsById = new Map();
+        const publicQuery = query(
             collection(db, 'circles'),
-            where('type', '==', 'public'),
-            orderBy('createdAt', 'desc')
+            where('type', '==', 'public')
         );
-        const snapshot = await getDocsWithAuthRetry(q, 'circles');
-        return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        const publicSnapshot = await getDocsWithAuthRetry(publicQuery, 'circles_public');
+        publicSnapshot.docs.forEach((docSnap) => {
+            resultsById.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+        });
+
+        // Also include circles the user is already in (private circles won't match the public query).
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+            const mineQuery = query(
+                collection(db, 'circles'),
+                where('members', 'array-contains', uid)
+            );
+            const mineSnapshot = await getDocsWithAuthRetry(mineQuery, 'circles_mine');
+            mineSnapshot.docs.forEach((docSnap) => {
+                resultsById.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+            });
+        }
+
+        const circles = Array.from(resultsById.values());
+        circles.sort((a, b) => {
+            const aMs = a?.createdAt?.toMillis?.() || 0;
+            const bMs = b?.createdAt?.toMillis?.() || 0;
+            return bMs - aMs;
+        });
+        return circles;
     },
 
     // Privileged operations are still Functions-backed.

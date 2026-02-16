@@ -2426,13 +2426,24 @@ const ensureDailyAffirmations = async () => {
     const dailyDoc = await dailyRef.get();
     let affirmationIds = dailyDoc.exists ? (dailyDoc.data()?.affirmationIds || []) : [];
     if (affirmationIds.length === 0) {
-        const snapshot = await db.collection('affirmations')
-            .where('status', '==', 'published')
-            .orderBy('publishedAt', 'desc')
-            .limit(200)
-            .get();
-        const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const picks = pickRandomItems(all, 3);
+        let all = [];
+        // Prefer publishedAt ordering, but fall back for legacy docs missing that field.
+        try {
+            const snapshot = await db.collection('affirmations')
+                .orderBy('publishedAt', 'desc')
+                .limit(200)
+                .get();
+            all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+        catch {
+            const snapshot = await db.collection('affirmations')
+                .orderBy('createdAt', 'desc')
+                .limit(200)
+                .get();
+            all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+        const filtered = all.filter((item) => !item.status || ['active', 'published'].includes(item.status));
+        const picks = pickRandomItems(filtered, 3);
         affirmationIds = picks.map((item) => item.id);
         await dailyRef.set({
             date: todayKey,
@@ -2444,8 +2455,10 @@ const ensureDailyAffirmations = async () => {
 };
 const sendDailyAffirmationsNotification = async (slotIndex, title) => {
     const affirmationIds = await ensureDailyAffirmations();
-    if (affirmationIds.length === 0)
+    if (affirmationIds.length === 0) {
+        console.warn(`[Affirmations] No daily affirmation ids available for slot ${slotIndex}.`);
         return;
+    }
     const pickId = affirmationIds[Math.min(slotIndex, affirmationIds.length - 1)];
     const affirmationDoc = await db.collection('affirmations').doc(pickId).get();
     const content = affirmationDoc.data()?.content || 'Your daily affirmation is ready.';
