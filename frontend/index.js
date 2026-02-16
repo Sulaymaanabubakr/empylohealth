@@ -7,6 +7,14 @@ require('react-native-get-random-values');
 
 const { LogBox } = require('react-native');
 
+// Suppress NativeEventEmitter warnings from terminal output (react-native-webrtc cosmetic noise).
+// LogBox only hides the in-app yellow box; this also silences the Metro console.
+const _origWarn = console.warn;
+console.warn = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('new NativeEventEmitter()')) return;
+  _origWarn(...args);
+};
+
 // Keep dev console readable while we maintain compatibility with older dev clients.
 LogBox.ignoreLogs([
   '[expo-av]: Expo AV has been deprecated and will be removed in SDK 54.',

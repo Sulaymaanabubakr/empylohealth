@@ -306,6 +306,7 @@ const DashboardScreen = ({ navigation }) => {
             const profiles = {};
             // Load up to 5 member profiles for timeline visualization
             const memberIds = circle.members.slice(0, 5);
+            console.log('[Dashboard] Loading member profiles for circle:', circle.id, 'memberIds:', memberIds);
 
             for (const memberId of memberIds) {
                 const memberDoc = await getDoc(doc(db, 'users', memberId));
@@ -319,8 +320,11 @@ const DashboardScreen = ({ navigation }) => {
                         wellbeingLabel: wellbeing.label,
                         wellbeingStatus: data.wellbeingStatus || ''
                     };
+                } else {
+                    console.log('[Dashboard] Member doc does not exist:', memberId);
                 }
             }
+            console.log('[Dashboard] Loaded profiles:', Object.keys(profiles).length, 'of', memberIds.length);
             setMemberProfiles(profiles);
         } catch (error) {
             console.error('Error loading member profiles:', error);
@@ -507,13 +511,13 @@ const DashboardScreen = ({ navigation }) => {
                         const iconName = challenge.icon || 'alert-circle-outline';
                         const safeIconName = MaterialCommunityIcons?.glyphMap?.[iconName] ? iconName : 'alert-circle-outline';
                         return (
-                        <View key={index} style={[styles.challengeCard, { marginRight: index === 0 ? 10 : 0, marginLeft: index === 1 ? 10 : 0, flex: 1 }]}>
-                            <View style={[styles.challengeIcon, { backgroundColor: challenge.bg || '#FFF3E0' }]}>
-                                <MaterialCommunityIcons name={safeIconName} size={28} color={challenge.color || '#FF9800'} />
+                            <View key={index} style={[styles.challengeCard, { marginRight: index === 0 ? 10 : 0, marginLeft: index === 1 ? 10 : 0, flex: 1 }]}>
+                                <View style={[styles.challengeIcon, { backgroundColor: challenge.bg || '#FFF3E0' }]}>
+                                    <MaterialCommunityIcons name={safeIconName} size={28} color={challenge.color || '#FF9800'} />
+                                </View>
+                                <Text style={styles.challengeTitle}>{challenge.title}</Text>
+                                <Text style={styles.challengeLevel}>Level: {challenge.level}</Text>
                             </View>
-                            <Text style={styles.challengeTitle}>{challenge.title}</Text>
-                            <Text style={styles.challengeLevel}>Level: {challenge.level}</Text>
-                        </View>
                         );
                     }) : (
                         <Text style={{ color: '#999', fontStyle: 'italic', padding: 10 }}>No specific challenges flagged.</Text>

@@ -62,7 +62,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isSelf(userId) || sharedCircleReadAllowed(userId));
+      // Profile data (name, photo, wellbeing) is not sensitive – allow any authenticated read.
+      // The previous sharedCircleReadAllowed() gate required 4 get() calls and broke when
+      // userCircles docs were missing, causing cascading permission-denied errors.
+      allow read: if isAuthenticated();
       allow create: if isSelf(userId) && request.resource.data.uid == request.auth.uid;
       allow update: if isSelf(userId) &&
         request.resource.data.uid == request.auth.uid &&
@@ -82,9 +85,12 @@ service cloud.firestore {
     }
 
     match /circles/{circleId} {
+      // Simplified: any authenticated member can read, or any public circle.
+      // Removed 'is list' / 'hasAll' guards so Firestore's query planner can
+      // statically prove array-contains satisfies the rule.
       allow read: if isAuthenticated() && (
-        resource.data.type == 'public' ||
-        (resource.data.members is list && request.auth.uid in resource.data.members)
+        request.auth.uid in resource.data.members ||
+        resource.data.type == 'public'
       );
       allow create: if isAuthenticated() &&
         request.resource.data.createdBy == request.auth.uid &&

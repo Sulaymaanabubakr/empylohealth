@@ -14,7 +14,7 @@ export const assessmentService = {
     },
 
     subscribeToWellbeingStats: (uid, callback) => {
-        if (!uid) return () => {};
+        if (!uid) return () => { };
 
         const userRef = doc(db, 'users', uid);
         return onSnapshot(userRef, (docSnap) => {
@@ -56,12 +56,15 @@ export const assessmentService = {
         const allContent = await contentRepository.getExploreContent(40);
         if (!challengeTags.length) return allContent.slice(0, 10);
 
-        return allContent
+        const matched = allContent
             .filter((item) => {
                 const tags = item.tags || item.themes || [];
                 return tags.some((tag) => challengeTags.includes(tag));
             })
             .slice(0, 10);
+
+        // Fallback: when tags exist but nothing matches, show general content instead of empty.
+        return matched.length > 0 ? matched : allContent.slice(0, 10);
     },
 
     getAssessmentHistory: async (limitCount = 7) => {
