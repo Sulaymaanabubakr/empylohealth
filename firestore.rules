@@ -15,8 +15,14 @@ service cloud.firestore {
     }
 
     function isCircleMember(circleId, uid) {
-      return exists(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)) &&
-        get(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)).data.status == 'active';
+      return (
+        exists(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)) &&
+        get(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)).data.status == 'active'
+      ) || (
+        exists(/databases/$(database)/documents/circles/$(circleId)) &&
+        get(/databases/$(database)/documents/circles/$(circleId)).data.members is list &&
+        uid in get(/databases/$(database)/documents/circles/$(circleId)).data.members
+      );
     }
 
     function isCircleModerator(circleId, uid) {
@@ -34,16 +40,6 @@ service cloud.firestore {
 	        get(/databases/$(database)/documents/userCircles/$(request.auth.uid)).data.circleIds
 	          .hasAny(get(/databases/$(database)/documents/userCircles/$(targetUid)).data.circleIds);
 	    }
-
-    function validUserProfileKeys() {
-      return request.resource.data.keys().hasOnly([
-        'uid', 'email', 'name', 'displayName', 'photoURL', 'bio', 'about',
-        'role', 'dob', 'gender', 'location', 'settings',
-        'onboardingCompleted', 'wellbeingScore', 'wellbeingLabel', 'streak',
-        'lastAssessmentAt', 'subscription', 'createdAt', 'updatedAt',
-        'expoPushTokens', 'fcmTokens', 'voipPushTokens', 'status'
-      ]);
-    }
 
     function circleMembershipOnlyUpdate() {
       return request.resource.data.diff(resource.data).changedKeys().hasOnly([
@@ -67,11 +63,10 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated() && (isSelf(userId) || sharedCircleReadAllowed(userId));
-      allow create: if isSelf(userId) && request.resource.data.uid == request.auth.uid && validUserProfileKeys();
+      allow create: if isSelf(userId) && request.resource.data.uid == request.auth.uid;
       allow update: if isSelf(userId) &&
         request.resource.data.uid == request.auth.uid &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        validUserProfileKeys();
+        request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if isSelf(userId) || isAdmin();
     }
 
@@ -84,7 +79,11 @@ service cloud.firestore {
     }
 
     match /circles/{circleId} {
-      allow read: if isAuthenticated() && (resource.data.type == 'public' || isCircleMember(circleId, request.auth.uid));
+      allow read: if isAuthenticated() && (
+        resource.data.type == 'public' ||
+        isCircleMember(circleId, request.auth.uid) ||
+        (resource.data.members is list && request.auth.uid in resource.data.members)
+      );
       allow create: if isAuthenticated() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.adminId == request.auth.uid &&
