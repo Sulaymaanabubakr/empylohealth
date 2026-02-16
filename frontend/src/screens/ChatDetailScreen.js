@@ -30,6 +30,8 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [typingUsers, setTypingUsers] = useState({});
     const [chatPresence, setChatPresence] = useState({});
     const [otherPresence, setOtherPresence] = useState({ state: 'offline', lastChanged: null });
+    const [resolvedChatName, setResolvedChatName] = useState(chat?.name || 'Chat');
+    const [resolvedChatAvatar, setResolvedChatAvatar] = useState(chat?.avatar || chat?.photoURL || chat?.image || '');
     const typingDebounceRef = useRef(null);
     const presenceIntervalRef = useRef(null);
     const pendingMessagesRef = useRef(new Map());
@@ -131,6 +133,11 @@ const ChatDetailScreen = ({ navigation, route }) => {
     }, [chat?.id, user?.uid]);
 
     useEffect(() => {
+        setResolvedChatName(chat?.name || 'Chat');
+        setResolvedChatAvatar(chat?.avatar || chat?.photoURL || chat?.image || '');
+    }, [chat?.name, chat?.avatar, chat?.photoURL, chat?.image]);
+
+    useEffect(() => {
         if (chat?.isGroup) {
             setOtherPresence({ state: 'offline', lastChanged: null });
             return undefined;
@@ -197,6 +204,8 @@ const ChatDetailScreen = ({ navigation, route }) => {
             if (!snap.exists()) return;
             const data = snap.data();
             setActiveHuddle(data?.activeHuddle || null);
+            setResolvedChatName(data?.name || chat?.name || 'Chat');
+            setResolvedChatAvatar(data?.image || data?.avatar || data?.photoURL || chat?.avatar || chat?.photoURL || chat?.image || '');
         });
 
         const unsubMember = onSnapshot(doc(db, 'circles', chat.circleId, 'members', user.uid), (snap) => {
@@ -212,7 +221,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
             unsubCircle();
             unsubMember();
         };
-    }, [chat?.circleId, chat?.isGroup, user?.uid]);
+    }, [chat?.avatar, chat?.circleId, chat?.image, chat?.isGroup, chat?.name, chat?.photoURL, user?.uid]);
 
     const getOtherParticipantId = () => {
         if (!Array.isArray(chat?.participants) || !user?.uid) return null;
@@ -460,10 +469,10 @@ const ChatDetailScreen = ({ navigation, route }) => {
         const senderProfile = senderId ? profileCache[senderId] : null;
         const senderName = isMe
             ? 'You'
-            : (senderProfile?.name || (chat?.isGroup ? 'Member' : chat?.name));
+            : (senderProfile?.name || (chat?.isGroup ? 'Member' : resolvedChatName));
         const senderAvatar = isMe
             ? (userData?.photoURL || user?.photoURL || '')
-            : (senderProfile?.photoURL || (chat?.isGroup ? '' : (chat.avatar || chat.photoURL || chat.image)));
+            : (senderProfile?.photoURL || (chat?.isGroup ? '' : resolvedChatAvatar));
 
         const otherId = !chat?.isGroup && Array.isArray(chat?.participants)
             ? chat.participants.find((id) => id !== user?.uid)
@@ -532,14 +541,14 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 >
                     {/* Use the avatar computed by the service, or fallbacks if data structure differs */}
                     <Avatar
-                        uri={chat.avatar || chat.photoURL || chat.image}
-                        name={chat.name}
+                        uri={resolvedChatAvatar}
+                        name={resolvedChatName}
                         size={40}
-                        key={chat.avatar || 'default'}
+                        key={resolvedChatAvatar || 'default'}
                     />
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
-                    <Text style={styles.headerName}>{chat.name}</Text>
+                    <Text style={styles.headerName}>{resolvedChatName}</Text>
                     <View style={styles.headerStatusRow}>
                         {isDirectChat && activeTypingCount === 0 && (
                             <View style={[styles.onlineDot, isOtherOnline ? styles.onlineDotOn : styles.onlineDotOff]} />

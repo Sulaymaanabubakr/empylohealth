@@ -47,6 +47,7 @@ export const chatService = {
             orderBy('updatedAt', 'desc')
         );
         return onSnapshot(q, async (snapshot) => {
+            const circleCache = new Map();
             const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
                 const data = docSnap.data();
                 const participants = data.participants || [];
@@ -70,6 +71,21 @@ export const chatService = {
                         } catch {
                             // Ignore enrichment errors.
                         }
+                    }
+                } else if (data?.circleId) {
+                    try {
+                        const circleId = data.circleId;
+                        if (!circleCache.has(circleId)) {
+                            const circleDoc = await getDoc(doc(db, 'circles', circleId));
+                            circleCache.set(circleId, circleDoc.exists() ? (circleDoc.data() || {}) : null);
+                        }
+                        const circleData = circleCache.get(circleId);
+                        if (circleData) {
+                            name = circleData?.name || name;
+                            avatar = circleData?.image || circleData?.avatar || circleData?.photoURL || avatar || null;
+                        }
+                    } catch {
+                        // Ignore group enrichment errors.
                     }
                 }
 
