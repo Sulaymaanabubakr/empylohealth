@@ -60,7 +60,7 @@ export const chatRepository = {
         return { success: true, chatId: created.id, isNew: true };
     },
 
-    async sendMessage(chatId, text, type = 'text', mediaUrl = null) {
+    async sendMessage(chatId, text, type = 'text', mediaUrl = null, clientMessageId = null) {
         const uid = auth.currentUser?.uid;
         if (!uid) throw new Error('User must be authenticated.');
         if (!chatId) throw new Error('chatId is required');
@@ -80,7 +80,8 @@ export const chatRepository = {
             chatId,
             text: text || '',
             type,
-            mediaUrl: mediaUrl || null
+            mediaUrl: mediaUrl || null,
+            clientMessageId: clientMessageId || null
         });
 
         return result || { success: true };

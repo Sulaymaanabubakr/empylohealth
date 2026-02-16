@@ -718,7 +718,7 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
 
-    const { chatId, text, type = 'text', mediaUrl = null } = data;
+    const { chatId, text, type = 'text', mediaUrl = null, clientMessageId = null } = data;
     const uid = context.auth.uid;
 
     if (!chatId || (!text && !mediaUrl)) {
@@ -755,12 +755,13 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
             text,
             type, // 'text' | 'image' | 'video'
             mediaUrl,
+            ...(clientMessageId ? { clientMessageId: String(clientMessageId) } : {}),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             readBy: [uid]
         };
 
         // Add to subcollection
-        await chatRef.collection('messages').add(messageData);
+        const messageRef = await chatRef.collection('messages').add(messageData);
 
         // Update parent
         await chatRef.update({
@@ -768,7 +769,7 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
-        return { success: true };
+        return { success: true, messageId: messageRef.id };
     } catch (error) {
         console.error("Error sending message:", error);
         throw new functions.https.HttpsError('internal', 'Unable to send message.');

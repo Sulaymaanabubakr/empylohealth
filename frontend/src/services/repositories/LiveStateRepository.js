@@ -32,6 +32,29 @@ export const liveStateRepository = {
         return () => off(typingRef, 'value', handler);
     },
 
+    setChatPresence(chatId, uid, state = 'active') {
+        if (!chatId || !uid) return Promise.resolve();
+        const presenceRef = ref(rtdb, `chatPresence/${chatId}/${uid}`);
+        return set(presenceRef, {
+            state,
+            // Server timestamp (ms) used for seen/read comparisons.
+            lastSeenAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        }).catch((e) => {
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                console.warn('[RTDB] setChatPresence failed', e?.message || e);
+            }
+        });
+    },
+
+    subscribeChatPresence(chatId, callback) {
+        if (!chatId) return () => {};
+        const presenceRef = ref(rtdb, `chatPresence/${chatId}`);
+        const handler = (snap) => callback(snap.val() || {});
+        onValue(presenceRef, handler);
+        return () => off(presenceRef, 'value', handler);
+    },
+
     upsertHuddleLiveState(roomId, patch) {
         if (!roomId) return Promise.resolve();
         const roomRef = ref(rtdb, `live/${roomId}`);

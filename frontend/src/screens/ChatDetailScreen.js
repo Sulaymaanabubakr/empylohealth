@@ -6,6 +6,7 @@ import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { chatService } from '../services/api/chatService';
+import { liveStateRepository } from '../services/repositories/LiveStateRepository';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
@@ -26,6 +27,10 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [circleRole, setCircleRole] = useState(null);
     const [activeHuddle, setActiveHuddle] = useState(null);
     const [typingUsers, setTypingUsers] = useState({});
+    const [chatPresence, setChatPresence] = useState({});
+    const typingDebounceRef = useRef(null);
+    const presenceIntervalRef = useRef(null);
+    const pendingMessagesRef = useRef(new Map());
 
     // Keyboard Visibility management for bottom insets
     useEffect(() => {
@@ -68,18 +73,28 @@ const ChatDetailScreen = ({ navigation, route }) => {
     useEffect(() => {
         if (chat.id) {
             const unsubscribe = chatService.subscribeToMessages(chat.id, (msgs) => {
-                // Map backend format to UI format if needed, but service already does some cleanup
                 const formatted = msgs.map(m => ({
                     id: m._id,
+                    clientMessageId: m.clientMessageId || null,
                     text: m.text,
+                    createdAt: m.createdAt,
+                    createdAtMs: m.createdAtMs || new Date(m.createdAt).getTime(),
                     time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     isMe: m.user._id === user?.uid,
+                    pending: false,
+                    failed: false,
                     ...m
-                })).reverse(); // Reverse for FlatList if standard top-down or bottom-up
-                // Actually, chatService desc, so newest first. 
-                // If displaying standard list, might want reverse order. 
-                // Simple reverse here to show oldest at top for basic list.
-                setMessages(formatted);
+                })).reverse();
+
+                formatted.forEach((msg) => {
+                    if (msg.clientMessageId && pendingMessagesRef.current.has(msg.clientMessageId)) {
+                        pendingMessagesRef.current.delete(msg.clientMessageId);
+                    }
+                });
+
+                const pending = [...pendingMessagesRef.current.values()];
+                const merged = [...formatted, ...pending].sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+                setMessages(merged);
             });
             return () => unsubscribe();
         }
@@ -94,12 +109,49 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
     useEffect(() => {
         if (!chat?.id || !user?.uid) return undefined;
-        const shouldSetTyping = Boolean(inputText?.trim());
-        chatService.setTyping(chat.id, shouldSetTyping).catch(() => {});
-        return () => {
-            chatService.setTyping(chat.id, false).catch(() => {});
+        return liveStateRepository.subscribeChatPresence(chat.id, (presenceState) => {
+            setChatPresence(presenceState || {});
+        });
+    }, [chat?.id, user?.uid]);
+
+    useEffect(() => {
+        if (!chat?.id || !user?.uid) return undefined;
+        const pushActive = () => {
+            liveStateRepository.setChatPresence(chat.id, user.uid, 'active').catch(() => {});
         };
-    }, [chat?.id, inputText, user?.uid]);
+        const pushIdle = () => {
+            liveStateRepository.setChatPresence(chat.id, user.uid, 'idle').catch(() => {});
+        };
+
+        const unsubscribeFocus = navigation.addListener('focus', () => {
+            pushActive();
+            if (presenceIntervalRef.current) clearInterval(presenceIntervalRef.current);
+            presenceIntervalRef.current = setInterval(pushActive, 5000);
+        });
+
+        const unsubscribeBlur = navigation.addListener('blur', () => {
+            if (presenceIntervalRef.current) {
+                clearInterval(presenceIntervalRef.current);
+                presenceIntervalRef.current = null;
+            }
+            pushIdle();
+        });
+
+        pushActive();
+        if (presenceIntervalRef.current) clearInterval(presenceIntervalRef.current);
+        presenceIntervalRef.current = setInterval(pushActive, 5000);
+
+        return () => {
+            unsubscribeFocus();
+            unsubscribeBlur();
+            if (presenceIntervalRef.current) {
+                clearInterval(presenceIntervalRef.current);
+                presenceIntervalRef.current = null;
+            }
+            chatService.setTyping(chat.id, false).catch(() => {});
+            pushIdle();
+        };
+    }, [chat?.id, navigation, user?.uid]);
 
     useEffect(() => {
         if (!chat?.isGroup || !chat?.circleId || !user?.uid) {
@@ -194,19 +246,88 @@ const ChatDetailScreen = ({ navigation, route }) => {
         if (!inputText.trim()) return;
 
         const textToSend = inputText;
+        const now = new Date();
+        const clientMessageId = `${user?.uid || 'me'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         setInputText(''); // Clear UI immediately
+        chatService.setTyping(chat.id, false).catch(() => {});
+        if (typingDebounceRef.current) {
+            clearTimeout(typingDebounceRef.current);
+            typingDebounceRef.current = null;
+        }
+
+        const optimisticMessage = {
+            id: `temp_${clientMessageId}`,
+            _id: `temp_${clientMessageId}`,
+            clientMessageId,
+            text: textToSend,
+            createdAt: now,
+            createdAtMs: now.getTime(),
+            time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isMe: true,
+            pending: true,
+            failed: false,
+            user: { _id: user?.uid }
+        };
+        pendingMessagesRef.current.set(clientMessageId, optimisticMessage);
+        setMessages((prev) => [...prev, optimisticMessage].sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0)));
 
         try {
-            await chatService.sendMessage(chat.id, textToSend);
+            await chatService.sendMessage(chat.id, textToSend, 'text', null, clientMessageId);
             // Scroll to bottom
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         } catch (error) {
             console.error("Failed to send", error);
-            // Optionally restore text or show error
+            if (pendingMessagesRef.current.has(clientMessageId)) {
+                const failed = {
+                    ...pendingMessagesRef.current.get(clientMessageId),
+                    pending: false,
+                    failed: true
+                };
+                pendingMessagesRef.current.set(clientMessageId, failed);
+                setMessages((prev) => prev.map((m) => (m.clientMessageId === clientMessageId ? failed : m)));
+            }
         }
     };
 
-    const activeTypingCount = Object.keys(typingUsers || {}).filter((uid) => uid !== user?.uid).length;
+    const handleInputChange = (value) => {
+        setInputText(value);
+        if (!chat?.id || !user?.uid) return;
+
+        const hasText = Boolean(value.trim());
+        if (!hasText) {
+            if (typingDebounceRef.current) {
+                clearTimeout(typingDebounceRef.current);
+                typingDebounceRef.current = null;
+            }
+            chatService.setTyping(chat.id, false).catch(() => {});
+            return;
+        }
+
+        chatService.setTyping(chat.id, true).catch(() => {});
+        if (typingDebounceRef.current) clearTimeout(typingDebounceRef.current);
+        typingDebounceRef.current = setTimeout(() => {
+            chatService.setTyping(chat.id, false).catch(() => {});
+            typingDebounceRef.current = null;
+        }, 2500);
+    };
+
+    useEffect(() => () => {
+        if (typingDebounceRef.current) {
+            clearTimeout(typingDebounceRef.current);
+            typingDebounceRef.current = null;
+        }
+        if (chat?.id && user?.uid) {
+            chatService.setTyping(chat.id, false).catch(() => {});
+        }
+    }, [chat?.id, user?.uid]);
+
+    const nowMs = Date.now();
+    const activeTypingCount = Object.keys(typingUsers || {}).filter((uid) => {
+        if (uid === user?.uid) return false;
+        const row = typingUsers?.[uid];
+        const updatedAt = typeof row?.updatedAt === 'number' ? row.updatedAt : 0;
+        return row?.state === 'typing' && (nowMs - updatedAt) < 8000;
+    }).length;
     const headerStatusText = activeTypingCount > 0
         ? 'Typing...'
         : (chat.members ? `${chat.members} members active` : (chat.isOnline ? 'Online now' : 'Last seen recently'));
@@ -305,6 +426,15 @@ const ChatDetailScreen = ({ navigation, route }) => {
         const senderAvatar = isMe
             ? (userData?.photoURL || user?.photoURL || '')
             : (senderProfile?.photoURL || (chat?.isGroup ? '' : (chat.avatar || chat.photoURL || chat.image)));
+
+        const otherId = !chat?.isGroup && Array.isArray(chat?.participants)
+            ? chat.participants.find((id) => id !== user?.uid)
+            : null;
+        const otherPresence = otherId ? chatPresence?.[otherId] : null;
+        const seenAt = typeof otherPresence?.lastSeenAt === 'number' ? otherPresence.lastSeenAt : 0;
+        const createdAtMs = item.createdAtMs || 0;
+        const isSeen = isMe && !item.pending && !item.failed && !chat?.isGroup && seenAt > 0 && seenAt >= createdAtMs;
+
         // Design: Incoming (Left) = Teal, Outgoing (Right) = Light
         return (
             <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
@@ -325,9 +455,16 @@ const ChatDetailScreen = ({ navigation, route }) => {
                         {item.text}
                     </Text>
                     <View style={styles.messageFooter}>
-                        {isMe && <Ionicons name="checkmark-done" size={14} color={COLORS.primary} style={{ marginRight: 4 }} />}
+                        {isMe && (
+                            <Ionicons
+                                name={item.pending ? 'time-outline' : (isSeen ? 'checkmark-done' : 'checkmark')}
+                                size={14}
+                                color={item.failed ? COLORS.error : (isSeen ? COLORS.primary : '#9E9E9E')}
+                                style={{ marginRight: 4 }}
+                            />
+                        )}
                         <Text style={[styles.messageTime, isMe ? { color: '#9E9E9E' } : { color: 'rgba(255,255,255,0.8)' }]}>
-                            {item.time}
+                            {item.failed ? 'Failed' : item.time}
                         </Text>
                     </View>
                 </TouchableOpacity>
@@ -407,7 +544,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                             placeholder="Write a message..."
                             placeholderTextColor="#9E9E9E"
                             value={inputText}
-                            onChangeText={setInputText}
+                            onChangeText={handleInputChange}
                             multiline
                         />
                     </View>

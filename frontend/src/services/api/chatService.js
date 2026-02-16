@@ -9,8 +9,8 @@ export const chatService = {
         return chatRepository.createOrGetDirectChat(recipientId);
     },
 
-    sendMessage: async (chatId, text, type = 'text', mediaUrl = null) => {
-        await chatRepository.sendMessage(chatId, text, type, mediaUrl);
+    sendMessage: async (chatId, text, type = 'text', mediaUrl = null, clientMessageId = null) => {
+        await chatRepository.sendMessage(chatId, text, type, mediaUrl, clientMessageId);
         return { success: true };
     },
 
@@ -25,8 +25,11 @@ export const chatService = {
                 const data = docSnap.data();
                 return {
                     _id: docSnap.id,
+                    clientMessageId: data.clientMessageId || null,
                     text: data.text,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+                    createdAtMs: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+                    readBy: Array.isArray(data.readBy) ? data.readBy : [],
                     user: {
                         _id: data.senderId
                     },

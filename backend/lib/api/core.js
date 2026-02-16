@@ -666,7 +666,7 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
-    const { chatId, text, type = 'text', mediaUrl = null } = data;
+    const { chatId, text, type = 'text', mediaUrl = null, clientMessageId = null } = data;
     const uid = context.auth.uid;
     if (!chatId || (!text && !mediaUrl)) {
         throw new functions.https.HttpsError('invalid-argument', 'Chat ID and message content are required.');
@@ -697,17 +697,18 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
             text,
             type, // 'text' | 'image' | 'video'
             mediaUrl,
+            ...(clientMessageId ? { clientMessageId: String(clientMessageId) } : {}),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             readBy: [uid]
         };
         // Add to subcollection
-        await chatRef.collection('messages').add(messageData);
+        const messageRef = await chatRef.collection('messages').add(messageData);
         // Update parent
         await chatRef.update({
             lastMessage: type === 'text' ? text : '📷 Media',
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
-        return { success: true };
+        return { success: true, messageId: messageRef.id };
     }
     catch (error) {
         console.error("Error sending message:", error);
