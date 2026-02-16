@@ -23,15 +23,11 @@ const ROUTE_TARGETS = {
     APP: 'APP'
 };
 
-const isProfileComplete = (profile) => {
-    if (!profile) return false;
-    if (profile.onboardingCompleted === true) return true;
-    return Boolean(profile.name && profile.role);
-};
-
 const decideInitialRoute = (user, profile) => {
     if (!user) return ROUTE_TARGETS.UNAUTH;
-    return isProfileComplete(profile) ? ROUTE_TARGETS.APP : ROUTE_TARGETS.PROFILE_SETUP;
+    // UX decision: authenticated users should land in-app directly.
+    // Profile setup remains optional and should be user-initiated, not forced on boot.
+    return ROUTE_TARGETS.APP;
 };
 
 export const AuthProvider = ({ children, onAuthReady }) => {
