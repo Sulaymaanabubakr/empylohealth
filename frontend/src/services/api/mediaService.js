@@ -1,6 +1,5 @@
 // TypeScript conversion in progress
-import { functions } from '../firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
+import { callableClient } from './callableClient';
 
 export const mediaService = {
     /**
@@ -12,8 +11,7 @@ export const mediaService = {
     uploadAsset: async (localUri, folder = 'avatars') => {
         try {
             // 1. Get Signature from Backend
-            const getSignature = httpsCallable(functions, 'generateUploadSignature');
-            const { data: signData } = await getSignature({ folder });
+            const signData = await callableClient.invokeWithAuth('generateUploadSignature', { folder });
 
             const { signature, timestamp, cloud_name, api_key } = signData;
 

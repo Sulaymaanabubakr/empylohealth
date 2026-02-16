@@ -1,6 +1,5 @@
 import { contentRepository } from '../repositories/ContentRepository';
-import { functions } from '../firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
+import { callableClient } from './callableClient';
 
 export const resourceService = {
     getExploreContent: async () => {
@@ -13,8 +12,7 @@ export const resourceService = {
 
     // Kept for admin/dev background seeding.
     seedResources: async () => {
-        const seedFn = httpsCallable(functions, 'seedResources');
-        await seedFn();
+        await callableClient.invokeWithAuth('seedResources', {});
         return { success: true };
     }
 };

@@ -562,10 +562,18 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
  * Callable Function: 'handleJoinRequest'
  */
 export const handleJoinRequest = regionalFunctions.https.onCall(async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    if (!context.auth) {
+        console.warn('[handleJoinRequest] unauthenticated request', {
+            circleId: data?.circleId || null,
+            targetUid: data?.targetUid || null,
+            action: data?.action || null
+        });
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
 
     const { circleId, targetUid, action } = data; // action: 'accept' | 'reject'
     const uid = context.auth.uid;
+    console.log('[handleJoinRequest] request received', { circleId, targetUid, action, uid });
 
     try {
         const circleRef = db.collection('circles').doc(circleId);

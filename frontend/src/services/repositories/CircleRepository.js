@@ -1,11 +1,9 @@
-import { auth, db, functions } from '../firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
+import { auth, db } from '../firebaseConfig';
 import {
     doc,
-    getDoc,
-    serverTimestamp,
-    updateDoc
+    getDoc
 } from 'firebase/firestore';
+import { callableClient } from '../api/callableClient';
 
 const canModerate = (role) => ['creator', 'admin', 'moderator'].includes(role);
 
@@ -13,8 +11,7 @@ export const circleRepository = {
     async createCircle({ name, description, category, type, image, visibility }) {
         if (!name?.trim()) throw new Error('Circle name is required.');
 
-        const fn = httpsCallable(functions, 'createCircle');
-        const result = await fn({
+        return callableClient.invokeWithAuth('createCircle', {
             name: name.trim(),
             description: description || '',
             category: category || 'General',
@@ -22,7 +19,6 @@ export const circleRepository = {
             visibility: visibility || 'visible',
             image: image || null
         });
-        return result.data;
     },
 
     async updateCircle(circleId, data) {
@@ -51,25 +47,20 @@ export const circleRepository = {
             }
         });
 
-        await updateDoc(doc(db, 'circles', circleId), {
-            ...allowedUpdates,
-            updatedAt: serverTimestamp()
+        // Use backend callable for consistency with auth/rules and auditability.
+        return callableClient.invokeWithAuth('updateCircle', {
+            circleId,
+            ...allowedUpdates
         });
-
-        return { success: true };
     },
 
     async joinCircle(circleId) {
         if (!circleId) throw new Error('Invalid request.');
-        const fn = httpsCallable(functions, 'joinCircle');
-        const result = await fn({ circleId });
-        return result.data;
+        return callableClient.invokeWithAuth('joinCircle', { circleId });
     },
 
     async leaveCircle(circleId) {
         if (!circleId) throw new Error('Invalid request.');
-        const fn = httpsCallable(functions, 'leaveCircle');
-        const result = await fn({ circleId });
-        return result.data;
+        return callableClient.invokeWithAuth('leaveCircle', { circleId });
     }
 };

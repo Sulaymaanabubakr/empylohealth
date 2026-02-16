@@ -1,5 +1,6 @@
-import { auth, app, FIREBASE_ENV_INFO } from '../firebaseConfig';
+import { auth, app, functions, FIREBASE_ENV_INFO } from '../firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
 
 const waitForAuthUser = async (timeoutMs = 10000) => {
   if (auth.currentUser) return auth.currentUser;
@@ -71,29 +72,83 @@ const postCallable = async (functionName, payload, token) => {
   }
 
   if (!response.ok) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn(`[CallableClient] ${functionName} HTTP ${response.status}`, json?.error || raw);
+    }
     throw asCallableError(json?.error, `Callable ${functionName} failed (${response.status}).`);
   }
   if (json?.error) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn(`[CallableClient] ${functionName} returned callable error`, json.error);
+    }
     throw asCallableError(json.error, `Callable ${functionName} returned an error.`);
   }
   return json?.result;
 };
 
+const invokeViaSdk = async (functionName, payload) => {
+  const callable = httpsCallable(functions, functionName);
+  const response = await callable(payload || {});
+  return response?.data;
+};
+
 export const callableClient = {
   invokeWithAuth: async (functionName, payload) => {
-    const { token } = await ensureToken(false);
+    const { user, token } = await ensureToken(false);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.log(`[CallableClient] invoking ${functionName}`, {
+        uid: user?.uid || null,
+        hasToken: Boolean(token)
+      });
+    }
+
+    let firstError = null;
     try {
       return await postCallable(functionName, payload, token);
     } catch (error) {
+      firstError = error;
       const code = String(error?.code || '');
       const message = String(error?.message || '').toLowerCase();
-      const isAuthError = code.includes('unauthenticated') || message.includes('unauthenticated');
-      if (!isAuthError) throw error;
+      const isAuthError =
+        code.includes('unauthenticated') ||
+        message.includes('unauthenticated') ||
+        message.includes('401');
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn(`[CallableClient] ${functionName} failed`, { code: error?.code, message: error?.message });
+      }
+      if (!isAuthError) {
+        // Use SDK callable as a compatibility fallback for callable protocol edge cases.
+        try {
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.log(`[CallableClient] falling back to SDK callable for ${functionName}`);
+          }
+          return await invokeViaSdk(functionName, payload);
+        } catch {
+          throw error;
+        }
+      }
 
       // Retry once with forced token refresh.
       const refreshed = await ensureToken(true);
-      return postCallable(functionName, payload, refreshed.token);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log(`[CallableClient] retrying ${functionName} with refreshed token`);
+      }
+      try {
+        return await postCallable(functionName, payload, refreshed.token);
+      } catch (secondError) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn(`[CallableClient] refreshed-token retry failed for ${functionName}`, {
+            code: secondError?.code,
+            message: secondError?.message
+          });
+          console.log(`[CallableClient] falling back to SDK callable for ${functionName}`);
+        }
+        try {
+          return await invokeViaSdk(functionName, payload);
+        } catch {
+          throw secondError || firstError;
+        }
+      }
     }
   }
 };
-

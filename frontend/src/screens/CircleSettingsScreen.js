@@ -354,6 +354,14 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             await circleService.handleJoinRequest(circleId, req.uid, 'accept');
             showModal({ type: 'success', title: 'Approved', message: `${req.displayName} has gathered to the circle.` });
         } catch (error) {
+            if (__DEV__) {
+                console.error('[CircleSettings] approve join request failed', {
+                    circleId,
+                    targetUid: req?.uid,
+                    code: error?.code,
+                    message: error?.message
+                });
+            }
             showModal({ type: 'error', title: 'Error', message: error?.message || 'Failed to approve request.' });
         } finally {
             setProcessingId(null);
@@ -365,6 +373,14 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         try {
             await circleService.handleJoinRequest(circleId, req.uid, 'reject');
         } catch (error) {
+            if (__DEV__) {
+                console.error('[CircleSettings] reject join request failed', {
+                    circleId,
+                    targetUid: req?.uid,
+                    code: error?.code,
+                    message: error?.message
+                });
+            }
             showModal({ type: 'error', title: 'Error', message: 'Failed to reject request.' });
         } finally {
             setProcessingId(null);

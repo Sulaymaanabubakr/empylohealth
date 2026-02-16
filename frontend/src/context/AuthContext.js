@@ -8,6 +8,7 @@ import { profileCache } from '../services/bootstrap/profileCache';
 import { perfLogger } from '../services/diagnostics/perfLogger';
 import { logNetworkRegionDebug } from '../services/diagnostics/networkRegionDebug';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
+import { callableClient } from '../services/api/callableClient';
 
 export const AuthContext = createContext(undefined);
 
@@ -233,10 +234,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const deleteAccount = async () => {
         // Still Functions-backed (privileged + cascade deletes).
         // Implemented in backend as deleteUserAccount callable.
-        const { httpsCallable } = require('firebase/functions');
-        const { functions } = require('../services/firebaseConfig');
-        const deleteFn = httpsCallable(functions, 'deleteUserAccount');
-        await deleteFn();
+        await callableClient.invokeWithAuth('deleteUserAccount', {});
         await logout();
         return { success: true };
     };

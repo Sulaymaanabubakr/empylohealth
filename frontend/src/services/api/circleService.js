@@ -1,7 +1,7 @@
-import { functions, db } from '../firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
+import { db } from '../firebaseConfig';
 import { collection, query, where, getDocs, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { circleRepository } from '../repositories/CircleRepository';
+import { callableClient } from './callableClient';
 
 export const circleService = {
     createCircle: async (name, description = '', category = 'General', type = 'public', image = null, visibility = 'visible') => {
@@ -42,39 +42,27 @@ export const circleService = {
 
     // Privileged operations are still Functions-backed.
     manageMember: async (circleId, targetUid, action) => {
-        const manageFn = httpsCallable(functions, 'manageMember');
-        const result = await manageFn({ circleId, targetUid, action });
-        return result.data;
+        return callableClient.invokeWithAuth('manageMember', { circleId, targetUid, action });
     },
 
     handleJoinRequest: async (circleId, targetUid, action) => {
-        const fn = httpsCallable(functions, 'handleJoinRequest');
-        await fn({ circleId, targetUid, action });
-        return { success: true };
+        return callableClient.invokeWithAuth('handleJoinRequest', { circleId, targetUid, action });
     },
 
     resolveCircleReport: async (circleId, reportId, action, resolutionNote = '') => {
-        const fn = httpsCallable(functions, 'resolveCircleReport');
-        const result = await fn({ circleId, reportId, action, resolutionNote });
-        return result.data;
+        return callableClient.invokeWithAuth('resolveCircleReport', { circleId, reportId, action, resolutionNote });
     },
 
     submitReport: async (circleId, targetId, targetType, reason, description = '') => {
-        const fn = httpsCallable(functions, 'submitReport');
-        const result = await fn({ circleId, targetId, targetType, reason, description });
-        return result.data;
+        return callableClient.invokeWithAuth('submitReport', { circleId, targetId, targetType, reason, description });
     },
 
     scheduleHuddle: async (circleId, title, scheduledAt) => {
-        const fn = httpsCallable(functions, 'scheduleHuddle');
-        const result = await fn({ circleId, title, scheduledAt: scheduledAt.toISOString() });
-        return result.data;
+        return callableClient.invokeWithAuth('scheduleHuddle', { circleId, title, scheduledAt: scheduledAt.toISOString() });
     },
 
     deleteScheduledHuddle: async (circleId, eventId) => {
-        const fn = httpsCallable(functions, 'deleteScheduledHuddle');
-        await fn({ circleId, eventId });
-        return { success: true };
+        return callableClient.invokeWithAuth('deleteScheduledHuddle', { circleId, eventId });
     },
 
     subscribeToScheduledHuddles: (circleId, callback) => {
