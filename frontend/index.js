@@ -10,6 +10,7 @@ const { LogBox } = require('react-native');
 // Keep dev console readable while we maintain compatibility with older dev clients.
 LogBox.ignoreLogs([
   '[expo-av]: Expo AV has been deprecated and will be removed in SDK 54.',
+  'new NativeEventEmitter() was called with a non-null argument without the required',
   '`new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.',
   '`new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.'
 ]);

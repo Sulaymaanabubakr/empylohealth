@@ -42,6 +42,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const presenceCleanupRef = useRef(null);
     const authStartRef = useRef(Date.now());
     const hasNotifiedAuthReadyRef = useRef(false);
+    const networkProfileBootstrappedRef = useRef(false);
 
     const loading = bootPhase !== BOOT_PHASES.READY;
 
@@ -70,6 +71,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
         const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
             perfLogger.log('time_to_auth_resolve', Date.now() - authStartRef.current);
+            networkProfileBootstrappedRef.current = false;
 
             if (profileUnsubscribeRef.current) {
                 profileUnsubscribeRef.current();
@@ -119,9 +121,15 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                     setUserData(normalizedProfile);
                     await profileCache.save(currentUser.uid, normalizedProfile);
 
+                    if (networkProfileBootstrappedRef.current) {
+                        // After bootstrap is complete, keep profile fresh but avoid re-running boot routing/perf.
+                        return;
+                    }
+
                     const decidedRoute = decideInitialRoute(currentUser, normalizedProfile);
                     setRouteTarget(decidedRoute);
                     setBootPhase(BOOT_PHASES.READY);
+                    networkProfileBootstrappedRef.current = true;
 
                     perfLogger.log('time_to_profile_ready', perfLogger.elapsedSince('auth_resolve_start'));
                     console.log('[BOOT] Route decision from network profile:', decidedRoute);
@@ -139,6 +147,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                     setUserData(fallbackProfile);
                     setRouteTarget(decideInitialRoute(currentUser, fallbackProfile));
                     setBootPhase(BOOT_PHASES.READY);
+                    networkProfileBootstrappedRef.current = true;
                 }
             );
 

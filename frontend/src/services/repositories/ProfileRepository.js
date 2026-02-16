@@ -17,7 +17,6 @@ export const profileRepository = {
         const profileRef = doc(db, USERS_COLLECTION, uid);
         return onSnapshot(
             profileRef,
-            { includeMetadataChanges: true },
             (snap) => {
                 callback(
                     snap.exists()

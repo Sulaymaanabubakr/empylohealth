@@ -84,7 +84,9 @@ export default function Navigation() {
         console.log('[PERF] time_to_first_render: navigation tree mounted');
     }
 
-    console.log('[Navigation] Route target:', routeTarget);
+    useEffect(() => {
+        console.log('[Navigation] Route target:', routeTarget);
+    }, [routeTarget]);
 
     const showHuddleBanner = !!activeHuddleSession && currentRouteName !== 'Huddle';
 
