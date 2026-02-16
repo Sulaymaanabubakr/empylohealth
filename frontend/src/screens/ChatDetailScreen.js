@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { chatService } from '../services/api/chatService';
 import { liveStateRepository } from '../services/repositories/LiveStateRepository';
+import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
@@ -28,6 +29,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [activeHuddle, setActiveHuddle] = useState(null);
     const [typingUsers, setTypingUsers] = useState({});
     const [chatPresence, setChatPresence] = useState({});
+    const [otherPresence, setOtherPresence] = useState({ state: 'offline', lastChanged: null });
     const typingDebounceRef = useRef(null);
     const presenceIntervalRef = useRef(null);
     const pendingMessagesRef = useRef(new Map());
@@ -92,7 +94,21 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     }
                 });
 
-                const pending = [...pendingMessagesRef.current.values()];
+                // Fallback reconciliation for servers that may not yet return clientMessageId:
+                // match pending message by same sender/text within a short time window.
+                formatted.forEach((msg) => {
+                    if (!msg.isMe || msg.clientMessageId) return;
+                    for (const [pendingId, pendingMsg] of pendingMessagesRef.current.entries()) {
+                        const sameText = String(pendingMsg?.text || '') === String(msg?.text || '');
+                        const closeTime = Math.abs((pendingMsg?.createdAtMs || 0) - (msg?.createdAtMs || 0)) <= 12000;
+                        if (sameText && closeTime) {
+                            pendingMessagesRef.current.delete(pendingId);
+                            break;
+                        }
+                    }
+                });
+
+                const pending = [...pendingMessagesRef.current.values()].filter((p) => p?.pending || p?.failed);
                 const merged = [...formatted, ...pending].sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
                 setMessages(merged);
             });
@@ -113,6 +129,23 @@ const ChatDetailScreen = ({ navigation, route }) => {
             setChatPresence(presenceState || {});
         });
     }, [chat?.id, user?.uid]);
+
+    useEffect(() => {
+        if (chat?.isGroup) {
+            setOtherPresence({ state: 'offline', lastChanged: null });
+            return undefined;
+        }
+        const otherId = Array.isArray(chat?.participants)
+            ? chat.participants.find((id) => id !== user?.uid)
+            : null;
+        if (!otherId) {
+            setOtherPresence({ state: 'offline', lastChanged: null });
+            return undefined;
+        }
+        return presenceRepository.subscribeToPresence(otherId, (state) => {
+            setOtherPresence(state || { state: 'offline', lastChanged: null });
+        });
+    }, [chat?.isGroup, chat?.participants, user?.uid]);
 
     useEffect(() => {
         if (!chat?.id || !user?.uid) return undefined;
@@ -273,6 +306,9 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
         try {
             await chatService.sendMessage(chat.id, textToSend, 'text', null, clientMessageId);
+            // Ack received from backend callable; keep only server-backed copy from snapshot.
+            pendingMessagesRef.current.delete(clientMessageId);
+            setMessages((prev) => prev.filter((m) => m.clientMessageId !== clientMessageId));
             // Scroll to bottom
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         } catch (error) {
@@ -328,9 +364,11 @@ const ChatDetailScreen = ({ navigation, route }) => {
         const updatedAt = typeof row?.updatedAt === 'number' ? row.updatedAt : 0;
         return row?.state === 'typing' && (nowMs - updatedAt) < 8000;
     }).length;
+    const isDirectChat = !chat?.isGroup;
+    const isOtherOnline = isDirectChat && otherPresence?.state === 'online';
     const headerStatusText = activeTypingCount > 0
         ? 'Typing...'
-        : (chat.members ? `${chat.members} members active` : (chat.isOnline ? 'Online now' : 'Last seen recently'));
+        : (isDirectChat ? (isOtherOnline ? 'Online' : 'Offline') : (chat.members ? `${chat.members} members active` : 'Group'));
 
     const hasActiveHuddle = Boolean(activeHuddle?.isActive !== false && activeHuddle?.roomUrl);
     const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
@@ -502,7 +540,12 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerName}>{chat.name}</Text>
-                    <Text style={styles.headerStatus}>{headerStatusText}</Text>
+                    <View style={styles.headerStatusRow}>
+                        {isDirectChat && activeTypingCount === 0 && (
+                            <View style={[styles.onlineDot, isOtherOnline ? styles.onlineDotOn : styles.onlineDotOff]} />
+                        )}
+                        <Text style={styles.headerStatus}>{headerStatusText}</Text>
+                    </View>
                 </View>
                 {canShowCallButton ? (
                     <TouchableOpacity style={styles.callButton} onPress={handleCall}>
@@ -685,6 +728,22 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#6A7385',
         fontWeight: '600',
+    },
+    headerStatusRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6
+    },
+    onlineDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4
+    },
+    onlineDotOn: {
+        backgroundColor: '#22C55E'
+    },
+    onlineDotOff: {
+        backgroundColor: '#9CA3AF'
     },
     callButton: {
         width: 40,
