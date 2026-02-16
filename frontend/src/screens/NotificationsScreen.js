@@ -62,8 +62,13 @@ const NotificationsScreen = ({ navigation }) => {
       style={styles.card}
       activeOpacity={0.9}
       onPress={async () => {
-        const handled = await notificationService.routeFromNotificationPayload({ data: item });
-        if (!handled) {
+        try {
+          const handled = await notificationService.routeFromNotificationPayload({ data: item });
+          if (!handled) {
+            navigation.navigate('MainTabs', { screen: 'Dashboard' });
+          }
+        } catch (error) {
+          console.error('[NotificationsScreen] Failed to route notification tap', error);
           navigation.navigate('MainTabs', { screen: 'Dashboard' });
         }
       }}

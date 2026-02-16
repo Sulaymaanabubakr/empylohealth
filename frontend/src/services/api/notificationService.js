@@ -94,37 +94,42 @@ const resolveChatNavigationPayload = async (chatId) => {
 };
 
 const navigateFromNotificationData = async (payload) => {
-    const data = payload?.notification?.request?.content?.data || payload?.data || {};
-    const type = data?.type;
-    const huddleId = data?.huddleId;
-    const chatId = data?.chatId;
+    try {
+        const data = payload?.notification?.request?.content?.data || payload?.data || {};
+        const type = data?.type;
+        const huddleId = data?.huddleId;
+        const chatId = data?.chatId;
 
-    if (type === 'HUDDLE_STARTED' && huddleId) {
-        navigate('Huddle', {
-            chat: { id: chatId || 'chat', name: 'Huddle', isGroup: true },
-            huddleId,
-            mode: 'join',
-            callTapTs: Date.now()
-        });
-        return true;
-    }
-
-    if (type === 'CHAT_MESSAGE' && chatId) {
-        const chat = await resolveChatNavigationPayload(chatId);
-        if (chat) {
-            navigate('ChatDetail', { chat });
+        if (type === 'HUDDLE_STARTED' && huddleId) {
+            navigate('Huddle', {
+                chat: { id: chatId || 'chat', name: 'Huddle', isGroup: true },
+                huddleId,
+                mode: 'join',
+                callTapTs: Date.now()
+            });
             return true;
         }
-        navigate('MainTabs', { screen: 'ChatList' });
-        return true;
-    }
 
-    if (type === 'DAILY_AFFIRMATION') {
-        navigate('Affirmations', { affirmationId: data?.affirmationId || null });
-        return true;
-    }
+        if (type === 'CHAT_MESSAGE' && chatId) {
+            const chat = await resolveChatNavigationPayload(chatId);
+            if (chat) {
+                navigate('ChatDetail', { chat });
+                return true;
+            }
+            navigate('MainTabs', { screen: 'ChatList' });
+            return true;
+        }
 
-    return false;
+        if (type === 'DAILY_AFFIRMATION') {
+            navigate('Affirmations', { affirmationId: data?.affirmationId || null });
+            return true;
+        }
+
+        return false;
+    } catch (error) {
+        console.error('[NotificationRouting] Failed to route notification payload', error);
+        return false;
+    }
 };
 
 const maybeShowNativeIncomingCall = async (payload) => {
@@ -218,12 +223,16 @@ export const notificationService = {
         });
 
         responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-            void navigateFromNotificationData(response);
+            navigateFromNotificationData(response).catch((error) => {
+                console.error('[NotificationRouting] Response listener failure', error);
+            });
         });
 
         Notifications.getLastNotificationResponseAsync().then((response) => {
             if (response) {
-                void navigateFromNotificationData(response);
+                navigateFromNotificationData(response).catch((error) => {
+                    console.error('[NotificationRouting] Last response routing failure', error);
+                });
             }
         }).catch(() => {});
     },

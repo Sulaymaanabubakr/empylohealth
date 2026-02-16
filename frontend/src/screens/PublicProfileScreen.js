@@ -21,6 +21,19 @@ const labelFromScore = (score) => {
     return 'Needs Attention';
 };
 
+const ringColorFromProfile = (profile = {}) => {
+    const rawScore = profile?.wellbeingScore;
+    const score = typeof rawScore === 'number'
+        ? rawScore
+        : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
+    const label = String(profile?.wellbeingLabel || profile?.wellbeingStatus || '').toLowerCase();
+
+    if (label.includes('struggl') || label.includes('attention')) return '#C62828';
+    if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32';
+    if (Number.isFinite(score)) return score >= 70 ? '#2E7D32' : '#C62828';
+    return '#BDBDBD';
+};
+
 const fmtDate = (value) => {
     if (!value) return 'Unknown';
     try {
@@ -60,16 +73,15 @@ const PublicProfileScreen = ({ navigation, route }) => {
                 }
                 setProfile({
                     uid: data.uid,
-                    name: data?.name || data?.displayName || 'Member',
-                    email: data?.email || '',
+                    name: data?.name || data?.displayName || data?.fullName || 'Member',
                     photoURL: data?.photoURL || '',
-                    bio: data?.bio || data?.about || 'No bio available yet.',
+                    bio: data?.bio || data?.about || data?.aboutMe || 'No bio available yet.',
                     wellbeingScore: data?.wellbeingScore ?? null,
-                    wellbeingLabel: data?.wellbeingLabel || labelFromScore(data?.wellbeingScore),
+                    wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || labelFromScore(data?.wellbeingScore),
                     streak: Number(data?.streak || 0),
                     role: data?.role || 'personal',
-                    location: data?.location || '',
-                    gender: data?.gender || '',
+                    location: data?.location || data?.city || data?.country || '',
+                    gender: data?.gender || data?.sex || '',
                     createdAt: data?.createdAt || null,
                     circlesCount: Number(data?.circlesCount || 0)
                 });
@@ -154,7 +166,9 @@ const PublicProfileScreen = ({ navigation, route }) => {
             ) : (
                 <ScrollView contentContainerStyle={styles.content}>
                     <LinearGradient colors={[COLORS.primary, '#00C9B1']} style={styles.heroCard}>
-                        <Avatar uri={profile.photoURL} name={profile.name} size={88} />
+                        <View style={[styles.heroAvatarRing, { borderColor: ringColorFromProfile(profile) }]}>
+                            <Avatar uri={profile.photoURL} name={profile.name} size={88} />
+                        </View>
                         <Text style={styles.name}>{profile.name}</Text>
                         <View style={styles.statusRow}>
                             <View style={[styles.presenceDot, presence?.state === 'online' ? styles.presenceOnline : styles.presenceOffline]} />
@@ -200,12 +214,6 @@ const PublicProfileScreen = ({ navigation, route }) => {
                             <View style={styles.detailRow}>
                                 <Text style={styles.detailKey}>Gender</Text>
                                 <Text style={styles.detailValue}>{profile.gender}</Text>
-                            </View>
-                        ) : null}
-                        {profile.email ? (
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailKey}>Email</Text>
-                                <Text style={styles.detailValue}>{profile.email}</Text>
                             </View>
                         ) : null}
                     </View>
@@ -286,6 +294,11 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.18,
         shadowRadius: 16,
         elevation: 8
+    },
+    heroAvatarRing: {
+        borderWidth: 3,
+        borderRadius: 48,
+        padding: 2
     },
     name: {
         marginTop: 14,

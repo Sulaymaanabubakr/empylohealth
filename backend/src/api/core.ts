@@ -742,12 +742,22 @@ export const getPublicProfile = regionalFunctions.https.onCall(async (data, cont
         }
 
         const userData = userSnap.data() || {};
+        let circlesCount = 0;
         const circleIds = Array.isArray(circlesSnap.data()?.circleIds) ? circlesSnap.data()?.circleIds : [];
+        if (circleIds.length > 0) {
+            circlesCount = circleIds.length;
+        } else {
+            // Backfill path for older accounts without userCircles index.
+            const circlesCountSnap = await db.collection('circles')
+                .where('members', 'array-contains', uid)
+                .count()
+                .get();
+            circlesCount = circlesCountSnap.data().count || 0;
+        }
 
         return {
             uid,
             name: userData?.name || userData?.displayName || 'Member',
-            email: userData?.email || '',
             photoURL: userData?.photoURL || '',
             bio: userData?.bio || userData?.about || 'No bio available yet.',
             wellbeingScore: userData?.wellbeingScore ?? null,
@@ -757,7 +767,7 @@ export const getPublicProfile = regionalFunctions.https.onCall(async (data, cont
             location: userData?.location || '',
             gender: userData?.gender || '',
             createdAt: userData?.createdAt || null,
-            circlesCount: circleIds.length
+            circlesCount
         };
     } catch (error) {
         if (error instanceof functions.https.HttpsError) {
