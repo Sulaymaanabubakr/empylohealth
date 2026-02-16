@@ -2,23 +2,54 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
 import Avatar from '../components/Avatar';
+
+const chatListCacheKey = (uid) => `chat_list_cache_v1:${uid}`;
 
 const ChatListScreen = ({ navigation }) => {
     const { user } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [chats, setChats] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
+    const [hasFirstSnapshot, setHasFirstSnapshot] = useState(false);
+    const [hydratedCache, setHydratedCache] = useState(false);
 
     useEffect(() => {
-        if (!user?.uid) return;
+        if (!user?.uid) return undefined;
+        let active = true;
+
+        const hydrate = async () => {
+            try {
+                const raw = await AsyncStorage.getItem(chatListCacheKey(user.uid));
+                if (!active || !raw) return;
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    setChats(parsed);
+                }
+            } catch {
+                // Ignore cache read errors.
+            } finally {
+                if (active) setHydratedCache(true);
+            }
+        };
+
+        hydrate();
+
         const unsubscribe = chatService.subscribeToChatList(user.uid, (updatedChats) => {
+            if (!active) return;
             setChats(updatedChats);
+            setHasFirstSnapshot(true);
+            AsyncStorage.setItem(chatListCacheKey(user.uid), JSON.stringify(updatedChats)).catch(() => {});
         });
-        return () => unsubscribe();
+
+        return () => {
+            active = false;
+            unsubscribe();
+        };
     }, [user?.uid]);
 
     const onRefresh = React.useCallback(() => {
@@ -29,6 +60,7 @@ const ChatListScreen = ({ navigation }) => {
     const filteredChats = chats.filter((chat) =>
         (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase())
     );
+    const showInitialLoading = !hasFirstSnapshot && !hydratedCache && chats.length === 0;
 
     const renderItem = ({ item }) => {
         const lastMessage = item.lastMessage || (item.isGroup ? 'Group conversation' : 'Start chatting');
@@ -122,13 +154,23 @@ const ChatListScreen = ({ navigation }) => {
                     keyboardShouldPersistTaps="handled"
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
                     ListEmptyComponent={
-                        <View style={styles.emptyWrap}>
-                            <View style={styles.emptyIconWrap}>
-                                <Ionicons name="chatbubble-ellipses-outline" size={30} color={COLORS.primary} />
+                        showInitialLoading ? (
+                            <View style={styles.emptyWrap}>
+                                <View style={styles.emptyIconWrap}>
+                                    <Ionicons name="time-outline" size={30} color={COLORS.primary} />
+                                </View>
+                                <Text style={styles.emptyTitle}>Loading chats...</Text>
+                                <Text style={styles.emptySubtitle}>Syncing your conversations.</Text>
                             </View>
-                            <Text style={styles.emptyTitle}>No chats yet</Text>
-                            <Text style={styles.emptySubtitle}>When you start a conversation, it will show up here.</Text>
-                        </View>
+                        ) : (
+                            <View style={styles.emptyWrap}>
+                                <View style={styles.emptyIconWrap}>
+                                    <Ionicons name="chatbubble-ellipses-outline" size={30} color={COLORS.primary} />
+                                </View>
+                                <Text style={styles.emptyTitle}>No chats yet</Text>
+                                <Text style={styles.emptySubtitle}>When you start a conversation, it will show up here.</Text>
+                            </View>
+                        )
                     }
                 />
             </KeyboardAvoidingView>
