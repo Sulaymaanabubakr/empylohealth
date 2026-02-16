@@ -2,6 +2,16 @@ let cachedImpl = null;
 
 const tryLoadExpoAudio = () => {
   try {
+    // Avoid importing expo-audio JS when current runtime doesn't include its native module.
+    // Importing in that case logs: "Cannot find native module 'ExpoAudio'".
+    // eslint-disable-next-line global-require
+    const { NativeModules } = require('react-native');
+    if (!NativeModules?.ExpoAudio) return null;
+  } catch {
+    return null;
+  }
+
+  try {
     // expo-audio (native; requires rebuild to be present in runtime)
     // eslint-disable-next-line global-require
     const mod = require('expo-audio');
@@ -83,4 +93,3 @@ export const loopingSound = {
     }
   }
 };
-
