@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
@@ -16,6 +16,16 @@ import { presenceRepository } from '../services/repositories/PresenceRepository'
 import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
 
 const { width } = Dimensions.get('window');
+
+const getWellbeingRingColor = (member = {}) => {
+    const rawScore = member?.score;
+    const score =
+        typeof rawScore === 'number'
+            ? rawScore
+            : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
+    if (!Number.isFinite(score)) return '#BDBDBD';
+    return score >= 70 ? '#2E7D32' : '#C62828';
+};
 
 const CircleDetailScreen = ({ navigation, route }) => {
     const { user } = useAuth();
@@ -35,6 +45,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const [showAllMembers, setShowAllMembers] = useState(false);
     const [memberModalVisible, setMemberModalVisible] = useState(false);
     const [selectedMember, setSelectedMember] = useState(null);
+    const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
     const memberCount = getCircleMemberCount(circle);
     const isFullForNonMembers = !isMember && memberCount >= MAX_CIRCLE_MEMBERS;
@@ -148,6 +159,23 @@ const CircleDetailScreen = ({ navigation, route }) => {
             unsubscribeEvents();
         };
     }, [circleId, circle?.members, circle?.adminId, user?.uid]);
+
+    useEffect(() => {
+        if (!circleId) return undefined;
+        if (!['creator', 'admin', 'moderator'].includes(role)) {
+            setPendingRequestsCount(0);
+            return undefined;
+        }
+
+        const requestsRef = collection(db, 'circles', circleId, 'requests');
+        const unsubRequests = onSnapshot(requestsRef, (snap) => {
+            setPendingRequestsCount(snap.size);
+        }, () => {
+            setPendingRequestsCount(0);
+        });
+
+        return () => unsubRequests();
+    }, [circleId, role]);
 
     useEffect(() => {
         checkPendingStatus();
@@ -330,6 +358,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     const hasActiveHuddle = Boolean(circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl);
     const canStartHuddle = ['creator', 'admin', 'moderator'].includes(role);
+    const canManageJoinRequests = ['creator', 'admin', 'moderator'].includes(role);
     const canSeeHuddleAction = hasActiveHuddle || canStartHuddle;
 
     return (
@@ -393,6 +422,20 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     </View>
                                     <Text style={styles.actionLabel}>Invite</Text>
                                 </TouchableOpacity>
+
+                                {canManageJoinRequests && (
+                                    <TouchableOpacity
+                                        style={styles.actionItem}
+                                        onPress={() => navigation.navigate('CircleSettings', { circleId: circle.id, initialTab: 'Requests' })}
+                                    >
+                                        <View style={[styles.actionIconCircle, { backgroundColor: '#FFF3E0' }]}>
+                                            <Ionicons name="mail-unread-outline" size={22} color="#EF6C00" />
+                                        </View>
+                                        <Text style={styles.actionLabel}>
+                                            Requests{pendingRequestsCount > 0 ? ` (${pendingRequestsCount})` : ''}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
@@ -543,7 +586,9 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     activeOpacity={0.85}
                                     onPress={() => openMemberModal(member)}
                                 >
-                                    <Avatar uri={member.image} name={member.name} size={48} />
+                                    <View style={[styles.memberWellbeingRing, { borderColor: getWellbeingRingColor(member) }]}>
+                                        <Avatar uri={member.image} name={member.name} size={48} />
+                                    </View>
                                     <View style={styles.memberInfo}>
                                         <Text style={styles.memberName}>{member.name}</Text>
                                         <Text style={styles.memberStatus}>
@@ -906,6 +951,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 16,
         backgroundColor: '#FFF',
+    },
+    memberWellbeingRing: {
+        borderWidth: 2,
+        borderRadius: 26,
+        padding: 1
     },
     memberInfo: {
         flex: 1,

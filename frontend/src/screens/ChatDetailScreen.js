@@ -9,8 +9,22 @@ import { chatService } from '../services/api/chatService';
 import { liveStateRepository } from '../services/repositories/LiveStateRepository';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
+
+const getWellbeingRingColor = (profile = {}) => {
+    const rawScore = profile?.wellbeingScore;
+    const score =
+        typeof rawScore === 'number'
+            ? rawScore
+            : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
+    const label = String(profile?.wellbeingLabel || profile?.wellbeingStatus || '').toLowerCase();
+
+    if (label.includes('struggl')) return '#C62828';
+    if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32';
+    if (Number.isFinite(score)) return score >= 70 ? '#2E7D32' : '#C62828';
+    return '#BDBDBD';
+};
 
 const ChatDetailScreen = ({ navigation, route }) => {
     const chat = route?.params?.chat;
@@ -32,6 +46,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [otherPresence, setOtherPresence] = useState({ state: 'offline', lastChanged: null });
     const [resolvedChatName, setResolvedChatName] = useState(chat?.name || 'Chat');
     const [resolvedChatAvatar, setResolvedChatAvatar] = useState(chat?.avatar || chat?.photoURL || chat?.image || '');
+    const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const typingDebounceRef = useRef(null);
     const presenceIntervalRef = useRef(null);
     const pendingMessagesRef = useRef(new Map());
@@ -223,6 +238,20 @@ const ChatDetailScreen = ({ navigation, route }) => {
         };
     }, [chat?.avatar, chat?.circleId, chat?.image, chat?.isGroup, chat?.name, chat?.photoURL, user?.uid]);
 
+    useEffect(() => {
+        if (!chat?.isGroup || !chat?.circleId || !['creator', 'admin', 'moderator'].includes(circleRole)) {
+            setPendingRequestsCount(0);
+            return undefined;
+        }
+        const requestsRef = collection(db, 'circles', chat.circleId, 'requests');
+        const unsubscribe = onSnapshot(requestsRef, (snap) => {
+            setPendingRequestsCount(snap.size);
+        }, () => {
+            setPendingRequestsCount(0);
+        });
+        return () => unsubscribe();
+    }, [chat?.circleId, chat?.isGroup, circleRole]);
+
     const getOtherParticipantId = () => {
         if (!Array.isArray(chat?.participants) || !user?.uid) return null;
         return chat.participants.find((id) => id !== user.uid) || null;
@@ -251,6 +280,8 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 uid,
                 name: data?.name || data?.displayName || 'Member',
                 photoURL: data?.photoURL || '',
+                wellbeingScore: data?.wellbeingScore ?? null,
+                wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || '',
                 role: chat?.isGroup ? 'Circle member' : 'Contact',
                 about: data?.bio || data?.about || 'Hey there! I am using Empylo.'
             };
@@ -262,6 +293,8 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 uid,
                 name: 'Member',
                 photoURL: '',
+                wellbeingScore: null,
+                wellbeingLabel: '',
                 role: chat?.isGroup ? 'Circle member' : 'Contact',
                 about: 'Profile unavailable'
             };
@@ -473,6 +506,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         const senderAvatar = isMe
             ? (userData?.photoURL || user?.photoURL || '')
             : (senderProfile?.photoURL || (chat?.isGroup ? '' : resolvedChatAvatar));
+        const ringColor = chat?.isGroup ? getWellbeingRingColor(senderProfile) : null;
 
         const otherId = !chat?.isGroup && Array.isArray(chat?.participants)
             ? chat.participants.find((id) => id !== user?.uid)
@@ -487,7 +521,9 @@ const ChatDetailScreen = ({ navigation, route }) => {
             <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
                 {!isMe && (
                     <TouchableOpacity onPress={() => openProfileModal(senderId)} activeOpacity={0.8} style={styles.avatarTap}>
-                        <Avatar uri={senderAvatar} name={senderName} size={32} />
+                        <View style={chat?.isGroup ? [styles.wellbeingRing, { borderColor: ringColor }] : null}>
+                            <Avatar uri={senderAvatar} name={senderName} size={32} />
+                        </View>
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity
@@ -556,13 +592,28 @@ const ChatDetailScreen = ({ navigation, route }) => {
                         <Text style={styles.headerStatus}>{headerStatusText}</Text>
                     </View>
                 </View>
-                {canShowCallButton ? (
-                    <TouchableOpacity style={styles.callButton} onPress={handleCall}>
-                        <Ionicons name={hasActiveHuddle ? 'call' : 'call-outline'} size={22} color={COLORS.primary} />
-                    </TouchableOpacity>
-                ) : (
-                    <View style={styles.callButtonPlaceholder} />
-                )}
+                <View style={styles.headerActions}>
+                    {chat?.isGroup && ['creator', 'admin', 'moderator'].includes(circleRole) && (
+                        <TouchableOpacity
+                            style={styles.requestsButton}
+                            onPress={() => navigation.navigate('CircleSettings', { circleId: chat.circleId, initialTab: 'Requests' })}
+                        >
+                            <Ionicons name="mail-unread-outline" size={18} color="#EF6C00" />
+                            {pendingRequestsCount > 0 && (
+                                <View style={styles.requestsBadge}>
+                                    <Text style={styles.requestsBadgeText}>{pendingRequestsCount}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    )}
+                    {canShowCallButton ? (
+                        <TouchableOpacity style={styles.callButton} onPress={handleCall}>
+                            <Ionicons name={hasActiveHuddle ? 'call' : 'call-outline'} size={22} color={COLORS.primary} />
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.callButtonPlaceholder} />
+                    )}
+                </View>
             </View>
 
             <KeyboardAvoidingView
@@ -766,6 +817,36 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40
     },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8
+    },
+    requestsButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFF3E0'
+    },
+    requestsBadge: {
+        position: 'absolute',
+        top: -3,
+        right: -3,
+        minWidth: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#D32F2F',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 4
+    },
+    requestsBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: '700'
+    },
     listContent: {
         paddingHorizontal: SPACING.lg,
         paddingTop: 14,
@@ -784,6 +865,11 @@ const styles = StyleSheet.create({
     avatarTap: {
         marginRight: 8,
         marginTop: 2
+    },
+    wellbeingRing: {
+        borderWidth: 2,
+        borderRadius: 18,
+        padding: 1
     },
     messageAvatar: {
         width: 32,

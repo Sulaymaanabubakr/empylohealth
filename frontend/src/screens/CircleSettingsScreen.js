@@ -128,6 +128,7 @@ const TabButton = ({ title, active, onPress, badge, alert }) => (
 
 const CircleSettingsScreen = ({ navigation, route }) => {
     const circleId = route?.params?.circleId;
+    const initialTab = route?.params?.initialTab;
     const { user } = useAuth();
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
@@ -168,6 +169,13 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const myRole = myMemberRec?.role || 'member'; // 'creator', 'admin', 'moderator', 'member'
     const isAdminOrCreator = ['creator', 'admin'].includes(myRole);
     const isModOrAbove = ['creator', 'admin', 'moderator'].includes(myRole);
+
+    useEffect(() => {
+        const allowedTabs = ['General', 'Members', 'Events', 'Requests', 'Reports'];
+        if (initialTab && allowedTabs.includes(initialTab)) {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab]);
 
     // Report Modal State
     const [showReportModal, setShowReportModal] = useState(false);
@@ -671,7 +679,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                     <TabButton title="Members" active={activeTab === 'Members'} onPress={() => setActiveTab('Members')} />
                     <TabButton title="Events" active={activeTab === 'Events'} onPress={() => setActiveTab('Events')} />
 
-                    {isAdminOrCreator && (
+                    {isModOrAbove && (
                         <TabButton title="Requests" active={activeTab === 'Requests'} onPress={() => setActiveTab('Requests')} badge={requests.length} />
                     )}
                     {isModOrAbove && (
@@ -683,7 +691,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             <ScrollView contentContainerStyle={styles.content}>
                 {activeTab === 'General' && <GeneralSettings circle={circle} onEdit={openEditModal} canEdit={isAdminOrCreator} onEditPhoto={handleUpdatePhoto} />}
                 {activeTab === 'Members' && <MembersTab />}
-                {activeTab === 'Requests' && isAdminOrCreator && <RequestsTab />}
+                {activeTab === 'Requests' && isModOrAbove && <RequestsTab />}
                 {activeTab === 'Reports' && isModOrAbove && <ReportsTab />}
                 {activeTab === 'Events' && <EventsTab />}
             </ScrollView>
