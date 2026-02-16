@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const apn_1 = __importDefault(require("apn"));
@@ -656,6 +656,52 @@ exports.createDirectChat = regionalFunctions.https.onCall(async (data, context) 
     catch (error) {
         console.error("Error creating chat:", error);
         throw new functions.https.HttpsError('internal', 'Unable to create chat.');
+    }
+});
+/**
+ * Get Public Profile (safe subset)
+ * Callable Function: 'getPublicProfile'
+ */
+exports.getPublicProfile = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+    const { uid } = data || {};
+    if (!uid || typeof uid !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'User ID is required.');
+    }
+    try {
+        const [userSnap, circlesSnap] = await Promise.all([
+            db.collection('users').doc(uid).get(),
+            db.collection('userCircles').doc(uid).get()
+        ]);
+        if (!userSnap.exists) {
+            throw new functions.https.HttpsError('not-found', 'Profile not found.');
+        }
+        const userData = userSnap.data() || {};
+        const circleIds = Array.isArray(circlesSnap.data()?.circleIds) ? circlesSnap.data()?.circleIds : [];
+        return {
+            uid,
+            name: userData?.name || userData?.displayName || 'Member',
+            email: userData?.email || '',
+            photoURL: userData?.photoURL || '',
+            bio: userData?.bio || userData?.about || 'No bio available yet.',
+            wellbeingScore: userData?.wellbeingScore ?? null,
+            wellbeingLabel: userData?.wellbeingLabel || '',
+            streak: Number(userData?.streak || 0),
+            role: userData?.role || 'personal',
+            location: userData?.location || '',
+            gender: userData?.gender || '',
+            createdAt: userData?.createdAt || null,
+            circlesCount: circleIds.length
+        };
+    }
+    catch (error) {
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        console.error('Error fetching public profile:', error);
+        throw new functions.https.HttpsError('internal', 'Unable to load profile.');
     }
 });
 /**

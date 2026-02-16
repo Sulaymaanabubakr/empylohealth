@@ -3,10 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { doc, getDoc } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
-import { db } from '../services/firebaseConfig';
 import { chatService } from '../services/api/chatService';
+import { callableClient } from '../services/api/callableClient';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
@@ -53,19 +52,14 @@ const PublicProfileScreen = ({ navigation, route }) => {
             }
 
             try {
-                const [snap, circlesSnap] = await Promise.all([
-                    getDoc(doc(db, 'users', uid)),
-                    getDoc(doc(db, 'userCircles', uid))
-                ]);
+                const data = await callableClient.invokeWithAuth('getPublicProfile', { uid });
                 if (!mounted) return;
-                if (!snap.exists()) {
+                if (!data?.uid) {
                     setProfile(null);
                     return;
                 }
-                const data = snap.data();
-                const circleIds = Array.isArray(circlesSnap.data()?.circleIds) ? circlesSnap.data().circleIds : [];
                 setProfile({
-                    uid,
+                    uid: data.uid,
                     name: data?.name || data?.displayName || 'Member',
                     email: data?.email || '',
                     photoURL: data?.photoURL || '',
@@ -77,8 +71,12 @@ const PublicProfileScreen = ({ navigation, route }) => {
                     location: data?.location || '',
                     gender: data?.gender || '',
                     createdAt: data?.createdAt || null,
-                    circlesCount: circleIds.length
+                    circlesCount: Number(data?.circlesCount || 0)
                 });
+            } catch {
+                if (mounted) {
+                    setProfile(null);
+                }
             } finally {
                 if (mounted) setLoading(false);
             }

@@ -38,6 +38,7 @@ export const cleanupStaleHuddles = coreApi.cleanupStaleHuddles;
 export const scheduleHuddle = coreApi.scheduleHuddle;
 export const deleteScheduledHuddle = coreApi.deleteScheduledHuddle;
 export const createDirectChat = coreApi.createDirectChat;
+export const getPublicProfile = coreApi.getPublicProfile;
 export const sendMessage = coreApi.sendMessage;
 export const submitAssessment = coreApi.submitAssessment;
 export const getUserStats = coreApi.getUserStats;

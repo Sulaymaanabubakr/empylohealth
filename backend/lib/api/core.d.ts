@@ -52,6 +52,11 @@ export declare const handleJoinRequest: functions.HttpsFunction & functions.Runn
  */
 export declare const createDirectChat: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Get Public Profile (safe subset)
+ * Callable Function: 'getPublicProfile'
+ */
+export declare const getPublicProfile: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Send a Message
  * Callable Function: 'sendMessage'
  */
