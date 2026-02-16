@@ -430,6 +430,12 @@ const HuddleScreen = ({ navigation, route }) => {
             setSeconds(0);
             firstRemoteAudioLoggedRef.current = false;
 
+            if (!user?.uid) {
+                setPhase('error');
+                setErrorMessage('Please wait for authentication to finish, then try again.');
+                return;
+            }
+
             const hasMic = await requestMicPermission();
             if (!hasMic) {
                 setPhase('error');

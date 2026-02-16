@@ -44,8 +44,6 @@ const ensureAuthReady = async () => {
     if (!user) {
         throw new Error('Authentication is not ready. Please wait a moment and try again.');
     }
-    // Ensure token is available before callable invocation.
-    await user.getIdToken().catch(() => {});
     return user;
 };
 
@@ -56,15 +54,29 @@ const isUnauthenticatedError = (error) => {
 };
 
 const callWithAuthRetry = async (callable, payload) => {
-    await ensureAuthReady();
+    const user = await ensureAuthReady();
+    const token = await user.getIdToken().catch(() => null);
+    if (!token) {
+        // If we can't mint a token at all, don't hit the callable.
+        throw new Error('Unable to authenticate call request. Please try again.');
+    }
     try {
         return await callable(payload);
     } catch (error) {
         if (!isUnauthenticatedError(error)) throw error;
         // Token might be stale/not attached yet: refresh once and retry.
-        await auth.currentUser?.getIdToken(true).catch(() => {});
-        await ensureAuthReady();
-        return callable(payload);
+        const current = await ensureAuthReady();
+        await current.reload().catch(() => {});
+        const refreshedToken = await current.getIdToken(true).catch(() => null);
+        if (!refreshedToken) {
+            throw new Error('Your session expired. Please sign in again.');
+        }
+        try {
+            return await callable(payload);
+        } catch (retryError) {
+            if (!isUnauthenticatedError(retryError)) throw retryError;
+            throw new Error('Your session expired. Please sign in again.');
+        }
     }
 };
 
