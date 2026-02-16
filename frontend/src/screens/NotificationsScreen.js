@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import { collection, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
+import { notificationService } from '../services/api/notificationService';
 
 const NotificationsScreen = ({ navigation }) => {
   const { user, userData } = useAuth();
@@ -60,14 +61,10 @@ const NotificationsScreen = ({ navigation }) => {
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.9}
-      onPress={() => {
-        if (item.type === 'HUDDLE_STARTED' && item.huddleId) {
-          navigation.navigate('Huddle', {
-            chat: { id: item.chatId || 'chat', name: 'Huddle', isGroup: true },
-            huddleId: item.huddleId,
-            mode: 'join',
-            callTapTs: Date.now()
-          });
+      onPress={async () => {
+        const handled = await notificationService.routeFromNotificationPayload({ data: item });
+        if (!handled) {
+          navigation.navigate('MainTabs', { screen: 'Dashboard' });
         }
       }}
     >

@@ -2,7 +2,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { auth, db } from '../firebaseConfig';
-import { doc, arrayUnion, setDoc } from 'firebase/firestore';
+import { doc, arrayUnion, setDoc, getDoc } from 'firebase/firestore';
 import { navigate } from '../../navigation/navigationRef';
 import { nativeCallService } from '../native/nativeCallService';
 
@@ -46,7 +46,54 @@ const saveUserPushToken = async (uid, field, token) => {
     }
 };
 
-const navigateFromNotificationData = (payload) => {
+const resolveChatNavigationPayload = async (chatId) => {
+    if (!chatId) return null;
+    try {
+        const chatSnap = await getDoc(doc(db, 'chats', chatId));
+        if (!chatSnap.exists()) return null;
+
+        const chatData = chatSnap.data() || {};
+        const participants = Array.isArray(chatData.participants) ? chatData.participants : [];
+        const isGroup = chatData.type === 'group' || participants.length > 2;
+
+        let name = chatData.name || 'Chat';
+        let avatar = chatData.avatar || chatData.photoURL || chatData.image || '';
+
+        if (isGroup && chatData.circleId) {
+            const circleSnap = await getDoc(doc(db, 'circles', chatData.circleId));
+            if (circleSnap.exists()) {
+                const circleData = circleSnap.data() || {};
+                name = circleData.name || name;
+                avatar = circleData.image || circleData.avatar || circleData.photoURL || avatar;
+            }
+        } else if (!isGroup) {
+            const currentUid = auth.currentUser?.uid;
+            const otherId = participants.find((id) => id !== currentUid) || participants[0];
+            if (otherId) {
+                const userSnap = await getDoc(doc(db, 'users', otherId));
+                if (userSnap.exists()) {
+                    const userData = userSnap.data() || {};
+                    name = userData.name || userData.displayName || name;
+                    avatar = userData.photoURL || avatar;
+                }
+            }
+        }
+
+        return {
+            id: chatId,
+            ...chatData,
+            name,
+            avatar,
+            isGroup,
+            members: participants.length,
+            me: auth.currentUser?.uid || null
+        };
+    } catch {
+        return null;
+    }
+};
+
+const navigateFromNotificationData = async (payload) => {
     const data = payload?.notification?.request?.content?.data || payload?.data || {};
     const type = data?.type;
     const huddleId = data?.huddleId;
@@ -59,6 +106,21 @@ const navigateFromNotificationData = (payload) => {
             mode: 'join',
             callTapTs: Date.now()
         });
+        return true;
+    }
+
+    if (type === 'CHAT_MESSAGE' && chatId) {
+        const chat = await resolveChatNavigationPayload(chatId);
+        if (chat) {
+            navigate('ChatDetail', { chat });
+            return true;
+        }
+        navigate('MainTabs', { screen: 'ChatList' });
+        return true;
+    }
+
+    if (type === 'DAILY_AFFIRMATION') {
+        navigate('Affirmations', { affirmationId: data?.affirmationId || null });
         return true;
     }
 
@@ -127,6 +189,10 @@ const registerVoipListeners = () => {
 };
 
 export const notificationService = {
+    routeFromNotificationPayload: async (payload) => {
+        return navigateFromNotificationData(payload);
+    },
+
     initializeNotificationRouting: () => {
         if (notificationRoutingInitialized) return;
         notificationRoutingInitialized = true;
@@ -152,12 +218,12 @@ export const notificationService = {
         });
 
         responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-            navigateFromNotificationData(response);
+            void navigateFromNotificationData(response);
         });
 
         Notifications.getLastNotificationResponseAsync().then((response) => {
             if (response) {
-                navigateFromNotificationData(response);
+                void navigateFromNotificationData(response);
             }
         }).catch(() => {});
     },
