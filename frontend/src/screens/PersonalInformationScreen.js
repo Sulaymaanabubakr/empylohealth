@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient'; // Only for button
@@ -26,6 +26,7 @@ const PersonalInformationScreen = ({ navigation }) => {
     const [dob, setDob] = useState(userData?.dob || '');
     const [gender, setGender] = useState(userData?.gender || 'Prefer not to say');
     const [location, setLocation] = useState(userData?.location || '');
+    const [bio, setBio] = useState(userData?.bio || userData?.about || '');
     const [avatarUri, setAvatarUri] = useState(userData?.photoURL || user?.photoURL || '');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -84,6 +85,8 @@ const PersonalInformationScreen = ({ navigation }) => {
                 dob,
                 gender,
                 location,
+                bio: bio.trim(),
+                about: bio.trim(), // Keep legacy field in sync for older readers.
                 photoURL,
                 updatedAt: new Date()
             };
@@ -198,6 +201,21 @@ const PersonalInformationScreen = ({ navigation }) => {
                             onSelect={setLocation}
                             icon={<Ionicons name="location-outline" size={20} color="#009688" />}
                         />
+
+                        <View style={styles.bioSection}>
+                            <Text style={styles.bioLabel}>Profile bio</Text>
+                            <TextInput
+                                style={styles.bioInput}
+                                value={bio}
+                                onChangeText={setBio}
+                                placeholder="Tell people a bit about yourself..."
+                                placeholderTextColor="#9E9E9E"
+                                multiline
+                                textAlignVertical="top"
+                                maxLength={300}
+                            />
+                            <Text style={styles.bioCount}>{bio.length}/300</Text>
+                        </View>
                     </View>
 
                     {/* Gradient Save Button */}
@@ -317,6 +335,32 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         letterSpacing: 0.5,
+    },
+    bioSection: {
+        marginTop: 2,
+    },
+    bioLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 8,
+    },
+    bioInput: {
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        borderRadius: 16,
+        minHeight: 96,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 15,
+        color: '#1A1A1A',
+        backgroundColor: '#FFFFFF',
+    },
+    bioCount: {
+        marginTop: 6,
+        textAlign: 'right',
+        fontSize: 12,
+        color: '#757575',
     },
 });
 

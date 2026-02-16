@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions, RefreshControl, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
@@ -158,6 +158,15 @@ const DashboardScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
 
+    const localWellbeingFallback = useCallback(() => {
+        const resolved = resolveMemberWellbeing(userData || {});
+        return {
+            score: typeof resolved.score === 'number' ? resolved.score : 0,
+            label: resolved.label || 'No data',
+            streak: Number(userData?.streak || 0)
+        };
+    }, [userData]);
+
     useEffect(() => {
         if (!user?.uid) return;
 
@@ -204,6 +213,18 @@ const DashboardScreen = ({ navigation }) => {
         }
     }, [user]);
 
+    useEffect(() => {
+        if (!user?.uid) return undefined;
+        return assessmentService.subscribeToWellbeingStats(user.uid, (stats) => {
+            if (!stats) return;
+            setWellbeing({
+                score: typeof stats.score === 'number' ? stats.score : 0,
+                label: stats.label || 'No data',
+                streak: Number(stats.streak || 0)
+            });
+        });
+    }, [user?.uid]);
+
     const fetchDashboardData = async () => {
         try {
             const [stats, challs, recs] = await Promise.all([
@@ -211,11 +232,13 @@ const DashboardScreen = ({ navigation }) => {
                 assessmentService.getKeyChallenges(),
                 assessmentService.getRecommendedContent()
             ]);
-            setWellbeing(stats);
+            const hasScore = typeof stats?.score === 'number';
+            setWellbeing(hasScore ? stats : localWellbeingFallback());
             setChallenges(challs);
             setRecommendations(recs);
         } catch (err) {
             console.log("Error fetching dashboard data", err);
+            setWellbeing(localWellbeingFallback());
         } finally {
             setRefreshing(false);
         }
@@ -309,19 +332,36 @@ const DashboardScreen = ({ navigation }) => {
             console.log('[Dashboard] Loading member profiles for circle:', circle.id, 'memberIds:', memberIds);
 
             for (const memberId of memberIds) {
-                const memberDoc = await getDoc(doc(db, 'users', memberId));
-                if (memberDoc.exists()) {
-                    const data = memberDoc.data();
-                    const wellbeing = resolveMemberWellbeing(data);
+                // Always seed current user from local auth/profile so "my" avatar never disappears.
+                if (memberId === user?.uid) {
+                    const wellbeing = resolveMemberWellbeing(userData || {});
                     profiles[memberId] = {
-                        name: data.name || data.displayName || 'Member',
-                        photoURL: data.photoURL || '',
+                        name: userData?.name || user?.displayName || 'You',
+                        photoURL: userData?.photoURL || user?.photoURL || '',
                         wellbeingScore: wellbeing.score,
                         wellbeingLabel: wellbeing.label,
-                        wellbeingStatus: data.wellbeingStatus || ''
+                        wellbeingStatus: userData?.wellbeingStatus || ''
                     };
-                } else {
-                    console.log('[Dashboard] Member doc does not exist:', memberId);
+                    continue;
+                }
+
+                try {
+                    const memberDoc = await getDoc(doc(db, 'users', memberId));
+                    if (memberDoc.exists()) {
+                        const data = memberDoc.data();
+                        const wellbeing = resolveMemberWellbeing(data);
+                        profiles[memberId] = {
+                            name: data.name || data.displayName || 'Member',
+                            photoURL: data.photoURL || '',
+                            wellbeingScore: wellbeing.score,
+                            wellbeingLabel: wellbeing.label,
+                            wellbeingStatus: data.wellbeingStatus || ''
+                        };
+                    } else {
+                        console.log('[Dashboard] Member doc does not exist:', memberId);
+                    }
+                } catch (memberError) {
+                    console.log('[Dashboard] Failed to load member profile:', memberId, memberError?.message || memberError);
                 }
             }
             console.log('[Dashboard] Loaded profiles:', Object.keys(profiles).length, 'of', memberIds.length);
@@ -338,6 +378,11 @@ const DashboardScreen = ({ navigation }) => {
         day: 'numeric',
         month: 'long'
     });
+    const selfResolvedWellbeing = resolveMemberWellbeing(userData || {});
+    const selfRingFallbackScore = typeof selfResolvedWellbeing.score === 'number'
+        ? selfResolvedWellbeing.score
+        : (typeof wellbeing?.score === 'number' ? wellbeing.score : null);
+    const selfRingFallbackLabel = selfResolvedWellbeing.label || wellbeing?.label || '';
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
@@ -373,7 +418,7 @@ const DashboardScreen = ({ navigation }) => {
                     <View style={styles.avatarContainer}>
                         <Avatar
                             uri={userData?.photoURL || user?.photoURL}
-                            name={userData?.name || user?.displayName || 'User'}
+                            name={userData?.name || user?.displayName || user?.email?.split('@')?.[0] || 'User'}
                             size={60}
                         />
                         <View style={styles.onlineBadge} />
@@ -394,7 +439,7 @@ const DashboardScreen = ({ navigation }) => {
                         <TouchableOpacity
                             style={styles.checkDetailsButton}
                             onPress={() => {
-                                if (wellbeing.score > 0) {
+                                if (typeof wellbeing.score === 'number' && wellbeing.score > 0) {
                                     navigation.navigate('Stats');
                                 } else {
                                     navigation.navigate('Assessment');
@@ -402,7 +447,7 @@ const DashboardScreen = ({ navigation }) => {
                             }}
                         >
                             <Text style={styles.checkDetailsText}>
-                                {wellbeing.score > 0 ? "Check Details" : "Take Assessment"}
+                                {(typeof wellbeing.score === 'number' && wellbeing.score > 0) ? "Check Details" : "Take Assessment"}
                             </Text>
                             <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
                         </TouchableOpacity>
@@ -451,7 +496,16 @@ const DashboardScreen = ({ navigation }) => {
                                 <View style={styles.memberStackContainer}>
                                     <View style={styles.avatarStack}>
                                         {circle.members.slice(0, 5).map((memberId, index) => {
-                                            const profile = memberProfiles[memberId];
+                                            const profile = memberProfiles[memberId] || (
+                                                memberId === user?.uid
+                                                    ? {
+                                                        name: userData?.name || user?.displayName || 'You',
+                                                        photoURL: userData?.photoURL || user?.photoURL || '',
+                                                        wellbeingScore: selfRingFallbackScore,
+                                                        wellbeingLabel: selfRingFallbackLabel
+                                                    }
+                                                    : null
+                                            );
                                             if (!profile) return null;
 
                                             return (

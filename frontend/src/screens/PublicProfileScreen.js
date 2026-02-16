@@ -40,6 +40,14 @@ const fmtDate = (value) => {
         if (typeof value?.toDate === 'function') {
             return value.toDate().toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
         }
+        if (typeof value === 'object' && (value?.seconds || value?._seconds)) {
+            const seconds = Number(value?.seconds || value?._seconds || 0);
+            const nanos = Number(value?.nanoseconds || value?._nanoseconds || 0);
+            const d = new Date((seconds * 1000) + Math.floor(nanos / 1e6));
+            if (!Number.isNaN(d.getTime())) {
+                return d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+            }
+        }
         const d = new Date(value);
         if (Number.isNaN(d.getTime())) return 'Unknown';
         return d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });

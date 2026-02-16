@@ -686,6 +686,58 @@ exports.getPublicProfile = regionalFunctions.https.onCall(async (data, context) 
             throw new functions.https.HttpsError('not-found', 'Profile not found.');
         }
         const userData = userSnap.data() || {};
+        const scoreFromUser = userData?.wellbeingScore;
+        const scoreFromStats = userData?.stats?.overallScore;
+        let wellbeingScore = typeof scoreFromUser === 'number'
+            ? scoreFromUser
+            : (typeof scoreFromStats === 'number' ? scoreFromStats : null);
+        let wellbeingLabel = userData?.wellbeingLabel || userData?.wellbeingStatus || '';
+        let streak = Number(userData?.streak ?? userData?.stats?.streak ?? 0);
+        let createdAt = userData?.createdAt || null;
+        // Fallbacks for older profiles with partial data.
+        if (wellbeingScore == null || !wellbeingLabel || !Number.isFinite(streak) || streak <= 0) {
+            const latestAssessmentSnap = await db.collection('assessments')
+                .where('uid', '==', uid)
+                .orderBy('createdAt', 'desc')
+                .limit(1)
+                .get();
+            if (!latestAssessmentSnap.empty) {
+                const latestAssessment = latestAssessmentSnap.docs[0]?.data() || {};
+                if (wellbeingScore == null && typeof latestAssessment?.score === 'number') {
+                    wellbeingScore = latestAssessment.score;
+                }
+                if (!createdAt && latestAssessment?.createdAt) {
+                    createdAt = latestAssessment.createdAt;
+                }
+            }
+        }
+        if (!wellbeingLabel) {
+            const s = typeof wellbeingScore === 'number' ? wellbeingScore : NaN;
+            if (Number.isFinite(s)) {
+                if (s >= 80)
+                    wellbeingLabel = 'Thriving';
+                else if (s >= 60)
+                    wellbeingLabel = 'Doing Well';
+                else if (s >= 40)
+                    wellbeingLabel = 'Okay';
+                else if (s >= 20)
+                    wellbeingLabel = 'Struggling';
+                else
+                    wellbeingLabel = 'Needs Attention';
+            }
+        }
+        if (!createdAt) {
+            try {
+                const authUser = await admin.auth().getUser(uid);
+                createdAt = authUser?.metadata?.creationTime || null;
+            }
+            catch {
+                // Ignore auth fallback failures.
+            }
+        }
+        if (!Number.isFinite(streak) || streak < 0) {
+            streak = 0;
+        }
         let circlesCount = 0;
         const circleIds = Array.isArray(circlesSnap.data()?.circleIds) ? circlesSnap.data()?.circleIds : [];
         if (circleIds.length > 0) {
@@ -704,13 +756,13 @@ exports.getPublicProfile = regionalFunctions.https.onCall(async (data, context) 
             name: userData?.name || userData?.displayName || 'Member',
             photoURL: userData?.photoURL || '',
             bio: userData?.bio || userData?.about || 'No bio available yet.',
-            wellbeingScore: userData?.wellbeingScore ?? null,
-            wellbeingLabel: userData?.wellbeingLabel || '',
-            streak: Number(userData?.streak || 0),
+            wellbeingScore,
+            wellbeingLabel,
+            streak,
             role: userData?.role || 'personal',
             location: userData?.location || '',
             gender: userData?.gender || '',
-            createdAt: userData?.createdAt || null,
+            createdAt,
             circlesCount
         };
     }
