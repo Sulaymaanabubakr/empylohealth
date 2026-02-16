@@ -70,6 +70,10 @@ export default function Navigation() {
         }
     }, [isReady, loading]);
 
+    useEffect(() => {
+        console.log('[Navigation] Route target:', routeTarget);
+    }, [routeTarget]);
+
     if (!isReady) {
         console.log('[PERF] Navigation: Waiting for isReady...');
         return (
@@ -83,10 +87,6 @@ export default function Navigation() {
         firstRenderLoggedRef.current = true;
         console.log('[PERF] time_to_first_render: navigation tree mounted');
     }
-
-    useEffect(() => {
-        console.log('[Navigation] Route target:', routeTarget);
-    }, [routeTarget]);
 
     const showHuddleBanner = !!activeHuddleSession && currentRouteName !== 'Huddle';
 
