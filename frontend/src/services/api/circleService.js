@@ -86,7 +86,12 @@ export const circleService = {
     },
 
     getAllCircles: async () => {
-        const q = query(collection(db, 'circles'), orderBy('createdAt', 'desc'));
+        // Discover feed should only query public circles to satisfy Firestore rules.
+        const q = query(
+            collection(db, 'circles'),
+            where('type', '==', 'public'),
+            orderBy('createdAt', 'desc')
+        );
         const snapshot = await getDocsWithAuthRetry(q, 'circles');
         return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
     },
