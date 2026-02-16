@@ -1,4 +1,5 @@
 import { auth, db } from '../firebaseConfig';
+import { callableClient } from '../api/callableClient';
 import {
     addDoc,
     collection,
@@ -7,7 +8,6 @@ import {
     getDocs,
     limit,
     query,
-    runTransaction,
     serverTimestamp,
     where
 } from 'firebase/firestore';
@@ -76,29 +76,13 @@ export const chatRepository = {
             throw new Error('Not allowed to send messages to this chat.');
         }
 
-        const messagesCollectionRef = collection(db, 'chats', chatId, 'messages');
-        const messageDocRef = doc(messagesCollectionRef);
-
-        await runTransaction(db, async (transaction) => {
-            transaction.set(messageDocRef, {
-                senderId: uid,
-                text: text || '',
-                type,
-                mediaUrl: mediaUrl || null,
-                createdAt: serverTimestamp()
-            });
-
-            transaction.update(chatDocRef, {
-                updatedAt: serverTimestamp(),
-                lastMessage: {
-                    senderId: uid,
-                    text: text || (type === 'image' ? '[image]' : '[message]'),
-                    type,
-                    createdAt: serverTimestamp()
-                }
-            });
+        const result = await callableClient.invokeWithAuth('sendMessage', {
+            chatId,
+            text: text || '',
+            type,
+            mediaUrl: mediaUrl || null
         });
 
-        return { success: true, messageId: messageDocRef.id };
+        return result || { success: true };
     }
 };

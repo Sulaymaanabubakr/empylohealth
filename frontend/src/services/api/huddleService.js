@@ -1,8 +1,6 @@
 // TypeScript conversion in progress
-import { auth, functions } from '../firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
-import { onAuthStateChanged } from 'firebase/auth';
 import { liveStateRepository } from '../repositories/LiveStateRepository';
+import { callableClient } from './callableClient';
 
 let activeLocalSession = null;
 const sessionListeners = new Set();
@@ -17,69 +15,6 @@ const emitSessionChange = () => {
     });
 };
 
-const waitForAuthUser = async (timeoutMs = 8000) => {
-    if (auth.currentUser) return auth.currentUser;
-    await new Promise((resolve) => {
-        let done = false;
-        const timer = setTimeout(() => {
-            if (done) return;
-            done = true;
-            unsub();
-            resolve();
-        }, timeoutMs);
-
-        const unsub = onAuthStateChanged(auth, () => {
-            if (done) return;
-            done = true;
-            clearTimeout(timer);
-            unsub();
-            resolve();
-        });
-    });
-    return auth.currentUser || null;
-};
-
-const ensureAuthReady = async () => {
-    const user = await waitForAuthUser();
-    if (!user) {
-        throw new Error('Authentication is not ready. Please wait a moment and try again.');
-    }
-    return user;
-};
-
-const isUnauthenticatedError = (error) => {
-    const code = String(error?.code || '');
-    const message = String(error?.message || '');
-    return code.includes('unauthenticated') || message.toLowerCase().includes('unauthenticated');
-};
-
-const callWithAuthRetry = async (callable, payload) => {
-    const user = await ensureAuthReady();
-    const token = await user.getIdToken().catch(() => null);
-    if (!token) {
-        // If we can't mint a token at all, don't hit the callable.
-        throw new Error('Unable to authenticate call request. Please try again.');
-    }
-    try {
-        return await callable(payload);
-    } catch (error) {
-        if (!isUnauthenticatedError(error)) throw error;
-        // Token might be stale/not attached yet: refresh once and retry.
-        const current = await ensureAuthReady();
-        await current.reload().catch(() => {});
-        const refreshedToken = await current.getIdToken(true).catch(() => null);
-        if (!refreshedToken) {
-            throw new Error('Your session expired. Please sign in again.');
-        }
-        try {
-            return await callable(payload);
-        } catch (retryError) {
-            if (!isUnauthenticatedError(retryError)) throw retryError;
-            throw new Error('Your session expired. Please sign in again.');
-        }
-    }
-};
-
 export const huddleService = {
     /**
      * Start a new Call/Huddle
@@ -88,16 +23,15 @@ export const huddleService = {
      */
     startHuddle: async (chatId, isGroup = false) => {
         try {
-            const startFn = httpsCallable(functions, 'startHuddle');
-            const result = await callWithAuthRetry(startFn, { chatId, isGroup });
-            if (result?.data?.huddleId) {
-                await liveStateRepository.upsertHuddleLiveState(result.data.huddleId, {
+            const result = await callableClient.invokeWithAuth('startHuddle', { chatId, isGroup });
+            if (result?.huddleId) {
+                await liveStateRepository.upsertHuddleLiveState(result.huddleId, {
                     state: 'ringing',
                     chatId,
-                    hostUid: result.data.startedBy || null
+                    hostUid: result.startedBy || null
                 }).catch(() => {});
             }
-            return result.data;
+            return result;
         } catch (error) {
             console.error("Error starting huddle:", error);
             throw error;
@@ -106,12 +40,11 @@ export const huddleService = {
 
     joinHuddle: async (huddleId) => {
         try {
-            const joinFn = httpsCallable(functions, 'joinHuddle');
-            const result = await callWithAuthRetry(joinFn, { huddleId });
+            const result = await callableClient.invokeWithAuth('joinHuddle', { huddleId });
             await liveStateRepository.upsertHuddleLiveState(huddleId, {
                 state: 'in-call'
             }).catch(() => {});
-            return result.data;
+            return result;
         } catch (error) {
             console.error("Error joining huddle:", error);
             throw error;
@@ -120,10 +53,9 @@ export const huddleService = {
 
     declineHuddle: async (huddleId) => {
         try {
-            const fn = httpsCallable(functions, 'declineHuddle');
-            const result = await callWithAuthRetry(fn, { huddleId });
+            const result = await callableClient.invokeWithAuth('declineHuddle', { huddleId });
             await liveStateRepository.upsertHuddleLiveState(huddleId, { state: 'idle' }).catch(() => {});
-            return result.data || { success: true };
+            return result || { success: true };
         } catch (error) {
             console.error("Error declining huddle:", error);
             throw error;
@@ -132,12 +64,11 @@ export const huddleService = {
 
     endHuddle: async (huddleId) => {
         try {
-            const endFn = httpsCallable(functions, 'endHuddle');
-            const result = await callWithAuthRetry(endFn, { huddleId });
+            const result = await callableClient.invokeWithAuth('endHuddle', { huddleId });
             await liveStateRepository.upsertHuddleLiveState(huddleId, {
                 state: 'ended'
             }).catch(() => {});
-            return result.data;
+            return result;
         } catch (error) {
             console.error("Error ending huddle:", error);
             throw error;
@@ -146,10 +77,9 @@ export const huddleService = {
 
     endHuddleWithReason: async (huddleId, reason) => {
         try {
-            const endFn = httpsCallable(functions, 'endHuddle');
-            const result = await callWithAuthRetry(endFn, { huddleId, reason });
+            const result = await callableClient.invokeWithAuth('endHuddle', { huddleId, reason });
             await liveStateRepository.upsertHuddleLiveState(huddleId, { state: 'ended' }).catch(() => {});
-            return result.data;
+            return result;
         } catch (error) {
             console.error("Error ending huddle:", error);
             throw error;
@@ -158,9 +88,8 @@ export const huddleService = {
 
     updateHuddleConnection: async (huddleId, action) => {
         try {
-            const fn = httpsCallable(functions, 'updateHuddleConnection');
-            const result = await callWithAuthRetry(fn, { huddleId, action }); // action: 'daily_joined' | 'daily_left'
-            return result.data || { success: true };
+            const result = await callableClient.invokeWithAuth('updateHuddleConnection', { huddleId, action }); // action: 'daily_joined' | 'daily_left'
+            return result || { success: true };
         } catch (error) {
             console.error("Error updating huddle connection:", error);
             throw error;
@@ -173,9 +102,8 @@ export const huddleService = {
      */
     ringHuddleParticipants: async (huddleId) => {
         try {
-            const ringFn = httpsCallable(functions, 'ringHuddleParticipants');
-            const result = await callWithAuthRetry(ringFn, { huddleId });
-            return result.data || { success: true };
+            const result = await callableClient.invokeWithAuth('ringHuddleParticipants', { huddleId });
+            return result || { success: true };
         } catch (error) {
             console.error("Error ringing participants:", error);
             throw error;
@@ -189,8 +117,7 @@ export const huddleService = {
      */
     updateHuddleState: async (huddleId, action) => {
         try {
-            const updateFn = httpsCallable(functions, 'updateHuddleState');
-            await callWithAuthRetry(updateFn, { huddleId, action });
+            await callableClient.invokeWithAuth('updateHuddleState', { huddleId, action });
             await liveStateRepository.upsertHuddleLiveState(huddleId, {
                 state: action === 'join' ? 'in-call' : (action === 'leave' ? 'idle' : action),
                 lastAction: action
