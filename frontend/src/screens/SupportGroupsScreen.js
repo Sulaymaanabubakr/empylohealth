@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -48,6 +48,8 @@ const SupportGroupsScreen = ({ route }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [groups, setGroups] = useState([]);
     const [memberPreviewMap, setMemberPreviewMap] = useState({});
+    const [deleteInProgress, setDeleteInProgress] = useState(false);
+    const [deletingCircleId, setDeletingCircleId] = useState(null);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -124,6 +126,15 @@ const SupportGroupsScreen = ({ route }) => {
         return () => { cancelled = true; };
     }, [groups]);
 
+    useEffect(() => {
+        if (!deleteInProgress || !deletingCircleId) return;
+        const stillVisible = groups.some((g) => g.id === deletingCircleId);
+        if (!stillVisible) {
+            setDeleteInProgress(false);
+            setDeletingCircleId(null);
+        }
+    }, [deleteInProgress, deletingCircleId, groups]);
+
     const renderGroupCard = ({ item, insideSwipe = false }) => (
         <TouchableOpacity
             style={[styles.groupCard, insideSwipe && styles.groupCardNoMargin]}
@@ -198,6 +209,8 @@ const SupportGroupsScreen = ({ route }) => {
             cancelText: 'Cancel',
             onConfirm: async () => {
                 try {
+                    setDeletingCircleId(circle.id);
+                    setDeleteInProgress(true);
                     const result = await circleService.deleteCircle(circle.id);
                     const action = result?.action || 'left_circle';
                     setGroups((prev) => prev.filter((g) => g.id !== circle.id));
@@ -209,6 +222,8 @@ const SupportGroupsScreen = ({ route }) => {
                             : 'You were removed from this circle.'
                     });
                 } catch (error) {
+                    setDeleteInProgress(false);
+                    setDeletingCircleId(null);
                     showModal({
                         type: 'error',
                         title: 'Action Failed',
@@ -335,6 +350,13 @@ const SupportGroupsScreen = ({ route }) => {
             >
                 <Ionicons name="add" size={32} color="#FFF" />
             </TouchableOpacity>
+
+            {deleteInProgress && (
+                <View style={styles.deleteOverlay}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.deleteOverlayText}>Deleting...</Text>
+                </View>
+            )}
 
         </SafeAreaView>
     );
@@ -622,6 +644,19 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#BDBDBD',
         marginTop: 8,
+    },
+    deleteOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255,255,255,0.75)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 200
+    },
+    deleteOverlayText: {
+        marginTop: 10,
+        color: '#1A1A1A',
+        fontSize: 14,
+        fontWeight: '600'
     }
 });
 

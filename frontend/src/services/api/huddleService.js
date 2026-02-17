@@ -208,6 +208,67 @@ export const huddleService = {
         }
     },
 
+    toggleActiveSessionMute: async () => {
+        if (!activeLocalSession?.callObject) return false;
+        try {
+            const nextMuted = !activeCallControlState.isMuted;
+            activeLocalSession.callObject.setLocalAudio(!nextMuted);
+            activeCallControlState = {
+                ...activeCallControlState,
+                isMuted: nextMuted
+            };
+            emitSessionChange();
+            if (activeLocalSession?.huddleId) {
+                huddleService.updateHuddleState(activeLocalSession.huddleId, nextMuted ? 'mute' : 'unmute').catch(() => {});
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    },
+
+    toggleActiveSessionSpeaker: async () => {
+        if (!activeLocalSession?.callObject) return false;
+        try {
+            const nextSpeakerOn = !activeCallControlState.isSpeakerOn;
+            activeLocalSession.callObject.setNativeInCallAudioMode(nextSpeakerOn ? 'video' : 'voice');
+            activeCallControlState = {
+                ...activeCallControlState,
+                isSpeakerOn: nextSpeakerOn
+            };
+            emitSessionChange();
+            return true;
+        } catch {
+            return false;
+        }
+    },
+
+    hangupActiveSession: async () => {
+        if (!activeLocalSession?.callObject) return false;
+        const session = activeLocalSession;
+        try {
+            const callObject = session.callObject;
+            try {
+                callObject.stopRemoteParticipantsAudioLevelObserver?.();
+            } catch {
+                // ignore
+            }
+            await callObject.leave().catch(() => {});
+            await callObject.destroy().catch(() => {});
+
+            const huddleId = session?.huddleId;
+            if (huddleId) {
+                huddleService.updateHuddleConnection(huddleId, 'daily_left').catch(() => {});
+                huddleService.endHuddleWithReason(huddleId, 'hangup').catch(() => {});
+            }
+
+            huddleService.clearActiveLocalSession();
+            return true;
+        } catch {
+            return false;
+        }
+    },
+
     clearActiveLocalSession: () => {
         if (activeLocalSession?.huddleId) {
             liveStateRepository.upsertHuddleLiveState(activeLocalSession.huddleId, {

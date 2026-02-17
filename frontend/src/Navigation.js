@@ -158,19 +158,19 @@ export default function Navigation() {
                     <View style={styles.huddleBannerActions}>
                         <TouchableOpacity
                             style={styles.huddleActionButton}
-                            onPress={() => huddleService.invokeActiveCallAction('toggleMute')}
+                            onPress={() => huddleService.toggleActiveSessionMute()}
                         >
                             <Ionicons name={isMuted ? 'mic-off' : 'mic'} size={18} color="#FFFFFF" />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.huddleActionButton}
-                            onPress={() => huddleService.invokeActiveCallAction('toggleSpeaker')}
+                            onPress={() => huddleService.toggleActiveSessionSpeaker()}
                         >
                             <Ionicons name={isSpeakerOn ? 'volume-high' : 'volume-mute'} size={18} color="#FFFFFF" />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.huddleActionButton, styles.huddleActionDanger]}
-                            onPress={() => huddleService.invokeActiveCallAction('hangup')}
+                            onPress={() => huddleService.hangupActiveSession()}
                         >
                             <MaterialIcons name="call-end" size={20} color="#FFFFFF" />
                         </TouchableOpacity>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -20,6 +20,8 @@ const ChatListScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [hasFirstSnapshot, setHasFirstSnapshot] = useState(false);
     const [hydratedCache, setHydratedCache] = useState(false);
+    const [deleteInProgress, setDeleteInProgress] = useState(false);
+    const [deletingChatId, setDeletingChatId] = useState(null);
 
     useEffect(() => {
         if (!user?.uid) return undefined;
@@ -54,6 +56,15 @@ const ChatListScreen = ({ navigation }) => {
             unsubscribe();
         };
     }, [user?.uid]);
+
+    useEffect(() => {
+        if (!deleteInProgress || !deletingChatId) return;
+        const stillVisible = chats.some((c) => c.id === deletingChatId);
+        if (!stillVisible) {
+            setDeleteInProgress(false);
+            setDeletingChatId(null);
+        }
+    }, [chats, deleteInProgress, deletingChatId]);
 
     const onRefresh = React.useCallback(() => {
         setRefreshing(true);
@@ -128,8 +139,12 @@ const ChatListScreen = ({ navigation }) => {
             cancelText: 'Cancel',
             onConfirm: async () => {
                 try {
+                    setDeletingChatId(chat.id);
+                    setDeleteInProgress(true);
                     const result = await chatService.deleteChat(chat.id, { deleteCircleIfLastAdmin: false });
                     if (result?.requiresCircleDeletion) {
+                        setDeleteInProgress(false);
+                        setDeletingChatId(null);
                         showModal({
                             type: 'confirmation',
                             title: 'Last Admin',
@@ -138,13 +153,18 @@ const ChatListScreen = ({ navigation }) => {
                             cancelText: 'Cancel',
                             onConfirm: async () => {
                                 try {
+                                    setDeletingChatId(chat.id);
+                                    setDeleteInProgress(true);
                                     await chatService.deleteChat(chat.id, { deleteCircleIfLastAdmin: true });
+                                    setChats((prev) => prev.filter((c) => c.id !== chat.id));
                                     showModal({
                                         type: 'success',
                                         title: 'Circle Deleted',
                                         message: 'The circle and its chat were deleted everywhere.'
                                     });
                                 } catch (error) {
+                                    setDeleteInProgress(false);
+                                    setDeletingChatId(null);
                                     showModal({
                                         type: 'error',
                                         title: 'Delete Failed',
@@ -155,12 +175,15 @@ const ChatListScreen = ({ navigation }) => {
                         });
                         return;
                     }
+                    setChats((prev) => prev.filter((c) => c.id !== chat.id));
                     showModal({
                         type: 'success',
                         title: 'Done',
                         message: result?.action === 'left_circle' ? 'You left the circle chat.' : 'Chat deleted.'
                     });
                 } catch (error) {
+                    setDeleteInProgress(false);
+                    setDeletingChatId(null);
                     showModal({
                         type: 'error',
                         title: 'Delete Failed',
@@ -264,6 +287,13 @@ const ChatListScreen = ({ navigation }) => {
                     }
                 />
             </KeyboardAvoidingView>
+
+            {deleteInProgress && (
+                <View style={styles.deleteOverlay}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.deleteOverlayText}>Deleting...</Text>
+                </View>
+            )}
         </SafeAreaView>
     );
 };
@@ -499,6 +529,19 @@ const styles = StyleSheet.create({
         color: '#6A7385',
         fontSize: 14,
         lineHeight: 20
+    },
+    deleteOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255,255,255,0.75)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 200
+    },
+    deleteOverlayText: {
+        marginTop: 10,
+        color: '#1A1A1A',
+        fontSize: 14,
+        fontWeight: '600'
     }
 });
 
