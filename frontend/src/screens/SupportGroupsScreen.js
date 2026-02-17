@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import { COLORS, SPACING } from '../theme/theme';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
@@ -11,6 +12,7 @@ import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/ci
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
+import { useModal } from '../context/ModalContext';
 
 const FILTERS = ['All', 'Connect', 'Culture', 'Enablement', 'Green Activities', 'Mental health', 'Physical health'];
 
@@ -39,6 +41,7 @@ const calculateCircleRating = (circle) => {
 const SupportGroupsScreen = ({ route }) => {
     const navigation = useNavigation();
     const { user } = useAuth();
+    const { showModal } = useModal();
     const scope = route?.params?.scope || 'public';
     const showJoinedOnly = scope === 'joined';
     const [activeFilter, setActiveFilter] = useState('All');
@@ -121,9 +124,9 @@ const SupportGroupsScreen = ({ route }) => {
         return () => { cancelled = true; };
     }, [groups]);
 
-    const renderGroupCard = ({ item }) => (
+    const renderGroupCard = ({ item, insideSwipe = false }) => (
         <TouchableOpacity
-            style={styles.groupCard}
+            style={[styles.groupCard, insideSwipe && styles.groupCardNoMargin]}
             activeOpacity={0.9}
             onPress={() => navigation.navigate('CircleDetail', { circle: item })}
         >
@@ -186,6 +189,65 @@ const SupportGroupsScreen = ({ route }) => {
         </TouchableOpacity>
     );
 
+    const handleDeleteCircle = (circle) => {
+        showModal({
+            type: 'confirmation',
+            title: 'Delete Circle',
+            message: 'Are you sure you want to continue? This action is permanent for admins/creators.',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    const result = await circleService.deleteCircle(circle.id);
+                    const action = result?.action || 'left_circle';
+                    setGroups((prev) => prev.filter((g) => g.id !== circle.id));
+                    showModal({
+                        type: 'success',
+                        title: action === 'deleted_circle' ? 'Circle Deleted' : 'Removed',
+                        message: action === 'deleted_circle'
+                            ? 'The circle and its chat were deleted everywhere.'
+                            : 'You were removed from this circle.'
+                    });
+                } catch (error) {
+                    showModal({
+                        type: 'error',
+                        title: 'Action Failed',
+                        message: error?.message || 'Could not process this action.'
+                    });
+                }
+            }
+        });
+    };
+
+    const renderRightActions = (item) => (
+        <TouchableOpacity
+            style={styles.swipeDeleteAction}
+            activeOpacity={0.9}
+            onPress={() => handleDeleteCircle(item)}
+        >
+            <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.swipeDeleteText}>Delete</Text>
+        </TouchableOpacity>
+    );
+
+    const renderRow = ({ item }) => {
+        const isMember = !!user?.uid && Array.isArray(item.members) && item.members.includes(user.uid);
+        if (!showJoinedOnly || !isMember) {
+            return renderGroupCard({ item });
+        }
+        return (
+            <View style={styles.swipeRowWrap}>
+                <Swipeable
+                    renderRightActions={() => renderRightActions(item)}
+                    overshootRight={false}
+                    containerStyle={styles.swipeContainer}
+                >
+                    {renderGroupCard({ item, insideSwipe: true })}
+                </Swipeable>
+            </View>
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
@@ -234,6 +296,15 @@ const SupportGroupsScreen = ({ route }) => {
                 </ScrollView>
             </View>
 
+            {showJoinedOnly && (
+                <View style={styles.deleteHintBanner}>
+                    <Ionicons name="information-circle-outline" size={16} color="#1A1A1A" />
+                    <Text style={styles.deleteHintText}>
+                        Swipe left on a circle card to delete. Only circle admins can delete a circle.
+                    </Text>
+                </View>
+            )}
+
             {/* Groups List */}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -241,7 +312,7 @@ const SupportGroupsScreen = ({ route }) => {
             >
                 <FlatList
                     data={filteredGroups}
-                    renderItem={renderGroupCard}
+                    renderItem={renderRow}
                     keyExtractor={item => item.id}
                     contentContainerStyle={styles.listContent}
                     keyboardShouldPersistTaps="handled"
@@ -371,6 +442,16 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#F5F5F5',
     },
+    groupCardNoMargin: {
+        marginBottom: 0
+    },
+    swipeRowWrap: {
+        marginBottom: 32
+    },
+    swipeContainer: {
+        borderRadius: 32,
+        overflow: 'visible'
+    },
     circleHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -476,6 +557,38 @@ const styles = StyleSheet.create({
         color: COLORS.white,
         fontSize: 15,
         fontWeight: '700',
+    },
+    swipeDeleteAction: {
+        width: 96,
+        marginLeft: 8,
+        backgroundColor: '#D32F2F',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4
+    },
+    swipeDeleteText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '700'
+    },
+    deleteHintBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: 20,
+        marginBottom: 12,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderWidth: 1,
+        borderColor: '#E8EDF4'
+    },
+    deleteHintText: {
+        flex: 1,
+        marginLeft: 8,
+        color: '#4A5568',
+        fontSize: 12,
+        fontWeight: '500'
     },
     fab: {
         position: 'absolute',

@@ -78,16 +78,33 @@ exports.onUserCreate = regionalFunctions.auth.user().onCreate(async (user) => {
 exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/messages/{messageId}')
     .onCreate(async (snapshot, context) => {
     const message = snapshot.data();
-    const { chatId } = context.params;
+    const { chatId, messageId } = context.params;
     const senderId = message.senderId;
     try {
         // 1. Get Chat Metadata (to find participants)
         const chatRef = db.collection('chats').doc(chatId);
-        const chatDoc = await chatRef.get();
+        const [chatDoc, senderDoc] = await Promise.all([
+            chatRef.get(),
+            db.collection('users').doc(senderId).get()
+        ]);
         if (!chatDoc.exists)
             return;
-        const chatData = chatDoc.data();
+        const chatData = chatDoc.data() || {};
+        const senderData = senderDoc.exists ? (senderDoc.data() || {}) : {};
         const participants = chatData?.participants || [];
+        const isGroup = chatData.type === 'group' || participants.length > 2;
+        const senderName = String(senderData?.name || senderData?.displayName || 'Someone');
+        const senderImage = String(senderData?.photoURL || '');
+        let circleImage = '';
+        let circleName = String(chatData?.name || 'Circle');
+        if (isGroup && chatData?.circleId) {
+            const circleDoc = await db.collection('circles').doc(chatData.circleId).get();
+            if (circleDoc.exists) {
+                const circleData = circleDoc.data() || {};
+                circleImage = String(circleData?.image || circleData?.avatar || circleData?.photoURL || '');
+                circleName = String(circleData?.name || circleName);
+            }
+        }
         // 2. Filter out the sender
         const recipients = participants.filter((uid) => uid !== senderId);
         if (recipients.length === 0)
@@ -109,11 +126,14 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
             const notifRef = db.collection('notifications').doc();
             notificationBatch.set(notifRef, {
                 uid,
-                title: 'New Message',
+                title: isGroup ? circleName : senderName,
                 subtitle: message.type === 'text' ? message.text : 'Sent a photo',
                 type: 'CHAT_MESSAGE',
                 chatId,
                 senderId,
+                senderName,
+                messageId,
+                image: isGroup ? circleImage : senderImage,
                 read: false,
                 createdAt: admin.firestore.FieldValue.serverTimestamp()
             });
@@ -122,22 +142,47 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
         if (expoTokens.length === 0 && fcmTokens.length === 0)
             return;
         const payload = {
-            title: 'New Message',
-            body: message.type === 'text' ? message.text : 'Sent a photo',
+            title: isGroup ? circleName : senderName,
+            body: message.type === 'text'
+                ? (isGroup ? `${senderName}: ${message.text}` : String(message.text || 'New message'))
+                : (isGroup ? `${senderName} sent a photo` : 'Sent a photo'),
+            categoryId: 'chat-message-actions',
             data: {
                 chatId: chatId,
-                type: 'CHAT_MESSAGE'
-            }
+                messageId,
+                senderId: String(senderId || ''),
+                senderName,
+                image: isGroup ? circleImage : senderImage,
+                type: 'CHAT_MESSAGE',
+                categoryId: 'chat-message-actions'
+            },
+            image: isGroup ? circleImage : senderImage
         };
         // 4a. Send FCM notifications (native tokens)
         if (fcmTokens.length > 0) {
+            const androidNotification = {
+                channelId: 'default',
+                ...(payload.image ? { imageUrl: payload.image } : {})
+            };
+            const apnsConfig = {
+                payload: {
+                    aps: {
+                        category: 'chat-message-actions'
+                    }
+                },
+                ...(payload.image ? { fcmOptions: { imageUrl: payload.image } } : {})
+            };
             const messagePayload = {
                 tokens: fcmTokens,
                 notification: {
                     title: payload.title,
                     body: payload.body,
                 },
-                data: payload.data
+                data: payload.data,
+                android: {
+                    notification: androidNotification
+                },
+                apns: apnsConfig
             };
             const response = await admin.messaging().sendEachForMulticast(messagePayload);
             console.log(`[Backend] FCM notifications sent: ${response.successCount}`);
@@ -148,7 +193,9 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                 to: token,
                 title: payload.title,
                 body: payload.body,
-                data: payload.data
+                data: payload.data,
+                categoryId: payload.categoryId,
+                ...(payload.image ? { imageUrl: payload.image } : {})
             }));
             try {
                 const response = await fetch('https://exp.host/--/api/v2/push/send', {

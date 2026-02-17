@@ -1,17 +1,24 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { auth, db } from '../firebaseConfig';
-import { doc, arrayUnion, setDoc, getDoc } from 'firebase/firestore';
+import { doc, arrayUnion, setDoc, getDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { navigate } from '../../navigation/navigationRef';
 import { nativeCallService } from '../native/nativeCallService';
+import { chatService } from './chatService';
 
 let notificationRoutingInitialized = false;
 let responseSubscription = null;
 let receiveSubscription = null;
 let voipListenersRegistered = false;
 let voipTokenUserId = null;
+let lastVoipToken = null;
+let pushRegistrationPromise = null;
 let lastInAppIncoming = { huddleId: null, ts: 0 };
+const CHAT_MESSAGE_CATEGORY_ID = 'chat-message-actions';
+const CHAT_MESSAGE_ACTION_REPLY = 'chat-reply';
+const CHAT_MESSAGE_ACTION_MARK_READ = 'chat-mark-read';
 
 let VoipPushNotification = null;
 try {
@@ -132,6 +139,75 @@ const navigateFromNotificationData = async (payload) => {
     }
 };
 
+const markChatNotificationsAsRead = async (chatId) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !chatId) return;
+    const notifQuery = query(
+        collection(db, 'notifications'),
+        where('uid', '==', uid),
+        where('type', '==', 'CHAT_MESSAGE'),
+        where('chatId', '==', chatId),
+        where('read', '==', false)
+    );
+    const snap = await getDocs(notifQuery);
+    if (snap.empty) return;
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+    await batch.commit();
+};
+
+const handleNotificationAction = async (response) => {
+    const actionId = response?.actionIdentifier;
+    const data = response?.notification?.request?.content?.data || {};
+    const chatId = data?.chatId;
+
+    if (!actionId || actionId === Notifications.DEFAULT_ACTION_IDENTIFIER) {
+        return navigateFromNotificationData(response);
+    }
+
+    if (actionId === CHAT_MESSAGE_ACTION_MARK_READ) {
+        if (chatId) {
+            await markChatNotificationsAsRead(chatId).catch(() => {});
+        }
+        return true;
+    }
+
+    if (actionId === CHAT_MESSAGE_ACTION_REPLY) {
+        const replyText = (response?.userText || '').trim();
+        if (!chatId || !replyText) return true;
+        await chatService.sendMessage(chatId, replyText, 'text', null).catch((error) => {
+            console.error('[NotificationRouting] Quick reply failed', error);
+        });
+        await markChatNotificationsAsRead(chatId).catch(() => {});
+        return true;
+    }
+
+    return navigateFromNotificationData(response);
+};
+
+const configureNotificationCategories = async () => {
+    try {
+        await Notifications.setNotificationCategoryAsync(CHAT_MESSAGE_CATEGORY_ID, [
+            {
+                identifier: CHAT_MESSAGE_ACTION_REPLY,
+                buttonTitle: 'Reply',
+                options: { opensAppToForeground: false },
+                textInput: {
+                    submitButtonTitle: 'Send',
+                    placeholder: 'Type a reply...'
+                }
+            },
+            {
+                identifier: CHAT_MESSAGE_ACTION_MARK_READ,
+                buttonTitle: 'Mark as read',
+                options: { opensAppToForeground: false }
+            }
+        ]);
+    } catch (error) {
+        console.warn('[NotificationRouting] Failed to set notification categories', error?.message || error);
+    }
+};
+
 const maybeShowNativeIncomingCall = async (payload) => {
     const data = payload?.request?.content?.data || payload?.notification?.request?.content?.data || payload?.data || {};
     if (data?.type !== 'HUDDLE_STARTED' || !data?.huddleId) return false;
@@ -174,6 +250,7 @@ const registerVoipListeners = () => {
     voipListenersRegistered = true;
 
     VoipPushNotification.addEventListener('register', (token) => {
+        lastVoipToken = token || null;
         saveUserPushToken(voipTokenUserId, 'voipPushTokens', token).catch(() => {});
     });
 
@@ -206,6 +283,7 @@ export const notificationService = {
         }
         nativeCallService.initialize();
         registerVoipListeners();
+        configureNotificationCategories().catch(() => {});
 
         Notifications.setNotificationHandler({
             handleNotification: async (notification) => {
@@ -223,14 +301,14 @@ export const notificationService = {
         });
 
         responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-            navigateFromNotificationData(response).catch((error) => {
+            handleNotificationAction(response).catch((error) => {
                 console.error('[NotificationRouting] Response listener failure', error);
             });
         });
 
         Notifications.getLastNotificationResponseAsync().then((response) => {
             if (response) {
-                navigateFromNotificationData(response).catch((error) => {
+                handleNotificationAction(response).catch((error) => {
                     console.error('[NotificationRouting] Last response routing failure', error);
                 });
             }
@@ -264,68 +342,89 @@ export const notificationService = {
      * @param {string} uid User ID to save token for
      */
     registerForPushNotificationsAsync: async (uid) => {
-        voipTokenUserId = uid || null;
-        if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync('default', {
-                name: 'default',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#FF231F7C',
-            });
-            await Notifications.setNotificationChannelAsync('huddle-calls', {
-                name: 'Huddle Calls',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 500, 250, 500, 250, 700],
-                lightColor: '#00A99D',
-                lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-                sound: 'default'
-            });
-        }
+        if (pushRegistrationPromise) return pushRegistrationPromise;
+        pushRegistrationPromise = (async () => {
+            voipTokenUserId = uid || null;
 
-        if (Device.isDevice) {
-            const { status: existingStatus } = await Notifications.getPermissionsAsync();
-            let finalStatus = existingStatus;
-
-            if (existingStatus !== 'granted') {
-                const { status } = await Notifications.requestPermissionsAsync();
-                finalStatus = status;
+            if (Platform.OS === 'android') {
+                await Notifications.setNotificationChannelAsync('default', {
+                    name: 'default',
+                    importance: Notifications.AndroidImportance.MAX,
+                    vibrationPattern: [0, 250, 250, 250],
+                    lightColor: '#FF231F7C',
+                });
+                await Notifications.setNotificationChannelAsync('huddle-calls', {
+                    name: 'Huddle Calls',
+                    importance: Notifications.AndroidImportance.MAX,
+                    vibrationPattern: [0, 500, 250, 500, 250, 700],
+                    lightColor: '#00A99D',
+                    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+                    sound: 'default'
+                });
             }
 
-            if (finalStatus !== 'granted') {
-                console.log('Failed to get push token for push notification!');
+            if (!Device.isDevice) {
+                console.log('Must use physical device for Push Notifications');
                 return;
             }
 
-            const expoToken = (await Notifications.getExpoPushTokenAsync()).data;
-            console.log("Expo Push Token:", expoToken);
-
-            let nativeToken = null;
             try {
-                const deviceToken = await Notifications.getDevicePushTokenAsync();
-                nativeToken = deviceToken.data;
-            } catch (error) {
-                // Native token may not be available in Expo Go
-            }
+                const { status: existingStatus } = await Notifications.getPermissionsAsync();
+                let finalStatus = existingStatus;
 
-            // Save token to backend user profile
-            if (uid && expoToken) {
-                await saveUserPushToken(uid, 'expoPushTokens', expoToken);
-            }
-
-            if (uid && nativeToken) {
-                await saveUserPushToken(uid, 'fcmTokens', nativeToken);
-            }
-
-            if (Platform.OS === 'ios' && VoipPushNotification) {
-                registerVoipListeners();
-                try {
-                    VoipPushNotification.registerVoipToken();
-                } catch {
-                    // ignore if unavailable in this build.
+                if (existingStatus !== 'granted') {
+                    const { status } = await Notifications.requestPermissionsAsync({
+                        ios: {
+                            allowAlert: true,
+                            allowBadge: true,
+                            allowSound: true
+                        }
+                    });
+                    finalStatus = status;
                 }
+
+                if (finalStatus !== 'granted') {
+                    console.log('Failed to get push token for push notification!');
+                    return;
+                }
+
+                const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
+                const expoToken = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+                console.log('Expo Push Token:', expoToken);
+
+                let nativeToken = null;
+                try {
+                    const deviceToken = await Notifications.getDevicePushTokenAsync();
+                    nativeToken = deviceToken.data;
+                } catch {
+                    // Native token may not be available in all dev environments.
+                }
+
+                if (uid && expoToken) {
+                    await saveUserPushToken(uid, 'expoPushTokens', expoToken);
+                }
+
+                if (uid && nativeToken) {
+                    await saveUserPushToken(uid, 'fcmTokens', nativeToken);
+                }
+
+                // VoIP token registration is already triggered natively in AppDelegate.
+                // Avoid forcing an extra native register call during permission flow.
+                if (Platform.OS === 'ios' && VoipPushNotification) {
+                    registerVoipListeners();
+                    if (uid && lastVoipToken) {
+                        await saveUserPushToken(uid, 'voipPushTokens', lastVoipToken);
+                    }
+                }
+            } catch (error) {
+                console.warn('[PushRegistration] registration failed', error?.message || error);
             }
-        } else {
-            console.log('Must use physical device for Push Notifications');
+        })();
+
+        try {
+            await pushRegistrationPromise;
+        } finally {
+            pushRegistrationPromise = null;
         }
     }
 };

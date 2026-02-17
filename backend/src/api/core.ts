@@ -82,6 +82,112 @@ const getCircleMemberCount = (circleData: any) => {
     return members.length;
 };
 
+const deleteCollectionDocs = async (ref: admin.firestore.CollectionReference, batchSize = 300) => {
+    while (true) {
+        const snap = await ref.limit(batchSize).get();
+        if (snap.empty) break;
+        const batch = db.batch();
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+        if (snap.size < batchSize) break;
+    }
+};
+
+const deleteChatCascade = async (chatId: string) => {
+    const chatRef = db.collection('chats').doc(chatId);
+    await deleteCollectionDocs(chatRef.collection('messages'));
+    await chatRef.delete().catch(() => {});
+};
+
+const removeUserFromCircle = async (circleId: string, uid: string) => {
+    const circleRef = db.collection('circles').doc(circleId);
+    await db.runTransaction(async (tx) => {
+        const circleSnap = await tx.get(circleRef);
+        if (!circleSnap.exists) return;
+        const c = circleSnap.data() || {};
+        const members = Array.isArray(c.members) ? c.members : [];
+        const wasMember = members.includes(uid);
+
+        tx.delete(circleRef.collection('members').doc(uid));
+        tx.set(db.collection('userCircles').doc(uid), {
+            circleIds: admin.firestore.FieldValue.arrayRemove(circleId),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true } as any);
+        tx.delete(db.collection('userCircles').doc(uid).collection('circles').doc(circleId));
+
+        if (wasMember) {
+            tx.update(circleRef, {
+                members: admin.firestore.FieldValue.arrayRemove(uid),
+                memberCount: admin.firestore.FieldValue.increment(-1),
+                membersCount: admin.firestore.FieldValue.increment(-1),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        if (c.chatId) {
+            tx.update(db.collection('chats').doc(c.chatId), {
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    });
+};
+
+const deleteCircleCascade = async (circleId: string) => {
+    const circleRef = db.collection('circles').doc(circleId);
+    const circleSnap = await circleRef.get();
+    if (!circleSnap.exists) return;
+    const circleData = circleSnap.data() || {};
+
+    const members = Array.isArray(circleData.members) ? circleData.members : [];
+    const memberIds = members.length
+        ? members
+        : (await circleRef.collection('members').get()).docs.map((d) => d.id);
+
+    const indexBatch = db.batch();
+    memberIds.forEach((memberUid) => {
+        const userCirclesRef = db.collection('userCircles').doc(memberUid);
+        indexBatch.set(userCirclesRef, {
+            circleIds: admin.firestore.FieldValue.arrayRemove(circleId),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        indexBatch.delete(userCirclesRef.collection('circles').doc(circleId));
+    });
+    await indexBatch.commit().catch(() => {});
+
+    const chatId = circleData?.chatId || null;
+    if (chatId) {
+        await deleteChatCascade(chatId);
+    }
+
+    await Promise.all([
+        deleteCollectionDocs(circleRef.collection('members')),
+        deleteCollectionDocs(circleRef.collection('requests')),
+        deleteCollectionDocs(circleRef.collection('scheduledHuddles')),
+        deleteCollectionDocs(circleRef.collection('reports'))
+    ]);
+
+    if (chatId) {
+        const notifSnap = await db.collection('notifications').where('chatId', '==', chatId).get();
+        if (!notifSnap.empty) {
+            let batch = db.batch();
+            let count = 0;
+            for (const d of notifSnap.docs) {
+                batch.delete(d.ref);
+                count += 1;
+                if (count >= 300) {
+                    await batch.commit();
+                    batch = db.batch();
+                    count = 0;
+                }
+            }
+            if (count > 0) await batch.commit();
+        }
+    }
+
+    await circleRef.delete();
+};
+
 /**
  * Create a new Circle
  * Callable Function: 'createCircle'
@@ -458,6 +564,130 @@ export const leaveCircle = regionalFunctions.https.onCall(async (data, context) 
     } catch (error) {
         console.error("Error leaving circle:", error);
         throw new functions.https.HttpsError('internal', 'Unable to leave circle.');
+    }
+});
+
+/**
+ * Delete Circle (admin/creator) or leave circle (member/moderator)
+ * Callable Function: 'deleteCircle'
+ */
+export const deleteCircle = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const { circleId } = data || {};
+    const uid = context.auth.uid;
+    if (!circleId) throw new functions.https.HttpsError('invalid-argument', 'Circle ID is required.');
+
+    try {
+        const circleRef = db.collection('circles').doc(circleId);
+        const [circleSnap, memberSnap] = await Promise.all([
+            circleRef.get(),
+            circleRef.collection('members').doc(uid).get()
+        ]);
+        if (!circleSnap.exists) throw new functions.https.HttpsError('not-found', 'Circle not found.');
+        if (!memberSnap.exists) throw new functions.https.HttpsError('permission-denied', 'Not a circle member.');
+
+        const role = memberSnap.data()?.role || 'member';
+        if (role === 'creator' || role === 'admin') {
+            await deleteCircleCascade(circleId);
+            return { success: true, action: 'deleted_circle' };
+        }
+
+        await removeUserFromCircle(circleId, uid);
+        return { success: true, action: 'left_circle' };
+    } catch (error) {
+        console.error('Error deleting circle:', error);
+        if (error instanceof functions.https.HttpsError) throw error;
+        throw new functions.https.HttpsError('internal', 'Unable to process circle deletion.');
+    }
+});
+
+/**
+ * Delete/Leave chat. For circle chats this follows role-aware governance rules.
+ * Callable Function: 'deleteChat'
+ */
+export const deleteChat = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const { chatId, deleteCircleIfLastAdmin = false } = data || {};
+    const uid = context.auth.uid;
+    if (!chatId) throw new functions.https.HttpsError('invalid-argument', 'Chat ID is required.');
+
+    try {
+        const chatRef = db.collection('chats').doc(chatId);
+        const chatSnap = await chatRef.get();
+        if (!chatSnap.exists) throw new functions.https.HttpsError('not-found', 'Chat not found.');
+        const chatData = chatSnap.data() || {};
+        const participants: string[] = Array.isArray(chatData.participants) ? chatData.participants : [];
+        if (!participants.includes(uid)) throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
+
+        const circleId = chatData.circleId || null;
+        if (!circleId) {
+            await chatRef.update({
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            const afterSnap = await chatRef.get();
+            const nextParticipants: string[] = Array.isArray(afterSnap.data()?.participants) ? afterSnap.data()?.participants : [];
+            if (nextParticipants.length === 0) {
+                await deleteChatCascade(chatId);
+            }
+            return { success: true, action: 'left_chat' };
+        }
+
+        const circleRef = db.collection('circles').doc(circleId);
+        const memberRef = circleRef.collection('members').doc(uid);
+        const memberSnap = await memberRef.get();
+        if (!memberSnap.exists) {
+            await chatRef.update({
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            return { success: true, action: 'left_chat' };
+        }
+
+        const role = memberSnap.data()?.role || 'member';
+        const isAdminLike = role === 'creator' || role === 'admin';
+        if (!isAdminLike) {
+            await removeUserFromCircle(circleId, uid);
+            return { success: true, action: 'left_circle' };
+        }
+
+        const adminMembersSnap = await circleRef.collection('members').get();
+        const otherAdminLike = adminMembersSnap.docs.filter((d) => {
+            const r = d.data()?.role;
+            return d.id !== uid && (r === 'creator' || r === 'admin');
+        });
+
+        if (otherAdminLike.length === 0) {
+            if (!deleteCircleIfLastAdmin) {
+                return {
+                    success: false,
+                    requiresCircleDeletion: true,
+                    action: 'needs_confirmation',
+                    message: 'You are the last admin in this circle. Delete the entire circle to continue.'
+                };
+            }
+            await deleteCircleCascade(circleId);
+            return { success: true, action: 'deleted_circle' };
+        }
+
+        if (role === 'creator') {
+            const nextAdminUid = otherAdminLike[0]!.id;
+            await circleRef.update({
+                adminId: nextAdminUid,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            await circleRef.collection('members').doc(nextAdminUid).set({
+                role: 'creator',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+
+        await removeUserFromCircle(circleId, uid);
+        return { success: true, action: 'left_circle' };
+    } catch (error) {
+        console.error('Error deleting chat:', error);
+        if (error instanceof functions.https.HttpsError) throw error;
+        throw new functions.https.HttpsError('internal', 'Unable to process chat deletion.');
     }
 });
 

@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.deleteUserAccount = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.submitContactForm = exports.getAffirmations = exports.getRecommendedContent = exports.getExploreContent = exports.updateSubscription = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.seedResources = exports.seedChallenges = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleConnection = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.submitReport = exports.resolveCircleReport = exports.handleJoinRequest = exports.manageMember = exports.leaveCircle = exports.updateCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
-exports.createEmployee = exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = void 0;
+exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.deleteUserAccount = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.submitContactForm = exports.getAffirmations = exports.getRecommendedContent = exports.getExploreContent = exports.updateSubscription = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.seedResources = exports.seedChallenges = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.deleteChat = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleConnection = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.submitReport = exports.resolveCircleReport = exports.handleJoinRequest = exports.manageMember = exports.deleteCircle = exports.leaveCircle = exports.updateCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
+exports.createEmployee = exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentStatus = exports.getAllContent = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Admin SDK once at entry point
 if (admin.apps.length === 0) {
@@ -55,6 +55,7 @@ exports.createCircle = coreApi.createCircle;
 exports.joinCircle = coreApi.joinCircle;
 exports.updateCircle = coreApi.updateCircle;
 exports.leaveCircle = coreApi.leaveCircle;
+exports.deleteCircle = coreApi.deleteCircle;
 exports.manageMember = coreApi.manageMember;
 exports.handleJoinRequest = coreApi.handleJoinRequest;
 exports.resolveCircleReport = coreApi.resolveCircleReport;
@@ -73,6 +74,7 @@ exports.deleteScheduledHuddle = coreApi.deleteScheduledHuddle;
 exports.createDirectChat = coreApi.createDirectChat;
 exports.getPublicProfile = coreApi.getPublicProfile;
 exports.sendMessage = coreApi.sendMessage;
+exports.deleteChat = coreApi.deleteChat;
 exports.submitAssessment = coreApi.submitAssessment;
 exports.getUserStats = coreApi.getUserStats;
 exports.getKeyChallenges = coreApi.getKeyChallenges;

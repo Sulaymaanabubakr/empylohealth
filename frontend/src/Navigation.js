@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
-import { View, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Pressable, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MainTabs from './navigation/MainTabs';
@@ -62,6 +63,7 @@ export default function Navigation() {
 
     useEffect(() => {
         console.log('[Navigation] Route target:', routeTarget);
+        flushPendingNavigation();
     }, [routeTarget]);
 
     if (!firstRenderLoggedRef.current) {
@@ -70,6 +72,21 @@ export default function Navigation() {
     }
 
     const showHuddleBanner = !!activeHuddleSession && currentRouteName !== 'Huddle';
+    const isMuted = !!activeHuddleSession?.controlState?.isMuted;
+    const isSpeakerOn = activeHuddleSession?.controlState?.isSpeakerOn !== false;
+
+    const openHuddle = () => {
+        navigationRef.navigate('Huddle', {
+            mode: 'join',
+            chatId: activeHuddleSession?.chatId,
+            huddleId: activeHuddleSession?.huddleId,
+            chat: {
+                id: activeHuddleSession?.chatId,
+                name: activeHuddleSession?.chatName || 'Huddle',
+                isGroup: true
+            }
+        });
+    };
 
     return (
         <View style={styles.root}>
@@ -80,6 +97,7 @@ export default function Navigation() {
                     setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
                 }}
                 onStateChange={() => {
+                    flushPendingNavigation();
                     setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
                 }}
             >
@@ -132,24 +150,32 @@ export default function Navigation() {
             </NavigationContainer>
 
             {showHuddleBanner && (
-                <Pressable
-                    style={styles.huddleBanner}
-                    onPress={() => {
-                        navigationRef.navigate('Huddle', {
-                            mode: 'join',
-                            chatId: activeHuddleSession?.chatId,
-                            huddleId: activeHuddleSession?.huddleId,
-                            chat: {
-                                id: activeHuddleSession?.chatId,
-                                name: activeHuddleSession?.chatName || 'Huddle',
-                                isGroup: true
-                            }
-                        });
-                    }}
-                >
-                    <Text style={styles.huddleBannerTitle}>Huddle in progress</Text>
-                    <Text style={styles.huddleBannerSubtitle}>Tap to return to call</Text>
-                </Pressable>
+                <View style={styles.huddleBanner}>
+                    <Pressable style={styles.huddleBannerInfo} onPress={openHuddle}>
+                        <Text style={styles.huddleBannerTitle}>Huddle in progress</Text>
+                        <Text style={styles.huddleBannerSubtitle}>Tap to return to call</Text>
+                    </Pressable>
+                    <View style={styles.huddleBannerActions}>
+                        <TouchableOpacity
+                            style={styles.huddleActionButton}
+                            onPress={() => huddleService.invokeActiveCallAction('toggleMute')}
+                        >
+                            <Ionicons name={isMuted ? 'mic-off' : 'mic'} size={18} color="#FFFFFF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.huddleActionButton}
+                            onPress={() => huddleService.invokeActiveCallAction('toggleSpeaker')}
+                        >
+                            <Ionicons name={isSpeakerOn ? 'volume-high' : 'volume-mute'} size={18} color="#FFFFFF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.huddleActionButton, styles.huddleActionDanger]}
+                            onPress={() => huddleService.invokeActiveCallAction('hangup')}
+                        >
+                            <MaterialIcons name="call-end" size={20} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
             )}
         </View>
     );
@@ -166,10 +192,32 @@ const styles = StyleSheet.create({
         bottom: 26,
         backgroundColor: '#111111',
         borderRadius: 14,
-        paddingHorizontal: 14,
+        paddingHorizontal: 12,
         paddingVertical: 10,
         borderWidth: 1,
-        borderColor: '#2E2E2E'
+        borderColor: '#2E2E2E',
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    huddleBannerInfo: {
+        flex: 1,
+        paddingRight: 10
+    },
+    huddleBannerActions: {
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    huddleActionButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#2F2F2F',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 8
+    },
+    huddleActionDanger: {
+        backgroundColor: '#E53935'
     },
     huddleBannerTitle: {
         color: '#FFFFFF',

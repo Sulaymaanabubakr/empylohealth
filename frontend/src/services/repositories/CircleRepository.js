@@ -62,5 +62,10 @@ export const circleRepository = {
     async leaveCircle(circleId) {
         if (!circleId) throw new Error('Invalid request.');
         return callableClient.invokeWithAuth('leaveCircle', { circleId });
+    },
+
+    async deleteCircle(circleId) {
+        if (!circleId) throw new Error('Invalid request.');
+        return callableClient.invokeWithAuth('deleteCircle', { circleId });
     }
 };

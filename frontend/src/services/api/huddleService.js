@@ -4,11 +4,34 @@ import { callableClient } from './callableClient';
 
 let activeLocalSession = null;
 const sessionListeners = new Set();
+let activeCallControlState = {
+    isMuted: false,
+    isSpeakerOn: true
+};
+let activeCallActions = {
+    toggleMute: null,
+    toggleSpeaker: null,
+    hangup: null
+};
+
+const buildSessionPayload = () => {
+    if (!activeLocalSession) return null;
+    return {
+        ...activeLocalSession,
+        controlState: { ...activeCallControlState },
+        controlsEnabled: {
+            mute: typeof activeCallActions.toggleMute === 'function',
+            speaker: typeof activeCallActions.toggleSpeaker === 'function',
+            hangup: typeof activeCallActions.hangup === 'function'
+        }
+    };
+};
 
 const emitSessionChange = () => {
+    const payload = buildSessionPayload();
     sessionListeners.forEach((listener) => {
         try {
-            listener(activeLocalSession);
+            listener(payload);
         } catch {
             // ignore listener errors
         }
@@ -131,10 +154,59 @@ export const huddleService = {
 
     setActiveLocalSession: (session) => {
         activeLocalSession = session || null;
+        if (!session) {
+            activeCallControlState = { isMuted: false, isSpeakerOn: true };
+            activeCallActions = { toggleMute: null, toggleSpeaker: null, hangup: null };
+        }
         emitSessionChange();
     },
 
     getActiveLocalSession: () => activeLocalSession,
+
+    updateActiveLocalSession: (patch = {}) => {
+        if (!activeLocalSession) return;
+        activeLocalSession = {
+            ...activeLocalSession,
+            ...patch
+        };
+        emitSessionChange();
+    },
+
+    setActiveCallControlState: (patch = {}) => {
+        activeCallControlState = {
+            ...activeCallControlState,
+            ...patch
+        };
+        emitSessionChange();
+    },
+
+    setActiveCallActions: (actions = {}) => {
+        activeCallActions = {
+            ...activeCallActions,
+            ...actions
+        };
+        emitSessionChange();
+    },
+
+    clearActiveCallActions: () => {
+        activeCallActions = {
+            toggleMute: null,
+            toggleSpeaker: null,
+            hangup: null
+        };
+        emitSessionChange();
+    },
+
+    invokeActiveCallAction: async (actionName) => {
+        const handler = activeCallActions?.[actionName];
+        if (typeof handler !== 'function') return false;
+        try {
+            await handler();
+            return true;
+        } catch {
+            return false;
+        }
+    },
 
     clearActiveLocalSession: () => {
         if (activeLocalSession?.huddleId) {
@@ -143,13 +215,15 @@ export const huddleService = {
             }).catch(() => {});
         }
         activeLocalSession = null;
+        activeCallControlState = { isMuted: false, isSpeakerOn: true };
+        activeCallActions = { toggleMute: null, toggleSpeaker: null, hangup: null };
         emitSessionChange();
     },
 
     subscribeToActiveLocalSession: (listener) => {
         if (typeof listener !== 'function') return () => {};
         sessionListeners.add(listener);
-        listener(activeLocalSession);
+        listener(buildSessionPayload());
         return () => {
             sessionListeners.delete(listener);
         };

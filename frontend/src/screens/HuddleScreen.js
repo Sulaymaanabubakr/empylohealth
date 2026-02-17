@@ -805,6 +805,28 @@ const HuddleScreen = ({ navigation, route }) => {
         callObject.setNativeInCallAudioMode(next ? 'video' : 'voice');
     };
 
+    useEffect(() => {
+        huddleService.setActiveCallControlState({
+            isMuted,
+            isSpeakerOn
+        });
+        huddleService.updateActiveLocalSession({
+            isMuted,
+            isSpeakerOn
+        });
+    }, [isMuted, isSpeakerOn]);
+
+    useEffect(() => {
+        huddleService.setActiveCallActions({
+            toggleMute,
+            toggleSpeaker,
+            hangup: () => leaveCall(false, true, true, 'hangup')
+        });
+        return () => {
+            huddleService.clearActiveCallActions();
+        };
+    }, [leaveCall, toggleMute, toggleSpeaker]);
+
     const participantsForUI = useMemo(() => {
         const sorted = [...participants].sort((a, b) => {
             if (a.local && !b.local) return -1;

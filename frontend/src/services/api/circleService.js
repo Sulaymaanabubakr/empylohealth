@@ -43,6 +43,10 @@ export const circleService = {
         return circleRepository.leaveCircle(circleId);
     },
 
+    deleteCircle: async (circleId) => {
+        return circleRepository.deleteCircle(circleId);
+    },
+
     subscribeToMyCircles: (uid, callback) => {
         const q = query(
             collection(db, 'circles'),

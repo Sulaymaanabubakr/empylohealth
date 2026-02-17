@@ -1,11 +1,19 @@
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
 const StatusModal = ({ visible, type, title, message, onClose, onConfirm, confirmText = 'Confirm', cancelText = 'Cancel' }) => {
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (!visible) {
+            setSubmitting(false);
+        }
+    }, [visible]);
+
     // Configuration based on type
     const getConfig = () => {
         switch (type) {
@@ -46,6 +54,21 @@ const StatusModal = ({ visible, type, title, message, onClose, onConfirm, confir
 
     const config = getConfig();
 
+    const handleConfirmPress = async () => {
+        if (submitting) return;
+        if (!onConfirm) {
+            onClose();
+            return;
+        }
+        try {
+            setSubmitting(true);
+            await Promise.resolve(onConfirm());
+            onClose();
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     return (
         <Modal
             animationType="fade"
@@ -70,17 +93,20 @@ const StatusModal = ({ visible, type, title, message, onClose, onConfirm, confir
                                 <TouchableOpacity
                                     style={[styles.button, styles.buttonCancel]}
                                     onPress={onClose}
+                                    disabled={submitting}
                                 >
                                     <Text style={styles.textStyleCancel}>{cancelText}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.button, { backgroundColor: config.color }]}
-                                    onPress={() => {
-                                        if (onConfirm) onConfirm();
-                                        onClose();
-                                    }}
+                                    onPress={handleConfirmPress}
+                                    disabled={submitting}
                                 >
-                                    <Text style={styles.textStyle}>{confirmText}</Text>
+                                    {submitting ? (
+                                        <ActivityIndicator color="#FFFFFF" />
+                                    ) : (
+                                        <Text style={styles.textStyle}>{confirmText}</Text>
+                                    )}
                                 </TouchableOpacity>
                             </>
                         ) : (

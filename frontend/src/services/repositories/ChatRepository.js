@@ -45,5 +45,15 @@ export const chatRepository = {
         });
 
         return result || { success: true };
+    },
+
+    async deleteChat(chatId, options = {}) {
+        const uid = auth.currentUser?.uid;
+        if (!uid) throw new Error('User must be authenticated.');
+        if (!chatId) throw new Error('chatId is required');
+        return callableClient.invokeWithAuth('deleteChat', {
+            chatId,
+            deleteCircleIfLastAdmin: !!options?.deleteCircleIfLastAdmin
+        });
     }
 };

@@ -5,6 +5,7 @@ export declare const createCircle: import("firebase-functions/v1").HttpsFunction
 export declare const joinCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const leaveCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const deleteCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const manageMember: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const handleJoinRequest: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const resolveCircleReport: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
@@ -23,6 +24,7 @@ export declare const deleteScheduledHuddle: import("firebase-functions/v1").Http
 export declare const createDirectChat: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getPublicProfile: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const sendMessage: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const deleteChat: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const submitAssessment: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getUserStats: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getKeyChallenges: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

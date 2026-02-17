@@ -37,6 +37,16 @@ export declare const joinCircle: functions.HttpsFunction & functions.Runnable<an
  */
 export declare const leaveCircle: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Delete Circle (admin/creator) or leave circle (member/moderator)
+ * Callable Function: 'deleteCircle'
+ */
+export declare const deleteCircle: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Delete/Leave chat. For circle chats this follows role-aware governance rules.
+ * Callable Function: 'deleteChat'
+ */
+export declare const deleteChat: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Manage Member (Promote/Demote/Kick/Ban)
  * Callable Function: 'manageMember'
  */

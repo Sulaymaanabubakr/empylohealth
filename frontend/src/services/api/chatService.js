@@ -15,6 +15,10 @@ export const chatService = {
         return { success: true };
     },
 
+    deleteChat: async (chatId, options = {}) => {
+        return chatRepository.deleteChat(chatId, options);
+    },
+
     subscribeToMessages: (chatId, callback) => {
         const q = query(
             collection(db, 'chats', chatId, 'messages'),

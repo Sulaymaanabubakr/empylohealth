@@ -2,16 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
 import Avatar from '../components/Avatar';
+import { useModal } from '../context/ModalContext';
 
 const chatListCacheKey = (uid) => `chat_list_cache_v1:${uid}`;
 
 const ChatListScreen = ({ navigation }) => {
     const { user } = useAuth();
+    const { showModal } = useModal();
     const [searchQuery, setSearchQuery] = useState('');
     const [chats, setChats] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -114,6 +117,79 @@ const ChatListScreen = ({ navigation }) => {
         );
     };
 
+    const handleDeleteChat = (chat) => {
+        showModal({
+            type: 'confirmation',
+            title: 'Delete Chat',
+            message: chat?.circleId
+                ? 'This will remove you from the circle chat.'
+                : 'This will remove this chat for you.',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    const result = await chatService.deleteChat(chat.id, { deleteCircleIfLastAdmin: false });
+                    if (result?.requiresCircleDeletion) {
+                        showModal({
+                            type: 'confirmation',
+                            title: 'Last Admin',
+                            message: 'You are the last admin. Delete the entire circle and its chat permanently?',
+                            confirmText: 'Delete Circle',
+                            cancelText: 'Cancel',
+                            onConfirm: async () => {
+                                try {
+                                    await chatService.deleteChat(chat.id, { deleteCircleIfLastAdmin: true });
+                                    showModal({
+                                        type: 'success',
+                                        title: 'Circle Deleted',
+                                        message: 'The circle and its chat were deleted everywhere.'
+                                    });
+                                } catch (error) {
+                                    showModal({
+                                        type: 'error',
+                                        title: 'Delete Failed',
+                                        message: error?.message || 'Could not delete this circle.'
+                                    });
+                                }
+                            }
+                        });
+                        return;
+                    }
+                    showModal({
+                        type: 'success',
+                        title: 'Done',
+                        message: result?.action === 'left_circle' ? 'You left the circle chat.' : 'Chat deleted.'
+                    });
+                } catch (error) {
+                    showModal({
+                        type: 'error',
+                        title: 'Delete Failed',
+                        message: error?.message || 'Could not delete this chat.'
+                    });
+                }
+            }
+        });
+    };
+
+    const renderRightActions = (item) => (
+        <TouchableOpacity style={styles.swipeDeleteAction} onPress={() => handleDeleteChat(item)} activeOpacity={0.9}>
+            <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.swipeDeleteText}>Delete</Text>
+        </TouchableOpacity>
+    );
+
+    const renderRow = ({ item }) => (
+        <View style={styles.swipeRowWrap}>
+            <Swipeable
+                renderRightActions={() => renderRightActions(item)}
+                overshootRight={false}
+                containerStyle={styles.swipeContainer}
+            >
+                {renderItem({ item })}
+            </Swipeable>
+        </View>
+    );
+
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar barStyle="dark-content" backgroundColor="#F3F6FA" />
@@ -148,10 +224,17 @@ const ChatListScreen = ({ navigation }) => {
                 )}
             </View>
 
+            <View style={styles.deleteHintBanner}>
+                <Ionicons name="information-circle-outline" size={16} color="#1A1A1A" />
+                <Text style={styles.deleteHintText}>
+                    Swipe left on a chat to delete. Only circle admins can delete a circle.
+                </Text>
+            </View>
+
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                 <FlatList
                     data={filteredChats}
-                    renderItem={renderItem}
+                    renderItem={renderRow}
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={[
                         styles.listContent,
@@ -270,6 +353,45 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderWidth: 1,
         borderColor: '#E8EDF4'
+    },
+    swipeRowWrap: {
+        marginBottom: 10
+    },
+    swipeContainer: {
+        borderRadius: 18,
+        overflow: 'hidden'
+    },
+    swipeDeleteAction: {
+        width: 96,
+        marginLeft: 8,
+        backgroundColor: '#D32F2F',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4
+    },
+    swipeDeleteText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '700'
+    },
+    deleteHintBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: SPACING.lg,
+        marginBottom: SPACING.sm,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderWidth: 1,
+        borderColor: '#E8EDF4'
+    },
+    deleteHintText: {
+        flex: 1,
+        marginLeft: 8,
+        color: '#4A5568',
+        fontSize: 12,
+        fontWeight: '500'
     },
     avatarContainer: {
         position: 'relative',
