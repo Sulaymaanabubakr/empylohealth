@@ -2107,6 +2107,22 @@ export const joinHuddle = regionalFunctions.https.onCall(async (data, context) =
 
         const huddle = huddleDoc.data() || {};
         if (huddle.isActive === false || huddle.status === 'ended') {
+            // Self-heal stale circle pointers so clients stop attempting to re-join ended huddles.
+            let circleId = huddle.circleId || null;
+            if (!circleId && huddle.chatId) {
+                const chatSnap = await db.collection('chats').doc(huddle.chatId).get();
+                circleId = chatSnap.exists ? (chatSnap.data()?.circleId || null) : null;
+            }
+            if (circleId) {
+                const circleRef = db.collection('circles').doc(circleId);
+                const circleSnap = await circleRef.get();
+                const activeHuddleId = circleSnap.exists ? circleSnap.data()?.activeHuddle?.huddleId : null;
+                if (activeHuddleId === huddleId) {
+                    await circleRef.update({
+                        activeHuddle: admin.firestore.FieldValue.delete()
+                    }).catch(() => {});
+                }
+            }
             throw new functions.https.HttpsError('failed-precondition', 'This huddle has already ended.');
         }
 

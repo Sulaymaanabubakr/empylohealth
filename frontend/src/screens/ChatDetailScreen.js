@@ -14,6 +14,15 @@ import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import { resolveWellbeingScore } from '../utils/wellbeing';
 
+const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
+
+const isPotentiallyActiveHuddle = (huddle) => {
+    if (!huddle?.huddleId || !huddle?.roomUrl) return false;
+    if (huddle?.isActive === false) return false;
+    const status = String(huddle?.status || '').toLowerCase();
+    return ACTIVE_HUDDLE_STATUSES.has(status);
+};
+
 const ChatDetailScreen = ({ navigation, route }) => {
     const chat = route?.params?.chat;
     const { user, userData } = useAuth();
@@ -427,7 +436,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         ? 'Typing...'
         : (isDirectChat ? (isOtherOnline ? 'Online' : 'Offline') : (chat.members ? `${chat.members} members active` : 'Group'));
 
-    const hasActiveHuddle = Boolean(activeHuddle?.isActive !== false && activeHuddle?.roomUrl);
+    const hasActiveHuddle = isPotentiallyActiveHuddle(activeHuddle);
     const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
     const canShowCallButton = !chat?.isGroup || hasActiveHuddle || canStartHuddleInCircle;
     const hasNewJoinRequests = pendingRequestsCount > 0 && latestRequestCreatedAt > lastSeenRequestsAt;
@@ -436,14 +445,25 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
     const handleCall = async () => {
         if (chat?.isGroup) {
-            if (hasActiveHuddle) {
-                navigation.navigate('Huddle', {
-                    chat,
-                    huddleId: activeHuddle?.huddleId,
-                    mode: 'join',
-                    callTapTs: Date.now()
-                });
-                return;
+            if (isPotentiallyActiveHuddle(activeHuddle)) {
+                const huddleSnap = await getDoc(doc(db, 'huddles', activeHuddle.huddleId)).catch(() => null);
+                const huddleData = huddleSnap?.exists?.() ? (huddleSnap.data() || {}) : null;
+                const status = String(huddleData?.status || '').toLowerCase();
+                const canJoinCurrent = Boolean(
+                    huddleData &&
+                    huddleData?.isActive !== false &&
+                    status !== 'ended'
+                );
+                if (canJoinCurrent) {
+                    navigation.navigate('Huddle', {
+                        chat,
+                        huddleId: activeHuddle?.huddleId,
+                        mode: 'join',
+                        callTapTs: Date.now()
+                    });
+                    return;
+                }
+                setActiveHuddle(null);
             }
 
             if (!canStartHuddleInCircle) {

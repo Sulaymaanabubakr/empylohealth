@@ -16,6 +16,7 @@ let voipTokenUserId = null;
 let lastVoipToken = null;
 let pushRegistrationPromise = null;
 let lastInAppIncoming = { huddleId: null, ts: 0 };
+let lastHandledNotificationResponseKey = null;
 const CHAT_MESSAGE_CATEGORY_ID = 'chat-message-actions';
 const CHAT_MESSAGE_ACTION_REPLY = 'chat-reply';
 const CHAT_MESSAGE_ACTION_MARK_READ = 'chat-mark-read';
@@ -185,6 +186,22 @@ const handleNotificationAction = async (response) => {
     return navigateFromNotificationData(response);
 };
 
+const getNotificationResponseKey = (response) => {
+    const id = response?.notification?.request?.identifier || '';
+    const action = response?.actionIdentifier || '';
+    const data = response?.notification?.request?.content?.data || {};
+    return `${id}:${action}:${data?.type || ''}:${data?.chatId || ''}:${data?.huddleId || ''}:${data?.affirmationId || ''}`;
+};
+
+const consumeNotificationResponse = async (response) => {
+    if (!response) return false;
+    const key = getNotificationResponseKey(response);
+    if (key && key === lastHandledNotificationResponseKey) return false;
+    lastHandledNotificationResponseKey = key;
+    await Notifications.clearLastNotificationResponseAsync().catch(() => {});
+    return true;
+};
+
 const configureNotificationCategories = async () => {
     try {
         await Notifications.setNotificationCategoryAsync(CHAT_MESSAGE_CATEGORY_ID, [
@@ -301,16 +318,26 @@ export const notificationService = {
         });
 
         responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-            handleNotificationAction(response).catch((error) => {
-                console.error('[NotificationRouting] Response listener failure', error);
-            });
+            consumeNotificationResponse(response)
+                .then((shouldHandle) => {
+                    if (!shouldHandle) return;
+                    return handleNotificationAction(response);
+                })
+                .catch((error) => {
+                    console.error('[NotificationRouting] Response listener failure', error);
+                });
         });
 
         Notifications.getLastNotificationResponseAsync().then((response) => {
             if (response) {
-                handleNotificationAction(response).catch((error) => {
-                    console.error('[NotificationRouting] Last response routing failure', error);
-                });
+                consumeNotificationResponse(response)
+                    .then((shouldHandle) => {
+                        if (!shouldHandle) return;
+                        return handleNotificationAction(response);
+                    })
+                    .catch((error) => {
+                        console.error('[NotificationRouting] Last response routing failure', error);
+                    });
             }
         }).catch(() => {});
     },

@@ -27,6 +27,15 @@ const resolveMemberScore = (data = {}) => {
     return null;
 };
 
+const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
+
+const isPotentiallyActiveHuddle = (huddle) => {
+    if (!huddle?.huddleId || !huddle?.roomUrl) return false;
+    if (huddle?.isActive === false) return false;
+    const status = String(huddle?.status || '').toLowerCase();
+    return ACTIVE_HUDDLE_STATUSES.has(status);
+};
+
 const CircleDetailScreen = ({ navigation, route }) => {
     const { user } = useAuth();
     const initialCircle = route.params?.circle;
@@ -356,7 +365,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
         </View>
     );
 
-    const hasActiveHuddle = Boolean(circle.activeHuddle?.isActive !== false && circle.activeHuddle?.roomUrl);
+    const hasActiveHuddle = isPotentiallyActiveHuddle(circle?.activeHuddle);
     const canStartHuddle = ['creator', 'admin', 'moderator'].includes(role);
     const canManageJoinRequests = ['creator', 'admin', 'moderator'].includes(role);
     const canSeeHuddleAction = hasActiveHuddle || canStartHuddle;
@@ -461,22 +470,36 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                 </TouchableOpacity>
 
                                 {canSeeHuddleAction && (
-                                    <TouchableOpacity
-                                        style={styles.actionItem}
-                                        onPress={async () => {
-                                            if (!circle.chatId) {
-                                                showModal({ type: 'info', title: 'Huddle unavailable', message: 'This circle does not have a chat yet.' });
-                                                return;
-                                            }
+                                <TouchableOpacity
+                                    style={styles.actionItem}
+                                    onPress={async () => {
+                                        if (!circle.chatId) {
+                                            showModal({ type: 'info', title: 'Huddle unavailable', message: 'This circle does not have a chat yet.' });
+                                            return;
+                                        }
 
-                                            if (hasActiveHuddle) {
-                                                navigation.navigate('Huddle', {
-                                                    chat: { id: circle.chatId, name: circle.name, isGroup: true },
-                                                    huddleId: circle.activeHuddle.huddleId,
-                                                    mode: 'join',
-                                                    callTapTs: Date.now()
-                                                });
-                                                return;
+                                            const active = circle?.activeHuddle;
+                                            if (isPotentiallyActiveHuddle(active)) {
+                                                const huddleSnap = await getDoc(doc(db, 'huddles', active.huddleId)).catch(() => null);
+                                                const huddleData = huddleSnap?.exists?.() ? (huddleSnap.data() || {}) : null;
+                                                const status = String(huddleData?.status || '').toLowerCase();
+                                                const canJoinCurrent = Boolean(
+                                                    huddleData &&
+                                                    huddleData?.isActive !== false &&
+                                                    status !== 'ended'
+                                                );
+
+                                                if (canJoinCurrent) {
+                                                    navigation.navigate('Huddle', {
+                                                        chat: { id: circle.chatId, name: circle.name, isGroup: true },
+                                                        huddleId: active.huddleId,
+                                                        mode: 'join',
+                                                        callTapTs: Date.now()
+                                                    });
+                                                    return;
+                                                }
+
+                                                setCircle((prev) => (prev ? { ...prev, activeHuddle: null } : prev));
                                             }
 
                                             if (!canStartHuddle) {
