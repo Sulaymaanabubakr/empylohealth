@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
-import { View, ActivityIndicator, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Pressable, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MainTabs from './navigation/MainTabs';
@@ -48,8 +48,7 @@ import { huddleService } from './services/api/huddleService';
 const Stack = createNativeStackNavigator();
 
 export default function Navigation() {
-    const { loading, routeTarget } = useAuth();
-    const [isReady, setIsReady] = useState(false);
+    const { routeTarget } = useAuth();
     const [activeHuddleSession, setActiveHuddleSession] = useState(null);
     const [currentRouteName, setCurrentRouteName] = useState('');
     const firstRenderLoggedRef = useRef(false);
@@ -62,26 +61,8 @@ export default function Navigation() {
     }, []);
 
     useEffect(() => {
-        // Do not restore persisted navigation state on cold launch.
-        // Warm resume (app minimized) naturally preserves the in-memory screen.
-        if (!loading && !isReady) {
-            console.log('[PERF] Navigation: isReady set to true');
-            setIsReady(true);
-        }
-    }, [isReady, loading]);
-
-    useEffect(() => {
         console.log('[Navigation] Route target:', routeTarget);
     }, [routeTarget]);
-
-    if (!isReady) {
-        console.log('[PERF] Navigation: Waiting for isReady...');
-        return (
-            <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#FFFFFF" />
-            </View>
-        );
-    }
 
     if (!firstRenderLoggedRef.current) {
         firstRenderLoggedRef.current = true;

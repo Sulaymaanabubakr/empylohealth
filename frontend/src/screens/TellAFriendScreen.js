@@ -37,7 +37,14 @@ const TellAFriendScreen = ({ navigation }) => {
                 {/* QR Card */}
                 <View style={styles.qrCard}>
                     <View style={styles.avatarContainer}>
-                        <Avatar uri={avatarUri || ''} name={userData?.name || user?.displayName || 'User'} size={60} />
+                        <Avatar
+                            uri={avatarUri || ''}
+                            name={userData?.name || user?.displayName || 'User'}
+                            size={60}
+                            showWellbeingRing
+                            wellbeingScore={userData?.wellbeingScore}
+                            wellbeingLabel={userData?.wellbeingLabel || userData?.wellbeingStatus}
+                        />
                     </View>
 
                     {/* QR Code Placeholder - In a real app we'd use react-native-qrcode-svg */}

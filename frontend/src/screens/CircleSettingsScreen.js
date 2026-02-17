@@ -51,7 +51,14 @@ const RequestItem = ({ request, onAccept, onReject, processingId }) => {
     const isProcessing = processingId === request.uid;
     return (
         <View style={styles.listItem}>
-            <Avatar uri={request.photoURL} name={request.displayName} size={48} />
+            <Avatar
+                uri={request.photoURL}
+                name={request.displayName}
+                size={48}
+                showWellbeingRing
+                wellbeingScore={request?.wellbeingScore}
+                wellbeingLabel={request?.wellbeingLabel || request?.wellbeingStatus}
+            />
             <View style={styles.listItemContent}>
                 <Text style={styles.itemTitle}>{request.displayName}</Text>
                 <Text style={styles.itemSubtitle}>Requested {new Date(request.createdAt?.toDate()).toLocaleDateString()}</Text>
@@ -91,7 +98,14 @@ const MemberItem = ({ member, currentUserUid, onManage, currentMemberRole }) => 
 
     return (
         <View style={styles.listItem}>
-            <Avatar uri={member.image} name={member.name} size={48} />
+            <Avatar
+                uri={member.image}
+                name={member.name}
+                size={48}
+                showWellbeingRing
+                wellbeingScore={member?.wellbeingScore}
+                wellbeingLabel={member?.wellbeingLabel || member?.wellbeingStatus}
+            />
             <View style={styles.listItemContent}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={styles.itemTitle}>{member.name} {member.uid === currentUserUid && '(You)'}</Text>
@@ -316,7 +330,9 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                                 ...m,
                                 name: userDoc?.name || userDoc?.displayName || 'Unknown Member',
                                 image: userDoc?.photoURL || null,
-                                email: userDoc?.email || ''
+                                email: userDoc?.email || '',
+                                wellbeingScore: userDoc?.wellbeingScore ?? userDoc?.stats?.overallScore ?? null,
+                                wellbeingLabel: userDoc?.wellbeingLabel || userDoc?.wellbeingStatus || ''
                             };
                         }
                         return { ...m, name: 'Unknown', image: null };
@@ -340,6 +356,8 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                                 ...r,
                                 displayName: userDoc?.name || userDoc?.displayName || r.displayName || 'Unknown',
                                 photoURL: userDoc?.photoURL || r.photoURL || null,
+                                wellbeingScore: userDoc?.wellbeingScore ?? userDoc?.stats?.overallScore ?? null,
+                                wellbeingLabel: userDoc?.wellbeingLabel || userDoc?.wellbeingStatus || '',
                             };
                         }
                         return r;

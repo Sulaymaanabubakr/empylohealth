@@ -27,6 +27,16 @@ const getWellbeingRingColor = (member = {}) => {
     return score >= 70 ? '#2E7D32' : '#C62828';
 };
 
+const resolveMemberScore = (data = {}) => {
+    const raw = data?.wellbeingScore ?? data?.stats?.overallScore;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (typeof raw === 'string') {
+        const n = Number(String(raw).replace('%', '').trim());
+        return Number.isFinite(n) ? n : null;
+    }
+    return null;
+};
+
 const CircleDetailScreen = ({ navigation, route }) => {
     const { user } = useAuth();
     const initialCircle = route.params?.circle;
@@ -138,7 +148,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                             image: data?.photoURL || '',
                             role: memberRole,
                             status: presence?.state === 'online' ? 'online' : 'offline',
-                            score: data?.wellbeingScore || 0
+                            score: resolveMemberScore(data)
                         };
                     })
                 );
@@ -587,7 +597,13 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     onPress={() => openMemberModal(member)}
                                 >
                                     <View style={[styles.memberWellbeingRing, { borderColor: getWellbeingRingColor(member) }]}>
-                                        <Avatar uri={member.image} name={member.name} size={48} />
+                                        <Avatar
+                                            uri={member.image}
+                                            name={member.name}
+                                            size={48}
+                                            showWellbeingRing
+                                            wellbeingScore={member?.score}
+                                        />
                                     </View>
                                     <View style={styles.memberInfo}>
                                         <Text style={styles.memberName}>{member.name}</Text>
@@ -697,7 +713,13 @@ const CircleDetailScreen = ({ navigation, route }) => {
                 <View style={styles.profileOverlay}>
                     <TouchableOpacity style={styles.profileBackdrop} onPress={() => setMemberModalVisible(false)} />
                     <View style={styles.profileModal}>
-                        <Avatar uri={selectedMember?.image || ''} name={selectedMember?.name || 'Member'} size={76} />
+                        <Avatar
+                            uri={selectedMember?.image || ''}
+                            name={selectedMember?.name || 'Member'}
+                            size={76}
+                            showWellbeingRing
+                            wellbeingScore={selectedMember?.score}
+                        />
                         <Text style={styles.profileName}>{selectedMember?.name || 'Member'}</Text>
                         <Text style={styles.profileRole}>{selectedMember?.role || 'Member'}</Text>
 

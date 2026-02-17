@@ -13,6 +13,7 @@ import { db } from '../services/firebaseConfig';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { callDiagnostics } from '../services/calling/callDiagnostics';
 import { loopingSound } from '../services/audio/loopingSound';
+import { resolveWellbeingScore } from '../utils/wellbeing';
 
 const MAX_VISIBLE_PARTICIPANTS = 8;
 const INVITE_TIMEOUT_MS = 40000; // 30-45s
@@ -111,7 +112,9 @@ const HuddleScreen = ({ navigation, route }) => {
                 return {
                     uid,
                     name: data?.name || data?.displayName || 'Member',
-                    photoURL: data?.photoURL || ''
+                    photoURL: data?.photoURL || '',
+                    wellbeingScore: resolveWellbeingScore(data),
+                    wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || ''
                 };
             }));
             setExpectedParticipants(rows);
@@ -740,9 +743,19 @@ const HuddleScreen = ({ navigation, route }) => {
             uid: p?.userData?.uid || p?.session_id || p?.user_name || Math.random().toString(36),
             name: p?.local ? 'You' : (p?.user_name || 'Member'),
             photoURL: p?.userData?.photoURL || '',
+            wellbeingScore: p?.local ? resolveWellbeingScore(userData || {}) : null,
+            wellbeingLabel: p?.local ? (userData?.wellbeingLabel || userData?.wellbeingStatus || '') : '',
             joined: true
         }));
-    }, [expectedParticipants, participants]);
+    }, [expectedParticipants, participants, userData]);
+
+    const expectedByUid = useMemo(() => {
+        const map = new Map();
+        (expectedParticipants || []).forEach((member) => {
+            if (member?.uid) map.set(member.uid, member);
+        });
+        return map;
+    }, [expectedParticipants]);
 
     const circleNodes = useMemo(() => {
         const { visible } = participantsForUI;
@@ -841,6 +854,10 @@ const HuddleScreen = ({ navigation, route }) => {
 
                     {circleNodes.map((node) => {
                         const isActive = activeSpeakerSessionId && activeSpeakerSessionId === node.participant.session_id;
+                        const uid = node.participant?.userData?.uid;
+                        const expectedMember = uid ? expectedByUid.get(uid) : null;
+                        const nodeScore = expectedMember?.wellbeingScore ?? (node.participant?.local ? resolveWellbeingScore(userData || {}) : null);
+                        const nodeLabel = expectedMember?.wellbeingLabel ?? (node.participant?.local ? (userData?.wellbeingLabel || userData?.wellbeingStatus || '') : '');
                         return (
                             <Animated.View
                                 key={node.participant.session_id}
@@ -861,6 +878,9 @@ const HuddleScreen = ({ navigation, route }) => {
                                     uri={node.participant?.userData?.photoURL || ''}
                                     name={node.participant?.user_name || 'Member'}
                                     size={node.size - 8}
+                                    showWellbeingRing
+                                    wellbeingScore={nodeScore}
+                                    wellbeingLabel={nodeLabel}
                                 />
                                 <Text style={styles.participantName} numberOfLines={1}>
                                     {node.participant.local ? 'You' : (node.participant.user_name || 'Member')}
@@ -902,7 +922,14 @@ const HuddleScreen = ({ navigation, route }) => {
                         {rosterParticipants.map((member) => (
                             <View key={member.uid} style={styles.rosterItem}>
                                 <View style={styles.rosterIdentity}>
-                                    <Avatar uri={member.photoURL} name={member.name} size={32} />
+                                    <Avatar
+                                        uri={member.photoURL}
+                                        name={member.name}
+                                        size={32}
+                                        showWellbeingRing
+                                        wellbeingScore={member?.wellbeingScore}
+                                        wellbeingLabel={member?.wellbeingLabel}
+                                    />
                                     <Text style={styles.rosterName} numberOfLines={1}>{member.name}</Text>
                                 </View>
                                 <View style={[styles.rosterStatusPill, member.joined ? styles.rosterJoined : styles.rosterPending]}>

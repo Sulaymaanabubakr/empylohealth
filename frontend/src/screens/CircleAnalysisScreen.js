@@ -150,6 +150,8 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                             id: memberId,
                             name: data.name || data.displayName || 'Member',
                             photoURL: data.photoURL,
+                            wellbeingScore: data?.wellbeingScore ?? data?.stats?.overallScore ?? null,
+                            wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || '',
                             level: level,
                             contributionPoints: points,
                         });
@@ -300,7 +302,14 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                                         </View>
 
                                         <View style={styles.rankUser}>
-                                            <Avatar uri={member.photoURL} name={member.name} size={44} />
+                                            <Avatar
+                                                uri={member.photoURL}
+                                                name={member.name}
+                                                size={44}
+                                                showWellbeingRing
+                                                wellbeingScore={member?.wellbeingScore}
+                                                wellbeingLabel={member?.wellbeingLabel}
+                                            />
                                             <View style={styles.rankInfo}>
                                                 <Text style={styles.rankName} numberOfLines={1}>{member.name}</Text>
                                                 <Text style={styles.rankLevel}>Level {member.level} • {member.contributionPoints} pts</Text>

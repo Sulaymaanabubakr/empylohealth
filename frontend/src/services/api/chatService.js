@@ -3,6 +3,7 @@ import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc } fro
 import { chatRepository } from '../repositories/ChatRepository';
 import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { presenceRepository } from '../repositories/PresenceRepository';
+import { resolveWellbeingScore } from '../../utils/wellbeing';
 
 export const chatService = {
     createDirectChat: async (recipientId) => {
@@ -68,6 +69,8 @@ export const chatService = {
                             name = userData?.name || userData?.displayName || 'Anonymous';
                             avatar = userData?.photoURL || null;
                             isOnline = presence?.state === 'online';
+                            data.wellbeingScore = resolveWellbeingScore(userData);
+                            data.wellbeingLabel = userData?.wellbeingLabel || userData?.wellbeingStatus || '';
                         } catch {
                             // Ignore enrichment errors.
                         }

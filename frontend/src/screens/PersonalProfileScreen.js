@@ -140,7 +140,14 @@ const PersonalProfileScreen = ({ navigation }) => {
 
             <View style={styles.profileInfo}>
                 <View style={styles.avatarContainer}>
-                    <Avatar uri={safeAvatar || ''} name={displayName} size={80} />
+                    <Avatar
+                        uri={safeAvatar || ''}
+                        name={displayName}
+                        size={80}
+                        showWellbeingRing
+                        wellbeingScore={userData?.wellbeingScore}
+                        wellbeingLabel={userData?.wellbeingLabel || userData?.wellbeingStatus}
+                    />
                 </View>
                 <Text style={styles.name}>{displayName}</Text>
                 <Text style={styles.email}>{displayEmail}</Text>

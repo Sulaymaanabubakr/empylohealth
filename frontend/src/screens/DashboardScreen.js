@@ -14,6 +14,7 @@ import { circleService } from '../services/api/circleService';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
+import { getWellbeingRingColor } from '../utils/wellbeing';
 
 import { assessmentService } from '../services/api/assessmentService';
 
@@ -48,28 +49,6 @@ const calculateCircleRating = (circle) => {
     return Math.min(score, 5.0).toFixed(1); // Cap at 5.0
 };
 
-const getWellbeingRingColor = (memberWellbeing) => {
-    const rawScore = memberWellbeing?.wellbeingScore;
-    const score =
-        typeof rawScore === 'number'
-            ? rawScore
-            : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
-    const label = String(memberWellbeing?.wellbeingLabel || memberWellbeing?.wellbeingStatus || '').toLowerCase();
-
-    // Prefer explicit labels/status where available.
-    if (label.includes('struggl')) return '#C62828'; // red
-    if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32'; // green
-
-    // Fall back to score if present.
-    if (Number.isFinite(score)) {
-        if (score >= 70) return '#2E7D32'; // green
-        return '#C62828'; // red
-    }
-
-    // Unknown/no recent wellbeing data.
-    return '#BDBDBD';
-};
-
 const resolveMemberWellbeing = (userData = {}) => {
     const directScore = userData?.wellbeingScore;
     const statsScore = userData?.stats?.overallScore;
@@ -90,6 +69,14 @@ const resolveMemberWellbeing = (userData = {}) => {
         score: Number.isFinite(parsedScore) ? parsedScore : null,
         label
     };
+};
+
+const getMemberRingColor = (memberWellbeing) => {
+    return getWellbeingRingColor({
+        wellbeingScore: memberWellbeing?.wellbeingScore,
+        wellbeingLabel: memberWellbeing?.wellbeingLabel,
+        wellbeingStatus: memberWellbeing?.wellbeingStatus
+    }) || '#BDBDBD';
 };
 
 const CircularProgress = ({ score, label }) => {
@@ -420,6 +407,9 @@ const DashboardScreen = ({ navigation }) => {
                             uri={userData?.photoURL || user?.photoURL}
                             name={userData?.name || user?.displayName || user?.email?.split('@')?.[0] || 'User'}
                             size={60}
+                            showWellbeingRing
+                            wellbeingScore={wellbeing?.score ?? userData?.wellbeingScore}
+                            wellbeingLabel={wellbeing?.label || userData?.wellbeingLabel || userData?.wellbeingStatus}
                         />
                         <View style={styles.onlineBadge} />
                     </View>
@@ -516,7 +506,7 @@ const DashboardScreen = ({ navigation }) => {
                                                         {
                                                             zIndex: 10 - index,
                                                             marginLeft: index === 0 ? 0 : -18,
-                                                            borderColor: getWellbeingRingColor(profile)
+                                                            borderColor: getMemberRingColor(profile)
                                                         }
                                                     ]}
                                                 >

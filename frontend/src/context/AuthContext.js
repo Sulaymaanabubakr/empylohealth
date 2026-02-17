@@ -1,6 +1,4 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo } from 'react';
-import { View, Image, ActivityIndicator, Text } from 'react-native';
-import { TYPOGRAPHY } from '../theme/theme';
 import { authService } from '../services/auth/authService';
 import { notificationService } from '../services/api/notificationService';
 import { profileRepository } from '../services/repositories/ProfileRepository';
@@ -269,21 +267,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
     return (
         <AuthContext.Provider value={contextValue}>
-            {loading ? (
-                <View style={{ flex: 1, backgroundColor: '#00A99D', justifyContent: 'center', alignItems: 'center' }}>
-                    <Image
-                        source={require('../assets/images/logo_white.png')}
-                        style={{ width: '50%', height: undefined, aspectRatio: 1, marginBottom: 40 }}
-                        resizeMode="contain"
-                    />
-                    <ActivityIndicator size="large" color="#FFFFFF" />
-                    <Text style={{ color: '#FFFFFF', marginTop: 16, ...TYPOGRAPHY.body, fontWeight: '600' }}>
-                        Preparing your workspace...
-                    </Text>
-                </View>
-            ) : (
-                children
-            )}
+            {children}
         </AuthContext.Provider>
     );
 };

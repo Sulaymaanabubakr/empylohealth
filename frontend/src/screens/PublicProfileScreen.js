@@ -28,9 +28,11 @@ const ringColorFromProfile = (profile = {}) => {
         : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
     const label = String(profile?.wellbeingLabel || profile?.wellbeingStatus || '').toLowerCase();
 
+    // Keep ring color deterministic from score whenever score exists.
+    if (Number.isFinite(score)) return score >= 70 ? '#2E7D32' : '#C62828';
+
     if (label.includes('struggl') || label.includes('attention')) return '#C62828';
     if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32';
-    if (Number.isFinite(score)) return score >= 70 ? '#2E7D32' : '#C62828';
     return '#BDBDBD';
 };
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, StyleProp, ImageStyle } from 'react-native';
+import { getWellbeingRingColor } from '../utils/wellbeing';
 
 const getInitials = (name) => {
   if (!name || typeof name !== 'string') return '?';
@@ -19,22 +20,38 @@ const getColor = (name) => {
 };
 
 
-const Avatar = ({ uri, name, size = 56, style }) => {
+const Avatar = ({ uri, name, size = 56, style, wellbeingScore = null, wellbeingLabel = '', wellbeingStatus = '', showWellbeingRing = false }) => {
   const initials = getInitials(name);
   const backgroundColor = getColor(name || initials);
+  const ringColor = showWellbeingRing
+    ? getWellbeingRingColor({ wellbeingScore, wellbeingLabel, wellbeingStatus })
+    : null;
+  const hasRing = Boolean(ringColor);
+  const ringThickness = hasRing ? 3 : 0;
+  const innerSize = Math.max(1, size - ringThickness * 2);
 
   if (uri && typeof uri === 'string' && uri.trim().length > 0) {
-    return <Image source={{ uri }} style={[styles.image, { width: size, height: size, borderRadius: size / 2 }, style]} />;
+    return (
+      <View style={[styles.wrapper, { width: size, height: size, borderRadius: size / 2, borderWidth: ringThickness, borderColor: ringColor || 'transparent' }, style]}>
+        <Image source={{ uri }} style={[styles.image, { width: innerSize, height: innerSize, borderRadius: innerSize / 2 }]} />
+      </View>
+    );
   }
 
   return (
-    <View style={[styles.fallback, { width: size, height: size, borderRadius: size / 2, backgroundColor }, style]}>
-      <Text style={[styles.initials, { fontSize: Math.max(12, size * 0.35) }]}>{initials}</Text>
+    <View style={[styles.wrapper, { width: size, height: size, borderRadius: size / 2, borderWidth: ringThickness, borderColor: ringColor || 'transparent' }, style]}>
+      <View style={[styles.fallback, { width: innerSize, height: innerSize, borderRadius: innerSize / 2, backgroundColor }]}>
+        <Text style={[styles.initials, { fontSize: Math.max(12, innerSize * 0.35) }]}>{initials}</Text>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   image: {
     resizeMode: 'cover',
   },

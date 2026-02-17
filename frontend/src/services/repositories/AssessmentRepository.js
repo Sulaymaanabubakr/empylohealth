@@ -21,6 +21,10 @@ const labelFromScore = (score = 0) => {
     return 'Needs Attention';
 };
 
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const toValidNumber = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
 export const assessmentRepository = {
     async submitAssessment({ type, score, answers, mood }) {
         const uid = auth.currentUser?.uid;
@@ -35,12 +39,69 @@ export const assessmentRepository = {
             createdAt: serverTimestamp()
         });
 
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.exists() ? userSnap.data() : {};
+
+        const latestAssessmentsSnap = await getDocs(query(
+            collection(db, 'assessments'),
+            where('uid', '==', uid),
+            orderBy('createdAt', 'desc'),
+            limit(30)
+        ));
+
+        const recentDailyScores = [];
+        latestAssessmentsSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data?.type !== 'daily') return;
+            const dailyScore = toValidNumber(data?.score);
+            if (dailyScore == null) return;
+            recentDailyScores.push(dailyScore);
+        });
+
+        // Ensure the latest daily submission is reflected immediately.
+        if (type === 'daily' && recentDailyScores[0] !== score) {
+            recentDailyScores.unshift(score);
+        }
+
+        const dailyWindow = recentDailyScores.slice(0, 7);
+        const dailyAvg7 = dailyWindow.length
+            ? Math.round(dailyWindow.reduce((sum, n) => sum + n, 0) / dailyWindow.length)
+            : null;
+
+        const existingWeekly = toValidNumber(userData?.weeklyScore);
+        const existingWellbeing = toValidNumber(userData?.wellbeingScore);
+        const weeklyAnchor = type === 'questionnaire'
+            ? score
+            : (existingWeekly ?? existingWellbeing ?? null);
+
+        const dailyDelta = weeklyAnchor != null && dailyAvg7 != null
+            ? dailyAvg7 - weeklyAnchor
+            : 0;
+        const dailyAdjustment = weeklyAnchor != null && dailyAvg7 != null
+            ? clamp(Math.round(dailyDelta * 0.25), -10, 10)
+            : 0;
+
+        const computedWellbeing = weeklyAnchor != null
+            ? clamp(Math.round(weeklyAnchor + dailyAdjustment), 0, 100)
+            : clamp(Math.round(dailyAvg7 ?? score), 0, 100);
+
         await setDoc(
-            doc(db, 'users', uid),
+            userRef,
             {
-                wellbeingScore: score,
-                wellbeingLabel: labelFromScore(score),
+                wellbeingScore: computedWellbeing,
+                wellbeingLabel: labelFromScore(computedWellbeing),
+                weeklyScore: weeklyAnchor,
+                dailyTrendScore: dailyAvg7,
+                wellbeingModelVersion: 'v2_weekly_anchor_daily_trend',
+                wellbeingComponents: {
+                    weeklyAnchor,
+                    dailyAvg7,
+                    dailyDelta,
+                    dailyAdjustment
+                },
                 lastAssessmentAt: serverTimestamp(),
+                'stats.overallScore': computedWellbeing,
                 updatedAt: serverTimestamp()
             },
             { merge: true }

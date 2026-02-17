@@ -12,20 +12,7 @@ import { presenceRepository } from '../services/repositories/PresenceRepository'
 import { db } from '../services/firebaseConfig';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
-
-const getWellbeingRingColor = (profile = {}) => {
-    const rawScore = profile?.wellbeingScore;
-    const score =
-        typeof rawScore === 'number'
-            ? rawScore
-            : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
-    const label = String(profile?.wellbeingLabel || profile?.wellbeingStatus || '').toLowerCase();
-
-    if (label.includes('struggl')) return '#C62828';
-    if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32';
-    if (Number.isFinite(score)) return score >= 70 ? '#2E7D32' : '#C62828';
-    return '#BDBDBD';
-};
+import { resolveWellbeingScore } from '../utils/wellbeing';
 
 const ChatDetailScreen = ({ navigation, route }) => {
     const chat = route?.params?.chat;
@@ -292,6 +279,8 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 uid,
                 name: userData?.name || user?.displayName || 'You',
                 photoURL: userData?.photoURL || user?.photoURL || '',
+                wellbeingScore: resolveWellbeingScore(userData || {}),
+                wellbeingLabel: userData?.wellbeingLabel || userData?.wellbeingStatus || '',
                 role: 'You',
                 about: 'This is you'
             };
@@ -306,7 +295,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 uid,
                 name: data?.name || data?.displayName || 'Member',
                 photoURL: data?.photoURL || '',
-                wellbeingScore: data?.wellbeingScore ?? null,
+                wellbeingScore: resolveWellbeingScore(data),
                 wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || '',
                 role: chat?.isGroup ? 'Circle member' : 'Contact',
                 about: data?.bio || data?.about || 'Hey there! I am using Empylo.'
@@ -442,6 +431,8 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
     const canShowCallButton = !chat?.isGroup || hasActiveHuddle || canStartHuddleInCircle;
     const hasNewJoinRequests = pendingRequestsCount > 0 && latestRequestCreatedAt > lastSeenRequestsAt;
+    const directOtherId = !chat?.isGroup ? getOtherParticipantId() : null;
+    const directOtherProfile = directOtherId ? profileCache[directOtherId] : null;
 
     const handleCall = async () => {
         if (chat?.isGroup) {
@@ -536,13 +527,15 @@ const ChatDetailScreen = ({ navigation, route }) => {
         const isMe = item.isMe;
         const senderId = item?.user?._id;
         const senderProfile = senderId ? profileCache[senderId] : null;
+        const myScore = resolveWellbeingScore(userData || {});
         const senderName = isMe
             ? 'You'
             : (senderProfile?.name || (chat?.isGroup ? 'Member' : resolvedChatName));
         const senderAvatar = isMe
             ? (userData?.photoURL || user?.photoURL || '')
             : (senderProfile?.photoURL || (chat?.isGroup ? '' : resolvedChatAvatar));
-        const ringColor = chat?.isGroup ? getWellbeingRingColor(senderProfile) : null;
+        const senderScore = isMe ? myScore : senderProfile?.wellbeingScore;
+        const senderLabel = isMe ? (userData?.wellbeingLabel || userData?.wellbeingStatus || '') : senderProfile?.wellbeingLabel;
 
         const otherId = !chat?.isGroup && Array.isArray(chat?.participants)
             ? chat.participants.find((id) => id !== user?.uid)
@@ -555,13 +548,18 @@ const ChatDetailScreen = ({ navigation, route }) => {
         // Design: Incoming (Left) = Teal, Outgoing (Right) = Light
         return (
             <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
-                {!isMe && (
+                {!isMe ? (
                     <TouchableOpacity onPress={() => openProfileModal(senderId)} activeOpacity={0.8} style={styles.avatarTap}>
-                        <View style={chat?.isGroup ? [styles.wellbeingRing, { borderColor: ringColor }] : null}>
-                            <Avatar uri={senderAvatar} name={senderName} size={32} />
-                        </View>
+                        <Avatar
+                            uri={senderAvatar}
+                            name={senderName}
+                            size={32}
+                            showWellbeingRing
+                            wellbeingScore={senderScore}
+                            wellbeingLabel={senderLabel}
+                        />
                     </TouchableOpacity>
-                )}
+                ) : null}
                 <TouchableOpacity
                     onLongPress={() => !isMe && handleMessageLongPress(item)}
                     activeOpacity={0.9} // Slight feedback but keep bubble look
@@ -587,6 +585,18 @@ const ChatDetailScreen = ({ navigation, route }) => {
                         </Text>
                     </View>
                 </TouchableOpacity>
+                {isMe ? (
+                    <TouchableOpacity activeOpacity={1} style={[styles.avatarTap, styles.avatarTapMe]}>
+                        <Avatar
+                            uri={senderAvatar}
+                            name={senderName}
+                            size={32}
+                            showWellbeingRing
+                            wellbeingScore={senderScore}
+                            wellbeingLabel={senderLabel}
+                        />
+                    </TouchableOpacity>
+                ) : null}
             </View>
         );
     };
@@ -616,6 +626,9 @@ const ChatDetailScreen = ({ navigation, route }) => {
                         uri={resolvedChatAvatar}
                         name={resolvedChatName}
                         size={40}
+                        showWellbeingRing
+                        wellbeingScore={chat?.isGroup ? chat?.wellbeingScore : directOtherProfile?.wellbeingScore}
+                        wellbeingLabel={chat?.isGroup ? chat?.wellbeingLabel : directOtherProfile?.wellbeingLabel}
                         key={resolvedChatAvatar || 'default'}
                     />
                 </TouchableOpacity>
@@ -712,6 +725,9 @@ const ChatDetailScreen = ({ navigation, route }) => {
                             uri={selectedProfile?.photoURL || ''}
                             name={selectedProfile?.name || 'Member'}
                             size={76}
+                            showWellbeingRing
+                            wellbeingScore={selectedProfile?.wellbeingScore}
+                            wellbeingLabel={selectedProfile?.wellbeingLabel}
                         />
                         <Text style={styles.profileName}>{selectedProfile?.name || 'Member'}</Text>
                         <Text style={styles.profileRole}>{selectedProfile?.role || 'Contact'}</Text>
@@ -916,10 +932,9 @@ const styles = StyleSheet.create({
         marginRight: 8,
         marginTop: 2
     },
-    wellbeingRing: {
-        borderWidth: 2,
-        borderRadius: 18,
-        padding: 1
+    avatarTapMe: {
+        marginRight: 0,
+        marginLeft: 8
     },
     messageAvatar: {
         width: 32,

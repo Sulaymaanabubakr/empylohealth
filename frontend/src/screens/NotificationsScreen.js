@@ -92,7 +92,14 @@ const NotificationsScreen = ({ navigation }) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
         <View style={styles.avatarContainer}>
-          <Avatar uri={userData?.photoURL || user?.photoURL} name={userData?.name || user?.displayName || 'User'} size={40} />
+          <Avatar
+            uri={userData?.photoURL || user?.photoURL}
+            name={userData?.name || user?.displayName || 'User'}
+            size={40}
+            showWellbeingRing
+            wellbeingScore={userData?.wellbeingScore}
+            wellbeingLabel={userData?.wellbeingLabel || userData?.wellbeingStatus}
+          />
         </View>
       </View>
 

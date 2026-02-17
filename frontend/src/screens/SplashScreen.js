@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Image, StyleSheet, Animated, Easing } from 'react-native';
 import { COLORS } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 
 const SplashScreen = ({ navigation }) => {
   const { user, loading } = useAuth();
+  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // If auth is still loading, wait.
@@ -20,13 +21,36 @@ const SplashScreen = ({ navigation }) => {
     }
   }, [navigation, user, loading]);
 
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.06,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
   return (
     <View style={styles.container}>
-      <Image
-        source={require('../assets/images/logo_white.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <Animated.View style={{ transform: [{ scale: pulse }] }}>
+        <Image
+          source={require('../assets/images/logo_white.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </Animated.View>
     </View>
   );
 };

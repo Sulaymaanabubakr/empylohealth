@@ -142,7 +142,14 @@ const PersonalInformationScreen = ({ navigation }) => {
                     <View style={styles.avatarSection}>
                         <View style={styles.avatarWrapper}>
                             <View style={styles.avatarBorder}>
-                                <Avatar uri={avatarUri || ''} name={name || user?.displayName || 'User'} size={100} />
+                                <Avatar
+                                    uri={avatarUri || ''}
+                                    name={name || user?.displayName || 'User'}
+                                    size={100}
+                                    showWellbeingRing
+                                    wellbeingScore={userData?.wellbeingScore}
+                                    wellbeingLabel={userData?.wellbeingLabel || userData?.wellbeingStatus}
+                                />
                             </View>
                             <TouchableOpacity style={styles.editAvatarButton} onPress={pickImage}>
                                 <MaterialCommunityIcons name="camera" size={18} color="#FFF" />

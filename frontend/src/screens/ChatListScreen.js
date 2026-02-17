@@ -71,7 +71,14 @@ const ChatListScreen = ({ navigation }) => {
                 onPress={() => navigation.navigate('ChatDetail', { chat: item })}
             >
                 <View style={styles.avatarContainer}>
-                    <Avatar uri={item.avatar || item.photoURL || item.image || ''} name={item.name} size={56} />
+                    <Avatar
+                        uri={item.avatar || item.photoURL || item.image || ''}
+                        name={item.name}
+                        size={56}
+                        showWellbeingRing
+                        wellbeingScore={item?.wellbeingScore}
+                        wellbeingLabel={item?.wellbeingLabel}
+                    />
                     {item.isOnline && <View style={styles.onlineIndicator} />}
                 </View>
 
