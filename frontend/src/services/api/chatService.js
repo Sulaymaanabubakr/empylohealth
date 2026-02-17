@@ -1,5 +1,5 @@
 import { db, auth } from '../firebaseConfig';
-import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, getDocs } from 'firebase/firestore';
 import { chatRepository } from '../repositories/ChatRepository';
 import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { presenceRepository } from '../repositories/PresenceRepository';
@@ -110,6 +110,76 @@ export const chatService = {
             }));
             callback(chats);
         });
+    },
+
+    preloadChatList: async (uid) => {
+        if (!uid) return [];
+        const q = query(
+            collection(db, 'chats'),
+            where('participants', 'array-contains', uid),
+            orderBy('updatedAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const circleCache = new Map();
+        const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data();
+            const participants = data.participants || [];
+            const isGroup = data.type === 'group' || participants.length > 2;
+            let name = data.name || 'Chat';
+            let avatar = data.avatar || null;
+            let isOnline = false;
+
+            if (!isGroup) {
+                const otherId = participants.find((id) => id !== uid);
+                if (otherId) {
+                    try {
+                        const [userDoc, presence] = await Promise.all([
+                            getDoc(doc(db, 'users', otherId)),
+                            presenceRepository.getPresence(otherId).catch(() => ({ state: 'offline' }))
+                        ]);
+                        const userData = userDoc.exists() ? userDoc.data() : {};
+                        name = userData?.name || userData?.displayName || 'Anonymous';
+                        avatar = userData?.photoURL || null;
+                        isOnline = presence?.state === 'online';
+                        data.wellbeingScore = resolveWellbeingScore(userData);
+                        data.wellbeingLabel = userData?.wellbeingLabel || userData?.wellbeingStatus || '';
+                    } catch {
+                        // Ignore enrichment errors.
+                    }
+                }
+            } else if (data?.circleId) {
+                try {
+                    const circleId = data.circleId;
+                    if (!circleCache.has(circleId)) {
+                        const circleDoc = await getDoc(doc(db, 'circles', circleId));
+                        circleCache.set(circleId, circleDoc.exists() ? (circleDoc.data() || {}) : null);
+                    }
+                    const circleData = circleCache.get(circleId);
+                    if (circleData) {
+                        name = circleData?.name || name;
+                        avatar = circleData?.image || circleData?.avatar || circleData?.photoURL || avatar || null;
+                    }
+                } catch {
+                    // Ignore group enrichment errors.
+                }
+            }
+
+            const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
+            const time = updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            return {
+                id: docSnap.id,
+                ...data,
+                name,
+                avatar,
+                time,
+                members: participants.length,
+                unread: 0,
+                isOnline,
+                isGroup,
+                me: auth.currentUser?.uid || uid
+            };
+        }));
+        return chats;
     },
 
     setTyping: (chatId, isTyping) => {

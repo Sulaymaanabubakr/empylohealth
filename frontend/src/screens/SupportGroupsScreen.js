@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { screenCacheService } from '../services/bootstrap/screenCacheService';
 
 const FILTERS = ['All', 'Connect', 'Culture', 'Enablement', 'Green Activities', 'Mental health', 'Physical health'];
 
@@ -47,8 +48,13 @@ const SupportGroupsScreen = ({ route }) => {
 
     useFocusEffect(
         React.useCallback(() => {
+            const cacheKey = `${showJoinedOnly ? 'support_groups_joined' : 'support_groups_public'}:${user?.uid || 'guest'}`;
             const loadGroups = async () => {
                 try {
+                    const cached = await screenCacheService.get(cacheKey);
+                    if (Array.isArray(cached) && cached.length > 0) {
+                        setGroups(cached);
+                    }
                     const circles = await circleService.getAllCircles();
                     const visible = (circles || []).filter((c) => {
                         const isMember = !!user?.uid && Array.isArray(c.members) && c.members.includes(user.uid);
@@ -60,6 +66,7 @@ const SupportGroupsScreen = ({ route }) => {
                         return isPublic && !isFull;
                     });
                     setGroups(visible);
+                    screenCacheService.set(cacheKey, visible);
                 } catch (error) {
                     console.error('Failed to load support groups', error);
                     setGroups([]);

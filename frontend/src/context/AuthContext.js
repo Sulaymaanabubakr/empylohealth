@@ -7,6 +7,7 @@ import { perfLogger } from '../services/diagnostics/perfLogger';
 import { logNetworkRegionDebug } from '../services/diagnostics/networkRegionDebug';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { callableClient } from '../services/api/callableClient';
+import { appPreloadService } from '../services/bootstrap/appPreloadService';
 
 export const AuthContext = createContext(undefined);
 
@@ -41,6 +42,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const authStartRef = useRef(Date.now());
     const hasNotifiedAuthReadyRef = useRef(false);
     const networkProfileBootstrappedRef = useRef(false);
+    const preloadedUidRef = useRef(null);
 
     const loading = bootPhase !== BOOT_PHASES.READY;
 
@@ -86,6 +88,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                 setUserData(null);
                 setRouteTarget(ROUTE_TARGETS.UNAUTH);
                 setBootPhase(BOOT_PHASES.READY);
+                preloadedUidRef.current = null;
                 return;
             }
 
@@ -154,6 +157,13 @@ export const AuthProvider = ({ children, onAuthReady }) => {
             notificationService.registerForPushNotificationsAsync(currentUser.uid).catch((e) => {
                 console.warn('[AuthContext] Push registration failed', e?.message || e);
             });
+
+            if (preloadedUidRef.current !== currentUser.uid) {
+                preloadedUidRef.current = currentUser.uid;
+                appPreloadService.preloadForUser(currentUser.uid).catch((e) => {
+                    console.warn('[BOOT] App preload failed', e?.message || e);
+                });
+            }
         });
 
         const safetyTimer = setTimeout(() => {

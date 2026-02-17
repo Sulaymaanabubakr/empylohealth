@@ -15,6 +15,7 @@ import { db } from '../services/firebaseConfig';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import { getWellbeingRingColor } from '../utils/wellbeing';
+import { screenCacheService } from '../services/bootstrap/screenCacheService';
 
 import { assessmentService } from '../services/api/assessmentService';
 
@@ -175,6 +176,25 @@ const DashboardScreen = ({ navigation }) => {
 
     useEffect(() => {
         console.log('DashboardScreen mounted. User:', user?.email);
+        const hydrate = async () => {
+            if (!user?.uid) return;
+            const cached = await screenCacheService.get(`dashboard:${user.uid}`);
+            if (!cached) return;
+            if (cached?.wellbeing && typeof cached.wellbeing === 'object') {
+                const score = typeof cached.wellbeing?.score === 'number' ? cached.wellbeing.score : null;
+                const label = cached.wellbeing?.label || 'No data';
+                if (score != null) {
+                    setWellbeing({
+                        score,
+                        label,
+                        streak: Number(cached.wellbeing?.streak || 0)
+                    });
+                }
+            }
+            if (Array.isArray(cached?.challenges)) setChallenges(cached.challenges);
+            if (Array.isArray(cached?.recommendations)) setRecommendations(cached.recommendations);
+        };
+        hydrate();
         checkAssessments();
         fetchDashboardData();
 
@@ -223,6 +243,13 @@ const DashboardScreen = ({ navigation }) => {
             setWellbeing(hasScore ? stats : localWellbeingFallback());
             setChallenges(challs);
             setRecommendations(recs);
+            if (user?.uid) {
+                screenCacheService.set(`dashboard:${user.uid}`, {
+                    wellbeing: hasScore ? stats : localWellbeingFallback(),
+                    challenges: challs || [],
+                    recommendations: recs || []
+                });
+            }
         } catch (err) {
             console.log("Error fetching dashboard data", err);
             setWellbeing(localWellbeingFallback());

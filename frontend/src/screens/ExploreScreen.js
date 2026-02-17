@@ -5,12 +5,15 @@ import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
 import { resourceService } from '../services/api/resourceService';
+import { useAuth } from '../context/AuthContext';
+import { screenCacheService } from '../services/bootstrap/screenCacheService';
 
 
 const { width } = Dimensions.get('window');
 
 const ExploreScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets(); // Add hook
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('Self-development');
     const [activeFilter, setActiveFilter] = useState('All');
     const [activities, setActivities] = useState([]);
@@ -23,8 +26,18 @@ const ExploreScreen = ({ navigation }) => {
     const [error, setError] = useState(null);
 
     useEffect(() => {
+        const hydrate = async () => {
+            if (!user?.uid) return;
+            const cached = await screenCacheService.get(`explore:${user.uid}`);
+            if (!cached) return;
+            if (Array.isArray(cached.activities)) setActivities(cached.activities);
+            if (Array.isArray(cached.supportGroups)) setSupportGroups(cached.supportGroups);
+            if (Array.isArray(cached.affirmations)) setAffirmations(cached.affirmations);
+            setLoading(false);
+        };
+        hydrate();
         loadContent();
-    }, []);
+    }, [user?.uid]);
 
     const loadContent = async () => {
         try {
@@ -40,6 +53,13 @@ const ExploreScreen = ({ navigation }) => {
             const publicCircles = (circles || []).filter((circle) => (circle?.type || 'public') === 'public');
             setSupportGroups(publicCircles);
             setAffirmations(affs);
+            if (user?.uid) {
+                screenCacheService.set(`explore:${user.uid}`, {
+                    activities: items || [],
+                    supportGroups: publicCircles || [],
+                    affirmations: affs || [],
+                });
+            }
         } catch (err) {
             console.error("ExploreScreen Error:", err);
             setError(err.message || "Failed to load content");
