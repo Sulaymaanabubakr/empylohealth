@@ -146,8 +146,8 @@ export declare const ringPendingHuddles: functions.CloudFunction<unknown>;
 export declare const updateHuddleState: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Scheduled cleanup: auto-end huddles stuck in ringing/accepted too long.
- * - ringing: end as timeout after 45s
- * - accepted (but not ongoing): end as failed_to_connect after 30s
+ * - ringing: keep long enough for host-side timeout UX (2m prompt + 5m grace + countdown)
+ * - accepted (but not ongoing): still guard against stale sessions
  */
 export declare const cleanupStaleHuddles: functions.CloudFunction<unknown>;
 /**

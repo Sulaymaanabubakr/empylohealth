@@ -460,12 +460,10 @@ const HuddleScreen = ({ navigation, route }) => {
                 return;
             }
 
-            // If callee accepted (status went to 'accepted' or 'ongoing'), stop ringback for the caller
-            if ((status === 'accepted' || status === 'ongoing') && isHost) {
+            // Keep host in ringing UX until an actual remote participant is present.
+            if ((status === 'accepted' || status === 'ongoing') && isHost && remoteParticipantCount > 0 && phase === 'ringing') {
                 stopRingbackTone();
-                if (phase === 'ringing') {
-                    setPhase('joining');
-                }
+                setPhase('joining');
             }
 
             // Debug: log participant array changes from Firestore
@@ -476,7 +474,7 @@ const HuddleScreen = ({ navigation, route }) => {
         });
 
         return unsubscribe;
-    }, [huddleId, isHost, leaveCall, phase, stopRingbackTone]);
+    }, [huddleId, isHost, leaveCall, phase, remoteParticipantCount, stopRingbackTone]);
 
     // Host-alone flow:
     // 1) after 2 min alone -> ask to end
@@ -762,15 +760,17 @@ const HuddleScreen = ({ navigation, route }) => {
     }, [firebaseStatus, huddleId, isHost, leaveCall, remoteParticipantCount]);
 
     useEffect(() => {
-        // Only re-ring while explicitly in ringing phase.
-        if (!isHost || !huddleId || phase !== 'ringing' || remoteParticipantCount > 0) return undefined;
+        // Keep ringing members who haven't joined while huddle is still active.
+        if (!isHost || !huddleId || !hasLocalJoinedDaily || phase === 'ending' || phase === 'ended' || phase === 'error') {
+            return undefined;
+        }
 
         const interval = setInterval(() => {
             huddleService.ringHuddleParticipants(huddleId).catch(() => { });
         }, 12000);
 
         return () => clearInterval(interval);
-    }, [huddleId, isHost, phase, remoteParticipantCount]);
+    }, [hasLocalJoinedDaily, huddleId, isHost, phase]);
 
     useEffect(() => {
         const shouldPlayRingback =

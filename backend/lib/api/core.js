@@ -1982,7 +1982,8 @@ exports.ringHuddleParticipants = regionalFunctions.https.onCall(async (data, con
         if (huddle.startedBy !== uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the caller can trigger ringing.');
         }
-        if (huddle.isActive === false || huddle.status !== 'ringing') {
+        const status = String(huddle.status || 'ringing');
+        if (huddle.isActive === false || status === 'ended') {
             return { success: true, skipped: true, reason: 'not-ringable' };
         }
         const lastRingAt = huddle.lastRingSentAt?.toMillis?.() || 0;
@@ -1997,8 +1998,9 @@ exports.ringHuddleParticipants = regionalFunctions.https.onCall(async (data, con
         const chatDoc = await db.collection('chats').doc(chatId).get();
         const chatData = chatDoc.data() || {};
         const chatParticipants = chatDoc.data()?.participants || [];
-        const joined = huddle.participants || [];
-        const recipients = chatParticipants.filter((pid) => pid !== uid && !joined.includes(pid));
+        const joined = Array.isArray(huddle.participants) ? huddle.participants : [];
+        const declined = Array.isArray(huddle.declinedUserIds) ? huddle.declinedUserIds : [];
+        const recipients = chatParticipants.filter((pid) => pid !== uid && !joined.includes(pid) && !declined.includes(pid));
         await sendHuddleNotifications({
             recipientUids: recipients,
             chatId,
@@ -2029,7 +2031,8 @@ exports.ringPendingHuddles = regionalFunctions.pubsub.schedule('every 1 minutes'
         let notified = 0;
         for (const huddleDoc of snapshot.docs) {
             const huddle = huddleDoc.data() || {};
-            if (huddle.status !== 'ringing') {
+            const status = String(huddle.status || 'ringing');
+            if (status === 'ended') {
                 continue;
             }
             const lastRingAt = huddle.lastRingSentAt?.toMillis?.() || 0;
@@ -2045,8 +2048,9 @@ exports.ringPendingHuddles = regionalFunctions.pubsub.schedule('every 1 minutes'
             const chatDoc = await db.collection('chats').doc(chatId).get();
             const chatData = chatDoc.data() || {};
             const chatParticipants = chatDoc.data()?.participants || [];
-            const joined = huddle.participants || [];
-            const recipients = chatParticipants.filter((pid) => pid !== startedBy && !joined.includes(pid));
+            const joined = Array.isArray(huddle.participants) ? huddle.participants : [];
+            const declined = Array.isArray(huddle.declinedUserIds) ? huddle.declinedUserIds : [];
+            const recipients = chatParticipants.filter((pid) => pid !== startedBy && !joined.includes(pid) && !declined.includes(pid));
             if (!recipients.length) {
                 continue;
             }
@@ -2176,13 +2180,15 @@ exports.updateHuddleState = regionalFunctions.https.onCall(async (data, context)
 });
 /**
  * Scheduled cleanup: auto-end huddles stuck in ringing/accepted too long.
- * - ringing: end as timeout after 45s
- * - accepted (but not ongoing): end as failed_to_connect after 30s
+ * - ringing: keep long enough for host-side timeout UX (2m prompt + 5m grace + countdown)
+ * - accepted (but not ongoing): still guard against stale sessions
  */
 exports.cleanupStaleHuddles = regionalFunctions.pubsub.schedule('every 1 minutes').onRun(async () => {
     const now = Date.now();
-    const RINGING_MAX_MS = 45 * 1000;
-    const ACCEPTED_MAX_MS = 30 * 1000;
+    // UX target: 2 min prompt + 5 min grace + forced 5-second countdown.
+    // Keep backend cleanup just above that so app-side flow can complete first.
+    const RINGING_MAX_MS = 8 * 60 * 1000; // 8 minutes
+    const ACCEPTED_MAX_MS = 3 * 60 * 1000; // 3 minutes
     try {
         const snap = await db.collection('huddles')
             .where('isActive', '==', true)
