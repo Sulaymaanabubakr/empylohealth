@@ -448,7 +448,7 @@ const DashboardScreen = ({ navigation }) => {
                 {/* Circles Section */}
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Circles</Text>
-                    <TouchableOpacity style={styles.seeAllButton} onPress={() => navigation.navigate('SupportGroups')}>
+                    <TouchableOpacity style={styles.seeAllButton} onPress={() => navigation.navigate('SupportGroups', { scope: 'joined' })}>
                         <Text style={styles.seeAllText}>See All</Text>
                         <Ionicons name="chevron-forward" size={14} color="#FFA726" />
                     </TouchableOpacity>

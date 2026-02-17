@@ -1,50 +1,72 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, Image, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
-
-const { width } = Dimensions.get('window');
+import { db } from '../services/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 const FILTERS = ['All', 'Connect', 'Culture', 'Enablement', 'Green Activities', 'Mental health', 'Physical health'];
 
-const SupportGroupsScreen = () => {
+const calculateCircleRating = (circle) => {
+    if (!circle) return '4.2';
+    if (circle.score) return String(circle.score);
+
+    let score = 4.2;
+    const memberCount = Array.isArray(circle.members) ? circle.members.length : 0;
+    if (memberCount > 50) score += 0.4;
+    else if (memberCount > 20) score += 0.3;
+    else if (memberCount > 10) score += 0.2;
+    else if (memberCount > 2) score += 0.1;
+
+    const lastUpdate = circle.updatedAt?.toMillis?.() || circle.lastMessageAt?.toMillis?.() || 0;
+    if (lastUpdate > 0) {
+        const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
+        if (hoursSinceUpdate < 24) score += 0.4;
+        else if (hoursSinceUpdate < 72) score += 0.2;
+        else if (hoursSinceUpdate < 168) score += 0.1;
+    }
+
+    return Math.min(score, 5.0).toFixed(1);
+};
+
+const SupportGroupsScreen = ({ route }) => {
     const navigation = useNavigation();
-    const insets = useSafeAreaInsets();
     const { user } = useAuth();
+    const scope = route?.params?.scope || 'public';
+    const showJoinedOnly = scope === 'joined';
     const [activeFilter, setActiveFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [groups, setGroups] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [memberPreviewMap, setMemberPreviewMap] = useState({});
 
     useFocusEffect(
         React.useCallback(() => {
             const loadGroups = async () => {
                 try {
-                    // Only show loading on initial load or if empty
-                    if (groups.length === 0) setLoading(true);
-            const circles = await circleService.getAllCircles();
-            // Hide full circles from browse unless you're already a member.
-            const visible = (circles || []).filter((c) => {
-                const isMember = !!user?.uid && Array.isArray(c.members) && c.members.includes(user.uid);
-                const isFull = !isMember && getCircleMemberCount(c) >= MAX_CIRCLE_MEMBERS;
-                return !isFull;
-            });
-            setGroups(visible);
-        } catch (error) {
-            console.error('Failed to load support groups', error);
-            setGroups([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-    loadGroups();
-        }, [user?.uid])
+                    const circles = await circleService.getAllCircles();
+                    const visible = (circles || []).filter((c) => {
+                        const isMember = !!user?.uid && Array.isArray(c.members) && c.members.includes(user.uid);
+                        if (showJoinedOnly) return isMember;
+
+                        const isPublic = (c?.type || 'public') === 'public';
+                        const isFull = !isMember && getCircleMemberCount(c) >= MAX_CIRCLE_MEMBERS;
+                        // Public search screen should not include private circles.
+                        return isPublic && !isFull;
+                    });
+                    setGroups(visible);
+                } catch (error) {
+                    console.error('Failed to load support groups', error);
+                    setGroups([]);
+                }
+            };
+            loadGroups();
+        }, [showJoinedOnly, user?.uid])
     );
 
     const filteredGroups = groups.filter(group => {
@@ -52,10 +74,45 @@ const SupportGroupsScreen = () => {
         const tags = group.tags || (group.category ? [group.category] : []);
         const matchesFilter = activeFilter === 'All' || tags.includes(activeFilter);
         const isMember = !!user?.uid && Array.isArray(group.members) && group.members.includes(user.uid);
+        if (showJoinedOnly) {
+            return matchesSearch && matchesFilter && isMember;
+        }
+
+        const isPublic = (group?.type || 'public') === 'public';
         const isFull = !isMember && getCircleMemberCount(group) >= MAX_CIRCLE_MEMBERS;
-        // Hide full circles from browse unless you're already a member.
-        return matchesSearch && matchesFilter && !isFull;
+        return matchesSearch && matchesFilter && isPublic && !isFull;
     });
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadMemberPreviews = async () => {
+            const previewEntries = await Promise.all(
+                (groups || []).map(async (group) => {
+                    const ids = Array.isArray(group?.members) ? group.members.slice(0, 3) : [];
+                    const members = await Promise.all(ids.map(async (uid) => {
+                        try {
+                            const snap = await getDoc(doc(db, 'users', uid));
+                            const data = snap.exists() ? snap.data() : {};
+                            return {
+                                uid,
+                                name: data?.name || data?.displayName || 'Member',
+                                photoURL: data?.photoURL || '',
+                                wellbeingScore: data?.wellbeingScore ?? data?.stats?.overallScore ?? null,
+                                wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || ''
+                            };
+                        } catch {
+                            return { uid, name: 'Member', photoURL: '' };
+                        }
+                    }));
+                    return [group.id, members];
+                })
+            );
+            if (cancelled) return;
+            setMemberPreviewMap(Object.fromEntries(previewEntries));
+        };
+        loadMemberPreviews();
+        return () => { cancelled = true; };
+    }, [groups]);
 
     const renderGroupCard = ({ item }) => (
         <TouchableOpacity
@@ -63,40 +120,62 @@ const SupportGroupsScreen = () => {
             activeOpacity={0.9}
             onPress={() => navigation.navigate('CircleDetail', { circle: item })}
         >
-            <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: item.color || '#E0F2F1' }]}>
-                    <Text style={{ fontSize: 24 }}>{item.icon || '👥'}</Text>
+            <View style={styles.circleHeader}>
+                <View>
+                    <Text style={styles.circleTitle}>{item.name}</Text>
+                    <Text style={styles.circleMembers}>{Array.isArray(item.members) ? item.members.length : 0} Members • High Activity</Text>
                 </View>
-                <View style={styles.cardHeaderText}>
-                    <Text style={styles.groupName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.groupCategory}>{item.category || 'General'}</Text>
+                <View style={styles.scoreBadge}>
+                    <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
+                    <Text style={styles.scoreBadgeText}>{calculateCircleRating(item)}</Text>
                 </View>
-                {item.verified && (
-                    <MaterialIcons name="verified" size={20} color={COLORS.primary} />
-                )}
             </View>
 
-            <Text style={styles.groupDescription} numberOfLines={2}>
-                {item.description || "Join this circle to connect with others and share experiences."}
-            </Text>
-
-            <View style={styles.cardFooter}>
-                <View style={styles.memberInfo}>
-                    <View style={styles.avatarPile}>
-                        {/* Placeholder avatars since we don't have member images easily here */}
-                        <View style={[styles.miniAvatar, { backgroundColor: '#FFCC80', zIndex: 3 }]} />
-                        <View style={[styles.miniAvatar, { backgroundColor: '#90CAF9', zIndex: 2, marginLeft: -10 }]} />
-                        <View style={[styles.miniAvatar, { backgroundColor: '#A5D6A7', zIndex: 1, marginLeft: -10 }]} />
+            {(Array.isArray(item.members) && item.members.length > 0) ? (
+                <View style={styles.memberStackContainer}>
+                    <View style={styles.avatarStack}>
+                        {(memberPreviewMap[item.id] || []).map((member, index) => (
+                            <View
+                                key={`${item.id}_${member.uid}`}
+                                style={{
+                                    marginLeft: index === 0 ? 0 : -14,
+                                    zIndex: 10 - index
+                                }}
+                            >
+                                <Avatar
+                                    uri={member.photoURL}
+                                    name={member.name}
+                                    size={40}
+                                    showWellbeingRing
+                                    wellbeingScore={member?.wellbeingScore}
+                                    wellbeingLabel={member?.wellbeingLabel}
+                                />
+                            </View>
+                        ))}
+                        {Array.isArray(item.members) && item.members.length > 3 && (
+                            <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -14 }]}>
+                                <Text style={styles.moreMembersText}>+{item.members.length - 3}</Text>
+                            </View>
+                        )}
                     </View>
-                    <Text style={styles.memberCountText}>
-                        {Array.isArray(item.members) ? item.members.length : (item.members || 0)} members
-                    </Text>
+                    <View style={styles.stackInfoContainer}>
+                        <Text style={styles.stackInfoText}>
+                            <Text style={styles.highlightText}>{Array.isArray(item.members) ? item.members.length : 0} members</Text> are active
+                        </Text>
+                        <View style={styles.activeIndicator} />
+                    </View>
                 </View>
-
-                <View style={styles.joinButton}>
-                    <Text style={styles.joinButtonText}>View</Text>
-                </View>
-            </View>
+            ) : (
+                <Text style={styles.timelineEmptyText}>
+                    Join the conversation with this circle.
+                </Text>
+            )}
+            <TouchableOpacity
+                style={styles.viewCircleButton}
+                onPress={() => navigation.navigate('CircleDetail', { circle: item })}
+            >
+                <Text style={styles.viewCircleButtonText}>View Circle</Text>
+            </TouchableOpacity>
         </TouchableOpacity>
     );
 
@@ -109,7 +188,7 @@ const SupportGroupsScreen = () => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Circles</Text>
+                <Text style={styles.headerTitle}>{showJoinedOnly ? 'My Circles' : 'Circles'}</Text>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -273,91 +352,123 @@ const styles = StyleSheet.create({
         paddingBottom: 100, // Space for FAB
     },
     groupCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 24,
-        padding: 20,
-        marginBottom: 16,
+        backgroundColor: '#FFF',
+        borderRadius: 32,
+        padding: 24,
+        marginBottom: 32,
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-        elevation: 4,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 24,
+        elevation: 10,
         borderWidth: 1,
         borderColor: '#F5F5F5',
     },
-    cardHeader: {
+    circleHeader: {
         flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    iconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    cardHeaderText: {
-        flex: 1,
-    },
-    groupName: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1A1A1A',
-        marginBottom: 2,
-    },
-    groupCategory: {
-        fontSize: 12,
-        color: COLORS.primary,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-    },
-    groupDescription: {
-        fontSize: 14,
-        color: '#616161',
-        lineHeight: 20,
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
         marginBottom: 16,
     },
-    cardFooter: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#F5F5F5',
+    circleTitle: {
+        fontSize: 22,
+        fontWeight: '800',
+        marginBottom: 4,
+        color: '#212121',
     },
-    memberInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    avatarPile: {
-        flexDirection: 'row',
-        marginRight: 8,
-    },
-    miniAvatar: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: '#FFFFFF',
-    },
-    memberCountText: {
-        fontSize: 13,
+    circleMembers: {
+        fontSize: 14,
         color: '#757575',
         fontWeight: '500',
-        marginLeft: 6,
     },
-    joinButton: {
-        backgroundColor: '#F0F2F5',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-    },
-    joinButtonText: {
+    timelineEmptyText: {
         fontSize: 13,
-        fontWeight: '600',
-        color: '#1A1A1A',
+        color: '#9E9E9E',
+        fontWeight: '500',
+        marginBottom: 16,
+        fontStyle: 'italic',
+    },
+    memberStackContainer: {
+        marginBottom: 20,
+        marginTop: 12,
+        alignItems: 'center',
+        width: '100%',
+    },
+    avatarStack: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+    moreMembersBadge: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: '#F5F5F5',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#FFF',
+    },
+    moreMembersText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#757575',
+    },
+    stackInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    stackInfoText: {
+        fontSize: 14,
+        color: '#757575',
+        fontWeight: '500',
+        marginRight: 6,
+    },
+    highlightText: {
+        color: '#212121',
+        fontWeight: '700',
+    },
+    activeIndicator: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#00E676',
+    },
+    scoreBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#E8F5E9',
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#C8E6C9',
+    },
+    scoreBadgeText: {
+        color: '#2E7D32',
+        fontWeight: '800',
+        fontSize: 14,
+    },
+    viewCircleButton: {
+        backgroundColor: COLORS.primary,
+        alignSelf: 'center',
+        width: '100%',
+        borderRadius: 20,
+        paddingVertical: 12,
+        alignItems: 'center',
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
+        marginTop: 4,
+    },
+    viewCircleButtonText: {
+        color: COLORS.white,
+        fontSize: 15,
+        fontWeight: '700',
     },
     fab: {
         position: 'absolute',

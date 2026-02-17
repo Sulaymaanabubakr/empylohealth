@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
@@ -11,6 +11,7 @@ import ImageCropper from '../components/ImageCropper';
 
 const CreateCircleScreen = ({ navigation }) => {
     const { showModal } = useModal();
+    const insets = useSafeAreaInsets();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState('Support Group');
@@ -71,7 +72,7 @@ const CreateCircleScreen = ({ navigation }) => {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <StatusBar barStyle="dark-content" />
 
             {/* Header */}
@@ -191,7 +192,7 @@ const CreateCircleScreen = ({ navigation }) => {
             </KeyboardAvoidingView>
 
             {/* Footer */}
-            <View style={styles.footer}>
+            <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
                 <TouchableOpacity style={styles.createButton} onPress={handleCreate} disabled={loading}>
                     {loading ? (
                         <ActivityIndicator color="#FFF" />

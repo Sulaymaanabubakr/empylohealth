@@ -37,7 +37,8 @@ const ExploreScreen = ({ navigation }) => {
             ]);
             console.log('ExploreScreen: fetched', items.length, 'resources,', circles.length, 'circles,', affs.length, 'affirmations');
             setActivities(items);
-            setSupportGroups(circles);
+            const publicCircles = (circles || []).filter((circle) => (circle?.type || 'public') === 'public');
+            setSupportGroups(publicCircles);
             setAffirmations(affs);
         } catch (err) {
             console.error("ExploreScreen Error:", err);
