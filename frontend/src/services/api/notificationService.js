@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { auth, db } from '../firebaseConfig';
-import { doc, arrayUnion, setDoc, getDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, arrayUnion, setDoc, getDoc } from 'firebase/firestore';
 import { navigate } from '../../navigation/navigationRef';
 import { nativeCallService } from '../native/nativeCallService';
 import { chatService } from './chatService';
@@ -103,7 +103,7 @@ const resolveChatNavigationPayload = async (chatId) => {
 
 const navigateFromNotificationData = async (payload) => {
     try {
-        const data = payload?.notification?.request?.content?.data || payload?.data || {};
+        const data = extractNotificationData(payload);
         const type = data?.type;
         const huddleId = data?.huddleId;
         const chatId = data?.chatId;
@@ -118,13 +118,20 @@ const navigateFromNotificationData = async (payload) => {
             return true;
         }
 
-        if (type === 'CHAT_MESSAGE' && chatId) {
+        if ((type === 'CHAT_MESSAGE' || chatId) && chatId) {
             const chat = await resolveChatNavigationPayload(chatId);
             if (chat) {
                 navigate('ChatDetail', { chat });
                 return true;
             }
-            navigate('MainTabs', { screen: 'ChatList' });
+            navigate('ChatDetail', {
+                chat: {
+                    id: chatId,
+                    name: data?.chatName || data?.senderName || 'Chat',
+                    isGroup: String(data?.isGroup || '').toLowerCase() === 'true',
+                    participants: []
+                }
+            });
             return true;
         }
 
@@ -141,25 +148,12 @@ const navigateFromNotificationData = async (payload) => {
 };
 
 const markChatNotificationsAsRead = async (chatId) => {
-    const uid = auth.currentUser?.uid;
-    if (!uid || !chatId) return;
-    const notifQuery = query(
-        collection(db, 'notifications'),
-        where('uid', '==', uid),
-        where('type', '==', 'CHAT_MESSAGE'),
-        where('chatId', '==', chatId),
-        where('read', '==', false)
-    );
-    const snap = await getDocs(notifQuery);
-    if (snap.empty) return;
-    const batch = writeBatch(db);
-    snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
-    await batch.commit();
+    await chatService.markChatNotificationsRead(chatId, auth.currentUser?.uid);
 };
 
 const handleNotificationAction = async (response) => {
     const actionId = response?.actionIdentifier;
-    const data = response?.notification?.request?.content?.data || {};
+    const data = extractNotificationData(response);
     const chatId = data?.chatId;
 
     if (!actionId || actionId === Notifications.DEFAULT_ACTION_IDENTIFIER) {
@@ -189,7 +183,7 @@ const handleNotificationAction = async (response) => {
 const getNotificationResponseKey = (response) => {
     const id = response?.notification?.request?.identifier || '';
     const action = response?.actionIdentifier || '';
-    const data = response?.notification?.request?.content?.data || {};
+    const data = extractNotificationData(response);
     return `${id}:${action}:${data?.type || ''}:${data?.chatId || ''}:${data?.huddleId || ''}:${data?.affirmationId || ''}`;
 };
 
@@ -226,7 +220,7 @@ const configureNotificationCategories = async () => {
 };
 
 const maybeShowNativeIncomingCall = async (payload) => {
-    const data = payload?.request?.content?.data || payload?.notification?.request?.content?.data || payload?.data || {};
+    const data = extractNotificationData(payload);
     if (data?.type !== 'HUDDLE_STARTED' || !data?.huddleId) return false;
     const shown = await nativeCallService.presentIncomingHuddleCall({
         huddleId: data.huddleId,
@@ -454,4 +448,36 @@ export const notificationService = {
             pushRegistrationPromise = null;
         }
     }
+};
+const toObject = (value) => {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch {
+            return {};
+        }
+    }
+    return {};
+};
+
+const extractNotificationData = (payload) => {
+    const responseData = toObject(payload?.notification?.request?.content?.data);
+    const directData = toObject(payload?.data);
+    const requestData = toObject(payload?.request?.content?.data);
+    const triggerData = toObject(payload?.notification?.request?.trigger?.remoteMessage?.data);
+    const remoteMessageData = toObject(payload?.request?.trigger?.remoteMessage?.data);
+    const apsCustomData = toObject(payload?.notification?.request?.trigger?.payload);
+    const nestedData = toObject(responseData?.data);
+    return {
+        ...apsCustomData,
+        ...remoteMessageData,
+        ...triggerData,
+        ...requestData,
+        ...directData,
+        ...responseData,
+        ...nestedData
+    };
 };

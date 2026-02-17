@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +22,7 @@ const ChatListScreen = ({ navigation }) => {
     const [hydratedCache, setHydratedCache] = useState(false);
     const [deleteInProgress, setDeleteInProgress] = useState(false);
     const [deletingChatId, setDeletingChatId] = useState(null);
+    const [unreadState, setUnreadState] = useState({ byChat: {}, total: 0 });
 
     useEffect(() => {
         if (!user?.uid) return undefined;
@@ -66,18 +67,33 @@ const ChatListScreen = ({ navigation }) => {
         }
     }, [chats, deleteInProgress, deletingChatId]);
 
+    useEffect(() => {
+        if (!user?.uid) return undefined;
+        return chatService.subscribeUnreadCounts(user.uid, (state) => {
+            setUnreadState(state || { byChat: {}, total: 0 });
+        });
+    }, [user?.uid]);
+
     const onRefresh = React.useCallback(() => {
         setRefreshing(true);
         setTimeout(() => setRefreshing(false), 900);
     }, []);
 
-    const filteredChats = chats.filter((chat) =>
+    const chatsWithUnread = useMemo(() => chats.map((chat) => ({
+        ...chat,
+        unread: unreadState?.byChat?.[chat.id] || 0
+    })), [chats, unreadState?.byChat]);
+
+    const filteredChats = chatsWithUnread.filter((chat) =>
         (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase())
     );
-    const showInitialLoading = !hasFirstSnapshot && !hydratedCache && chats.length === 0;
+    const showInitialLoading = !hasFirstSnapshot && !hydratedCache && chatsWithUnread.length === 0;
 
     const renderItem = ({ item }) => {
         const lastMessage = item.lastMessage || (item.isGroup ? 'Group conversation' : 'Start chatting');
+        const isLastMessageFromMe = item?.lastMessageSenderId === user?.uid;
+        const lastMessageReadBy = Array.isArray(item?.lastMessageReadBy) ? item.lastMessageReadBy : [];
+        const readByOthers = lastMessageReadBy.some((memberId) => memberId && memberId !== user?.uid);
         return (
             <TouchableOpacity
                 style={styles.chatCard}
@@ -115,6 +131,14 @@ const ChatListScreen = ({ navigation }) => {
                                 <Ionicons name="people" size={12} color={COLORS.primary} />
                                 <Text style={styles.groupChipText}>{item.members || 0}</Text>
                             </View>
+                        )}
+                        {isLastMessageFromMe && (
+                            <Ionicons
+                                name={readByOthers ? 'checkmark-done' : 'checkmark'}
+                                size={14}
+                                color={readByOthers ? '#34B7F1' : '#9AA3B2'}
+                                style={styles.sentTick}
+                            />
                         )}
                         <Text
                             style={[styles.lastMessage, item.unread > 0 && styles.lastMessageUnread]}
@@ -226,7 +250,10 @@ const ChatListScreen = ({ navigation }) => {
                 </TouchableOpacity>
                 <View style={styles.headerTextWrap}>
                     <Text style={styles.headerTitle}>Chats</Text>
-                    <Text style={styles.headerSubtitle}>{filteredChats.length} conversation{filteredChats.length === 1 ? '' : 's'}</Text>
+                    <Text style={styles.headerSubtitle}>
+                        {filteredChats.length} conversation{filteredChats.length === 1 ? '' : 's'}
+                        {unreadState.total > 0 ? ` • ${unreadState.total} unread` : ''}
+                    </Text>
                 </View>
                 <View style={styles.backButtonGhost} />
             </View>
@@ -479,6 +506,9 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
         fontSize: 11,
         fontWeight: '700'
+    },
+    sentTick: {
+        marginRight: 6
     },
     lastMessage: {
         flex: 1,

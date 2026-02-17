@@ -1044,6 +1044,9 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
         // Update parent
         await chatRef.update({
             lastMessage: type === 'text' ? text : '📷 Media',
+            lastMessageType: type,
+            lastMessageSenderId: uid,
+            lastMessageReadBy: [uid],
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         return { success: true, messageId: messageRef.id };

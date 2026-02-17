@@ -1,5 +1,5 @@
 import { db, auth } from '../firebaseConfig';
-import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, getDocs, writeBatch, updateDoc, arrayUnion } from 'firebase/firestore';
 import { chatRepository } from '../repositories/ChatRepository';
 import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { presenceRepository } from '../repositories/PresenceRepository';
@@ -114,6 +114,52 @@ export const chatService = {
             }));
             callback(chats);
         });
+    },
+
+    subscribeUnreadCounts: (uid, callback) => {
+        if (!uid) {
+            callback({ byChat: {}, total: 0 });
+            return () => {};
+        }
+        const q = query(
+            collection(db, 'notifications'),
+            where('uid', '==', uid),
+            where('type', '==', 'CHAT_MESSAGE'),
+            where('read', '==', false)
+        );
+        return onSnapshot(q, (snapshot) => {
+            const byChat = {};
+            snapshot.docs.forEach((docSnap) => {
+                const chatId = docSnap.data()?.chatId;
+                if (!chatId) return;
+                byChat[chatId] = (byChat[chatId] || 0) + 1;
+            });
+            callback({
+                byChat,
+                total: snapshot.size
+            });
+        }, () => {
+            callback({ byChat: {}, total: 0 });
+        });
+    },
+
+    markChatNotificationsRead: async (chatId, uid = auth.currentUser?.uid) => {
+        if (!uid || !chatId) return;
+        const q = query(
+            collection(db, 'notifications'),
+            where('uid', '==', uid),
+            where('type', '==', 'CHAT_MESSAGE'),
+            where('chatId', '==', chatId),
+            where('read', '==', false)
+        );
+        const snap = await getDocs(q);
+        if (snap.empty) return;
+        const batch = writeBatch(db);
+        snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+        await batch.commit();
+        await updateDoc(doc(db, 'chats', chatId), {
+            lastMessageReadBy: arrayUnion(uid)
+        }).catch(() => {});
     },
 
     preloadChatList: async (uid) => {

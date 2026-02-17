@@ -75,6 +75,11 @@ const BottomNavigation = ({ state, descriptors, navigation }) => {
                             ) : (
                                 iconFn('#BDBDBD')
                             )}
+                            {route.name === 'ChatList' && options.tabBarBadge !== undefined && options.tabBarBadge !== null && (
+                                <View style={styles.tabBadge}>
+                                    <Text style={styles.tabBadgeText}>{String(options.tabBarBadge)}</Text>
+                                </View>
+                            )}
                             <Text style={[styles.navLabel, isFocused && { color: COLORS.primary, fontWeight: '700' }]}>
                                 {label === 'Dashboard' ? 'Home' : (label === 'ChatList' ? 'Chat' : label)}
                             </Text>
@@ -127,6 +132,23 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: 4, // Added consistency for non-active items too
     },
+    tabBadge: {
+        position: 'absolute',
+        top: -2,
+        right: '24%',
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: '#E53935',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 5
+    },
+    tabBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: '800'
+    }
 });
 
 export default BottomNavigation;

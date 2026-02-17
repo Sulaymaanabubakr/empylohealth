@@ -179,6 +179,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
         const unsubscribeFocus = navigation.addListener('focus', () => {
             pushActive();
+            chatService.markChatNotificationsRead(chat.id, user.uid).catch(() => {});
             if (presenceIntervalRef.current) clearInterval(presenceIntervalRef.current);
             presenceIntervalRef.current = setInterval(pushActive, 5000);
         });
@@ -192,6 +193,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         });
 
         pushActive();
+        chatService.markChatNotificationsRead(chat.id, user.uid).catch(() => {});
         if (presenceIntervalRef.current) clearInterval(presenceIntervalRef.current);
         presenceIntervalRef.current = setInterval(pushActive, 5000);
 
