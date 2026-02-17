@@ -23,12 +23,26 @@ const getColor = (name) => {
 const Avatar = ({ uri, name, size = 56, style, wellbeingScore = null, wellbeingLabel = '', wellbeingStatus = '', showWellbeingRing = false }) => {
   const initials = getInitials(name);
   const backgroundColor = getColor(name || initials);
+  const hasNumericSize = typeof size === 'number' && Number.isFinite(size) && size > 0;
   const ringColor = showWellbeingRing
     ? getWellbeingRingColor({ wellbeingScore, wellbeingLabel, wellbeingStatus })
     : null;
   const hasRing = Boolean(ringColor);
-  const ringThickness = hasRing ? 3 : 0;
-  const innerSize = Math.max(1, size - ringThickness * 2);
+  const ringThickness = hasRing && hasNumericSize ? 3 : 0;
+  const innerSize = hasNumericSize ? Math.max(1, size - ringThickness * 2) : null;
+
+  // Some screens (e.g. circle cards) intentionally pass size={null} and control dimensions via style.
+  // Keep that rendering path working without wrapper math.
+  if (!hasNumericSize) {
+    if (uri && typeof uri === 'string' && uri.trim().length > 0) {
+      return <Image source={{ uri }} style={[styles.image, style]} />;
+    }
+    return (
+      <View style={[styles.fallback, { backgroundColor }, style]}>
+        <Text style={styles.initials}>{initials}</Text>
+      </View>
+    );
+  }
 
   if (uri && typeof uri === 'string' && uri.trim().length > 0) {
     return (

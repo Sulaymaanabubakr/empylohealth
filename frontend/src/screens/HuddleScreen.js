@@ -16,10 +16,13 @@ import { loopingSound } from '../services/audio/loopingSound';
 import { resolveWellbeingScore } from '../utils/wellbeing';
 
 const MAX_VISIBLE_PARTICIPANTS = 8;
-const INVITE_TIMEOUT_MS = 40000; // 30-45s
 const JOIN_TIMEOUT_MS = 15000; // 10-15s
 const JOIN_MAX_ATTEMPTS = 1;
 const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 20000;
+const HOST_ALONE_PROMPT_DELAY_MS = 120000; // 2 min
+const HOST_ALONE_FORCE_END_DELAY_MS = 300000; // 5 min after "No"
+const FORCE_END_COUNTDOWN_SECONDS = 5;
+const MAX_CALL_DURATION_MS = 3600000; // 1 hour
 // Audio playback is handled via loopingSound (expo-audio preferred, expo-av fallback).
 
 const HuddleScreen = ({ navigation, route }) => {
@@ -50,8 +53,14 @@ const HuddleScreen = ({ navigation, route }) => {
     const inviteTimeoutRef = useRef(null);
     const joinTimeoutRef = useRef(null);
     const aloneAfterAcceptTimeoutRef = useRef(null);
+    const hostAlonePromptTimeoutRef = useRef(null);
+    const hostAloneForceEndTimeoutRef = useRef(null);
+    const forceEndCountdownIntervalRef = useRef(null);
+    const maxCallDurationTimeoutRef = useRef(null);
     const joinStartedSessionRef = useRef(0);
     const lastFirebaseStatusRef = useRef(null);
+    const everHadRemoteParticipantRef = useRef(false);
+    const hostAlonePromptShownRef = useRef(false);
 
 	const chat = route?.params?.chat || { id: route?.params?.chatId, name: 'Huddle', isGroup: true };
 	const mode = route?.params?.mode || (route?.params?.huddleId ? 'join' : 'start');
@@ -68,6 +77,8 @@ const HuddleScreen = ({ navigation, route }) => {
     const [hasLocalJoinedDaily, setHasLocalJoinedDaily] = useState(false);
     const [expectedParticipants, setExpectedParticipants] = useState([]);
     const [seconds, setSeconds] = useState(0);
+    const [showHostAlonePrompt, setShowHostAlonePrompt] = useState(false);
+    const [forceEndCountdown, setForceEndCountdown] = useState(null);
     const [layoutSize, setLayoutSize] = useState({
         width: Dimensions.get('window').width,
         height: Math.max(Dimensions.get('window').height - 260, 320)
@@ -143,6 +154,26 @@ const HuddleScreen = ({ navigation, route }) => {
         }
     };
 
+    const clearForceEndCountdown = useCallback(() => {
+        if (forceEndCountdownIntervalRef.current) {
+            clearInterval(forceEndCountdownIntervalRef.current);
+            forceEndCountdownIntervalRef.current = null;
+        }
+        setForceEndCountdown(null);
+    }, []);
+
+    const clearHostAloneTimers = useCallback(() => {
+        if (hostAlonePromptTimeoutRef.current) {
+            clearTimeout(hostAlonePromptTimeoutRef.current);
+            hostAlonePromptTimeoutRef.current = null;
+        }
+        if (hostAloneForceEndTimeoutRef.current) {
+            clearTimeout(hostAloneForceEndTimeoutRef.current);
+            hostAloneForceEndTimeoutRef.current = null;
+        }
+        setShowHostAlonePrompt(false);
+    }, []);
+
     const clearAllTimeouts = useCallback(() => {
         if (inviteTimeoutRef.current) {
             clearTimeout(inviteTimeoutRef.current);
@@ -156,6 +187,31 @@ const HuddleScreen = ({ navigation, route }) => {
             clearTimeout(aloneAfterAcceptTimeoutRef.current);
             aloneAfterAcceptTimeoutRef.current = null;
         }
+        if (maxCallDurationTimeoutRef.current) {
+            clearTimeout(maxCallDurationTimeoutRef.current);
+            maxCallDurationTimeoutRef.current = null;
+        }
+        clearHostAloneTimers();
+        clearForceEndCountdown();
+    }, [clearForceEndCountdown, clearHostAloneTimers]);
+
+    const startForceEndCountdown = useCallback(() => {
+        if (forceEndCountdownIntervalRef.current) return;
+        setShowHostAlonePrompt(false);
+        setForceEndCountdown(FORCE_END_COUNTDOWN_SECONDS);
+        forceEndCountdownIntervalRef.current = setInterval(() => {
+            setForceEndCountdown((prev) => {
+                if (prev == null) return null;
+                if (prev <= 1) {
+                    clearInterval(forceEndCountdownIntervalRef.current);
+                    forceEndCountdownIntervalRef.current = null;
+                    callDiagnostics.log(huddleIdRef.current, 'host_alone_force_end_countdown_finished');
+                    leaveCallRef.current?.(true, true, true, 'host_alone_forced_end');
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
     }, []);
 
     const stopRingbackTone = useCallback(async () => {
@@ -372,6 +428,9 @@ const HuddleScreen = ({ navigation, route }) => {
 
     useEffect(() => {
         const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (forceEndCountdownIntervalRef.current) {
+                return true;
+            }
             keepAliveOnUnmountRef.current = true;
             navigation.goBack();
             return true;
@@ -419,25 +478,54 @@ const HuddleScreen = ({ navigation, route }) => {
         return unsubscribe;
     }, [huddleId, isHost, leaveCall, phase, stopRingbackTone]);
 
-    // Caller: hard invite timeout so we never ring forever.
+    // Host-alone flow:
+    // 1) after 2 min alone -> ask to end
+    // 2) if host chooses "No", wait 5 min still alone -> force 5..1 countdown and end
     useEffect(() => {
-        if (!isHost || !huddleId) return undefined;
-        if (firebaseStatus !== 'ringing') return undefined;
-        if (inviteTimeoutRef.current) return undefined;
+        if (forceEndCountdownIntervalRef.current) return undefined; // countdown is unstoppable once started
+        const isEligible =
+            isHost &&
+            hasLocalJoinedDaily &&
+            remoteParticipantCount === 0 &&
+            !everHadRemoteParticipantRef.current &&
+            phase !== 'ending' &&
+            phase !== 'ended' &&
+            phase !== 'error';
 
-        inviteTimeoutRef.current = setTimeout(() => {
-            console.warn('[HUDDLE] invite timeout');
-            callDiagnostics.log(huddleId, 'timeout_invite');
-            leaveCall(true, true, true, 'timeout');
-        }, INVITE_TIMEOUT_MS);
+        if (!isEligible) {
+            clearHostAloneTimers();
+            return undefined;
+        }
+
+        if (!hostAlonePromptShownRef.current && !hostAlonePromptTimeoutRef.current) {
+            hostAlonePromptTimeoutRef.current = setTimeout(() => {
+                hostAlonePromptTimeoutRef.current = null;
+                hostAlonePromptShownRef.current = true;
+                callDiagnostics.log(huddleIdRef.current, 'host_alone_prompt_shown');
+                setShowHostAlonePrompt(true);
+            }, HOST_ALONE_PROMPT_DELAY_MS);
+        }
+
+        return undefined;
+    }, [clearHostAloneTimers, hasLocalJoinedDaily, isHost, phase, remoteParticipantCount]);
+
+    useEffect(() => {
+        if (!isHost || !hasLocalJoinedDaily || phase === 'ending' || phase === 'ended' || phase === 'error') return undefined;
+        if (maxCallDurationTimeoutRef.current) return undefined;
+
+        maxCallDurationTimeoutRef.current = setTimeout(() => {
+            console.warn('[HUDDLE] max call duration reached (1 hour)');
+            callDiagnostics.log(huddleIdRef.current, 'max_duration_reached');
+            leaveCallRef.current?.(true, true, true, 'max_duration_reached');
+        }, MAX_CALL_DURATION_MS);
 
         return () => {
-            if (inviteTimeoutRef.current) {
-                clearTimeout(inviteTimeoutRef.current);
-                inviteTimeoutRef.current = null;
+            if (maxCallDurationTimeoutRef.current) {
+                clearTimeout(maxCallDurationTimeoutRef.current);
+                maxCallDurationTimeoutRef.current = null;
             }
         };
-    }, [firebaseStatus, huddleId, isHost, leaveCall]);
+    }, [hasLocalJoinedDaily, isHost, phase]);
 
     useEffect(() => {
         if (hasStartedJoinRef.current) return;
@@ -464,6 +552,10 @@ const HuddleScreen = ({ navigation, route }) => {
             hasDailyJoinedRef.current = false;
             setHasLocalJoinedDaily(false);
             startedByMeRef.current = mode === 'start';
+            everHadRemoteParticipantRef.current = false;
+            hostAlonePromptShownRef.current = false;
+            clearHostAloneTimers();
+            clearForceEndCountdown();
 
             const hasMic = await requestMicPermission();
             if (!hasMic) {
@@ -621,7 +713,7 @@ const HuddleScreen = ({ navigation, route }) => {
         };
 
         start();
-    }, [attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, huddleId, leaveCall, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, user?.displayName, user?.uid, userData?.name]);
+    }, [attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, clearForceEndCountdown, clearHostAloneTimers, huddleId, leaveCall, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, user?.displayName, user?.uid, userData?.name]);
 
     const remoteParticipantCount = useMemo(
         () => participants.filter((p) => !p.local).length,
@@ -631,6 +723,8 @@ const HuddleScreen = ({ navigation, route }) => {
     useEffect(() => {
         if (phase === 'ending' || phase === 'ended' || phase === 'error') return;
         if (remoteParticipantCount > 0) {
+            everHadRemoteParticipantRef.current = true;
+            clearHostAloneTimers();
             callDiagnostics.log(huddleId, 'remote_participant_connected', { remoteCount: remoteParticipantCount });
             if (joinTimeoutRef.current) {
                 clearTimeout(joinTimeoutRef.current);
@@ -644,7 +738,7 @@ const HuddleScreen = ({ navigation, route }) => {
                 setPhase('ongoing');
             }
         }
-    }, [phase, remoteParticipantCount]);
+    }, [clearHostAloneTimers, huddleId, phase, remoteParticipantCount]);
 
     useEffect(() => {
         if (!huddleId) return undefined;
@@ -782,7 +876,35 @@ const HuddleScreen = ({ navigation, route }) => {
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
-	    const statusText = phase === 'ending'
+    const isForceEnding = forceEndCountdown != null;
+
+    const handleHostAloneEndNow = () => {
+        callDiagnostics.log(huddleIdRef.current, 'host_alone_prompt_end_now');
+        setShowHostAlonePrompt(false);
+        clearHostAloneTimers();
+        leaveCall(true, true, true, 'host_alone_timeout');
+    };
+
+    const handleHostAloneKeepWaiting = () => {
+        callDiagnostics.log(huddleIdRef.current, 'host_alone_prompt_keep_waiting');
+        setShowHostAlonePrompt(false);
+        if (hostAloneForceEndTimeoutRef.current || forceEndCountdownIntervalRef.current) return;
+        hostAloneForceEndTimeoutRef.current = setTimeout(() => {
+            hostAloneForceEndTimeoutRef.current = null;
+            const stillAlone =
+                isHostRef.current &&
+                hasDailyJoinedRef.current &&
+                !everHadRemoteParticipantRef.current &&
+                (participants.filter((p) => !p.local).length === 0);
+            if (!stillAlone) return;
+            callDiagnostics.log(huddleIdRef.current, 'host_alone_force_end_countdown_started');
+            startForceEndCountdown();
+        }, HOST_ALONE_FORCE_END_DELAY_MS);
+    };
+
+	    const statusText = isForceEnding
+            ? `Call ends in ${forceEndCountdown}s`
+            : phase === 'ending'
 	        ? 'Ending call...'
 	        : phase === 'ringing'
 	            ? (isHost && hasLocalJoinedDaily && remoteParticipantCount === 0 ? 'Waiting for others...' : 'Ringing...')
@@ -825,6 +947,7 @@ const HuddleScreen = ({ navigation, route }) => {
                     <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => {
+                            if (forceEndCountdownIntervalRef.current) return;
                             keepAliveOnUnmountRef.current = true;
                             navigation.goBack();
                         }}
@@ -897,11 +1020,19 @@ const HuddleScreen = ({ navigation, route }) => {
                 </View>
 
                 <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + 20 }]}>
-                    <TouchableOpacity style={[styles.controlButton, isMuted && styles.controlButtonActive]} onPress={toggleMute}>
+                    <TouchableOpacity
+                        style={[styles.controlButton, isMuted && styles.controlButtonActive]}
+                        onPress={toggleMute}
+                        disabled={isForceEnding}
+                    >
                         <Ionicons name={isMuted ? 'mic-off' : 'mic'} size={24} color={isMuted ? '#FFFFFF' : '#1E2A3D'} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]} onPress={toggleSpeaker}>
+                    <TouchableOpacity
+                        style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
+                        onPress={toggleSpeaker}
+                        disabled={isForceEnding}
+                    >
                         <Ionicons name={isSpeakerOn ? 'volume-high' : 'volume-mute'} size={24} color={isSpeakerOn ? '#FFFFFF' : '#1E2A3D'} />
                     </TouchableOpacity>
 
@@ -942,6 +1073,33 @@ const HuddleScreen = ({ navigation, route }) => {
                         ))}
                     </ScrollView>
                 </View>
+
+                {showHostAlonePrompt && (
+                    <View style={styles.promptOverlay}>
+                        <View style={styles.promptCard}>
+                            <Text style={styles.promptTitle}>No one else has joined yet</Text>
+                            <Text style={styles.promptText}>
+                                Would you like to end this huddle now?
+                            </Text>
+                            <View style={styles.promptActions}>
+                                <TouchableOpacity style={styles.promptBtnSecondary} onPress={handleHostAloneKeepWaiting}>
+                                    <Text style={styles.promptBtnSecondaryText}>No, keep waiting</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.promptBtnPrimary} onPress={handleHostAloneEndNow}>
+                                    <Text style={styles.promptBtnPrimaryText}>End huddle</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                )}
+
+                {isForceEnding && (
+                    <View style={styles.forceEndOverlay}>
+                        <Text style={styles.forceEndTitle}>Call ends in</Text>
+                        <Text style={styles.forceEndCountdown}>{forceEndCountdown}</Text>
+                        <Text style={styles.forceEndSubtitle}>Ending automatically to save call costs</Text>
+                    </View>
+                )}
             </SafeAreaView>
         </ExpoLinearGradient>
     );
@@ -1134,6 +1292,100 @@ const styles = StyleSheet.create({
     },
     rosterStatusTextPending: {
         color: '#667085'
+    },
+    promptOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.46)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+        zIndex: 40
+    },
+    promptCard: {
+        width: '100%',
+        maxWidth: 360,
+        borderRadius: 16,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        paddingHorizontal: 18,
+        paddingVertical: 18
+    },
+    promptTitle: {
+        fontSize: 19,
+        fontWeight: '800',
+        color: '#111827',
+        textAlign: 'center'
+    },
+    promptText: {
+        marginTop: 8,
+        fontSize: 14,
+        lineHeight: 20,
+        color: '#4B5563',
+        textAlign: 'center'
+    },
+    promptActions: {
+        marginTop: 16,
+        gap: 10
+    },
+    promptBtnPrimary: {
+        backgroundColor: COLORS.error,
+        borderRadius: 12,
+        height: 46,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    promptBtnPrimaryText: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '700'
+    },
+    promptBtnSecondary: {
+        backgroundColor: '#F3F4F6',
+        borderRadius: 12,
+        height: 46,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    promptBtnSecondaryText: {
+        color: '#111827',
+        fontSize: 15,
+        fontWeight: '700'
+    },
+    forceEndOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(127, 29, 29, 0.88)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50
+    },
+    forceEndTitle: {
+        color: '#FEE2E2',
+        fontSize: 24,
+        fontWeight: '800'
+    },
+    forceEndCountdown: {
+        marginTop: 10,
+        color: '#FFFFFF',
+        fontSize: 120,
+        lineHeight: 120,
+        fontWeight: '900'
+    },
+    forceEndSubtitle: {
+        marginTop: 8,
+        color: '#FECACA',
+        fontSize: 15,
+        fontWeight: '700',
+        textAlign: 'center',
+        paddingHorizontal: 24
     },
     errorScreen: {
         flex: 1,

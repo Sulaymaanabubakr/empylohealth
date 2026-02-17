@@ -17,16 +17,6 @@ import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/ci
 
 const { width } = Dimensions.get('window');
 
-const getWellbeingRingColor = (member = {}) => {
-    const rawScore = member?.score;
-    const score =
-        typeof rawScore === 'number'
-            ? rawScore
-            : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
-    if (!Number.isFinite(score)) return '#BDBDBD';
-    return score >= 70 ? '#2E7D32' : '#C62828';
-};
-
 const resolveMemberScore = (data = {}) => {
     const raw = data?.wellbeingScore ?? data?.stats?.overallScore;
     if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
@@ -596,15 +586,13 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     activeOpacity={0.85}
                                     onPress={() => openMemberModal(member)}
                                 >
-                                    <View style={[styles.memberWellbeingRing, { borderColor: getWellbeingRingColor(member) }]}>
-                                        <Avatar
-                                            uri={member.image}
-                                            name={member.name}
-                                            size={48}
-                                            showWellbeingRing
-                                            wellbeingScore={member?.score}
-                                        />
-                                    </View>
+                                    <Avatar
+                                        uri={member.image}
+                                        name={member.name}
+                                        size={48}
+                                        showWellbeingRing
+                                        wellbeingScore={member?.score}
+                                    />
                                     <View style={styles.memberInfo}>
                                         <Text style={styles.memberName}>{member.name}</Text>
                                         <Text style={styles.memberStatus}>
@@ -973,11 +961,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 16,
         backgroundColor: '#FFF',
-    },
-    memberWellbeingRing: {
-        borderWidth: 2,
-        borderRadius: 26,
-        padding: 1
     },
     memberInfo: {
         flex: 1,
