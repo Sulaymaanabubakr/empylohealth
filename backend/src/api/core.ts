@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import apn from 'apn';
 import { v2 as cloudinary } from 'cloudinary';
 import { seedChallengeData, seedResourceData, seedAffirmationData, seedAffirmationImages } from '../seedData';
@@ -2486,7 +2487,9 @@ export const ringHuddleParticipants = regionalFunctions.https.onCall(async (data
     }
 });
 
-export const ringPendingHuddles = regionalFunctions.pubsub.schedule('every 1 minutes').onRun(async () => {
+export const ringPendingHuddles = onSchedule(
+    { schedule: 'every 1 minutes', region: 'europe-west1' },
+    async () => {
     try {
         const snapshot = await db.collection('huddles').where('isActive', '==', true).limit(200).get();
         let processed = 0;
@@ -2544,10 +2547,10 @@ export const ringPendingHuddles = regionalFunctions.pubsub.schedule('every 1 min
         }
 
         console.log('[ringPendingHuddles] processed:', processed, 'notified:', notified);
-        return null;
+        return;
     } catch (error) {
         console.error('[ringPendingHuddles] failed', error);
-        return null;
+        return;
     }
 });
 
@@ -2655,7 +2658,9 @@ export const updateHuddleState = regionalFunctions.https.onCall(async (data, con
  * - ringing: keep long enough for host-side timeout UX (2m prompt + 5m grace + countdown)
  * - accepted (but not ongoing): still guard against stale sessions
  */
-export const cleanupStaleHuddles = regionalFunctions.pubsub.schedule('every 1 minutes').onRun(async () => {
+export const cleanupStaleHuddles = onSchedule(
+    { schedule: 'every 1 minutes', region: 'europe-west1' },
+    async () => {
     const now = Date.now();
     // UX target: 2 min prompt + 5 min grace + forced 5-second countdown.
     // Keep backend cleanup just above that so app-side flow can complete first.
@@ -2696,10 +2701,10 @@ export const cleanupStaleHuddles = regionalFunctions.pubsub.schedule('every 1 mi
         }
 
         console.log('[cleanupStaleHuddles] ended:', ended);
-        return null;
+        return;
     } catch (error) {
         console.error('[cleanupStaleHuddles] failed', error);
-        return null;
+        return;
     }
 });
 
@@ -3332,17 +3337,26 @@ export const getSeedStatus = regionalFunctions.https.onRequest(async (req, res) 
 // UK time (DST-safe). Intentionally not configurable: app-wide scheduling is UK-local.
 const AFFIRMATION_TIMEZONE = 'Europe/London';
 
-export const sendAffirmationsMorning = regionalFunctions.pubsub.schedule('0 8 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
-    await sendDailyAffirmationsNotification(0, 'Morning Affirmation');
-});
+export const sendAffirmationsMorning = onSchedule(
+    { schedule: '0 8 * * *', timeZone: AFFIRMATION_TIMEZONE, region: 'europe-west1' },
+    async () => {
+        await sendDailyAffirmationsNotification(0, 'Morning Affirmation');
+    }
+);
 
-export const sendAffirmationsAfternoon = regionalFunctions.pubsub.schedule('0 13 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
-    await sendDailyAffirmationsNotification(1, 'Afternoon Affirmation');
-});
+export const sendAffirmationsAfternoon = onSchedule(
+    { schedule: '0 13 * * *', timeZone: AFFIRMATION_TIMEZONE, region: 'europe-west1' },
+    async () => {
+        await sendDailyAffirmationsNotification(1, 'Afternoon Affirmation');
+    }
+);
 
-export const sendAffirmationsEvening = regionalFunctions.pubsub.schedule('0 19 * * *').timeZone(AFFIRMATION_TIMEZONE).onRun(async () => {
-    await sendDailyAffirmationsNotification(2, 'Evening Affirmation');
-});
+export const sendAffirmationsEvening = onSchedule(
+    { schedule: '0 19 * * *', timeZone: AFFIRMATION_TIMEZONE, region: 'europe-west1' },
+    async () => {
+        await sendDailyAffirmationsNotification(2, 'Evening Affirmation');
+    }
+);
 
 // ==========================================
 // CONTACT (WEB) FUNCTIONS

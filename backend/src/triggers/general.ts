@@ -100,13 +100,13 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                 notificationBatch.set(notifRef, {
                     uid,
                     title: isGroup ? circleName : senderName,
-                    subtitle: message.type === 'text' ? message.text : 'Sent a photo',
+                    subtitle: String(message.text || 'New message'),
                     type: 'CHAT_MESSAGE',
                     chatId,
                     senderId,
                     senderName,
                     messageId,
-                    image: isGroup ? circleImage : senderImage,
+                    avatar: isGroup ? circleImage : senderImage,
                     read: false,
                     createdAt: admin.firestore.FieldValue.serverTimestamp()
                 });
@@ -115,37 +115,40 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
 
             if (expoTokens.length === 0 && fcmTokens.length === 0) return;
 
+            const messageText = String(message?.text || '').trim();
             const payload = {
                 title: isGroup ? circleName : senderName,
-                body: message.type === 'text'
-                    ? (isGroup ? `${senderName}: ${message.text}` : String(message.text || 'New message'))
-                    : (isGroup ? `${senderName} sent a photo` : 'Sent a photo'),
+                body: isGroup ? `${senderName}: ${messageText || 'New message'}` : (messageText || 'New message'),
                 categoryId: 'chat-message-actions',
                 data: {
                     chatId: chatId,
+                    conversationId: chatId,
                     messageId,
                     senderId: String(senderId || ''),
                     senderName,
-                    image: isGroup ? circleImage : senderImage,
+                    senderAvatar: isGroup ? circleImage : senderImage,
                     type: 'CHAT_MESSAGE',
                     categoryId: 'chat-message-actions'
-                },
-                image: isGroup ? circleImage : senderImage
+                }
             };
 
             // 4a. Send FCM notifications (native tokens)
             if (fcmTokens.length > 0) {
                 const androidNotification: admin.messaging.AndroidNotification = {
                     channelId: 'default',
-                    ...(payload.image ? { imageUrl: payload.image } : {})
+                    tag: chatId
                 };
                 const apnsConfig: admin.messaging.ApnsConfig = {
+                    headers: {
+                        'apns-push-type': 'alert',
+                        'apns-priority': '10'
+                    },
                     payload: {
                         aps: {
-                            category: 'chat-message-actions'
+                            category: 'chat-message-actions',
+                            'thread-id': chatId
                         }
-                    },
-                    ...(payload.image ? { fcmOptions: { imageUrl: payload.image } } : {})
+                    }
                 };
                 const messagePayload: admin.messaging.MulticastMessage = {
                     tokens: fcmTokens,
@@ -155,6 +158,7 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                     },
                     data: payload.data,
                     android: {
+                        priority: 'high',
                         notification: androidNotification
                     },
                     apns: apnsConfig
@@ -171,8 +175,7 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                     title: payload.title,
                     body: payload.body,
                     data: payload.data,
-                    categoryId: payload.categoryId,
-                    ...(payload.image ? { imageUrl: payload.image } : {})
+                    categoryId: payload.categoryId
                 }));
 
                 try {

@@ -15,10 +15,10 @@ export declare const joinHuddle: import("firebase-functions/v1").HttpsFunction &
 export declare const declineHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const endHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const ringHuddleParticipants: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
-export declare const ringPendingHuddles: import("firebase-functions/v1").CloudFunction<unknown>;
+export declare const ringPendingHuddles: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const updateHuddleState: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateHuddleConnection: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
-export declare const cleanupStaleHuddles: import("firebase-functions/v1").CloudFunction<unknown>;
+export declare const cleanupStaleHuddles: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const scheduleHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const deleteScheduledHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const createDirectChat: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
@@ -41,9 +41,9 @@ export declare const getExploreContent: import("firebase-functions/v1").HttpsFun
 export declare const getRecommendedContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const submitContactForm: import("firebase-functions/v1").HttpsFunction;
-export declare const sendAffirmationsMorning: import("firebase-functions/v1").CloudFunction<unknown>;
-export declare const sendAffirmationsAfternoon: import("firebase-functions/v1").CloudFunction<unknown>;
-export declare const sendAffirmationsEvening: import("firebase-functions/v1").CloudFunction<unknown>;
+export declare const sendAffirmationsMorning: import("firebase-functions/scheduler").ScheduleFunction;
+export declare const sendAffirmationsAfternoon: import("firebase-functions/scheduler").ScheduleFunction;
+export declare const sendAffirmationsEvening: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const deleteUserAccount: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getDashboardStats: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAllUsers: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

@@ -148,7 +148,7 @@ export declare const endHuddle: functions.HttpsFunction & functions.Runnable<any
  * Callable Function: 'ringHuddleParticipants'
  */
 export declare const ringHuddleParticipants: functions.HttpsFunction & functions.Runnable<any>;
-export declare const ringPendingHuddles: functions.CloudFunction<unknown>;
+export declare const ringPendingHuddles: import("firebase-functions/v2/scheduler").ScheduleFunction;
 /**
  * Join/Leave Huddle
  * Callable Function: 'updateHuddleState'
@@ -159,7 +159,7 @@ export declare const updateHuddleState: functions.HttpsFunction & functions.Runn
  * - ringing: keep long enough for host-side timeout UX (2m prompt + 5m grace + countdown)
  * - accepted (but not ongoing): still guard against stale sessions
  */
-export declare const cleanupStaleHuddles: functions.CloudFunction<unknown>;
+export declare const cleanupStaleHuddles: import("firebase-functions/v2/scheduler").ScheduleFunction;
 /**
  * Schedule a Huddle
  * Callable Function: 'scheduleHuddle'
@@ -194,9 +194,9 @@ export declare const seedAffirmations: functions.HttpsFunction & functions.Runna
 export declare const backfillAffirmationImages: functions.HttpsFunction;
 export declare const seedAll: functions.HttpsFunction;
 export declare const getSeedStatus: functions.HttpsFunction;
-export declare const sendAffirmationsMorning: functions.CloudFunction<unknown>;
-export declare const sendAffirmationsAfternoon: functions.CloudFunction<unknown>;
-export declare const sendAffirmationsEvening: functions.CloudFunction<unknown>;
+export declare const sendAffirmationsMorning: import("firebase-functions/v2/scheduler").ScheduleFunction;
+export declare const sendAffirmationsAfternoon: import("firebase-functions/v2/scheduler").ScheduleFunction;
+export declare const sendAffirmationsEvening: import("firebase-functions/v2/scheduler").ScheduleFunction;
 export declare const submitContactForm: functions.HttpsFunction;
 export declare const deleteUserAccount: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=core.d.ts.map
