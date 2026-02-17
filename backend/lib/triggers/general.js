@@ -152,7 +152,10 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                 messageId,
                 senderId: String(senderId || ''),
                 senderName,
+                chatName: isGroup ? circleName : senderName,
+                isGroup: String(isGroup),
                 senderAvatar: isGroup ? circleImage : senderImage,
+                chatAvatar: isGroup ? circleImage : senderImage,
                 type: 'CHAT_MESSAGE',
                 categoryId: 'chat-message-actions'
             }

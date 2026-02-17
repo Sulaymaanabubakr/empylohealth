@@ -155,6 +155,7 @@ const handleNotificationAction = async (response) => {
     const actionId = response?.actionIdentifier;
     const data = extractNotificationData(response);
     const chatId = data?.chatId;
+    const notificationId = response?.notification?.request?.identifier || null;
 
     if (!actionId || actionId === Notifications.DEFAULT_ACTION_IDENTIFIER) {
         return navigateFromNotificationData(response);
@@ -164,16 +165,27 @@ const handleNotificationAction = async (response) => {
         if (chatId) {
             await markChatNotificationsAsRead(chatId).catch(() => {});
         }
+        if (notificationId) {
+            await Notifications.dismissNotificationAsync(notificationId).catch(() => {});
+        }
         return true;
     }
 
     if (actionId === CHAT_MESSAGE_ACTION_REPLY) {
         const replyText = (response?.userText || '').trim();
-        if (!chatId || !replyText) return true;
-        await chatService.sendMessage(chatId, replyText, 'text', null).catch((error) => {
+        if (!chatId || !replyText) {
+            if (notificationId) {
+                await Notifications.dismissNotificationAsync(notificationId).catch(() => {});
+            }
+            return true;
+        }
+        await markChatNotificationsAsRead(chatId).catch(() => {});
+        if (notificationId) {
+            await Notifications.dismissNotificationAsync(notificationId).catch(() => {});
+        }
+        chatService.sendMessage(chatId, replyText, 'text', null).catch((error) => {
             console.error('[NotificationRouting] Quick reply failed', error);
         });
-        await markChatNotificationsAsRead(chatId).catch(() => {});
         return true;
     }
 
@@ -300,7 +312,8 @@ export const notificationService = {
             handleNotification: async (notification) => {
                 const shownAsNativeCall = await maybeShowNativeIncomingCall(notification);
                 return {
-                    shouldShowAlert: !shownAsNativeCall,
+                    shouldShowBanner: !shownAsNativeCall,
+                    shouldShowList: !shownAsNativeCall,
                     shouldPlaySound: true,
                     shouldSetBadge: false
                 };
