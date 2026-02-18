@@ -8,6 +8,7 @@ import Terms from './pages/legal/Terms';
 import DeleteAccount from './pages/legal/DeleteAccount';
 import CommunityGuidelines from './pages/legal/CommunityGuidelines';
 import Download from './pages/Download';
+import OpenInApp from './pages/OpenInApp';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route path="/contact" element={<Contact />} />
 
           <Route path="/download" element={<Download />} />
+          <Route path="/open/:type/:id" element={<OpenInApp />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/delete-account" element={<DeleteAccount />} />

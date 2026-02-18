@@ -52,6 +52,7 @@ import AboutCirclesScreen from './screens/AboutCirclesScreen';
 import { navigationRef, flushPendingNavigation, navigate } from './navigation/navigationRef';
 import { huddleService } from './services/api/huddleService';
 import { parseDeepLink } from './utils/deepLinks';
+import { pendingDeepLink } from './services/deepLink/pendingDeepLink';
 import { biometricPrefs } from './services/security/biometricPrefs';
 import { userService } from './services/api/userService';
 import { auth } from './services/firebaseConfig';
@@ -457,9 +458,18 @@ export default function Navigation() {
         }, 2600);
     };
 
-    const routeFromDeepLink = (url) => {
+    const routeFromDeepLink = async (url, options = {}) => {
+        const { persistIfUnauthed = true } = options;
         const parsed = parseDeepLink(url);
         if (!parsed) return false;
+
+        if (routeTarget === 'UNAUTH') {
+            if (persistIfUnauthed) {
+                await pendingDeepLink.save(url).catch(() => {});
+            }
+            navigate('Onboarding');
+            return true;
+        }
 
         if (parsed.type === 'circle' && parsed.id) {
             const didNavigate = navigate('CircleDetail', { circle: { id: parsed.id } });
@@ -490,6 +500,20 @@ export default function Navigation() {
             if (url) routeFromDeepLink(url);
         });
         return () => sub.remove();
+    }, [routeTarget]);
+
+    useEffect(() => {
+        if (routeTarget === 'UNAUTH') return;
+        let cancelled = false;
+        const resolvePending = async () => {
+            const pendingUrl = await pendingDeepLink.consume().catch(() => '');
+            if (!pendingUrl || cancelled) return;
+            await routeFromDeepLink(pendingUrl, { persistIfUnauthed: false });
+        };
+        resolvePending().catch(() => {});
+        return () => {
+            cancelled = true;
+        };
     }, [routeTarget]);
 
     useEffect(() => {
