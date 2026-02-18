@@ -4,6 +4,7 @@ import { chatRepository } from '../repositories/ChatRepository';
 import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { presenceRepository } from '../repositories/PresenceRepository';
 import { resolveWellbeingScore } from '../../utils/wellbeing';
+import { isPresenceOnline } from '../../utils/presence';
 
 export const chatService = {
     createDirectChat: async (recipientId) => {
@@ -99,7 +100,7 @@ export const chatService = {
                             const userData = userDoc.exists() ? userDoc.data() : {};
                             name = userData?.name || userData?.displayName || 'Anonymous';
                             avatar = userData?.photoURL || null;
-                            isOnline = presence?.state === 'online';
+                            isOnline = isPresenceOnline(presence);
                             data.wellbeingScore = resolveWellbeingScore(userData);
                             data.wellbeingLabel = userData?.wellbeingLabel || userData?.wellbeingStatus || '';
                         } catch {
@@ -230,7 +231,7 @@ export const chatService = {
                         const userData = userDoc.exists() ? userDoc.data() : {};
                         name = userData?.name || userData?.displayName || 'Anonymous';
                         avatar = userData?.photoURL || null;
-                        isOnline = presence?.state === 'online';
+                        isOnline = isPresenceOnline(presence);
                         data.wellbeingScore = resolveWellbeingScore(userData);
                         data.wellbeingLabel = userData?.wellbeingLabel || userData?.wellbeingStatus || '';
                     } catch {

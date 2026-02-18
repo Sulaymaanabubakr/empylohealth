@@ -16,6 +16,7 @@ import { presenceRepository } from '../services/repositories/PresenceRepository'
 import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 import { buildCircleShareText } from '../utils/deepLinks';
+import { isPresenceOnline, presenceFreshnessMs } from '../utils/presence';
 
 const { width } = Dimensions.get('window');
 
@@ -59,6 +60,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [nowMs, setNowMs] = useState(Date.now());
     const [reminderLoadingId, setReminderLoadingId] = useState(null);
+    const [presenceTick, setPresenceTick] = useState(0);
 
     const memberCount = getCircleMemberCount(circle);
     const isFullForNonMembers = !isMember && memberCount >= MAX_CIRCLE_MEMBERS;
@@ -150,7 +152,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                             name: data?.name || data?.displayName || 'Member',
                             image: data?.photoURL || '',
                             role: memberRole,
-                            status: presence?.state === 'online' ? 'online' : 'offline',
+                            status: isPresenceOnline(presence) ? 'online' : 'offline',
                             score: resolveMemberScore(data)
                         };
                     })
@@ -171,7 +173,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
             unsubscribe();
             unsubscribeEvents();
         };
-    }, [circleId, circle?.members, circle?.adminId, user?.uid]);
+    }, [circleId, circle?.members, circle?.adminId, user?.uid, presenceTick]);
 
     useEffect(() => {
         if (!circleId) return undefined;
@@ -196,6 +198,11 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     useEffect(() => {
         const timer = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        const timer = setInterval(() => setPresenceTick((v) => v + 1), Math.max(15000, presenceFreshnessMs / 2));
         return () => clearInterval(timer);
     }, []);
 

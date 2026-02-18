@@ -10,6 +10,7 @@ import { presenceRepository } from '../services/repositories/PresenceRepository'
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { COLORS, SPACING } from '../theme/theme';
+import { isPresenceOnline } from '../utils/presence';
 
 const labelFromScore = (score) => {
     const n = Number(score);
@@ -154,6 +155,8 @@ const PublicProfileScreen = ({ navigation, route }) => {
         }
     };
 
+    const isOnline = isPresenceOnline(presence);
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="dark-content" backgroundColor="#F7F9FB" />
@@ -181,8 +184,8 @@ const PublicProfileScreen = ({ navigation, route }) => {
                         </View>
                         <Text style={styles.name}>{profile.name}</Text>
                         <View style={styles.statusRow}>
-                            <View style={[styles.presenceDot, presence?.state === 'online' ? styles.presenceOnline : styles.presenceOffline]} />
-                            <Text style={styles.statusText}>{presence?.state === 'online' ? 'Online' : 'Offline'}</Text>
+                            <View style={[styles.presenceDot, isOnline ? styles.presenceOnline : styles.presenceOffline]} />
+                            <Text style={styles.statusText}>{isOnline ? 'Online' : 'Offline'}</Text>
                         </View>
                         <Text style={styles.scoreLine}>{profile.wellbeingLabel}</Text>
                     </LinearGradient>

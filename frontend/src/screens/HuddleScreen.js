@@ -14,6 +14,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { callDiagnostics } from '../services/calling/callDiagnostics';
 import { loopingSound } from '../services/audio/loopingSound';
 import { resolveWellbeingScore } from '../utils/wellbeing';
+import { useModal } from '../context/ModalContext';
 
 const MAX_VISIBLE_PARTICIPANTS = 8;
 const JOIN_TIMEOUT_MS = 15000; // 10-15s
@@ -27,6 +28,7 @@ const MAX_CALL_DURATION_MS = 3600000; // 1 hour
 
 const HuddleScreen = ({ navigation, route }) => {
     const { user, userData } = useAuth();
+    const { showModal } = useModal();
     const insets = useSafeAreaInsets();
     const callObjectRef = useRef(null);
     const hasStartedJoinRef = useRef(false);
@@ -156,6 +158,21 @@ const HuddleScreen = ({ navigation, route }) => {
             return null;
         }
     };
+
+    const toJoinFailureMessage = useCallback((error, fallback = '') => {
+        const raw = String(error?.message || '').toLowerCase();
+        if (raw.includes('already ended')) {
+            return 'This huddle has already ended.';
+        }
+        if (raw.includes('permission') || raw.includes('unauthenticated')) {
+            return 'You do not have permission to join this huddle right now.';
+        }
+        if (raw.includes('timeout') || raw.includes('network') || raw.includes('unavailable')) {
+            return 'Unable to join due to poor network. Please check your connection and try again.';
+        }
+        if (fallback) return fallback;
+        return 'Unable to join due to poor network. Please check your connection and try again.';
+    }, []);
 
     const clearForceEndCountdown = useCallback(() => {
         if (forceEndCountdownIntervalRef.current) {
@@ -323,7 +340,13 @@ const HuddleScreen = ({ navigation, route }) => {
 	                console.warn('[HUDDLE] Daily error:', ev);
 	                stopRingbackTone();
 	                clearAllTimeouts();
-	                leaveCall(isHost, true, true, 'failed_to_connect');
+	                leaveCall(
+                        isHost,
+                        true,
+                        true,
+                        'failed_to_connect',
+                        toJoinFailureMessage(ev, 'Connection dropped. Please check your network and try again.')
+                    );
 	            })
 	        };
 
@@ -331,9 +354,15 @@ const HuddleScreen = ({ navigation, route }) => {
             callObject.on(eventName, handler);
         });
         eventHandlersRef.current = handlers;
-	    }, [clearAllTimeouts, detachCallHandlers, isHost, leaveCall, logMetric, refreshParticipants, stopRingbackTone]);
+	    }, [clearAllTimeouts, detachCallHandlers, isHost, leaveCall, logMetric, refreshParticipants, stopRingbackTone, toJoinFailureMessage]);
 
-    const leaveCall = useCallback(async (endForEveryone = false, navigateBack = true, clearLocalSession = true, endedReason = 'hangup') => {
+    const leaveCall = useCallback(async (
+        endForEveryone = false,
+        navigateBack = true,
+        clearLocalSession = true,
+        endedReason = 'hangup',
+        postLeaveErrorMessage = ''
+    ) => {
         if (isLeavingRef.current) return;
         isLeavingRef.current = true;
         joinFlowCancelledRef.current = true;
@@ -368,6 +397,15 @@ const HuddleScreen = ({ navigation, route }) => {
             } else {
                 navigation.navigate('MainTabs');
             }
+            if (postLeaveErrorMessage) {
+                setTimeout(() => {
+                    showModal({
+                        type: 'error',
+                        title: 'Huddle ended',
+                        message: postLeaveErrorMessage
+                    });
+                }, 0);
+            }
         }
 
         // Best-effort backend cleanup AFTER UI exit.
@@ -380,7 +418,7 @@ const HuddleScreen = ({ navigation, route }) => {
             }
             safeCall(() => huddleService.endHuddleWithReason(currentHuddleId, endedReason));
         }
-    }, [clearAllTimeouts, detachCallHandlers, huddleId, navigation, stopRingbackTone]);
+    }, [clearAllTimeouts, detachCallHandlers, huddleId, navigation, showModal, stopRingbackTone]);
 
     useEffect(() => {
         leaveCallRef.current = leaveCall;
@@ -724,7 +762,13 @@ const HuddleScreen = ({ navigation, route }) => {
                     if (joinStartedSessionRef.current !== joinSession) return;
                     console.warn('[HUDDLE] join timeout');
                     callDiagnostics.log(resolvedHuddleId, 'timeout_join');
-                    leaveCall(isHost, true, true, 'failed_to_connect');
+                    leaveCall(
+                        isHost,
+                        true,
+                        true,
+                        'failed_to_connect',
+                        'Unable to join due to poor network. Please check your connection and try again.'
+                    );
                 }, JOIN_TIMEOUT_MS);
 
                 let activeCallObject = null;
@@ -796,12 +840,12 @@ const HuddleScreen = ({ navigation, route }) => {
                 await stopRingbackTone();
                 console.error('Huddle join failed', error);
                 clearAllTimeouts();
-                leaveCall(isHost, true, true, 'failed_to_connect');
+                leaveCall(isHost, true, true, 'failed_to_connect', toJoinFailureMessage(error));
             }
         };
 
         start();
-    }, [attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, clearForceEndCountdown, clearHostAloneTimers, huddleId, leaveCall, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, user?.displayName, user?.uid, userData?.name]);
+    }, [attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, clearForceEndCountdown, clearHostAloneTimers, huddleId, leaveCall, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, toJoinFailureMessage, user?.displayName, user?.uid, userData?.name]);
 
     const remoteParticipantCount = useMemo(
         () => participants.filter((p) => !p.local).length,
@@ -858,7 +902,13 @@ const HuddleScreen = ({ navigation, route }) => {
             if (remoteParticipantCount > 0) return;
             console.warn('[HUDDLE] accepted-but-alone timeout');
             callDiagnostics.log(huddleId, 'timeout_accepted_alone');
-            leaveCall(isHost, true, true, 'failed_to_connect');
+            leaveCall(
+                isHost,
+                true,
+                true,
+                'failed_to_connect',
+                'No other participant joined in time. Please try again.'
+            );
         }, ALONE_AFTER_ACCEPT_TIMEOUT_MS);
 
         return () => {

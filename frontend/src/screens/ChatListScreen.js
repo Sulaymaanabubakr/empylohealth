@@ -7,6 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
+import { presenceRepository } from '../services/repositories/PresenceRepository';
+import { isPresenceOnline } from '../utils/presence';
 import Avatar from '../components/Avatar';
 import { useModal } from '../context/ModalContext';
 
@@ -25,6 +27,7 @@ const ChatListScreen = ({ navigation }) => {
     const [muteInProgress, setMuteInProgress] = useState(false);
     const [mutingChatId, setMutingChatId] = useState(null);
     const [unreadState, setUnreadState] = useState({ byChat: {}, total: 0 });
+    const [presenceByUid, setPresenceByUid] = useState({});
     const swipeableRefs = useRef({});
 
     useEffect(() => {
@@ -77,15 +80,57 @@ const ChatListScreen = ({ navigation }) => {
         });
     }, [user?.uid]);
 
+    useEffect(() => {
+        if (!user?.uid) return undefined;
+        const directOtherIds = Array.from(
+            new Set(
+                (chats || [])
+                    .filter((chat) => !chat?.isGroup)
+                    .map((chat) => Array.isArray(chat?.participants) ? chat.participants.find((id) => id && id !== user.uid) : null)
+                    .filter(Boolean)
+            )
+        );
+        if (directOtherIds.length === 0) {
+            setPresenceByUid({});
+            return undefined;
+        }
+
+        const unsubscribers = directOtherIds.map((uid) => presenceRepository.subscribeToPresence(uid, (presence) => {
+            setPresenceByUid((prev) => ({ ...prev, [uid]: presence || { state: 'offline', lastChanged: null } }));
+        }));
+        return () => {
+            unsubscribers.forEach((unsubscribe) => {
+                try {
+                    unsubscribe?.();
+                } catch {
+                    // ignore
+                }
+            });
+        };
+    }, [chats, user?.uid]);
+
     const onRefresh = React.useCallback(() => {
         setRefreshing(true);
         setTimeout(() => setRefreshing(false), 900);
     }, []);
 
-    const chatsWithUnread = useMemo(() => chats.map((chat) => ({
-        ...chat,
-        unread: unreadState?.byChat?.[chat.id] || 0
-    })), [chats, unreadState?.byChat]);
+    const chatsWithUnread = useMemo(() => chats.map((chat) => {
+        if (chat?.isGroup) {
+            return {
+                ...chat,
+                unread: unreadState?.byChat?.[chat.id] || 0
+            };
+        }
+        const otherId = Array.isArray(chat?.participants)
+            ? chat.participants.find((id) => id && id !== user?.uid)
+            : null;
+        const livePresence = otherId ? presenceByUid[otherId] : null;
+        return {
+            ...chat,
+            unread: unreadState?.byChat?.[chat.id] || 0,
+            isOnline: livePresence ? isPresenceOnline(livePresence) : Boolean(chat?.isOnline)
+        };
+    }), [chats, presenceByUid, unreadState?.byChat, user?.uid]);
 
     const filteredChats = chatsWithUnread.filter((chat) =>
         (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase())

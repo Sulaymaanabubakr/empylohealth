@@ -10,6 +10,7 @@ import {
 } from 'firebase/database';
 
 const CONNECTED_PATH = '.info/connected';
+const HEARTBEAT_INTERVAL_MS = 30000;
 
 const buildPresencePayload = (state) => ({
     state,
@@ -22,15 +23,29 @@ export const presenceRepository = {
 
         const userStatusRef = ref(rtdb, `status/${uid}`);
         const connectedRef = ref(rtdb, CONNECTED_PATH);
+        let heartbeatInterval = null;
+
+        const clearHeartbeat = () => {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+        };
 
         const handler = async (snap) => {
             if (snap.val() !== true) {
+                clearHeartbeat();
                 return;
             }
 
             try {
                 await onDisconnect(userStatusRef).set(buildPresencePayload('offline'));
                 await set(userStatusRef, buildPresencePayload('online'));
+                if (!heartbeatInterval) {
+                    heartbeatInterval = setInterval(() => {
+                        set(userStatusRef, buildPresencePayload('online')).catch(() => {});
+                    }, HEARTBEAT_INTERVAL_MS);
+                }
             } catch (e) {
                 if (typeof __DEV__ !== 'undefined' && __DEV__) {
                     console.warn('[RTDB] startPresence write failed', e?.message || e);
@@ -44,6 +59,7 @@ export const presenceRepository = {
         return async () => {
             try {
                 connectedUnsubscribe();
+                clearHeartbeat();
                 await set(userStatusRef, buildPresencePayload('offline'));
             } catch {
                 // Ignore cleanup errors.

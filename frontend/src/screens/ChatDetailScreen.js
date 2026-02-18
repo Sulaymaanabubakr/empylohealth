@@ -13,6 +13,7 @@ import { db } from '../services/firebaseConfig';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import { resolveWellbeingScore } from '../utils/wellbeing';
+import { isPresenceOnline } from '../utils/presence';
 import { circleService } from '../services/api/circleService';
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 import { userService } from '../services/api/userService';
@@ -472,7 +473,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         return row?.state === 'typing' && (nowMs - updatedAt) < 8000;
     }).length;
     const isDirectChat = !chat?.isGroup;
-    const isOtherOnline = isDirectChat && otherPresence?.state === 'online';
+    const isOtherOnline = isDirectChat && isPresenceOnline(otherPresence);
     const headerStatusText = activeTypingCount > 0
         ? 'Typing...'
         : (isDirectChat ? (isOtherOnline ? 'Online' : 'Offline') : (chat.members ? `${chat.members} members active` : 'Group'));
