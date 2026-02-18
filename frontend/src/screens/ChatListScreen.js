@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +22,10 @@ const ChatListScreen = ({ navigation }) => {
     const [hydratedCache, setHydratedCache] = useState(false);
     const [deleteInProgress, setDeleteInProgress] = useState(false);
     const [deletingChatId, setDeletingChatId] = useState(null);
+    const [muteInProgress, setMuteInProgress] = useState(false);
+    const [mutingChatId, setMutingChatId] = useState(null);
     const [unreadState, setUnreadState] = useState({ byChat: {}, total: 0 });
+    const swipeableRefs = useRef({});
 
     useEffect(() => {
         if (!user?.uid) return undefined;
@@ -206,6 +209,7 @@ const ChatListScreen = ({ navigation }) => {
                         return;
                     }
                     setChats((prev) => prev.filter((c) => c.id !== chat.id));
+                    swipeableRefs.current?.[chat.id]?.close?.();
                     showModal({
                         type: 'success',
                         title: 'Done',
@@ -235,9 +239,13 @@ const ChatListScreen = ({ navigation }) => {
             confirmText: isMuted ? 'Unmute' : 'Mute',
             cancelText: 'Cancel',
             onConfirm: async () => {
+                if (muteInProgress) return;
                 try {
+                    setMuteInProgress(true);
+                    setMutingChatId(chat.id);
                     await chatService.setChatMuted(chat.id, !isMuted);
                     setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, isMuted: !isMuted } : c)));
+                    swipeableRefs.current?.[chat.id]?.close?.();
                     showModal({
                         type: 'success',
                         title: isMuted ? 'Chat Unmuted' : 'Chat Muted',
@@ -251,6 +259,9 @@ const ChatListScreen = ({ navigation }) => {
                         title: 'Update Failed',
                         message: error?.message || 'Could not update chat mute settings.'
                     });
+                } finally {
+                    setMuteInProgress(false);
+                    setMutingChatId(null);
                 }
             }
         });
@@ -262,24 +273,38 @@ const ChatListScreen = ({ navigation }) => {
             <TouchableOpacity
                 style={[styles.swipeMuteAction, isMuted && styles.swipeUnmuteAction]}
                 onPress={() => handleToggleMuteChat(item)}
+                disabled={muteInProgress || deleteInProgress}
                 activeOpacity={0.9}
             >
                 <Ionicons name={isMuted ? 'notifications-outline' : 'notifications-off-outline'} size={20} color="#FFFFFF" />
-                <Text style={styles.swipeMuteText}>{isMuted ? 'Unmute' : 'Mute'}</Text>
+                <Text style={styles.swipeMuteText}>
+                    {mutingChatId === item?.id && muteInProgress ? 'Please wait' : (isMuted ? 'Unmute' : 'Mute')}
+                </Text>
             </TouchableOpacity>
         );
     };
 
     const renderRightActions = (item) => (
-        <TouchableOpacity style={styles.swipeDeleteAction} onPress={() => handleDeleteChat(item)} activeOpacity={0.9}>
+        <TouchableOpacity
+            style={styles.swipeDeleteAction}
+            onPress={() => handleDeleteChat(item)}
+            disabled={muteInProgress || deleteInProgress}
+            activeOpacity={0.9}
+        >
             <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.swipeDeleteText}>Delete</Text>
+            <Text style={styles.swipeDeleteText}>
+                {deletingChatId === item?.id && deleteInProgress ? 'Please wait' : 'Delete'}
+            </Text>
         </TouchableOpacity>
     );
 
     const renderRow = ({ item }) => (
         <View style={styles.swipeRowWrap}>
             <Swipeable
+                ref={(ref) => {
+                    if (ref) swipeableRefs.current[item.id] = ref;
+                    else delete swipeableRefs.current[item.id];
+                }}
                 renderLeftActions={() => renderLeftActions(item)}
                 renderRightActions={() => renderRightActions(item)}
                 overshootLeft={false}
@@ -373,6 +398,12 @@ const ChatListScreen = ({ navigation }) => {
                 <View style={styles.deleteOverlay}>
                     <ActivityIndicator size="large" color={COLORS.primary} />
                     <Text style={styles.deleteOverlayText}>Deleting...</Text>
+                </View>
+            )}
+            {muteInProgress && (
+                <View style={styles.deleteOverlay}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.deleteOverlayText}>Updating mute settings...</Text>
                 </View>
             )}
         </SafeAreaView>
