@@ -133,25 +133,105 @@ const createExploreActivitySvgDataUri = (input) => {
     const tag = String(input?.tag || 'LEARN');
     const category = String(input?.category || 'Self-development');
     const seed = `${input?.id || ''}|${title}|${tag}|${category}`;
+    const semanticText = `${title} ${tag} ${category}`.toLowerCase();
+    const isSleep = semanticText.includes('sleep') || semanticText.includes('rest') || semanticText.includes('night');
+    const isFocus = semanticText.includes('focus') || semanticText.includes('deep work') || semanticText.includes('attention');
+    const isListening = semanticText.includes('listen') || semanticText.includes('communication') || semanticText.includes('conversation');
     const palette = explorePalettes[hashText(seed) % explorePalettes.length];
-    const safeTitle = escapeXml(title.length > 24 ? `${title.slice(0, 24)}...` : title);
-    const safeTag = escapeXml(tag.length > 12 ? `${tag.slice(0, 12)}...` : tag);
-    const safeCategory = escapeXml(category.length > 20 ? `${category.slice(0, 20)}...` : category);
+    const variant = hashText(`${seed}:v`) % 3;
+    const shirtColor = variant === 0 ? '#4AC08F' : (variant === 1 ? '#57C58D' : '#4BB6A2');
+    const hairColor = variant === 0 ? '#1A2B40' : (variant === 1 ? '#243447' : '#203143');
+    const bookAccent = variant === 0 ? '#45C2A2' : (variant === 1 ? '#3FA7B8' : '#53C985');
+    const iconColor = variant === 0 ? '#8FA0B6' : (variant === 1 ? '#95A4BA' : '#91A7BB');
+    const backgroundBlob = isSleep
+        ? `<ellipse cx="352" cy="214" rx="236" ry="152" fill="#DDEAC0" opacity="0.72"/>`
+        : isFocus
+            ? `<ellipse cx="352" cy="214" rx="236" ry="152" fill="#CFE6DE" opacity="0.72"/>`
+            : isListening
+                ? `<ellipse cx="352" cy="214" rx="236" ry="152" fill="#D9EEE9" opacity="0.72"/>`
+                : `<ellipse cx="352" cy="214" rx="236" ry="152" fill="${palette.shape}" opacity="0.58"/>`;
+    const sleepScene = `
+  <path d="M170 298 q34 -32 82 -34 q44 2 78 24 q-18 24 -52 34 q-68 20 -108 -24z" fill="#EAF2D6"/>
+  <rect x="178" y="226" width="196" height="72" rx="22" fill="#F6FAFF" stroke="#203547" stroke-width="4"/>
+  <rect x="160" y="208" width="214" height="22" rx="11" fill="#1E3345"/>
+  <circle cx="392" cy="116" r="26" fill="#E8F0C9"/>
+  <path d="M404 108 q-6 16 -22 20 q6 10 20 10 q20 -4 24 -24 q0 -8 -8 -10z" fill="#263A4F"/>
+  <circle cx="446" cy="168" r="12" fill="#F3F8E1"/>
+  <polygon points="470,186 476,198 490,200 480,210 484,224 470,216 456,224 460,210 450,200 464,198" fill="#F4F8E4"/>
+  <g transform="translate(210 144)">
+    <path d="M40 40 q54 -34 102 -6 q34 18 34 58 q-10 44 -58 54 q-56 8 -96 -24 q-26 -20 -24 -44 q2 -24 42 -38z" fill="${shirtColor}"/>
+    <circle cx="82" cy="22" r="24" fill="#FFE8D6"/>
+    <path d="M64 18 q8 -32 40 -24 q28 8 28 30 q-10 12 -24 8 q-12 -6 -24 -14z" fill="${hairColor}"/>
+    <path d="M76 24 q8 6 16 0" stroke="#1F2C3E" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>`;
+    const focusScene = `
+  <circle cx="236" cy="210" r="94" fill="#E9F3FF"/>
+  <circle cx="236" cy="210" r="76" fill="none" stroke="#3E5D88" stroke-width="11"/>
+  <rect x="268" y="236" width="76" height="14" rx="7" transform="rotate(40 268 236)" fill="#3E5D88"/>
+  <path d="M398 178 q44 -24 80 12 q30 28 18 72 q-12 28 -40 36 q-56 14 -94 -24 q-26 -28 -10 -56 q12 -22 46 -40z" fill="${shirtColor}"/>
+  <circle cx="434" cy="142" r="26" fill="#FFE8D7"/>
+  <path d="M416 138 q8 -34 44 -24 q26 10 24 34 q-8 10 -22 8 q-14 -6 -24 -18z" fill="${hairColor}"/>
+  <path d="M426 146 q8 6 16 0" stroke="#1F2C3E" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <rect x="330" y="290" width="240" height="40" rx="18" fill="#F6FAFF" stroke="#263547" stroke-width="3"/>
+  <rect x="344" y="254" width="220" height="38" rx="18" fill="#FFFFFF" stroke="#263547" stroke-width="3"/>
+  <rect x="356" y="220" width="198" height="36" rx="18" fill="#F3F8FD" stroke="#263547" stroke-width="3"/>
+  <rect x="372" y="214" width="86" height="8" rx="4" fill="#CBD6E4"/>
+  <rect x="462" y="214" width="72" height="8" rx="4" fill="${bookAccent}"/>`;
+    const listeningScene = `
+  <circle cx="574" cy="118" r="34" fill="#EEF2F7" stroke="${iconColor}" stroke-width="2"/>
+  <polygon points="566,118 586,106 586,130" fill="${iconColor}"/>
+  <path d="M550 112 q8 6 0 12 M546 106 q14 12 0 24" stroke="${iconColor}" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M398 174 q46 -26 86 12 q28 30 16 72 q-14 32 -44 40 q-58 14 -98 -26 q-24 -24 -8 -54 q14 -22 48 -44z" fill="${shirtColor}"/>
+  <circle cx="434" cy="138" r="26" fill="#FFE8D7"/>
+  <path d="M416 134 q10 -34 44 -24 q28 10 24 34 q-8 10 -22 8 q-14 -6 -24 -18z" fill="${hairColor}"/>
+  <path d="M426 142 q8 6 16 0" stroke="#1F2C3E" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <rect x="176" y="292" width="278" height="34" rx="14" fill="#EFF3F8" stroke="#263548" stroke-width="3"/>
+  <rect x="186" y="260" width="288" height="34" rx="14" fill="#FFFFFF" stroke="#263548" stroke-width="3"/>
+  <rect x="202" y="228" width="268" height="34" rx="14" fill="#F7F9FC" stroke="#263548" stroke-width="3"/>
+  <rect x="198" y="226" width="92" height="8" rx="4" fill="#C6D3E2"/>
+  <rect x="306" y="226" width="74" height="8" rx="4" fill="${bookAccent}"/>
+  <path d="M610 240 q34 34 12 78 q-32 -20 -26 -68 q6 -10 14 -10z" fill="#4AC08F"/>
+  <path d="M638 246 q-36 28 -26 78 q32 -12 40 -54 q2 -18 -14 -24z" fill="#65D7A7"/>
+  <path d="M606 272 q18 18 8 44" stroke="#2FAF7F" stroke-width="4" fill="none"/>`;
+    const genericScene = `
+  <circle cx="570" cy="120" r="34" fill="#EEF2F7" stroke="${iconColor}" stroke-width="2"/>
+  <polygon points="562,120 582,108 582,132" fill="${iconColor}"/>
+  <path d="M546 115 q8 5 0 10 M541 110 q14 10 0 20" stroke="${iconColor}" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <polygon points="640,208 666,224 640,240" fill="none" stroke="${iconColor}" stroke-width="3"/>
+  <rect x="140" y="194" width="14" height="14" fill="none" stroke="${iconColor}" stroke-width="3"/>
+  <line x1="128" y1="242" x2="146" y2="242" stroke="${iconColor}" stroke-width="3"/>
+  <path d="M592 320 L646 320 L634 380 L604 380 Z" fill="#243447"/>
+  <path d="M614 240 q34 34 12 78 q-32 -20 -26 -68 q6 -10 14 -10z" fill="#4AC08F"/>
+  <path d="M642 246 q-36 28 -26 78 q32 -12 40 -54 q2 -18 -14 -24z" fill="#65D7A7"/>
+  <path d="M610 272 q18 18 8 44" stroke="#2FAF7F" stroke-width="4" fill="none"/>
+  <g transform="translate(180 250)">
+    <rect x="0" y="66" width="278" height="34" rx="14" fill="#EFF3F8" stroke="#263548" stroke-width="3"/>
+    <rect x="10" y="64" width="94" height="8" rx="4" fill="#C6D3E2"/>
+    <rect x="124" y="64" width="74" height="8" rx="4" fill="${bookAccent}"/>
+    <rect x="10" y="34" width="288" height="34" rx="14" fill="#FFFFFF" stroke="#263548" stroke-width="3"/>
+    <rect x="26" y="32" width="98" height="8" rx="4" fill="#D4DEE9"/>
+    <rect x="148" y="32" width="76" height="8" rx="4" fill="#CBD6E3"/>
+    <rect x="26" y="2" width="268" height="34" rx="14" fill="#F7F9FC" stroke="#263548" stroke-width="3"/>
+    <rect x="38" y="0" width="88" height="8" rx="4" fill="#B8C8DB"/>
+    <rect x="154" y="0" width="82" height="8" rx="4" fill="${bookAccent}"/>
+  </g>
+  <g transform="translate(246 118)">
+    <ellipse cx="128" cy="110" rx="18" ry="12" fill="#D9E3EE"/>
+    <circle cx="128" cy="74" r="28" fill="#FFE9D7"/>
+    <path d="M106 60 q8 -42 54 -26 q24 10 18 38 q-14 14 -34 6 q-18 -8 -38 -18z" fill="${hairColor}"/>
+    <path d="M118 74 q10 6 22 0" stroke="#1F2C3E" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M88 110 q40 -28 94 -14 q30 8 26 44 q-8 34 -46 38 q-54 8 -84 -28 q-20 -24 10 -40z" fill="${shirtColor}"/>
+    <path d="M108 146 q24 16 50 10 l24 42 q-40 18 -72 -8z" fill="#183149"/>
+    <path d="M156 150 q24 22 46 26 l-16 22 q-32 -8 -52 -36z" fill="#1F3D56"/>
+    <path d="M102 176 q-24 24 -54 12 l10 -24 q20 2 40 -14z" fill="#183149"/>
+    <path d="M168 192 q20 8 34 -4 l8 18 q-18 16 -42 2z" fill="#FFE9D7"/>
+    <path d="M42 202 q24 8 42 -6 l10 20 q-24 20 -52 8z" fill="#FFE9D7"/>
+  </g>`;
+    const sceneMarkup = isSleep ? sleepScene : (isFocus ? focusScene : (isListening ? listeningScene : genericScene));
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="${palette.card}"/>
-      <stop offset="100%" stop-color="${palette.accent}"/>
-    </linearGradient>
-  </defs>
-  <rect width="720" height="420" fill="url(#g)"/>
-  <circle cx="620" cy="90" r="86" fill="${palette.shape}" opacity="0.35"/>
-  <circle cx="120" cy="350" r="126" fill="${palette.shape}" opacity="0.22"/>
-  <rect x="42" y="44" width="174" height="62" rx="20" fill="rgba(255,255,255,0.22)"/>
-  <text x="129" y="84" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#FFFFFF">${safeTag}</text>
-  <text x="42" y="250" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700" fill="#FFFFFF">${safeTitle}</text>
-  <text x="42" y="300" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="${palette.tag}">${safeCategory}</text>
+  ${backgroundBlob}
+  ${sceneMarkup}
 </svg>`.trim();
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
