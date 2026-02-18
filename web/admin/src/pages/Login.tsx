@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion } from 'framer-motion';
 import { Logo } from '../components/Logo';
+import { FirebaseError } from 'firebase/app';
 
 export const Login = () => {
     const [email, setEmail] = useState('');
@@ -9,8 +10,24 @@ export const Login = () => {
     const [error, setError] = useState('');
     const [loadingLocal, setLoadingLocal] = useState(false);
     const { login } = useAuth();
-    const getErrorMessage = (error: unknown): string =>
-        error instanceof Error ? error.message : 'Invalid credentials. Please try again.';
+    const getErrorMessage = (error: unknown): string => {
+        if (error instanceof FirebaseError) {
+            switch (error.code) {
+                case 'auth/invalid-credential':
+                case 'auth/invalid-login-credentials':
+                    return 'Invalid email or password. Check both and try again.';
+                case 'auth/user-disabled':
+                    return 'This account is disabled. Contact a super admin.';
+                case 'auth/too-many-requests':
+                    return 'Too many failed attempts. Wait a moment and try again.';
+                case 'auth/operation-not-allowed':
+                    return 'Email/password sign-in is not enabled in Firebase Auth.';
+                default:
+                    return error.message || 'Unable to sign in right now.';
+            }
+        }
+        return error instanceof Error ? error.message : 'Unable to sign in right now.';
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

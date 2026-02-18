@@ -46,7 +46,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }, []);
 
     const login = async (email: string, pass: string) => {
-        await signInWithEmailAndPassword(auth, email, pass);
+        const normalizedEmail = (email || '').trim().toLowerCase();
+        const normalizedPass = (pass || '').trim();
+        await signInWithEmailAndPassword(auth, normalizedEmail, normalizedPass);
     };
 
     const logout = () => signOut(auth);

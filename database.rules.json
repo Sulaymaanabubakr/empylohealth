@@ -61,7 +61,7 @@
     "live": {
       "$roomId": {
         ".read": "auth != null",
-        ".write": "auth != null && (data.child('participants').child(auth.uid).exists() || newData.child('participants').child(auth.uid).exists() || auth.token.admin === true)",
+        ".write": "auth != null",
         "state": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 32)"
         },
