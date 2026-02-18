@@ -45,6 +45,7 @@ import TellAFriendScreen from './screens/TellAFriendScreen';
 import FAQScreen from './screens/FAQScreen';
 import CommunityGuidelinesScreen from './screens/CommunityGuidelinesScreen';
 import CommunityEducationScreen from './screens/CommunityEducationScreen';
+import CommunityEducationTopicScreen from './screens/CommunityEducationTopicScreen';
 import AboutCirclesScreen from './screens/AboutCirclesScreen';
 import { navigationRef, flushPendingNavigation, navigate } from './navigation/navigationRef';
 import { huddleService } from './services/api/huddleService';
@@ -67,9 +68,11 @@ export default function Navigation() {
     const [currentRouteName, setCurrentRouteName] = useState('');
     const [biometricLocked, setBiometricLocked] = useState(false);
     const [unlocking, setUnlocking] = useState(false);
+    const [deepLinkBannerText, setDeepLinkBannerText] = useState('');
     const firstRenderLoggedRef = useRef(false);
     const appStateRef = useRef(AppState.currentState);
     const unlockInFlightRef = useRef(false);
+    const deepLinkBannerTimerRef = useRef(null);
 
     const biometricsEnabled = routeTarget !== 'UNAUTH' && Boolean(userData?.settings?.biometrics);
 
@@ -169,19 +172,35 @@ export default function Navigation() {
         });
     };
 
+    const showDeepLinkBanner = (text = 'Opened from shared link') => {
+        if (deepLinkBannerTimerRef.current) {
+            clearTimeout(deepLinkBannerTimerRef.current);
+        }
+        setDeepLinkBannerText(text);
+        deepLinkBannerTimerRef.current = setTimeout(() => {
+            setDeepLinkBannerText('');
+            deepLinkBannerTimerRef.current = null;
+        }, 2600);
+    };
+
     const routeFromDeepLink = (url) => {
         const parsed = parseDeepLink(url);
         if (!parsed) return false;
 
         if (parsed.type === 'circle' && parsed.id) {
-            return navigate('CircleDetail', { circle: { id: parsed.id } });
+            const didNavigate = navigate('CircleDetail', { circle: { id: parsed.id } });
+            if (didNavigate) showDeepLinkBanner('Opened from shared circle link');
+            return didNavigate;
         }
         if (parsed.type === 'affirmation' && parsed.id) {
-            return navigate('Affirmations', { affirmationId: parsed.id });
+            const didNavigate = navigate('Affirmations', { affirmationId: parsed.id });
+            if (didNavigate) showDeepLinkBanner('Opened from shared affirmation link');
+            return didNavigate;
         }
         if (parsed.type === 'invite') {
-            if (routeTarget === 'UNAUTH') return navigate('Onboarding');
-            return navigate('MainTabs');
+            const didNavigate = routeTarget === 'UNAUTH' ? navigate('Onboarding') : navigate('MainTabs');
+            if (didNavigate) showDeepLinkBanner();
+            return didNavigate;
         }
         return false;
     };
@@ -198,6 +217,15 @@ export default function Navigation() {
         });
         return () => sub.remove();
     }, [routeTarget]);
+
+    useEffect(() => {
+        return () => {
+            if (deepLinkBannerTimerRef.current) {
+                clearTimeout(deepLinkBannerTimerRef.current);
+                deepLinkBannerTimerRef.current = null;
+            }
+        };
+    }, []);
 
     return (
         <View style={styles.root}>
@@ -255,6 +283,7 @@ export default function Navigation() {
                         <Stack.Screen name="FAQ" component={FAQScreen} />
                         <Stack.Screen name="AboutCircles" component={AboutCirclesScreen} />
                         <Stack.Screen name="CommunityEducation" component={CommunityEducationScreen} />
+                        <Stack.Screen name="CommunityEducationTopic" component={CommunityEducationTopicScreen} />
                         <Stack.Screen name="CommunityGuidelines" component={CommunityGuidelinesScreen} />
                         <Stack.Screen name="Assessment" component={AssessmentScreen} />
                         <Stack.Screen name="NineIndex" component={NineIndexScreen} />
@@ -262,6 +291,13 @@ export default function Navigation() {
                     </Stack.Navigator>
                 )}
             </NavigationContainer>
+
+            {!!deepLinkBannerText && (
+                <View style={styles.deepLinkBanner}>
+                    <Ionicons name="link-outline" size={16} color="#FFFFFF" />
+                    <Text style={styles.deepLinkBannerText}>{deepLinkBannerText}</Text>
+                </View>
+            )}
 
             {showHuddleBanner && (
                 <View style={styles.huddleBanner}>
@@ -319,6 +355,27 @@ export default function Navigation() {
 const styles = StyleSheet.create({
     root: {
         flex: 1
+    },
+    deepLinkBanner: {
+        position: 'absolute',
+        left: 14,
+        right: 14,
+        top: 56,
+        backgroundColor: 'rgba(17, 24, 39, 0.96)',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderWidth: 1,
+        borderColor: '#334155',
+        flexDirection: 'row',
+        alignItems: 'center',
+        zIndex: 1100
+    },
+    deepLinkBannerText: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: '600',
+        marginLeft: 8
     },
     huddleBanner: {
         position: 'absolute',

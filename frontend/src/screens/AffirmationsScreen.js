@@ -4,10 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { resourceService } from '../services/api/resourceService';
 import { useModal } from '../context/ModalContext';
+import { buildAffirmationShareText } from '../utils/deepLinks';
 
 const { width, height } = Dimensions.get('window');
 
-const AffirmationsScreen = ({ navigation }) => {
+const AffirmationsScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
     const flatListRef = useRef(null);
     const { showModal } = useModal();
@@ -15,6 +16,7 @@ const AffirmationsScreen = ({ navigation }) => {
     const [likedItems, setLikedItems] = useState(new Set());
     const [affirmations, setAffirmations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const targetAffirmationId = route?.params?.affirmationId || null;
 
     useEffect(() => {
         const loadAffirmations = async () => {
@@ -51,10 +53,24 @@ const AffirmationsScreen = ({ navigation }) => {
         }
     };
 
-    const handleShare = async (text) => {
+    useEffect(() => {
+        if (!targetAffirmationId || !affirmations.length) return;
+        const idx = affirmations.findIndex((item) => String(item.id) === String(targetAffirmationId));
+        if (idx >= 0) {
+            setCurrentIndex(idx);
+            setTimeout(() => {
+                flatListRef.current?.scrollToIndex({ index: idx, animated: false });
+            }, 80);
+        }
+    }, [targetAffirmationId, affirmations]);
+
+    const handleShare = async (item) => {
         try {
             await Share.share({
-                message: `${text} - Daily Affirmation via Empylo`,
+                message: buildAffirmationShareText({
+                    text: item?.text || item?.title || item?.content || '',
+                    affirmationId: item?.id
+                }),
             });
         } catch (error) {
             console.log(error.message);
@@ -110,7 +126,7 @@ const AffirmationsScreen = ({ navigation }) => {
                             <Ionicons name="arrow-undo-outline" size={28} color={currentIndex === 0 ? "rgba(255,255,255,0.3)" : "#FFF"} />
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(contentText)}>
+                        <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(item)}>
                             <Ionicons name="share-social-outline" size={28} color="#FFF" />
                         </TouchableOpacity>
 
@@ -165,7 +181,7 @@ const AffirmationsScreen = ({ navigation }) => {
                         <Ionicons name="arrow-undo-outline" size={28} color={currentIndex === 0 ? "rgba(255,255,255,0.3)" : "#FFF"} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(contentText)}>
+                    <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(item)}>
                         <Ionicons name="share-social-outline" size={28} color="#FFF" />
                     </TouchableOpacity>
 

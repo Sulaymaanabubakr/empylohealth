@@ -1,4 +1,5 @@
-const APP_SCHEME = 'exp+circles-app://';
+const APP_SCHEMES = ['exp+circles-app://', 'circles-app://', 'circles://'];
+const APP_SCHEME = APP_SCHEMES[0];
 const WEB_BASE = 'https://www.empylo.com';
 
 export const buildInviteLink = (uid) => `${APP_SCHEME}invite/${encodeURIComponent(uid || '')}`;
@@ -25,7 +26,11 @@ export const buildAffirmationShareText = ({ text, affirmationId }) => {
 
 export const parseDeepLink = (url) => {
     if (!url || typeof url !== 'string') return null;
-    const normalized = url.replace(APP_SCHEME, '').replace(/^https?:\/\/[^/]+\//, '');
+    let normalized = url;
+    APP_SCHEMES.forEach((scheme) => {
+        normalized = normalized.replace(scheme, '');
+    });
+    normalized = normalized.replace(/^https?:\/\/[^/]+\//, '');
     const [path, rawId] = normalized.split('/');
     const id = decodeURIComponent(rawId || '');
     if (!path) return null;
@@ -36,4 +41,3 @@ export const parseDeepLink = (url) => {
     if (key === 'invite' && id) return { type: 'invite', id };
     return null;
 };
-

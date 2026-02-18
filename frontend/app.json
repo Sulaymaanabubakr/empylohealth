@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Circles App",
+    "name": "Circles Health App",
     "slug": "circles-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,6 +17,7 @@
       "bundleIdentifier": "com.empylo.circlesapp",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
+        "CFBundleDisplayName": "Circles Health App",
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": false

@@ -153,7 +153,7 @@ const PersonalProfileScreen = ({ navigation }) => {
                 <Text style={styles.email}>{displayEmail}</Text>
             </View>
 
-            <TouchableOpacity style={styles.qrButton}>
+            <TouchableOpacity style={styles.qrButton} onPress={() => navigation.navigate('TellAFriend')}>
                 <MaterialCommunityIcons name="qrcode-scan" size={20} color="#FFA000" />
             </TouchableOpacity>
         </View>

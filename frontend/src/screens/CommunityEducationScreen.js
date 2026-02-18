@@ -1,43 +1,64 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '../context/AuthContext';
+import { COMMUNITY_EDUCATION_TOPICS } from '../constants/communityEducationTopics';
 
-const educationTracks = [
-    {
-        icon: 'compass-outline',
-        title: 'How Circles works',
-        body: 'Circles helps people support each other through communities, direct chats, huddles, wellbeing check-ins, and guided growth content.',
-        tag: 'Start here'
-    },
-    {
-        icon: 'analytics-outline',
-        title: 'Wellbeing score basics',
-        body: 'Your wellbeing score is driven primarily by your weekly assessment trend, with daily check-ins used as supporting signal to keep your status current.',
-        tag: 'Scoring'
-    },
-    {
-        icon: 'chatbubble-ellipses-outline',
-        title: 'Chats and huddles',
-        body: 'Use chat for ongoing support and huddles for real-time voice/video connection. Scheduled huddles notify members before start time.',
-        tag: 'Realtime'
-    },
-    {
-        icon: 'shield-checkmark-outline',
-        title: 'Safety controls',
-        body: 'You can report messages/users, block direct contacts, mute chats, and use moderator/admin actions to keep communities safe.',
-        tag: 'Safety'
-    },
-    {
-        icon: 'notifications-outline',
-        title: 'Notifications and routing',
-        body: 'Message, affirmation, and huddle notifications are designed to open the relevant screen directly so users can act without losing context.',
-        tag: 'Alerts'
-    }
-];
+const getProgressKey = (uid) => `community_education_progress_v1:${uid || 'guest'}`;
 
 export default function CommunityEducationScreen({ navigation }) {
+    const { user } = useAuth();
+    const [completedIds, setCompletedIds] = useState([]);
+    const progressKey = useMemo(() => getProgressKey(user?.uid), [user?.uid]);
+    const totalTopics = COMMUNITY_EDUCATION_TOPICS.length;
+    const completedCount = completedIds.length;
+    const progressPercent = Math.round((completedCount / totalTopics) * 100);
+
+    const loadProgress = useCallback(async () => {
+        try {
+            const raw = await AsyncStorage.getItem(progressKey);
+            if (!raw) {
+                setCompletedIds([]);
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            setCompletedIds(Array.isArray(parsed?.completedIds) ? parsed.completedIds : []);
+        } catch {
+            setCompletedIds([]);
+        }
+    }, [progressKey]);
+
+    useEffect(() => {
+        loadProgress();
+    }, [loadProgress]);
+
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', loadProgress);
+        return unsubscribe;
+    }, [navigation, loadProgress]);
+
+    const openTopic = (index) => {
+        navigation.navigate('CommunityEducationTopic', { startIndex: index });
+    };
+
+    const continueLearning = () => {
+        const firstIncompleteIndex = COMMUNITY_EDUCATION_TOPICS.findIndex((item) => !completedIds.includes(item.id));
+        openTopic(firstIncompleteIndex >= 0 ? firstIncompleteIndex : 0);
+    };
+
+    const markAllDone = async () => {
+        const allIds = COMMUNITY_EDUCATION_TOPICS.map((item) => item.id);
+        setCompletedIds(allIds);
+        try {
+            await AsyncStorage.setItem(progressKey, JSON.stringify({ completedIds: allIds }));
+        } catch {
+            // no-op
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="dark-content" />
@@ -61,32 +82,39 @@ export default function CommunityEducationScreen({ navigation }) {
                     </View>
                     <Text style={styles.heroTitle}>Learn Circles Faster</Text>
                     <Text style={styles.heroBody}>
-                        Understand the core flows, wellbeing model, and safety actions so your community gets real value from day one.
+                        Tap any topic to start learning. Swipe left and right between lessons, then mark all topics done when you finish.
                     </Text>
+                    <View style={styles.progressRow}>
+                        <Text style={styles.progressText}>{completedCount}/{totalTopics} completed</Text>
+                        <Text style={styles.progressText}>{progressPercent}%</Text>
+                    </View>
                 </LinearGradient>
 
                 <Text style={styles.sectionHeader}>Learning Tracks</Text>
-                {educationTracks.map((track, index) => (
-                    <View key={track.title} style={styles.trackCard}>
-                        <View style={styles.trackRow}>
-                            <View style={styles.trackIndex}>
-                                <Text style={styles.trackIndexText}>{index + 1}</Text>
-                            </View>
-                            <View style={styles.trackIcon}>
-                                <Ionicons name={track.icon} size={18} color="#0D8A80" />
-                            </View>
-                            <View style={styles.trackTextWrap}>
-                                <View style={styles.trackTitleRow}>
-                                    <Text style={styles.trackTitle}>{track.title}</Text>
-                                    <View style={styles.trackTag}>
-                                        <Text style={styles.trackTagText}>{track.tag}</Text>
-                                    </View>
+                {COMMUNITY_EDUCATION_TOPICS.map((track, index) => {
+                    const completed = completedIds.includes(track.id);
+                    return (
+                        <TouchableOpacity key={track.id} style={styles.trackCard} activeOpacity={0.9} onPress={() => openTopic(index)}>
+                            <View style={styles.trackRow}>
+                                <View style={styles.trackIndex}>
+                                    <Text style={styles.trackIndexText}>{index + 1}</Text>
                                 </View>
-                                <Text style={styles.trackBody}>{track.body}</Text>
+                                <View style={styles.trackIcon}>
+                                    <Ionicons name={track.icon} size={18} color="#0D8A80" />
+                                </View>
+                                <View style={styles.trackTextWrap}>
+                                    <View style={styles.trackTitleRow}>
+                                        <Text style={styles.trackTitle}>{track.title}</Text>
+                                        <View style={completed ? styles.trackDoneTag : styles.trackTag}>
+                                            <Text style={completed ? styles.trackDoneText : styles.trackTagText}>{completed ? 'Done' : track.tag}</Text>
+                                        </View>
+                                    </View>
+                                    <Text style={styles.trackBody}>{track.summary}</Text>
+                                </View>
                             </View>
-                        </View>
-                    </View>
-                ))}
+                        </TouchableOpacity>
+                    );
+                })}
 
                 <LinearGradient
                     colors={['#FFFFFF', '#ECF7F6']}
@@ -96,14 +124,14 @@ export default function CommunityEducationScreen({ navigation }) {
                 >
                     <Text style={styles.helpTitle}>Need more help?</Text>
                     <Text style={styles.helpBody}>
-                        Visit FAQ for common questions or open Community Guidelines for behavior standards and enforcement process.
+                        Complete all topics for full onboarding. You can revisit any lesson at any time.
                     </Text>
                     <View style={styles.ctaRow}>
-                        <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('FAQ')}>
-                            <Text style={styles.secondaryBtnText}>Open FAQ</Text>
+                        <TouchableOpacity style={styles.secondaryBtn} onPress={continueLearning}>
+                            <Text style={styles.secondaryBtnText}>Continue</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('CommunityGuidelines')}>
-                            <Text style={styles.primaryBtnText}>Guidelines</Text>
+                        <TouchableOpacity style={styles.primaryBtn} onPress={markAllDone}>
+                            <Text style={styles.primaryBtnText}>Mark All Done</Text>
                         </TouchableOpacity>
                     </View>
                 </LinearGradient>
@@ -156,6 +184,16 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.92)',
         fontSize: 13,
         lineHeight: 18
+    },
+    progressRow: {
+        marginTop: 10,
+        flexDirection: 'row',
+        justifyContent: 'space-between'
+    },
+    progressText: {
+        color: 'rgba(255,255,255,0.95)',
+        fontSize: 12,
+        fontWeight: '700'
     },
     sectionHeader: {
         fontSize: 13,
@@ -224,6 +262,17 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '700',
         color: '#6B7280'
+    },
+    trackDoneTag: {
+        backgroundColor: '#E6F8EF',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 2
+    },
+    trackDoneText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#0F9D58'
     },
     trackBody: {
         fontSize: 13,
