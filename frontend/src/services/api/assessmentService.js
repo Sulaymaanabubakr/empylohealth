@@ -2,6 +2,7 @@ import { db, auth } from '../firebaseConfig';
 import { collection, query, where, orderBy, limit, getDocs, doc, onSnapshot } from 'firebase/firestore';
 import { assessmentRepository } from '../repositories/AssessmentRepository';
 import { contentRepository } from '../repositories/ContentRepository';
+import { callableClient } from './callableClient';
 
 export const assessmentService = {
     submitAssessment: async (type, score, answers = {}, mood = '') => {
@@ -49,12 +50,21 @@ export const assessmentService = {
         const user = auth.currentUser;
         if (!user) return [];
 
+        try {
+            const response = await callableClient.invokeWithAuth('getRecommendedContent', {});
+            const items = Array.isArray(response?.items) ? response.items : [];
+            if (items.length > 0) return items;
+        } catch (error) {
+            console.warn('getRecommendedContent callable failed, using fallback:', error?.message || error);
+        }
+
+        // Fallback path avoids external image URLs if callable is unavailable.
         const userSnap = await getDocs(query(collection(db, 'assessments'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1)));
         const latest = userSnap.docs[0]?.data();
         const challengeTags = Object.keys(latest?.answers || {}).filter((key) => latest.answers[key]);
 
         const allContent = await contentRepository.getExploreContent(40);
-        if (!challengeTags.length) return allContent.slice(0, 10);
+        if (!challengeTags.length) return allContent.slice(0, 10).map((item) => ({ ...item, image: null }));
 
         const matched = allContent
             .filter((item) => {
@@ -63,8 +73,7 @@ export const assessmentService = {
             })
             .slice(0, 10);
 
-        // Fallback: when tags exist but nothing matches, show general content instead of empty.
-        return matched.length > 0 ? matched : allContent.slice(0, 10);
+        return (matched.length > 0 ? matched : allContent.slice(0, 10)).map((item) => ({ ...item, image: null }));
     },
 
     getAssessmentHistory: async (limitCount = 7) => {

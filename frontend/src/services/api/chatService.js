@@ -1,5 +1,5 @@
 import { db, auth } from '../firebaseConfig';
-import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, getDocs, writeBatch, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, getDocs, writeBatch, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { chatRepository } from '../repositories/ChatRepository';
 import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { presenceRepository } from '../repositories/PresenceRepository';
@@ -17,6 +17,15 @@ export const chatService = {
 
     deleteChat: async (chatId, options = {}) => {
         return chatRepository.deleteChat(chatId, options);
+    },
+
+    setChatMuted: async (chatId, muted, uid = auth.currentUser?.uid) => {
+        if (!uid || !chatId) throw new Error('Unable to update mute settings.');
+        await updateDoc(doc(db, 'users', uid), {
+            mutedChatIds: muted ? arrayUnion(chatId) : arrayRemove(chatId),
+            updatedAt: new Date()
+        });
+        return { success: true };
     },
 
     subscribeToMessages: (chatId, callback) => {
@@ -61,11 +70,14 @@ export const chatService = {
         );
         return onSnapshot(q, async (snapshot) => {
             let blockedUserIds = [];
+            let mutedChatIds = [];
             try {
                 const selfDoc = await getDoc(doc(db, 'users', uid));
                 blockedUserIds = Array.isArray(selfDoc.data()?.blockedUserIds) ? selfDoc.data().blockedUserIds : [];
+                mutedChatIds = Array.isArray(selfDoc.data()?.mutedChatIds) ? selfDoc.data().mutedChatIds : [];
             } catch {
                 blockedUserIds = [];
+                mutedChatIds = [];
             }
             const circleCache = new Map();
             const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
@@ -124,6 +136,7 @@ export const chatService = {
                     unread: 0,
                     isOnline,
                     isGroup,
+                    isMuted: mutedChatIds.includes(docSnap.id),
                     me: auth.currentUser?.uid || uid
                 };
             }));
@@ -196,6 +209,7 @@ export const chatService = {
             getDoc(doc(db, 'users', uid)).catch(() => null)
         ]);
         const blockedUserIds = Array.isArray(selfDoc?.data?.()?.blockedUserIds) ? selfDoc.data().blockedUserIds : [];
+        const mutedChatIds = Array.isArray(selfDoc?.data?.()?.mutedChatIds) ? selfDoc.data().mutedChatIds : [];
         const circleCache = new Map();
         const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
             const data = docSnap.data();
@@ -252,6 +266,7 @@ export const chatService = {
                 unread: 0,
                 isOnline,
                 isGroup,
+                isMuted: mutedChatIds.includes(docSnap.id),
                 me: auth.currentUser?.uid || uid
             };
         }));

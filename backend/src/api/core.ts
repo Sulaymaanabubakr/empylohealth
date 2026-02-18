@@ -31,6 +31,68 @@ const pickRandomItems = <T>(items: T[], count: number) => {
     return copy.slice(0, Math.min(count, copy.length));
 };
 
+const recommendationPalettes = [
+    { bg: ['#E3F2FD', '#BBDEFB'], accent: '#1E88E5', shape: '#90CAF9' },
+    { bg: ['#E8F5E9', '#C8E6C9'], accent: '#2E7D32', shape: '#81C784' },
+    { bg: ['#FFF3E0', '#FFE0B2'], accent: '#EF6C00', shape: '#FFB74D' },
+    { bg: ['#F3E5F5', '#E1BEE7'], accent: '#8E24AA', shape: '#BA68C8' },
+    { bg: ['#E0F7FA', '#B2EBF2'], accent: '#00838F', shape: '#4DD0E1' }
+];
+
+const hashText = (input: string) => {
+    let hash = 0;
+    for (let i = 0; i < input.length; i += 1) {
+        hash = ((hash << 5) - hash) + input.charCodeAt(i);
+        hash |= 0;
+    }
+    return Math.abs(hash);
+};
+
+const escapeXml = (text: string) => String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+const createRecommendationSvgDataUri = (input: { id?: string; title?: string; category?: string }) => {
+    const title = String(input?.title || 'Wellbeing');
+    const category = String(input?.category || 'General');
+    const seed = `${input?.id || ''}|${title}|${category}`;
+    const palette = recommendationPalettes[hashText(seed) % recommendationPalettes.length]!;
+    const initial = escapeXml(title.trim().charAt(0).toUpperCase() || 'C');
+    const categoryLabel = escapeXml(category.length > 16 ? `${category.slice(0, 16)}...` : category);
+    const titleLabel = escapeXml(title.length > 22 ? `${title.slice(0, 22)}...` : title);
+
+    const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${palette.bg[0]}"/>
+      <stop offset="100%" stop-color="${palette.bg[1]}"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="420" fill="url(#g)"/>
+  <circle cx="620" cy="90" r="84" fill="${palette.shape}" opacity="0.55"/>
+  <circle cx="110" cy="350" r="120" fill="${palette.shape}" opacity="0.35"/>
+  <rect x="42" y="42" width="124" height="124" rx="30" fill="${palette.accent}" opacity="0.93"/>
+  <text x="104" y="124" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700" fill="#FFFFFF">${initial}</text>
+  <text x="42" y="236" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#0F172A">${titleLabel}</text>
+  <text x="42" y="282" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="${palette.accent}">${categoryLabel}</text>
+</svg>`.trim();
+
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+const mapRecommendedItem = (item: any) => ({
+    ...item,
+    image: createRecommendationSvgDataUri({
+        id: item?.id,
+        title: item?.title,
+        category: item?.category
+    })
+});
+
 const requireAdmin = (context: functions.https.CallableContext) => {
     if (!context.auth?.token?.admin) {
         throw new functions.https.HttpsError('permission-denied', 'Admin privileges required.');
@@ -1771,7 +1833,7 @@ export const getRecommendedContent = regionalFunctions.https.onCall(async (data,
             });
         }
 
-        return { items };
+        return { items: items.map(mapRecommendedItem) };
     } catch (error) {
         console.error("Error fetching recommended content:", error);
         throw new functions.https.HttpsError('internal', 'Unable to fetch recommendations.');

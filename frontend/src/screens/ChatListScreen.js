@@ -114,9 +114,15 @@ const ChatListScreen = ({ navigation }) => {
 
                 <View style={styles.chatContent}>
                     <View style={styles.chatHeader}>
-                        <Text numberOfLines={1} style={styles.chatName}>{item.name}</Text>
+                        <Text numberOfLines={1} style={[styles.chatName, item?.isMuted && styles.chatNameMuted]}>{item.name}</Text>
                         <View style={styles.chatMetaRight}>
                             <Text style={styles.chatTime}>{item.time || ''}</Text>
+                            {item?.isMuted && (
+                                <View style={styles.mutedBadge}>
+                                    <Ionicons name="notifications-off-outline" size={10} color="#64748B" />
+                                    <Text style={styles.mutedBadgeText}>Muted</Text>
+                                </View>
+                            )}
                             {item.unread > 0 && (
                                 <View style={styles.unreadBadge}>
                                     <Text style={styles.unreadText}>{item.unread > 99 ? '99+' : item.unread}</Text>
@@ -218,6 +224,52 @@ const ChatListScreen = ({ navigation }) => {
         });
     };
 
+    const handleToggleMuteChat = (chat) => {
+        const isMuted = !!chat?.isMuted;
+        showModal({
+            type: 'confirmation',
+            title: isMuted ? 'Unmute Chat' : 'Mute Chat',
+            message: isMuted
+                ? 'Unmute this chat to receive message notifications again?'
+                : 'Mute this chat? You will stop receiving notifications for new messages in this conversation.',
+            confirmText: isMuted ? 'Unmute' : 'Mute',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    await chatService.setChatMuted(chat.id, !isMuted);
+                    setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, isMuted: !isMuted } : c)));
+                    showModal({
+                        type: 'success',
+                        title: isMuted ? 'Chat Unmuted' : 'Chat Muted',
+                        message: isMuted
+                            ? 'You will now receive notifications for this chat.'
+                            : 'Notifications for this chat are now muted.'
+                    });
+                } catch (error) {
+                    showModal({
+                        type: 'error',
+                        title: 'Update Failed',
+                        message: error?.message || 'Could not update chat mute settings.'
+                    });
+                }
+            }
+        });
+    };
+
+    const renderLeftActions = (item) => {
+        const isMuted = !!item?.isMuted;
+        return (
+            <TouchableOpacity
+                style={[styles.swipeMuteAction, isMuted && styles.swipeUnmuteAction]}
+                onPress={() => handleToggleMuteChat(item)}
+                activeOpacity={0.9}
+            >
+                <Ionicons name={isMuted ? 'notifications-outline' : 'notifications-off-outline'} size={20} color="#FFFFFF" />
+                <Text style={styles.swipeMuteText}>{isMuted ? 'Unmute' : 'Mute'}</Text>
+            </TouchableOpacity>
+        );
+    };
+
     const renderRightActions = (item) => (
         <TouchableOpacity style={styles.swipeDeleteAction} onPress={() => handleDeleteChat(item)} activeOpacity={0.9}>
             <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
@@ -228,7 +280,9 @@ const ChatListScreen = ({ navigation }) => {
     const renderRow = ({ item }) => (
         <View style={styles.swipeRowWrap}>
             <Swipeable
+                renderLeftActions={() => renderLeftActions(item)}
                 renderRightActions={() => renderRightActions(item)}
+                overshootLeft={false}
                 overshootRight={false}
                 containerStyle={styles.swipeContainer}
             >
@@ -277,7 +331,7 @@ const ChatListScreen = ({ navigation }) => {
             <View style={styles.deleteHintBanner}>
                 <Ionicons name="information-circle-outline" size={16} color="#1A1A1A" />
                 <Text style={styles.deleteHintText}>
-                    Swipe left on a chat to delete. Only circle admins can delete a circle.
+                    Swipe right to mute/unmute. Swipe left to delete. Only circle admins can delete a circle.
                 </Text>
             </View>
 
@@ -429,7 +483,23 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 4
     },
+    swipeMuteAction: {
+        width: 96,
+        marginRight: 8,
+        backgroundColor: '#F57C00',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4
+    },
+    swipeUnmuteAction: {
+        backgroundColor: '#00A99D'
+    },
     swipeDeleteText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '700'
+    },
+    swipeMuteText: {
         color: '#FFFFFF',
         fontSize: 12,
         fontWeight: '700'
@@ -482,8 +552,26 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginRight: 8
     },
+    chatNameMuted: {
+        color: '#5F6B7A'
+    },
     chatMetaRight: {
         alignItems: 'flex-end'
+    },
+    mutedBadge: {
+        marginTop: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#EEF2F7',
+        borderRadius: 9,
+        paddingHorizontal: 6,
+        paddingVertical: 2
+    },
+    mutedBadgeText: {
+        marginLeft: 3,
+        color: '#64748B',
+        fontSize: 10,
+        fontWeight: '700'
     },
     chatTime: {
         color: '#8A93A5',

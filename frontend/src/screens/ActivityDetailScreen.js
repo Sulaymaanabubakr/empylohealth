@@ -2,9 +2,23 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, Platform, StatusBar } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import { SvgXml } from 'react-native-svg';
 import { COLORS, SPACING } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
+
+const decodeSvgDataUri = (uri = '') => {
+    if (!uri || typeof uri !== 'string') return null;
+    if (!uri.startsWith('data:image/svg+xml')) return null;
+    const commaIndex = uri.indexOf(',');
+    if (commaIndex < 0) return null;
+    const encoded = uri.slice(commaIndex + 1);
+    try {
+        return decodeURIComponent(encoded);
+    } catch {
+        return encoded;
+    }
+};
 
 const ActivityDetailScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
@@ -21,6 +35,7 @@ const ActivityDetailScreen = ({ navigation, route }) => {
         );
     }
     const { headerColor = activity.color, isDarkText = false } = activity;
+    const svgXml = decodeSvgDataUri(activity.image);
     const textColor = isDarkText ? '#1A1A1A' : '#FFFFFF';
     const badgeBg = isDarkText ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.25)';
     const badgeBorder = isDarkText ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.4)';
@@ -58,11 +73,15 @@ const ActivityDetailScreen = ({ navigation, route }) => {
                 <View style={styles.contentContainer}>
                     {activity.image ? (
                         <View style={styles.imageContainer}>
-                            <Image
-                                source={{ uri: activity.image }}
-                                style={styles.illustration}
-                                resizeMode="contain"
-                            />
+                            {svgXml ? (
+                                <SvgXml xml={svgXml} width="100%" height="100%" />
+                            ) : (
+                                <Image
+                                    source={{ uri: activity.image }}
+                                    style={styles.illustration}
+                                    resizeMode="contain"
+                                />
+                            )}
                         </View>
                     ) : null}
 

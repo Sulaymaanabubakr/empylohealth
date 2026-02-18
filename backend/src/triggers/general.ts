@@ -102,6 +102,8 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                     const userDoc = await db.collection('users').doc(uid).get();
                     const userData = userDoc.data() || {};
                     const settings = userData?.settings || {};
+                    const mutedChatIds = Array.isArray(userData?.mutedChatIds) ? userData.mutedChatIds : [];
+                    const chatMuted = mutedChatIds.includes(chatId);
                     const showNotifications = isGroup
                         ? (settings.groupShow ?? true)
                         : (settings.msgShow ?? true);
@@ -112,7 +114,7 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
 
                     return {
                         uid,
-                        showNotifications,
+                        showNotifications: showNotifications && !chatMuted,
                         showPreview,
                         playSound,
                         expoTokens: Array.isArray(userData.expoPushTokens) ? userData.expoPushTokens : [],

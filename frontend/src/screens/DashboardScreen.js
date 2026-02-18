@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import Svg, { Circle, G, Defs, LinearGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, G, Defs, LinearGradient, Stop, SvgXml } from 'react-native-svg';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AssessmentModal from '../components/AssessmentModal';
@@ -78,6 +78,19 @@ const getMemberRingColor = (memberWellbeing) => {
         wellbeingLabel: memberWellbeing?.wellbeingLabel,
         wellbeingStatus: memberWellbeing?.wellbeingStatus
     }) || '#BDBDBD';
+};
+
+const decodeSvgDataUri = (uri = '') => {
+    if (!uri || typeof uri !== 'string') return null;
+    if (!uri.startsWith('data:image/svg+xml')) return null;
+    const commaIndex = uri.indexOf(',');
+    if (commaIndex < 0) return null;
+    const encoded = uri.slice(commaIndex + 1);
+    try {
+        return decodeURIComponent(encoded);
+    } catch {
+        return encoded;
+    }
 };
 
 const CircularProgress = ({ score, label }) => {
@@ -628,23 +641,30 @@ const DashboardScreen = ({ navigation }) => {
                 >
                     {recommendations.length > 0 ? (
                         recommendations.map((item, index) => (
-                            <TouchableOpacity
-                                key={item.id || index}
-                                style={styles.recommendationCard}
-                                onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
-                            >
-                                <View style={[styles.recommendationImageContainer, { backgroundColor: item.color || '#E0F7FA' }]}>
-                                    {item.image ? (
-                                        <Image source={{ uri: item.image }} style={styles.recommendationImage} resizeMode="contain" />
-                                    ) : (
-                                        <MaterialCommunityIcons name="feather" size={32} color={COLORS.primary} />
-                                    )}
-                                </View>
-                                <View style={styles.recommendationContent}>
-                                    <Text style={styles.recommendationTitle} numberOfLines={2}>{item.title}</Text>
-                                    <Text style={styles.recommendationTag}>{item.tag || item.category || 'Activity'}</Text>
-                                </View>
-                            </TouchableOpacity>
+                            (() => {
+                                const svgXml = decodeSvgDataUri(item.image);
+                                return (
+                                    <TouchableOpacity
+                                        key={item.id || index}
+                                        style={styles.recommendationCard}
+                                        onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                                    >
+                                        <View style={[styles.recommendationImageContainer, { backgroundColor: item.color || '#E0F7FA' }]}>
+                                            {svgXml ? (
+                                                <SvgXml xml={svgXml} width="100%" height="100%" />
+                                            ) : item.image ? (
+                                                <Image source={{ uri: item.image }} style={styles.recommendationImage} resizeMode="contain" />
+                                            ) : (
+                                                <MaterialCommunityIcons name="feather" size={32} color={COLORS.primary} />
+                                            )}
+                                        </View>
+                                        <View style={styles.recommendationContent}>
+                                            <Text style={styles.recommendationTitle} numberOfLines={2}>{item.title}</Text>
+                                            <Text style={styles.recommendationTag}>{item.tag || item.category || 'Activity'}</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })()
                         ))
                     ) : (
                         <View style={styles.emptyRecommendation}>
