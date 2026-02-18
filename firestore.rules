@@ -30,17 +30,6 @@ service cloud.firestore {
         get(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)).data.role in ['creator', 'admin', 'moderator'];
     }
 
-	    function sharedCircleReadAllowed(targetUid) {
-	      // Firestore rules do not support statements (if/let); keep this expression-only.
-	      return isAuthenticated() &&
-	        exists(/databases/$(database)/documents/userCircles/$(request.auth.uid)) &&
-	        exists(/databases/$(database)/documents/userCircles/$(targetUid)) &&
-	        get(/databases/$(database)/documents/userCircles/$(request.auth.uid)).data.circleIds is list &&
-	        get(/databases/$(database)/documents/userCircles/$(targetUid)).data.circleIds is list &&
-	        get(/databases/$(database)/documents/userCircles/$(request.auth.uid)).data.circleIds
-	          .hasAny(get(/databases/$(database)/documents/userCircles/$(targetUid)).data.circleIds);
-	    }
-
     function circleMembershipOnlyUpdate() {
       return request.resource.data.diff(resource.data).changedKeys().hasOnly([
         'members',

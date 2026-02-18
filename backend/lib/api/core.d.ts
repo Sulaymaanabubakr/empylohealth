@@ -165,11 +165,13 @@ export declare const cleanupStaleHuddles: import("firebase-functions/v2/schedule
  * Callable Function: 'scheduleHuddle'
  */
 export declare const scheduleHuddle: functions.HttpsFunction & functions.Runnable<any>;
+export declare const toggleScheduledHuddleReminder: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Delete a Scheduled Huddle
  * Callable Function: 'deleteScheduledHuddle'
  */
 export declare const deleteScheduledHuddle: functions.HttpsFunction & functions.Runnable<any>;
+export declare const processScheduledHuddles: import("firebase-functions/v2/scheduler").ScheduleFunction;
 /**
  * Submit a Report (Circle Context)
  */

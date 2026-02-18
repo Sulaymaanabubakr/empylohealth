@@ -14,6 +14,7 @@ import { chatService } from '../services/api/chatService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
+import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 
 const { width } = Dimensions.get('window');
 
@@ -55,6 +56,8 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const [memberModalVisible, setMemberModalVisible] = useState(false);
     const [selectedMember, setSelectedMember] = useState(null);
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+    const [nowMs, setNowMs] = useState(Date.now());
+    const [reminderLoadingId, setReminderLoadingId] = useState(null);
 
     const memberCount = getCircleMemberCount(circle);
     const isFullForNonMembers = !isMember && memberCount >= MAX_CIRCLE_MEMBERS;
@@ -190,6 +193,11 @@ const CircleDetailScreen = ({ navigation, route }) => {
         checkPendingStatus();
     }, [circleId]);
 
+    useEffect(() => {
+        const timer = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
     const checkPendingStatus = async () => {
         try {
             if (!circle?.id) return;
@@ -243,6 +251,31 @@ const CircleDetailScreen = ({ navigation, route }) => {
             });
         } finally {
             setIsJoining(false);
+        }
+    };
+
+    const toggleReminder = async (event) => {
+        if (!user?.uid || !circle?.id || !event?.id) return;
+        const reminderUserIds = Array.isArray(event?.reminderUserIds) ? event.reminderUserIds : [];
+        const isSubscribed = reminderUserIds.includes(user.uid);
+        setReminderLoadingId(event.id);
+        try {
+            await circleService.toggleScheduledHuddleReminder(circle.id, event.id, !isSubscribed);
+            showModal({
+                type: 'success',
+                title: isSubscribed ? 'Reminder Off' : 'Reminder On',
+                message: isSubscribed
+                    ? '5-minute reminder removed.'
+                    : 'You will be notified 5 minutes before this huddle starts.'
+            });
+        } catch (error) {
+            showModal({
+                type: 'error',
+                title: 'Reminder Failed',
+                message: error?.message || 'Unable to update reminder.'
+            });
+        } finally {
+            setReminderLoadingId(null);
         }
     };
 
@@ -570,12 +603,29 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     </View>
                                     <View style={styles.eventInfo}>
                                         <Text style={styles.eventTitle}>{event.title}</Text>
-                                        <Text style={styles.eventTime}>
-                                            {event.scheduledAt?.toDate ? event.scheduledAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(event.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        <Text style={styles.eventTime}>{formatEventDateTime(event.scheduledAt)}</Text>
+                                        <Text style={styles.eventCountdown}>
+                                            {toMillis(event.scheduledAt) > nowMs
+                                                ? `Starts in ${formatCountdown(toMillis(event.scheduledAt), nowMs)}`
+                                                : 'Starting now'}
                                         </Text>
                                     </View>
-                                    <TouchableOpacity style={styles.remindBtn} onPress={() => showModal({ type: 'success', title: 'Reminder', message: 'Added to your calendar (Demo)' })}>
-                                        <Ionicons name="notifications-outline" size={20} color={COLORS.primary} />
+                                    <TouchableOpacity
+                                        style={styles.remindBtn}
+                                        disabled={reminderLoadingId === event.id || !isMember}
+                                        onPress={() => toggleReminder(event)}
+                                    >
+                                        {reminderLoadingId === event.id ? (
+                                            <ActivityIndicator size="small" color={COLORS.primary} />
+                                        ) : (
+                                            <Ionicons
+                                                name={(Array.isArray(event?.reminderUserIds) && event.reminderUserIds.includes(user?.uid))
+                                                    ? 'notifications'
+                                                    : 'notifications-outline'}
+                                                size={20}
+                                                color={COLORS.primary}
+                                            />
+                                        )}
                                     </TouchableOpacity>
                                 </View>
                             ))}
@@ -1170,6 +1220,7 @@ const styles = StyleSheet.create({
     eventInfo: { flex: 1, marginLeft: 16 },
     eventTitle: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 4 },
     eventTime: { fontSize: 13, color: '#757575' },
+    eventCountdown: { marginTop: 4, fontSize: 12, fontWeight: '700', color: COLORS.primary },
     remindBtn: { padding: 8, backgroundColor: '#E0F2F1', borderRadius: 12 }
 });
 

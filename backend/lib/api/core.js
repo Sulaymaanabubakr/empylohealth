@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -1653,6 +1653,88 @@ const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUr
         }
     }
 };
+const getCircleIdFromScheduledRef = (ref) => {
+    const segments = ref.path.split('/');
+    const circleIndex = segments.findIndex((seg) => seg === 'circles');
+    if (circleIndex < 0 || circleIndex + 1 >= segments.length)
+        return null;
+    return segments[circleIndex + 1] || null;
+};
+const sendScheduledReminderNotifications = async ({ recipientUids, circleId, chatId, scheduledHuddleId, title, body }) => {
+    if (!recipientUids.length)
+        return;
+    const uniqueRecipients = [...new Set(recipientUids)];
+    const expoTokens = [];
+    const fcmTokens = [];
+    for (const uid of uniqueRecipients) {
+        const userDoc = await db.collection('users').doc(uid).get();
+        const userData = userDoc.data() || {};
+        expoTokens.push(...(userData.expoPushTokens || []));
+        fcmTokens.push(...(userData.fcmTokens || []));
+    }
+    const batch = db.batch();
+    uniqueRecipients.forEach((uid) => {
+        const notifRef = db.collection('notifications').doc();
+        batch.set(notifRef, {
+            uid,
+            title,
+            subtitle: body,
+            type: 'SCHEDULED_HUDDLE_REMINDER',
+            circleId,
+            chatId,
+            scheduledHuddleId,
+            read: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    });
+    await batch.commit();
+    if (fcmTokens.length > 0) {
+        await admin.messaging().sendEachForMulticast({
+            tokens: fcmTokens,
+            notification: { title, body },
+            data: {
+                type: 'SCHEDULED_HUDDLE_REMINDER',
+                circleId,
+                chatId,
+                scheduledHuddleId
+            },
+            android: {
+                priority: 'high',
+                notification: {
+                    channelId: 'default'
+                }
+            },
+            apns: {
+                headers: {
+                    'apns-push-type': 'alert',
+                    'apns-priority': '10'
+                },
+                payload: {
+                    aps: {}
+                }
+            }
+        });
+    }
+    if (expoTokens.length > 0) {
+        const messages = expoTokens.map((token) => ({
+            to: token,
+            title,
+            body,
+            data: {
+                type: 'SCHEDULED_HUDDLE_REMINDER',
+                circleId,
+                chatId,
+                scheduledHuddleId
+            }
+        }));
+        await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(messages)
+        });
+    }
+};
 const getDailyApiKey = () => {
     const key = process.env.DAILY_API_KEY;
     if (!key) {
@@ -2468,6 +2550,125 @@ exports.cleanupStaleHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 m
         return;
     }
 });
+const startScheduledHuddleInternal = async ({ scheduledRef, scheduledData }) => {
+    const circleId = getCircleIdFromScheduledRef(scheduledRef);
+    if (!circleId)
+        throw new Error('Invalid scheduled huddle path');
+    const circleRef = db.collection('circles').doc(circleId);
+    const circleDoc = await circleRef.get();
+    if (!circleDoc.exists)
+        throw new Error('Circle not found');
+    const circle = circleDoc.data() || {};
+    const chatId = String(circle?.chatId || '').trim();
+    if (!chatId)
+        throw new Error('Circle chat missing');
+    const chatRef = db.collection('chats').doc(chatId);
+    const chatDoc = await chatRef.get();
+    if (!chatDoc.exists)
+        throw new Error('Chat not found');
+    const chatData = chatDoc.data() || {};
+    const participants = Array.isArray(chatData?.participants) ? chatData.participants : [];
+    if (!participants.length)
+        throw new Error('No participants to notify');
+    const startedBy = participants.includes(scheduledData?.createdBy)
+        ? scheduledData.createdBy
+        : participants[0];
+    if (!startedBy)
+        throw new Error('Unable to resolve scheduled host');
+    const existingSnap = await db.collection('huddles')
+        .where('chatId', '==', chatId)
+        .where('isActive', '==', true)
+        .limit(1)
+        .get();
+    if (!existingSnap.empty) {
+        const activeDoc = existingSnap.docs[0];
+        const activeData = activeDoc.data() || {};
+        await scheduledRef.set({
+            status: 'started',
+            startedAt: admin.firestore.FieldValue.serverTimestamp(),
+            startedHuddleId: activeDoc.id,
+            startedBy
+        }, { merge: true });
+        return {
+            huddleId: activeDoc.id,
+            roomUrl: activeData?.roomUrl || '',
+            startedBy
+        };
+    }
+    const { roomUrl, roomName } = await createDailyRoomAndToken({
+        chatId,
+        uid: startedBy,
+        userName: String(scheduledData?.createdByName || 'Scheduled Huddle')
+    });
+    const huddleRef = db.collection('huddles').doc();
+    const huddleData = {
+        id: huddleRef.id,
+        chatId,
+        circleId,
+        roomUrl,
+        roomName,
+        type: 'group',
+        createdBy: 'scheduler',
+        startedBy,
+        isGroup: true,
+        isActive: true,
+        isScheduled: true,
+        scheduledHuddleId: scheduledRef.id,
+        participants: [],
+        invitedUserIds: participants,
+        acceptedUserIds: [],
+        activeUserIds: [],
+        participantStates: {},
+        status: 'ringing',
+        ringStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+        acceptedAt: null,
+        endedAt: null,
+        endedReason: null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    await huddleRef.set(huddleData);
+    await circleRef.set({
+        activeHuddle: {
+            huddleId: huddleRef.id,
+            roomUrl,
+            startedBy,
+            startedAt: admin.firestore.FieldValue.serverTimestamp(),
+            status: 'ringing',
+            isRinging: true,
+            source: 'scheduled'
+        }
+    }, { merge: true });
+    await chatRef.collection('messages').add({
+        text: `📅 ${scheduledData?.title || 'Scheduled huddle'} is starting now. Tap to join.`,
+        type: 'system',
+        senderId: startedBy,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        metadata: {
+            huddleId: huddleRef.id,
+            roomUrl,
+            scheduledHuddleId: scheduledRef.id,
+            source: 'scheduled'
+        }
+    });
+    await scheduledRef.set({
+        status: 'started',
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+        startedHuddleId: huddleRef.id,
+        startedBy
+    }, { merge: true });
+    await sendHuddleNotifications({
+        recipientUids: participants,
+        chatId,
+        huddleId: huddleRef.id,
+        roomUrl,
+        title: 'Scheduled Huddle Started',
+        body: `${scheduledData?.title || 'Your scheduled huddle'} is starting now.`,
+        chatName: circle?.name || 'Huddle',
+        callerName: scheduledData?.title || 'Scheduled Huddle',
+        dedupePerRecipient: true
+    });
+    return { huddleId: huddleRef.id, roomUrl, startedBy };
+};
 /**
  * Schedule a Huddle
  * Callable Function: 'scheduleHuddle'
@@ -2488,12 +2689,39 @@ exports.scheduleHuddle = regionalFunctions.https.onCall(async (data, context) =>
         if (!['creator', 'admin', 'moderator'].includes(role)) {
             throw new functions.https.HttpsError('permission-denied', 'Only admins can schedule huddles.');
         }
+        const when = new Date(scheduledAt);
+        if (Number.isNaN(when.getTime()) || when.getTime() < (Date.now() + 60 * 1000)) {
+            throw new functions.https.HttpsError('invalid-argument', 'Scheduled time must be at least 1 minute from now.');
+        }
+        const circleDoc = await db.collection('circles').doc(circleId).get();
+        const chatId = String(circleDoc.data()?.chatId || '').trim();
+        if (!chatId) {
+            throw new functions.https.HttpsError('failed-precondition', 'Circle chat is not ready.');
+        }
         const scheduledRef = db.collection('circles').doc(circleId).collection('scheduledHuddles').doc();
         await scheduledRef.set({
-            title,
-            scheduledAt: new Date(scheduledAt), // Client sends ISO string/timestamp
+            title: String(title || 'Scheduled Huddle').trim(),
+            scheduledAt: when,
             createdBy: uid,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            circleId,
+            chatId,
+            status: 'scheduled',
+            reminderUserIds: [uid],
+            reminderSentUserIds: [],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        await db.collection('chats').doc(chatId).collection('messages').add({
+            text: `🗓️ Scheduled huddle: ${String(title || 'Huddle').trim()}`,
+            type: 'system',
+            senderId: uid,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            metadata: {
+                scheduledHuddleId: scheduledRef.id,
+                scheduledAt: when,
+                title: String(title || 'Huddle').trim(),
+                source: 'scheduled'
+            }
         });
         return { success: true, id: scheduledRef.id };
     }
@@ -2501,6 +2729,35 @@ exports.scheduleHuddle = regionalFunctions.https.onCall(async (data, context) =>
         console.error("Error scheduling huddle:", error);
         throw new functions.https.HttpsError('internal', 'Unable to schedule huddle.');
     }
+});
+exports.toggleScheduledHuddleReminder = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const { circleId, eventId, enabled } = data || {};
+    if (!circleId || !eventId || typeof enabled !== 'boolean') {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing circleId, eventId or enabled.');
+    }
+    const memberDoc = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
+    if (!memberDoc.exists || memberDoc.data()?.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Only active members can set reminders.');
+    }
+    const eventRef = db.collection('circles').doc(circleId).collection('scheduledHuddles').doc(eventId);
+    const eventDoc = await eventRef.get();
+    if (!eventDoc.exists)
+        throw new functions.https.HttpsError('not-found', 'Scheduled huddle not found.');
+    const event = eventDoc.data() || {};
+    const scheduledMs = event?.scheduledAt?.toMillis?.() || 0;
+    if (scheduledMs > 0 && scheduledMs <= Date.now()) {
+        throw new functions.https.HttpsError('failed-precondition', 'This scheduled huddle has already started.');
+    }
+    await eventRef.update({
+        reminderUserIds: enabled
+            ? admin.firestore.FieldValue.arrayUnion(uid)
+            : admin.firestore.FieldValue.arrayRemove(uid),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return { success: true, subscribed: enabled };
 });
 /**
  * Delete a Scheduled Huddle
@@ -2528,6 +2785,100 @@ exports.deleteScheduledHuddle = regionalFunctions.https.onCall(async (data, cont
         if (error instanceof functions.https.HttpsError)
             throw error;
         throw new functions.https.HttpsError('internal', 'Delete failed.');
+    }
+});
+exports.processScheduledHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 minutes', region: 'europe-west1' }, async () => {
+    const now = Date.now();
+    const dueUpperBound = new Date(now + 30 * 1000);
+    const reminderUpperBound = new Date(now + 5 * 60 * 1000);
+    const reminderLowerBound = new Date(now + 4 * 60 * 1000);
+    try {
+        const dueSnap = await db.collectionGroup('scheduledHuddles')
+            .where('status', '==', 'scheduled')
+            .where('scheduledAt', '<=', dueUpperBound)
+            .limit(100)
+            .get();
+        let started = 0;
+        for (const docSnap of dueSnap.docs) {
+            const data = docSnap.data() || {};
+            const scheduledMs = data?.scheduledAt?.toMillis?.() || 0;
+            if (scheduledMs <= 0 || scheduledMs > (now + 30 * 1000))
+                continue;
+            const locked = await db.runTransaction(async (tx) => {
+                const latest = await tx.get(docSnap.ref);
+                const latestData = latest.data() || {};
+                if (!latest.exists)
+                    return false;
+                if (latestData?.status !== 'scheduled')
+                    return false;
+                const latestMs = latestData?.scheduledAt?.toMillis?.() || 0;
+                if (latestMs <= 0 || latestMs > (Date.now() + 30 * 1000))
+                    return false;
+                tx.update(docSnap.ref, {
+                    status: 'starting',
+                    startedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                return true;
+            });
+            if (!locked)
+                continue;
+            try {
+                await startScheduledHuddleInternal({
+                    scheduledRef: docSnap.ref,
+                    scheduledData: data
+                });
+                started += 1;
+            }
+            catch (error) {
+                await docSnap.ref.set({
+                    status: 'scheduled',
+                    startError: String(error?.message || 'Unable to auto-start scheduled huddle.'),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                console.error('[processScheduledHuddles] auto-start failed', docSnap.ref.path, error);
+            }
+        }
+        const reminderSnap = await db.collectionGroup('scheduledHuddles')
+            .where('status', '==', 'scheduled')
+            .where('scheduledAt', '>', reminderLowerBound)
+            .where('scheduledAt', '<=', reminderUpperBound)
+            .limit(200)
+            .get();
+        let reminded = 0;
+        for (const docSnap of reminderSnap.docs) {
+            const data = docSnap.data() || {};
+            const subscribed = Array.isArray(data?.reminderUserIds) ? data.reminderUserIds : [];
+            const sent = Array.isArray(data?.reminderSentUserIds) ? data.reminderSentUserIds : [];
+            const targets = subscribed.filter((uid) => uid && !sent.includes(uid));
+            if (!targets.length)
+                continue;
+            const circleId = getCircleIdFromScheduledRef(docSnap.ref);
+            if (!circleId)
+                continue;
+            const chatId = String(data?.chatId || '').trim();
+            if (!chatId)
+                continue;
+            await sendScheduledReminderNotifications({
+                recipientUids: targets,
+                circleId,
+                chatId,
+                scheduledHuddleId: docSnap.id,
+                title: 'Huddle starts in 5 minutes',
+                body: `${String(data?.title || 'Scheduled huddle')} is about to begin.`
+            });
+            await docSnap.ref.update({
+                reminderSentUserIds: admin.firestore.FieldValue.arrayUnion(...targets),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            reminded += targets.length;
+        }
+        console.log('[processScheduledHuddles] started:', started, 'reminders:', reminded);
+        return;
+    }
+    catch (error) {
+        console.error('[processScheduledHuddles] failed', error);
+        return;
     }
 });
 /**

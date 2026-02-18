@@ -13,7 +13,7 @@ fi
 
 case "$GROUP" in
   huddle)
-    FUNCTIONS_FILTER="startHuddle,joinHuddle,endHuddle,ringHuddleParticipants,ringPendingHuddles,updateHuddleState,scheduleHuddle,deleteScheduledHuddle"
+    FUNCTIONS_FILTER="startHuddle,joinHuddle,endHuddle,ringHuddleParticipants,ringPendingHuddles,updateHuddleState,scheduleHuddle,deleteScheduledHuddle,toggleScheduledHuddleReminder,processScheduledHuddles"
     ;;
   chat)
     FUNCTIONS_FILTER="onMessageCreate,createDirectChat,sendMessage"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -140,6 +140,45 @@ const TabButton = ({ title, active, onPress, badge, alert }) => (
     </TouchableOpacity>
 );
 
+const buildDateOptions = (count = 14) => {
+    const now = new Date();
+    return Array.from({ length: count }).map((_, idx) => {
+        const date = new Date(now);
+        date.setHours(0, 0, 0, 0);
+        date.setDate(now.getDate() + idx);
+        return {
+            key: date.toISOString().slice(0, 10),
+            label: idx === 0 ? 'Today' : (idx === 1 ? 'Tomorrow' : date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })),
+            date
+        };
+    });
+};
+
+const buildTimeOptions = () => {
+    const slots = [];
+    for (let hour = 0; hour < 24; hour += 1) {
+        for (let minute = 0; minute < 60; minute += 30) {
+            const date = new Date();
+            date.setHours(hour, minute, 0, 0);
+            slots.push({
+                key: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+                label: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                hour,
+                minute
+            });
+        }
+    }
+    return slots;
+};
+
+const getInitialScheduleDate = () => {
+    const d = new Date();
+    d.setSeconds(0, 0);
+    const nextMinute = d.getMinutes() < 30 ? 30 : 60;
+    d.setMinutes(nextMinute, 0, 0);
+    return d;
+};
+
 const CircleSettingsScreen = ({ navigation, route }) => {
     const circleId = route?.params?.circleId;
     const initialTab = route?.params?.initialTab;
@@ -205,12 +244,30 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     // Schedule Event State
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [eventTitle, setEventTitle] = useState('');
-    const [eventDate, setEventDate] = useState(new Date());
+    const [eventDate, setEventDate] = useState(getInitialScheduleDate);
 
     // Edit Circle State
     const [showEditModal, setShowEditModal] = useState(false);
     const [editName, setEditName] = useState('');
     const [editDesc, setEditDesc] = useState('');
+
+    const dateOptions = useMemo(() => buildDateOptions(14), []);
+    const timeOptions = useMemo(() => buildTimeOptions(), []);
+
+    const selectedDateKey = eventDate.toISOString().slice(0, 10);
+    const selectedTimeKey = `${String(eventDate.getHours()).padStart(2, '0')}:${String(eventDate.getMinutes() < 30 ? 0 : 30).padStart(2, '0')}`;
+
+    const setDatePart = (dateValue) => {
+        const next = new Date(eventDate);
+        next.setFullYear(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate());
+        setEventDate(next);
+    };
+
+    const setTimePart = (hour, minute) => {
+        const next = new Date(eventDate);
+        next.setHours(hour, minute, 0, 0);
+        setEventDate(next);
+    };
 
     const openEditModal = () => {
         setEditName(circle.name);
@@ -740,12 +797,36 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         />
 
                         {/* Simple Date Input for MVP */}
-                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                            <TouchableOpacity onPress={() => setEventDate(new Date(Date.now() + 3600000))} style={styles.chip}>
-                                <Text>+1 Hour (Demo)</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <Text style={{ marginBottom: 20, color: '#666' }}>{eventDate.toLocaleString()}</Text>
+                        <Text style={styles.label}>Date</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scheduleSelectorRow}>
+                            {dateOptions.map((option) => (
+                                <TouchableOpacity
+                                    key={option.key}
+                                    style={[styles.scheduleChip, selectedDateKey === option.key && styles.scheduleChipActive]}
+                                    onPress={() => setDatePart(option.date)}
+                                >
+                                    <Text style={[styles.scheduleChipText, selectedDateKey === option.key && styles.scheduleChipTextActive]}>
+                                        {option.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        <Text style={styles.label}>Time</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scheduleSelectorRow}>
+                            {timeOptions.map((option) => (
+                                <TouchableOpacity
+                                    key={option.key}
+                                    style={[styles.scheduleChip, selectedTimeKey === option.key && styles.scheduleChipActive]}
+                                    onPress={() => setTimePart(option.hour, option.minute)}
+                                >
+                                    <Text style={[styles.scheduleChipText, selectedTimeKey === option.key && styles.scheduleChipTextActive]}>
+                                        {option.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                        <Text style={styles.schedulePreview}>Scheduled for {eventDate.toLocaleString()}</Text>
 
                         <View style={styles.modalActions}>
                             <TouchableOpacity onPress={() => setShowScheduleModal(false)} style={styles.modalCancel}>
@@ -1058,6 +1139,35 @@ const styles = StyleSheet.create({
         fontWeight: '700'
     },
     chip: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#E0F2F1', borderRadius: 20, marginRight: 8 },
+    scheduleSelectorRow: {
+        paddingBottom: 8,
+        gap: 8
+    },
+    scheduleChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 18,
+        backgroundColor: '#F1F5F9',
+        borderWidth: 1,
+        borderColor: '#E2E8F0'
+    },
+    scheduleChipActive: {
+        backgroundColor: '#E0F2F1',
+        borderColor: COLORS.primary
+    },
+    scheduleChipText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#5F6C80'
+    },
+    scheduleChipTextActive: {
+        color: COLORS.primary
+    },
+    schedulePreview: {
+        marginBottom: 20,
+        color: '#3F4A5A',
+        fontWeight: '600'
+    },
     addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primary, padding: 12, borderRadius: 12 },
     addButtonText: { color: '#FFF', fontWeight: '600', marginLeft: 8 },
     actionButtonSmall: { padding: 8 }

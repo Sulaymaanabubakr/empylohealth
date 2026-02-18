@@ -143,6 +143,10 @@ export const circleService = {
         return callableClient.invokeWithAuth('scheduleHuddle', { circleId, title, scheduledAt: scheduledAt.toISOString() });
     },
 
+    toggleScheduledHuddleReminder: async (circleId, eventId, enabled) => {
+        return callableClient.invokeWithAuth('toggleScheduledHuddleReminder', { circleId, eventId, enabled: !!enabled });
+    },
+
     deleteScheduledHuddle: async (circleId, eventId) => {
         return callableClient.invokeWithAuth('deleteScheduledHuddle', { circleId, eventId });
     },
@@ -150,6 +154,7 @@ export const circleService = {
     subscribeToScheduledHuddles: (circleId, callback) => {
         const q = query(
             collection(db, 'circles', circleId, 'scheduledHuddles'),
+            where('status', '==', 'scheduled'),
             orderBy('scheduledAt', 'asc')
         );
         return onSnapshot(q, (snapshot) => {

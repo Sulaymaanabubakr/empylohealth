@@ -140,6 +140,20 @@ const navigateFromNotificationData = async (payload) => {
             return true;
         }
 
+        if (type === 'SCHEDULED_HUDDLE_REMINDER') {
+            if (data?.circleId) {
+                navigate('CircleDetail', { circle: { id: data.circleId } });
+                return true;
+            }
+            if (data?.chatId) {
+                const chat = await resolveChatNavigationPayload(data.chatId);
+                if (chat) {
+                    navigate('ChatDetail', { chat });
+                    return true;
+                }
+            }
+        }
+
         return false;
     } catch (error) {
         console.error('[NotificationRouting] Failed to route notification payload', error);

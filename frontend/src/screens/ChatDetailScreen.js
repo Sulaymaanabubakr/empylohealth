@@ -13,6 +13,8 @@ import { db } from '../services/firebaseConfig';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import { resolveWellbeingScore } from '../utils/wellbeing';
+import { circleService } from '../services/api/circleService';
+import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 
 const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
 
@@ -46,6 +48,9 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [lastSeenRequestsAt, setLastSeenRequestsAt] = useState(0);
     const [latestRequestCreatedAt, setLatestRequestCreatedAt] = useState(0);
+    const [scheduledEvents, setScheduledEvents] = useState([]);
+    const [clockNowMs, setClockNowMs] = useState(Date.now());
+    const [reminderLoadingId, setReminderLoadingId] = useState(null);
     const typingDebounceRef = useRef(null);
     const presenceIntervalRef = useRef(null);
     const pendingMessagesRef = useRef(new Map());
@@ -65,6 +70,11 @@ const ChatDetailScreen = ({ navigation, route }) => {
             showSubscription.remove();
             hideSubscription.remove();
         };
+    }, []);
+
+    useEffect(() => {
+        const timer = setInterval(() => setClockNowMs(Date.now()), 1000);
+        return () => clearInterval(timer);
     }, []);
 
     if (!chat) {
@@ -263,6 +273,16 @@ const ChatDetailScreen = ({ navigation, route }) => {
     }, [chat?.circleId, chat?.isGroup, circleRole]);
 
     useEffect(() => {
+        if (!chat?.isGroup || !chat?.circleId) {
+            setScheduledEvents([]);
+            return undefined;
+        }
+        return circleService.subscribeToScheduledHuddles(chat.circleId, (list) => {
+            setScheduledEvents(list || []);
+        });
+    }, [chat?.circleId, chat?.isGroup]);
+
+    useEffect(() => {
         const loadLastSeenRequestsAt = async () => {
             if (!chat?.circleId || !user?.uid || !['creator', 'admin', 'moderator'].includes(circleRole)) {
                 setLastSeenRequestsAt(0);
@@ -279,6 +299,24 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const getOtherParticipantId = () => {
         if (!Array.isArray(chat?.participants) || !user?.uid) return null;
         return chat.participants.find((id) => id !== user.uid) || null;
+    };
+
+    const toggleReminder = async (event) => {
+        if (!chat?.circleId || !event?.id || !user?.uid) return;
+        const reminderUserIds = Array.isArray(event?.reminderUserIds) ? event.reminderUserIds : [];
+        const isSubscribed = reminderUserIds.includes(user.uid);
+        setReminderLoadingId(event.id);
+        try {
+            await circleService.toggleScheduledHuddleReminder(chat.circleId, event.id, !isSubscribed);
+        } catch (error) {
+            showModal({
+                type: 'error',
+                title: 'Reminder Failed',
+                message: error?.message || 'Unable to update reminder.'
+            });
+        } finally {
+            setReminderLoadingId(null);
+        }
     };
 
     const getUserProfile = async (uid) => {
@@ -425,7 +463,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         }
     }, [chat?.id, user?.uid]);
 
-    const nowMs = Date.now();
+    const nowMs = clockNowMs;
     const activeTypingCount = Object.keys(typingUsers || {}).filter((uid) => {
         if (uid === user?.uid) return false;
         const row = typingUsers?.[uid];
@@ -444,6 +482,12 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const hasNewJoinRequests = pendingRequestsCount > 0 && latestRequestCreatedAt > lastSeenRequestsAt;
     const directOtherId = !chat?.isGroup ? getOtherParticipantId() : null;
     const directOtherProfile = directOtherId ? profileCache[directOtherId] : null;
+    const nextScheduledEvent = [...scheduledEvents]
+        .sort((a, b) => toMillis(a?.scheduledAt) - toMillis(b?.scheduledAt))
+        .find((event) => {
+            const ms = toMillis(event?.scheduledAt);
+            return ms > 0 && String(event?.status || 'scheduled') === 'scheduled';
+        }) || null;
 
     const handleCall = async () => {
         if (chat?.isGroup) {
@@ -691,6 +735,35 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 </View>
             </View>
 
+            {chat?.isGroup && nextScheduledEvent && (
+                <View style={styles.scheduledBanner}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.scheduledTitle}>{nextScheduledEvent.title || 'Scheduled Huddle'}</Text>
+                        <Text style={styles.scheduledMeta}>{formatEventDateTime(nextScheduledEvent.scheduledAt)}</Text>
+                        <Text style={styles.scheduledCountdown}>
+                            {toMillis(nextScheduledEvent.scheduledAt) > nowMs
+                                ? `Starts in ${formatCountdown(toMillis(nextScheduledEvent.scheduledAt), nowMs)}`
+                                : 'Starting now'}
+                        </Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.scheduledBell}
+                        onPress={() => toggleReminder(nextScheduledEvent)}
+                        disabled={reminderLoadingId === nextScheduledEvent.id}
+                    >
+                        <Ionicons
+                            name={reminderLoadingId === nextScheduledEvent.id
+                                ? 'sync'
+                                : ((Array.isArray(nextScheduledEvent?.reminderUserIds) && nextScheduledEvent.reminderUserIds.includes(user?.uid))
+                                    ? 'notifications'
+                                    : 'notifications-outline')}
+                            size={18}
+                            color={COLORS.primary}
+                        />
+                    </TouchableOpacity>
+                </View>
+            )}
+
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
@@ -899,6 +972,44 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8
+    },
+    scheduledBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginHorizontal: SPACING.lg,
+        marginTop: 8,
+        marginBottom: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 14,
+        backgroundColor: '#E8F7F5',
+        borderWidth: 1,
+        borderColor: '#BFE9E4'
+    },
+    scheduledTitle: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: '#14514B'
+    },
+    scheduledMeta: {
+        marginTop: 2,
+        fontSize: 12,
+        color: '#3A6D68'
+    },
+    scheduledCountdown: {
+        marginTop: 2,
+        fontSize: 12,
+        fontWeight: '700',
+        color: COLORS.primary
+    },
+    scheduledBell: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
     requestsButton: {
         width: 36,
