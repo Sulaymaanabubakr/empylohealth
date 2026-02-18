@@ -36,6 +36,11 @@ const ActivityDetailScreen = ({ navigation, route }) => {
     }
     const { headerColor = activity.color, isDarkText = false } = activity;
     const svgXml = decodeSvgDataUri(activity.image);
+    const isGeneratedActivityArtwork = Boolean(svgXml);
+    const tagLabel = String(activity?.tag || activity?.type || 'LEARN').toUpperCase();
+    const durationLabel = String(activity?.time || '5 min');
+    const categoryLabel = String(activity?.category || 'Self-development');
+    const descriptionText = String(activity?.description || '').trim() || 'This guided activity helps you build healthy wellbeing habits in small, consistent steps.';
     const textColor = isDarkText ? '#1A1A1A' : '#FFFFFF';
     const badgeBg = isDarkText ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.25)';
     const badgeBorder = isDarkText ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.4)';
@@ -60,10 +65,10 @@ const ActivityDetailScreen = ({ navigation, route }) => {
                         <Text style={[styles.title, { color: textColor }]}>{activity.title}</Text>
                         <View style={styles.badgesContainer}>
                             <View style={[styles.badge, { backgroundColor: badgeBg, borderColor: badgeBorder }]}>
-                                <Text style={[styles.badgeText, { color: textColor }]}>LEARN</Text>
+                                <Text style={[styles.badgeText, { color: textColor }]}>{tagLabel}</Text>
                             </View>
                             <View style={[styles.badge, styles.timeBadge, { backgroundColor: badgeBg, borderColor: badgeBorder }]}>
-                                <Text style={[styles.badgeText, { color: textColor }]}>{activity.time}</Text>
+                                <Text style={[styles.badgeText, { color: textColor }]}>{durationLabel}</Text>
                             </View>
                         </View>
                     </View>
@@ -71,7 +76,7 @@ const ActivityDetailScreen = ({ navigation, route }) => {
 
                 {/* Content Area */}
                 <View style={styles.contentContainer}>
-                    {activity.image ? (
+                    {activity.image && !isGeneratedActivityArtwork ? (
                         <View style={styles.imageContainer}>
                             {svgXml ? (
                                 <SvgXml xml={svgXml} width="100%" height="100%" />
@@ -85,9 +90,14 @@ const ActivityDetailScreen = ({ navigation, route }) => {
                         </View>
                     ) : null}
 
-                    <Text style={styles.sectionText}>
-                        {activity.description}
-                    </Text>
+                    <View style={styles.infoCard}>
+                        <Text style={styles.infoTitle}>Overview</Text>
+                        <Text style={styles.sectionText}>{descriptionText}</Text>
+                        <Text style={styles.infoTitle}>Focus Area</Text>
+                        <Text style={styles.sectionText}>{categoryLabel}</Text>
+                        <Text style={styles.infoTitle}>How Long</Text>
+                        <Text style={styles.sectionText}>{durationLabel}</Text>
+                    </View>
 
                     {activity.steps && activity.steps.map((step, index) => (
                         <Text key={index} style={styles.sectionText}>
@@ -192,8 +202,23 @@ const styles = StyleSheet.create({
         fontSize: 16,
         lineHeight: 26,
         color: '#424242',
-        marginBottom: 20,
+        marginBottom: 14,
         fontWeight: '400',
+    },
+    infoCard: {
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 18,
+    },
+    infoTitle: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: '#334155',
+        marginBottom: 6,
+        textTransform: 'uppercase',
     },
     boldText: {
         fontWeight: '700',
