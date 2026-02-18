@@ -1041,6 +1041,7 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
         await batch.commit();
 
         if (roleChangeNotification) {
+            const circleAvatar = String(circleData?.image || circleData?.avatar || circleData?.photoURL || '');
             const notifRef = db.collection('notifications').doc();
             await notifRef.set({
                 uid: targetUid,
@@ -1048,6 +1049,7 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
                 subtitle: roleChangeNotification.body,
                 type: 'ROLE_UPDATED',
                 circleId,
+                avatar: circleAvatar,
                 read: false,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -1079,7 +1081,8 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
                     },
                     data: {
                         type: 'ROLE_UPDATED',
-                        circleId
+                        circleId,
+                        avatar: circleAvatar
                     }
                 }).catch(() => {});
             }
@@ -1091,7 +1094,8 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
                     body: roleChangeNotification?.body,
                     data: {
                         type: 'ROLE_UPDATED',
-                        circleId
+                        circleId,
+                        avatar: circleAvatar
                     }
                 }));
                 await fetch('https://exp.host/--/api/v2/push/send', {
@@ -2070,6 +2074,30 @@ const sendHuddleNotifications = async ({
     const expoTokens: string[] = [];
     const fcmTokens: string[] = [];
     const voipTokens: string[] = [];
+    let notificationAvatar = '';
+
+    try {
+        const chatDoc = await db.collection('chats').doc(chatId).get();
+        const chatData = chatDoc.data() || {};
+        if (chatData?.circleId) {
+            const circleDoc = await db.collection('circles').doc(String(chatData.circleId)).get();
+            const circleData = circleDoc.data() || {};
+            notificationAvatar = String(circleData?.image || circleData?.avatar || circleData?.photoURL || '');
+        }
+        if (!notificationAvatar) {
+            const huddleDoc = await db.collection('huddles').doc(huddleId).get();
+            const startedBy = String(huddleDoc.data()?.startedBy || '');
+            if (startedBy) {
+                const starterDoc = await db.collection('users').doc(startedBy).get();
+                notificationAvatar = String(starterDoc.data()?.photoURL || '');
+            }
+        }
+        if (!notificationAvatar) {
+            notificationAvatar = String(chatData?.avatar || chatData?.image || chatData?.photoURL || '');
+        }
+    } catch {
+        notificationAvatar = '';
+    }
 
     for (const ruid of uniqueRecipients) {
         const userDoc = await db.collection('users').doc(ruid).get();
@@ -2092,6 +2120,7 @@ const sendHuddleNotifications = async ({
             chatId,
             huddleId,
             roomUrl,
+            avatar: notificationAvatar,
             read: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -2102,7 +2131,16 @@ const sendHuddleNotifications = async ({
     const payload = {
         title,
         body,
-        data: { chatId, huddleId, roomUrl, type: 'HUDDLE_STARTED', chatName, callerName }
+        data: {
+            chatId,
+            huddleId,
+            roomUrl,
+            type: 'HUDDLE_STARTED',
+            chatName,
+            callerName,
+            categoryId: 'huddle-call-actions',
+            avatar: notificationAvatar || ''
+        }
     };
 
     if (fcmTokens.length > 0) {
@@ -2128,6 +2166,7 @@ const sendHuddleNotifications = async ({
                 payload: {
                     aps: {
                         sound: 'default',
+                        category: 'huddle-call-actions',
                         'interruption-level': 'time-sensitive'
                     }
                 }
@@ -2144,6 +2183,7 @@ const sendHuddleNotifications = async ({
             sound: 'default',
             priority: 'high',
             channelId: 'huddle-calls-ringtone',
+            categoryId: 'huddle-call-actions',
             interruptionLevel: 'time-sensitive',
             data: payload.data
         }));
@@ -2169,7 +2209,8 @@ const sendHuddleNotifications = async ({
             huddleId,
             roomUrl,
             chatName,
-            callerName
+            callerName,
+            avatar: notificationAvatar || ''
         };
 
         try {
@@ -2210,6 +2251,17 @@ const sendScheduledReminderNotifications = async ({
     const uniqueRecipients = [...new Set(recipientUids)];
     const expoTokens: string[] = [];
     const fcmTokens: string[] = [];
+    let notificationAvatar = '';
+
+    try {
+        if (circleId) {
+            const circleDoc = await db.collection('circles').doc(circleId).get();
+            const circleData = circleDoc.data() || {};
+            notificationAvatar = String(circleData?.image || circleData?.avatar || circleData?.photoURL || '');
+        }
+    } catch {
+        notificationAvatar = '';
+    }
 
     for (const uid of uniqueRecipients) {
         const userDoc = await db.collection('users').doc(uid).get();
@@ -2229,6 +2281,7 @@ const sendScheduledReminderNotifications = async ({
             circleId,
             chatId,
             scheduledHuddleId,
+            avatar: notificationAvatar,
             read: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -2244,7 +2297,8 @@ const sendScheduledReminderNotifications = async ({
                 type: 'SCHEDULED_HUDDLE_REMINDER',
                 circleId,
                 chatId,
-                scheduledHuddleId
+                scheduledHuddleId,
+                avatar: notificationAvatar || ''
             },
             android: {
                 priority: 'high',
@@ -2273,7 +2327,8 @@ const sendScheduledReminderNotifications = async ({
                 type: 'SCHEDULED_HUDDLE_REMINDER',
                 circleId,
                 chatId,
-                scheduledHuddleId
+                scheduledHuddleId,
+                avatar: notificationAvatar || ''
             }
         }));
         await fetch('https://exp.host/--/api/v2/push/send', {
@@ -3684,6 +3739,8 @@ export const resolveCircleReport = regionalFunctions.https.onCall(async (data, c
         if (action === 'warn' && targetType === 'member' && targetId) {
             const targetUser = await db.collection('users').doc(targetId).get().catch(() => null);
             const targetSettings = targetUser?.data?.()?.settings || {};
+            const circleDoc = await db.collection('circles').doc(circleId).get().catch(() => null);
+            const circleAvatar = String(circleDoc?.data?.()?.image || circleDoc?.data?.()?.avatar || circleDoc?.data?.()?.photoURL || '');
             if (targetSettings.securityNotifications ?? true) {
                 await db.collection('notifications').add({
                     uid: targetId,
@@ -3691,6 +3748,7 @@ export const resolveCircleReport = regionalFunctions.https.onCall(async (data, c
                     subtitle: 'A moderator reviewed a report about your behavior. Please follow circle guidelines.',
                     type: 'MODERATION_WARNING',
                     circleId,
+                    avatar: circleAvatar,
                     read: false,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -3841,6 +3899,7 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
     const pickId = affirmationIds[Math.min(slotIndex, affirmationIds.length - 1)]!;
     const affirmationDoc = await db.collection('affirmations').doc(pickId).get();
     const content = affirmationDoc.data()?.content || 'Your daily affirmation is ready.';
+    const affirmationAvatar = String(affirmationDoc.data()?.image || '');
 
     const usersSnap = await db.collection('users').get();
     const users = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -3857,6 +3916,7 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
                 type: 'DAILY_AFFIRMATION',
                 slot: slotIndex,
                 affirmationId: pickId,
+                avatar: affirmationAvatar,
                 read: false,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -3875,7 +3935,7 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
                     to: token,
                     title,
                     body: content,
-                    data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId }
+                    data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId, avatar: affirmationAvatar }
                 });
             });
         }
@@ -3891,7 +3951,7 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
         const messagePayload: admin.messaging.MulticastMessage = {
             tokens: chunk,
             notification: { title, body: content },
-            data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId }
+            data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId, avatar: affirmationAvatar }
         };
         await admin.messaging().sendEachForMulticast(messagePayload);
     }

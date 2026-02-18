@@ -57,29 +57,61 @@ const NotificationsScreen = ({ navigation }) => {
     return { todayNotifications: today, earlierNotifications: earlier };
   }, [notifications]);
 
-  const NotificationCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.9}
-      onPress={async () => {
-        try {
-          const handled = await notificationService.routeFromNotificationPayload({ data: item });
-          if (!handled) {
+  const getNotificationAvatarUri = (item) => (
+    item?.avatar
+    || item?.senderAvatar
+    || item?.chatAvatar
+    || item?.image
+    || ''
+  );
+
+  const getNotificationFallbackIcon = (type) => {
+    if (type === 'CHAT_MESSAGE') return 'chatbubble-ellipses-outline';
+    if (type === 'HUDDLE_STARTED' || type === 'SCHEDULED_HUDDLE_REMINDER') return 'call-outline';
+    if (type === 'DAILY_AFFIRMATION') return 'sparkles-outline';
+    if (type === 'ROLE_UPDATED') return 'shield-checkmark-outline';
+    if (type === 'MODERATION_WARNING') return 'alert-circle-outline';
+    return 'notifications-outline';
+  };
+
+  const NotificationCard = ({ item }) => {
+    const avatarUri = getNotificationAvatarUri(item);
+    const fallbackIcon = getNotificationFallbackIcon(item?.type);
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.9}
+        onPress={async () => {
+          try {
+            const handled = await notificationService.routeFromNotificationPayload({ data: item });
+            if (!handled) {
+              navigation.navigate('MainTabs', { screen: 'Dashboard' });
+            }
+          } catch (error) {
+            console.error('[NotificationsScreen] Failed to route notification tap', error);
             navigation.navigate('MainTabs', { screen: 'Dashboard' });
           }
-        } catch (error) {
-          console.error('[NotificationsScreen] Failed to route notification tap', error);
-          navigation.navigate('MainTabs', { screen: 'Dashboard' });
-        }
-      }}
-    >
-      <View style={[styles.iconCircle, { backgroundColor: item.color || '#B2DFDB' }]} />
-      <View style={styles.textContainer}>
-        <Text style={styles.cardTitle}>{item.title || 'Notification'}</Text>
-        <Text style={styles.cardSubtitle}>{item.subtitle || item.body || ''}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+        }}
+      >
+        {avatarUri ? (
+          <Avatar
+            uri={avatarUri}
+            name={item?.title || 'Notification'}
+            size={50}
+            style={styles.notificationAvatar}
+          />
+        ) : (
+          <View style={[styles.iconCircle, { backgroundColor: item.color || '#B2DFDB' }]}>
+            <Ionicons name={fallbackIcon} size={22} color="#1A1A1A" />
+          </View>
+        )}
+        <View style={styles.textContainer}>
+          <Text style={styles.cardTitle}>{item.title || 'Notification'}</Text>
+          <Text style={styles.cardSubtitle}>{item.subtitle || item.body || ''}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -209,6 +241,11 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
+    marginRight: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationAvatar: {
     marginRight: 16,
   },
   textContainer: {

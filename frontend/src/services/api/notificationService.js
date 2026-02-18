@@ -7,6 +7,7 @@ import { doc, arrayUnion, setDoc, getDoc } from 'firebase/firestore';
 import { navigate } from '../../navigation/navigationRef';
 import { nativeCallService } from '../native/nativeCallService';
 import { chatService } from './chatService';
+import { huddleService } from './huddleService';
 
 let notificationRoutingInitialized = false;
 let responseSubscription = null;
@@ -20,6 +21,9 @@ let lastHandledNotificationResponseKey = null;
 const CHAT_MESSAGE_CATEGORY_ID = 'chat-message-actions';
 const CHAT_MESSAGE_ACTION_REPLY = 'chat-reply';
 const CHAT_MESSAGE_ACTION_MARK_READ = 'chat-mark-read';
+const HUDDLE_CALL_CATEGORY_ID = 'huddle-call-actions';
+const HUDDLE_CALL_ACTION_ACCEPT = 'huddle-accept';
+const HUDDLE_CALL_ACTION_REJECT = 'huddle-reject';
 const HUDDLE_CALLS_CHANNEL_ID = 'huddle-calls-ringtone';
 
 let VoipPushNotification = null;
@@ -204,6 +208,33 @@ const handleNotificationAction = async (response) => {
         return true;
     }
 
+    if (actionId === HUDDLE_CALL_ACTION_REJECT) {
+        if (data?.huddleId) {
+            await huddleService.declineHuddle(data.huddleId).catch(() => {});
+            nativeCallService.endHuddleCall(data.huddleId);
+        }
+        if (notificationId) {
+            await Notifications.dismissNotificationAsync(notificationId).catch(() => {});
+        }
+        return true;
+    }
+
+    if (actionId === HUDDLE_CALL_ACTION_ACCEPT) {
+        if (notificationId) {
+            await Notifications.dismissNotificationAsync(notificationId).catch(() => {});
+        }
+        if (data?.huddleId) {
+            navigate('Huddle', {
+                chat: { id: data?.chatId || 'chat', name: data?.chatName || 'Huddle', isGroup: true },
+                huddleId: data.huddleId,
+                mode: 'join',
+                callTapTs: Date.now()
+            });
+            return true;
+        }
+        return false;
+    }
+
     return navigateFromNotificationData(response);
 };
 
@@ -239,6 +270,18 @@ const configureNotificationCategories = async () => {
                 identifier: CHAT_MESSAGE_ACTION_MARK_READ,
                 buttonTitle: 'Mark as read',
                 options: { opensAppToForeground: false }
+            }
+        ]);
+        await Notifications.setNotificationCategoryAsync(HUDDLE_CALL_CATEGORY_ID, [
+            {
+                identifier: HUDDLE_CALL_ACTION_ACCEPT,
+                buttonTitle: 'Accept',
+                options: { opensAppToForeground: true }
+            },
+            {
+                identifier: HUDDLE_CALL_ACTION_REJECT,
+                buttonTitle: 'Reject',
+                options: { opensAppToForeground: false, isDestructive: true }
             }
         ]);
     } catch (error) {
