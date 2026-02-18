@@ -2113,10 +2113,10 @@ const sendHuddleNotifications = async ({
             android: {
                 priority: 'high',
                 notification: {
-                    channelId: 'huddle-calls',
+                    channelId: 'huddle-calls-ringtone',
                     sound: 'default',
                     priority: 'max',
-                    defaultVibrateTimings: true
+                    defaultVibrateTimings: false
                 }
             },
             apns: {
@@ -2143,7 +2143,7 @@ const sendHuddleNotifications = async ({
             body: payload.body,
             sound: 'default',
             priority: 'high',
-            channelId: 'huddle-calls',
+            channelId: 'huddle-calls-ringtone',
             interruptionLevel: 'time-sensitive',
             data: payload.data
         }));

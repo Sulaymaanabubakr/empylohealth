@@ -20,6 +20,7 @@ let lastHandledNotificationResponseKey = null;
 const CHAT_MESSAGE_CATEGORY_ID = 'chat-message-actions';
 const CHAT_MESSAGE_ACTION_REPLY = 'chat-reply';
 const CHAT_MESSAGE_ACTION_MARK_READ = 'chat-mark-read';
+const HUDDLE_CALLS_CHANNEL_ID = 'huddle-calls-ringtone';
 
 let VoipPushNotification = null;
 try {
@@ -419,6 +420,14 @@ export const notificationService = {
                     name: 'Huddle Calls',
                     importance: Notifications.AndroidImportance.MAX,
                     vibrationPattern: [0, 500, 250, 500, 250, 700],
+                    lightColor: '#00A99D',
+                    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+                    sound: 'default'
+                });
+                await Notifications.setNotificationChannelAsync(HUDDLE_CALLS_CHANNEL_ID, {
+                    name: 'Huddle Calls (Ringtone)',
+                    importance: Notifications.AndroidImportance.MAX,
+                    vibrationPattern: [0],
                     lightColor: '#00A99D',
                     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
                     sound: 'default'

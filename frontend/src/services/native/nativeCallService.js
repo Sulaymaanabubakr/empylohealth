@@ -58,7 +58,7 @@ const getSetupOptions = () => ({
       'android.permission.CALL_PHONE'
     ],
     foregroundService: {
-      channelId: 'huddle-calls',
+      channelId: 'huddle-calls-ringtone',
       channelName: 'Huddle Calls',
       notificationTitle: 'Huddle call in progress'
     }

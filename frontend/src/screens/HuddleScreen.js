@@ -48,6 +48,9 @@ const HuddleScreen = ({ navigation, route }) => {
     const isHostRef = useRef(false);
     const leaveCallRef = useRef(null);
     const hasDailyJoinedRef = useRef(false);
+    const callStartedAtMsRef = useRef(0);
+    const hostAloneSinceMsRef = useRef(0);
+    const keepWaitingStartedAtMsRef = useRef(0);
     const startedByMeRef = useRef(false);
     const eventHandlersRef = useRef(null);
     const inviteTimeoutRef = useRef(null);
@@ -290,6 +293,12 @@ const HuddleScreen = ({ navigation, route }) => {
                 if (activeHuddleId) {
                     hasDailyJoinedRef.current = true;
                     setHasLocalJoinedDaily(true);
+                    if (!callStartedAtMsRef.current) {
+                        callStartedAtMsRef.current = Date.now();
+                    }
+                    huddleService.updateActiveLocalSession({
+                        startedAtMs: callStartedAtMsRef.current
+                    });
                     huddleService.updateHuddleConnection(activeHuddleId, 'daily_joined').catch(() => { });
                 }
                 refreshParticipants();
@@ -395,7 +404,13 @@ const HuddleScreen = ({ navigation, route }) => {
 
     useEffect(() => {
         if (phase !== 'ongoing') return undefined;
-        const timer = setInterval(() => setSeconds((prev) => prev + 1), 1000);
+        const syncElapsed = () => {
+            const startedAtMs = Number(callStartedAtMsRef.current || 0);
+            if (startedAtMs <= 0) return;
+            setSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
+        };
+        syncElapsed();
+        const timer = setInterval(syncElapsed, 1000);
         return () => clearInterval(timer);
     }, [phase]);
 
@@ -491,31 +506,89 @@ const HuddleScreen = ({ navigation, route }) => {
             phase !== 'error';
 
         if (!isEligible) {
+            hostAloneSinceMsRef.current = 0;
+            keepWaitingStartedAtMsRef.current = 0;
+            huddleService.updateActiveLocalSession({
+                hostAloneSinceMs: 0,
+                keepWaitingStartedAtMs: 0
+            });
             clearHostAloneTimers();
             return undefined;
         }
 
         if (!hostAlonePromptShownRef.current && !hostAlonePromptTimeoutRef.current) {
+            if (!hostAloneSinceMsRef.current) {
+                hostAloneSinceMsRef.current = Date.now();
+                huddleService.updateActiveLocalSession({
+                    hostAloneSinceMs: hostAloneSinceMsRef.current
+                });
+            }
+            const elapsedMs = Date.now() - hostAloneSinceMsRef.current;
+            const remainingMs = Math.max(0, HOST_ALONE_PROMPT_DELAY_MS - elapsedMs);
             hostAlonePromptTimeoutRef.current = setTimeout(() => {
                 hostAlonePromptTimeoutRef.current = null;
                 hostAlonePromptShownRef.current = true;
                 callDiagnostics.log(huddleIdRef.current, 'host_alone_prompt_shown');
                 setShowHostAlonePrompt(true);
-            }, HOST_ALONE_PROMPT_DELAY_MS);
+            }, remainingMs);
         }
 
         return undefined;
     }, [clearHostAloneTimers, hasLocalJoinedDaily, isHost, phase, remoteParticipantCount]);
 
     useEffect(() => {
+        const isEligible =
+            isHost &&
+            hasLocalJoinedDaily &&
+            remoteParticipantCount === 0 &&
+            !everHadRemoteParticipantRef.current &&
+            phase !== 'ending' &&
+            phase !== 'ended' &&
+            phase !== 'error';
+        if (!isEligible) return undefined;
+        if (!keepWaitingStartedAtMsRef.current) return undefined;
+        if (hostAloneForceEndTimeoutRef.current || forceEndCountdownIntervalRef.current) return undefined;
+
+        const elapsedMs = Date.now() - keepWaitingStartedAtMsRef.current;
+        const remainingMs = Math.max(0, HOST_ALONE_FORCE_END_DELAY_MS - elapsedMs);
+        if (remainingMs === 0) {
+            startForceEndCountdown();
+            return undefined;
+        }
+
+        hostAloneForceEndTimeoutRef.current = setTimeout(() => {
+            hostAloneForceEndTimeoutRef.current = null;
+            const stillAlone =
+                isHostRef.current &&
+                hasDailyJoinedRef.current &&
+                !everHadRemoteParticipantRef.current &&
+                (participants.filter((p) => !p.local).length === 0);
+            if (!stillAlone) return;
+            callDiagnostics.log(huddleIdRef.current, 'host_alone_force_end_countdown_started');
+            startForceEndCountdown();
+        }, remainingMs);
+
+        return () => {
+            if (hostAloneForceEndTimeoutRef.current) {
+                clearTimeout(hostAloneForceEndTimeoutRef.current);
+                hostAloneForceEndTimeoutRef.current = null;
+            }
+        };
+    }, [hasLocalJoinedDaily, isHost, participants, phase, remoteParticipantCount, startForceEndCountdown]);
+
+    useEffect(() => {
         if (!isHost || !hasLocalJoinedDaily || phase === 'ending' || phase === 'ended' || phase === 'error') return undefined;
         if (maxCallDurationTimeoutRef.current) return undefined;
+
+        const startedAtMs = Number(callStartedAtMsRef.current || 0);
+        const elapsedMs = startedAtMs > 0 ? Math.max(0, Date.now() - startedAtMs) : 0;
+        const remainingMs = Math.max(0, MAX_CALL_DURATION_MS - elapsedMs);
 
         maxCallDurationTimeoutRef.current = setTimeout(() => {
             console.warn('[HUDDLE] max call duration reached (1 hour)');
             callDiagnostics.log(huddleIdRef.current, 'max_duration_reached');
             leaveCallRef.current?.(true, true, true, 'max_duration_reached');
-        }, MAX_CALL_DURATION_MS);
+        }, remainingMs);
 
         return () => {
             if (maxCallDurationTimeoutRef.current) {
@@ -539,6 +612,9 @@ const HuddleScreen = ({ navigation, route }) => {
             }
             setErrorMessage('');
             setSeconds(0);
+            callStartedAtMsRef.current = 0;
+            hostAloneSinceMsRef.current = 0;
+            keepWaitingStartedAtMsRef.current = 0;
             firstRemoteAudioLoggedRef.current = false;
 
             if (!user?.uid) {
@@ -572,6 +648,11 @@ const HuddleScreen = ({ navigation, route }) => {
 	                setPhase('ongoing');
 	                attachCallHandlers(existingSession.callObject);
 	                refreshParticipants();
+                const resumedStartedAtMs = Number(existingSession?.startedAtMs || 0);
+                callStartedAtMsRef.current = resumedStartedAtMs > 0 ? resumedStartedAtMs : Date.now();
+                setSeconds(Math.max(0, Math.floor((Date.now() - callStartedAtMsRef.current) / 1000)));
+                hostAloneSinceMsRef.current = Number(existingSession?.hostAloneSinceMs || 0);
+                keepWaitingStartedAtMsRef.current = Number(existingSession?.keepWaitingStartedAtMs || 0);
                 if (existingSession?.huddleId) {
                         hasDailyJoinedRef.current = true;
                         setHasLocalJoinedDaily(true);
@@ -687,13 +768,22 @@ const HuddleScreen = ({ navigation, route }) => {
                 nativeCallService.setHuddleCallActive(resolvedHuddleId);
                 setIsSpeakerOn(true);
                 refreshParticipants();
+                const startedAtMs = callStartedAtMsRef.current || Date.now();
+                callStartedAtMsRef.current = startedAtMs;
+                setSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
                 huddleService.setActiveLocalSession({
                     chatId: chat.id,
                     huddleId: resolvedHuddleId,
                     chatName: chat?.name || 'Huddle',
                     startedBy: resolvedHostUid,
                     isHost: Boolean(hostStatus),
-                    callObject: activeCallObject
+                    callObject: activeCallObject,
+                    startedAtMs,
+                    elapsedSeconds: 0,
+                    hostAloneSinceMs: 0,
+                    keepWaitingStartedAtMs: 0,
+                    activeSpeakerSessionId: null,
+                    activeSpeakerName: ''
                 });
             } catch (error) {
                 const isExpectedCancellation =
@@ -719,9 +809,29 @@ const HuddleScreen = ({ navigation, route }) => {
     );
 
     useEffect(() => {
+        const activeSpeaker = participants.find((p) => p?.session_id === activeSpeakerSessionId);
+        const activeSpeakerName = activeSpeaker?.local ? 'You' : (activeSpeaker?.user_name || '');
+        huddleService.updateActiveLocalSession({
+            elapsedSeconds: seconds,
+            participantCount: participants.length,
+            remoteParticipantCount,
+            activeSpeakerSessionId: activeSpeakerSessionId || null,
+            activeSpeakerName: activeSpeakerName || '',
+            phase,
+            firebaseStatus
+        });
+    }, [activeSpeakerSessionId, firebaseStatus, participants, phase, remoteParticipantCount, seconds]);
+
+    useEffect(() => {
         if (phase === 'ending' || phase === 'ended' || phase === 'error') return;
         if (remoteParticipantCount > 0) {
             everHadRemoteParticipantRef.current = true;
+            hostAloneSinceMsRef.current = 0;
+            keepWaitingStartedAtMsRef.current = 0;
+            huddleService.updateActiveLocalSession({
+                hostAloneSinceMs: 0,
+                keepWaitingStartedAtMs: 0
+            });
             clearHostAloneTimers();
             callDiagnostics.log(huddleId, 'remote_participant_connected', { remoteCount: remoteParticipantCount });
             if (joinTimeoutRef.current) {
@@ -903,6 +1013,12 @@ const HuddleScreen = ({ navigation, route }) => {
     const handleHostAloneEndNow = () => {
         callDiagnostics.log(huddleIdRef.current, 'host_alone_prompt_end_now');
         setShowHostAlonePrompt(false);
+        hostAloneSinceMsRef.current = 0;
+        keepWaitingStartedAtMsRef.current = 0;
+        huddleService.updateActiveLocalSession({
+            hostAloneSinceMs: 0,
+            keepWaitingStartedAtMs: 0
+        });
         clearHostAloneTimers();
         leaveCall(true, true, true, 'host_alone_timeout');
     };
@@ -911,6 +1027,14 @@ const HuddleScreen = ({ navigation, route }) => {
         callDiagnostics.log(huddleIdRef.current, 'host_alone_prompt_keep_waiting');
         setShowHostAlonePrompt(false);
         if (hostAloneForceEndTimeoutRef.current || forceEndCountdownIntervalRef.current) return;
+        if (!keepWaitingStartedAtMsRef.current) {
+            keepWaitingStartedAtMsRef.current = Date.now();
+            huddleService.updateActiveLocalSession({
+                keepWaitingStartedAtMs: keepWaitingStartedAtMsRef.current
+            });
+        }
+        const elapsedMs = Date.now() - keepWaitingStartedAtMsRef.current;
+        const remainingMs = Math.max(0, HOST_ALONE_FORCE_END_DELAY_MS - elapsedMs);
         hostAloneForceEndTimeoutRef.current = setTimeout(() => {
             hostAloneForceEndTimeoutRef.current = null;
             const stillAlone =
@@ -921,7 +1045,7 @@ const HuddleScreen = ({ navigation, route }) => {
             if (!stillAlone) return;
             callDiagnostics.log(huddleIdRef.current, 'host_alone_force_end_countdown_started');
             startForceEndCountdown();
-        }, HOST_ALONE_FORCE_END_DELAY_MS);
+        }, remainingMs);
     };
 
 	    const statusText = isForceEnding

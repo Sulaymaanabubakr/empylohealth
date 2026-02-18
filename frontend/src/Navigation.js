@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
-import { View, Pressable, Text, StyleSheet, TouchableOpacity, AppState, Linking as RnLinking } from 'react-native';
+import { View, Pressable, Text, StyleSheet, TouchableOpacity, AppState, Linking as RnLinking, Animated, PanResponder, Dimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import MainTabs from './navigation/MainTabs';
 
 import SplashScreen from './screens/SplashScreen';
@@ -50,8 +52,19 @@ import AboutCirclesScreen from './screens/AboutCirclesScreen';
 import { navigationRef, flushPendingNavigation, navigate } from './navigation/navigationRef';
 import { huddleService } from './services/api/huddleService';
 import { parseDeepLink } from './utils/deepLinks';
+import { biometricPrefs } from './services/security/biometricPrefs';
+import { userService } from './services/api/userService';
+import { auth } from './services/firebaseConfig';
 
 const Stack = createNativeStackNavigator();
+const DRAG_MARGIN = 12;
+const LOCK_TIMEOUT_MS = 10 * 60 * 1000;
+const formatCallDuration = (seconds = 0) => {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
 
 let LocalAuthentication = null;
 try {
@@ -63,18 +76,37 @@ try {
 }
 
 export default function Navigation() {
-    const { routeTarget, userData } = useAuth();
+    const { routeTarget, userData, user } = useAuth();
     const [activeHuddleSession, setActiveHuddleSession] = useState(null);
     const [currentRouteName, setCurrentRouteName] = useState('');
     const [biometricLocked, setBiometricLocked] = useState(false);
     const [unlocking, setUnlocking] = useState(false);
+    const [passwordUnlocking, setPasswordUnlocking] = useState(false);
+    const [unlockPassword, setUnlockPassword] = useState('');
+    const [unlockError, setUnlockError] = useState('');
+    const [deviceBiometricEnabled, setDeviceBiometricEnabled] = useState(false);
+    const [setupPromptVisible, setSetupPromptVisible] = useState(false);
+    const [setupPromptBusy, setSetupPromptBusy] = useState(false);
+    const [setupPromptError, setSetupPromptError] = useState('');
     const [deepLinkBannerText, setDeepLinkBannerText] = useState('');
     const firstRenderLoggedRef = useRef(false);
     const appStateRef = useRef(AppState.currentState);
     const unlockInFlightRef = useRef(false);
+    const passwordUnlockInFlightRef = useRef(false);
     const deepLinkBannerTimerRef = useRef(null);
+    const lockPulseLoopRef = useRef(null);
+    const backgroundAtRef = useRef(0);
+    const screenSizeRef = useRef(Dimensions.get('window'));
+    const floatingPos = useRef(new Animated.ValueXY({ x: 14, y: Math.max(100, Dimensions.get('window').height - 130) })).current;
+    const lockOpacity = useRef(new Animated.Value(0)).current;
+    const lockScale = useRef(new Animated.Value(0.97)).current;
+    const lockPulse = useRef(new Animated.Value(0)).current;
+    const [floatingBox, setFloatingBox] = useState({ width: 320, height: 68 });
+    const [nowMs, setNowMs] = useState(Date.now());
 
-    const biometricsEnabled = routeTarget !== 'UNAUTH' && Boolean(userData?.settings?.biometrics);
+    const accountBiometricsEnabled = routeTarget !== 'UNAUTH' && Boolean(userData?.settings?.biometrics);
+    const biometricsEnabled = accountBiometricsEnabled && deviceBiometricEnabled;
+    const canUsePasswordFallback = Boolean(user?.email && user?.providerData?.some((provider) => provider?.providerId === 'password'));
 
     const unlockWithBiometrics = async () => {
         if (!biometricsEnabled) {
@@ -90,8 +122,9 @@ export default function Navigation() {
         setUnlocking(true);
         try {
             const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
             const supported = await LocalAuthentication.supportedAuthenticationTypesAsync();
-            if (!hasHardware || !supported?.length) {
+            if (!hasHardware || !isEnrolled || !supported?.length) {
                 // Do not hard-lock users on devices without biometric capability.
                 setBiometricLocked(false);
                 return true;
@@ -106,13 +139,48 @@ export default function Navigation() {
 
             const success = Boolean(result?.success);
             setBiometricLocked(!success);
+            if (!success) {
+                setUnlockError('Unlock was cancelled. Use biometrics or your password.');
+            } else {
+                setUnlockError('');
+            }
             return success;
         } catch (error) {
             setBiometricLocked(true);
+            setUnlockError('Could not verify biometrics. Try again or use password.');
             return false;
         } finally {
             setUnlocking(false);
             unlockInFlightRef.current = false;
+        }
+    };
+
+    const unlockWithPassword = async () => {
+        if (passwordUnlockInFlightRef.current) return false;
+        const password = String(unlockPassword || '').trim();
+        if (!password) {
+            setUnlockError('Enter your account password.');
+            return false;
+        }
+        if (!auth.currentUser?.email) {
+            setUnlockError('Password unlock is only available for email/password accounts.');
+            return false;
+        }
+        passwordUnlockInFlightRef.current = true;
+        setPasswordUnlocking(true);
+        setUnlockError('');
+        try {
+            const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+            await reauthenticateWithCredential(auth.currentUser, credential);
+            setBiometricLocked(false);
+            setUnlockPassword('');
+            return true;
+        } catch (error) {
+            setUnlockError('Password is incorrect. Please try again.');
+            return false;
+        } finally {
+            setPasswordUnlocking(false);
+            passwordUnlockInFlightRef.current = false;
         }
     };
 
@@ -124,6 +192,34 @@ export default function Navigation() {
     }, []);
 
     useEffect(() => {
+        const sub = Dimensions.addEventListener('change', ({ window }) => {
+            screenSizeRef.current = window;
+        });
+        return () => sub?.remove?.();
+    }, []);
+
+    useEffect(() => {
+        let mounted = true;
+        const loadDevicePreference = async () => {
+            if (!user?.uid || routeTarget === 'UNAUTH') {
+                setDeviceBiometricEnabled(false);
+                return;
+            }
+            const enabled = await biometricPrefs.isDeviceBiometricEnabled(user.uid);
+            const lastBackgroundAt = await biometricPrefs.getLastBackgroundAt(user.uid);
+            if (!mounted) return;
+            setDeviceBiometricEnabled(enabled);
+            backgroundAtRef.current = lastBackgroundAt;
+        };
+        loadDevicePreference().catch(() => {
+            if (mounted) setDeviceBiometricEnabled(false);
+        });
+        return () => {
+            mounted = false;
+        };
+    }, [user?.uid, routeTarget]);
+
+    useEffect(() => {
         console.log('[Navigation] Route target:', routeTarget);
         flushPendingNavigation();
     }, [routeTarget]);
@@ -131,24 +227,151 @@ export default function Navigation() {
     useEffect(() => {
         if (!biometricsEnabled) {
             setBiometricLocked(false);
+            setUnlockPassword('');
+            setUnlockError('');
             return;
         }
-        setBiometricLocked(true);
-        unlockWithBiometrics().catch(() => {});
-    }, [biometricsEnabled, routeTarget]);
+        if (!user?.uid || routeTarget === 'UNAUTH') return;
+        let cancelled = false;
+        const run = async () => {
+            const lastBackgroundAt = await biometricPrefs.getLastBackgroundAt(user.uid);
+            backgroundAtRef.current = lastBackgroundAt;
+            if (cancelled || !lastBackgroundAt) return;
+            const awayDuration = Date.now() - lastBackgroundAt;
+            if (awayDuration >= LOCK_TIMEOUT_MS) {
+                setBiometricLocked(true);
+                await unlockWithBiometrics();
+            }
+        };
+        run().catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [biometricsEnabled, routeTarget, user?.uid]);
+
+    useEffect(() => {
+        if (!user?.uid || routeTarget === 'UNAUTH') return;
+        let cancelled = false;
+        const maybeShowSetupPrompt = async () => {
+            const seen = await biometricPrefs.hasSeenSetupPrompt(user.uid);
+            if (cancelled || seen) return;
+            if (!LocalAuthentication) {
+                await biometricPrefs.markSetupPromptSeen(user.uid);
+                return;
+            }
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            if (!hasHardware) {
+                await biometricPrefs.markSetupPromptSeen(user.uid);
+                return;
+            }
+            if (!cancelled) {
+                setSetupPromptError('');
+                setSetupPromptVisible(true);
+            }
+        };
+        maybeShowSetupPrompt().catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [user?.uid, routeTarget]);
+
+    const handleSetupPrompt = async (enableBiometrics) => {
+        if (!user?.uid || setupPromptBusy) return;
+        setSetupPromptBusy(true);
+        setSetupPromptError('');
+        try {
+            if (!enableBiometrics) {
+                await biometricPrefs.setDeviceBiometricEnabled(user.uid, false);
+                await biometricPrefs.markSetupPromptSeen(user.uid);
+                setDeviceBiometricEnabled(false);
+                setSetupPromptVisible(false);
+                return;
+            }
+            if (!LocalAuthentication) {
+                setSetupPromptError('Biometric module is unavailable in this build. Rebuild the app to enable it.');
+                return;
+            }
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+            if (!hasHardware || !isEnrolled) {
+                setSetupPromptError('Set up Face ID/Fingerprint in device settings first, then try again.');
+                return;
+            }
+            await biometricPrefs.setDeviceBiometricEnabled(user.uid, true);
+            await biometricPrefs.markSetupPromptSeen(user.uid);
+            await userService.updateUserDocument(user.uid, {
+                settings: {
+                    ...(userData?.settings || {}),
+                    biometrics: true
+                }
+            });
+            setDeviceBiometricEnabled(true);
+            setSetupPromptVisible(false);
+        } catch (error) {
+            setSetupPromptError('Could not enable biometrics right now. Try again.');
+        } finally {
+            setSetupPromptBusy(false);
+        }
+    };
 
     useEffect(() => {
         const sub = AppState.addEventListener('change', (nextState) => {
             const previous = appStateRef.current;
             appStateRef.current = nextState;
+            if ((nextState === 'inactive' || nextState === 'background') && user?.uid) {
+                const now = Date.now();
+                backgroundAtRef.current = now;
+                biometricPrefs.setLastBackgroundAt(user.uid, now).catch(() => {});
+            }
             const comingToForeground =
                 (previous === 'background' || previous === 'inactive') && nextState === 'active';
             if (!comingToForeground || !biometricsEnabled) return;
+            const awayDuration = Date.now() - Number(backgroundAtRef.current || 0);
+            if (awayDuration < LOCK_TIMEOUT_MS) return;
             setBiometricLocked(true);
             unlockWithBiometrics().catch(() => {});
         });
         return () => sub.remove();
-    }, [biometricsEnabled, routeTarget]);
+    }, [biometricsEnabled, routeTarget, user?.uid]);
+
+    useEffect(() => {
+        if (!biometricLocked) {
+            if (lockPulseLoopRef.current) {
+                lockPulseLoopRef.current.stop();
+                lockPulseLoopRef.current = null;
+            }
+            return;
+        }
+        lockOpacity.setValue(0);
+        lockScale.setValue(0.97);
+        lockPulse.setValue(0);
+        Animated.parallel([
+            Animated.timing(lockOpacity, {
+                toValue: 1,
+                duration: 240,
+                useNativeDriver: true
+            }),
+            Animated.spring(lockScale, {
+                toValue: 1,
+                useNativeDriver: true,
+                bounciness: 8
+            })
+        ]).start();
+        const pulseLoop = Animated.loop(
+            Animated.sequence([
+                Animated.timing(lockPulse, { toValue: 1, duration: 1300, useNativeDriver: true }),
+                Animated.timing(lockPulse, { toValue: 0, duration: 1300, useNativeDriver: true })
+            ])
+        );
+        lockPulseLoopRef.current = pulseLoop;
+        pulseLoop.start();
+        return () => {
+            if (lockPulseLoopRef.current) {
+                lockPulseLoopRef.current.stop();
+                lockPulseLoopRef.current = null;
+            }
+        };
+    }, [biometricLocked, lockOpacity, lockPulse, lockScale]);
 
     if (!firstRenderLoggedRef.current) {
         firstRenderLoggedRef.current = true;
@@ -171,6 +394,57 @@ export default function Navigation() {
             }
         });
     };
+
+    useEffect(() => {
+        if (!showHuddleBanner) return undefined;
+        const timer = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, [showHuddleBanner]);
+
+    const callStartedAtMs = Number(activeHuddleSession?.startedAtMs || 0);
+    const elapsedSeconds = callStartedAtMs > 0
+        ? Math.max(0, Math.floor((nowMs - callStartedAtMs) / 1000))
+        : Number(activeHuddleSession?.elapsedSeconds || 0);
+    const activeSpeakerName = String(activeHuddleSession?.activeSpeakerName || '').trim();
+    const huddleSubtitle = activeSpeakerName
+        ? `${formatCallDuration(elapsedSeconds)} • ${activeSpeakerName} speaking`
+        : `${formatCallDuration(elapsedSeconds)} • Tap to return to call`;
+
+    const clampFloating = (x, y) => {
+        const window = screenSizeRef.current || Dimensions.get('window');
+        const maxX = Math.max(DRAG_MARGIN, window.width - floatingBox.width - DRAG_MARGIN);
+        const maxY = Math.max(DRAG_MARGIN + 40, window.height - floatingBox.height - DRAG_MARGIN - 60);
+        return {
+            x: Math.min(Math.max(DRAG_MARGIN, x), maxX),
+            y: Math.min(Math.max(DRAG_MARGIN + 40, y), maxY)
+        };
+    };
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+            onPanResponderGrant: () => {
+                floatingPos.setOffset({
+                    x: floatingPos.x.__getValue(),
+                    y: floatingPos.y.__getValue()
+                });
+                floatingPos.setValue({ x: 0, y: 0 });
+            },
+            onPanResponderMove: Animated.event([null, { dx: floatingPos.x, dy: floatingPos.y }], {
+                useNativeDriver: false
+            }),
+            onPanResponderRelease: () => {
+                floatingPos.flattenOffset();
+                const clamped = clampFloating(floatingPos.x.__getValue(), floatingPos.y.__getValue());
+                Animated.spring(floatingPos, {
+                    toValue: clamped,
+                    useNativeDriver: false,
+                    bounciness: 0
+                }).start();
+            }
+        })
+    ).current;
 
     const showDeepLinkBanner = (text = 'Opened from shared link') => {
         if (deepLinkBannerTimerRef.current) {
@@ -300,10 +574,25 @@ export default function Navigation() {
             )}
 
             {showHuddleBanner && (
-                <View style={styles.huddleBanner}>
+                <Animated.View
+                    style={[
+                        styles.huddleBanner,
+                        {
+                            left: floatingPos.x,
+                            top: floatingPos.y
+                        }
+                    ]}
+                    onLayout={(event) => {
+                        const { width, height } = event.nativeEvent.layout;
+                        setFloatingBox({ width, height });
+                    }}
+                >
+                    <View style={styles.huddleDragHandle} {...panResponder.panHandlers}>
+                        <Ionicons name="reorder-two-outline" size={18} color="#A3A3A3" />
+                    </View>
                     <Pressable style={styles.huddleBannerInfo} onPress={openHuddle}>
                         <Text style={styles.huddleBannerTitle}>Huddle in progress</Text>
-                        <Text style={styles.huddleBannerSubtitle}>Tap to return to call</Text>
+                        <Text style={styles.huddleBannerSubtitle} numberOfLines={1}>{huddleSubtitle}</Text>
                     </Pressable>
                     <View style={styles.huddleBannerActions}>
                         <TouchableOpacity
@@ -325,28 +614,128 @@ export default function Navigation() {
                             <MaterialIcons name="call-end" size={20} color="#FFFFFF" />
                         </TouchableOpacity>
                     </View>
+                </Animated.View>
+            )}
+
+            {setupPromptVisible && !biometricLocked && routeTarget !== 'UNAUTH' && (
+                <View style={styles.setupPromptOverlay}>
+                    <View style={styles.setupPromptCard}>
+                        <View style={styles.setupPromptIconWrap}>
+                            <Ionicons name="shield-checkmark" size={26} color="#FFFFFF" />
+                        </View>
+                        <Text style={styles.setupPromptTitle}>Protect Circles on this device?</Text>
+                        <Text style={styles.setupPromptBody}>
+                            Enable Face ID/Fingerprint lock so your app stays private.
+                        </Text>
+                        {!!setupPromptError && (
+                            <Text style={styles.setupPromptError}>{setupPromptError}</Text>
+                        )}
+                        <TouchableOpacity
+                            style={styles.setupEnableButton}
+                            onPress={() => handleSetupPrompt(true)}
+                            disabled={setupPromptBusy}
+                        >
+                            <Text style={styles.setupEnableButtonText}>
+                                {setupPromptBusy ? 'Setting up...' : 'Enable biometrics'}
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.setupSkipButton}
+                            onPress={() => handleSetupPrompt(false)}
+                            disabled={setupPromptBusy}
+                        >
+                            <Text style={styles.setupSkipButtonText}>Not now</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             )}
 
             {biometricLocked && (
-                <View style={styles.lockOverlay}>
-                    <View style={styles.lockCard}>
-                        <Ionicons name="lock-closed" size={22} color="#0F766E" />
-                        <Text style={styles.lockTitle}>App Locked</Text>
-                        <Text style={styles.lockSubtitle}>
-                            Unlock with biometrics or your device passcode to continue.
-                        </Text>
-                        <TouchableOpacity
-                            style={styles.unlockButton}
-                            onPress={() => unlockWithBiometrics()}
-                            disabled={unlocking}
-                        >
-                            <Text style={styles.unlockButtonText}>
-                                {unlocking ? 'Unlocking...' : 'Unlock'}
+                <Animated.View style={[styles.lockOverlay, { opacity: lockOpacity }]}>
+                    <LinearGradient
+                        colors={['#033D3A', '#056761', '#012625']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.lockOverlayBackground}
+                    />
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        style={styles.lockOverlayContent}
+                    >
+                        <Animated.View style={[styles.lockCard, { transform: [{ scale: lockScale }] }]}>
+                            <Animated.View
+                                style={[
+                                    styles.lockPulse,
+                                    {
+                                        opacity: lockPulse.interpolate({ inputRange: [0, 1], outputRange: [0.24, 0.58] }),
+                                        transform: [
+                                            {
+                                                scale: lockPulse.interpolate({
+                                                    inputRange: [0, 1],
+                                                    outputRange: [1, 1.34]
+                                                })
+                                            }
+                                        ]
+                                    }
+                                ]}
+                            />
+                            <View style={styles.lockIconWrap}>
+                                <Ionicons name="lock-closed" size={24} color="#FFFFFF" />
+                            </View>
+                            <Text style={styles.lockTitle}>Circles is locked</Text>
+                            <Text style={styles.lockSubtitle}>
+                                Unlock with biometrics to continue. Your app content stays hidden until verified.
                             </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+
+                            <TouchableOpacity
+                                style={styles.unlockButton}
+                                onPress={() => unlockWithBiometrics()}
+                                disabled={unlocking || passwordUnlocking}
+                            >
+                                <Ionicons name="finger-print" size={18} color="#FFFFFF" />
+                                <Text style={styles.unlockButtonText}>
+                                    {unlocking ? 'Verifying...' : 'Unlock with biometrics'}
+                                </Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.passwordDivider}>
+                                <View style={styles.passwordDividerLine} />
+                                <Text style={styles.passwordDividerText}>or</Text>
+                                <View style={styles.passwordDividerLine} />
+                            </View>
+
+                            {canUsePasswordFallback ? (
+                                <>
+                                    <TextInput
+                                        style={styles.passwordInput}
+                                        placeholder="Enter account password"
+                                        placeholderTextColor="#9CA3AF"
+                                        value={unlockPassword}
+                                        onChangeText={setUnlockPassword}
+                                        secureTextEntry
+                                        editable={!unlocking && !passwordUnlocking}
+                                        autoCapitalize="none"
+                                    />
+                                    <TouchableOpacity
+                                        style={styles.passwordUnlockButton}
+                                        onPress={unlockWithPassword}
+                                        disabled={unlocking || passwordUnlocking}
+                                    >
+                                        <Text style={styles.passwordUnlockButtonText}>
+                                            {passwordUnlocking ? 'Checking password...' : 'Unlock with password'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </>
+                            ) : (
+                                <Text style={styles.passwordFallbackHint}>
+                                    Password fallback is available for email/password accounts.
+                                </Text>
+                            )}
+
+                            {!!unlockError && <Text style={styles.unlockError}>{unlockError}</Text>}
+                        </Animated.View>
+                    </KeyboardAvoidingView>
+                </Animated.View>
             )}
         </View>
     );
@@ -379,9 +768,7 @@ const styles = StyleSheet.create({
     },
     huddleBanner: {
         position: 'absolute',
-        left: 14,
-        right: 14,
-        bottom: 26,
+        width: 336,
         backgroundColor: '#111111',
         borderRadius: 14,
         paddingHorizontal: 12,
@@ -389,7 +776,15 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#2E2E2E',
         flexDirection: 'row',
-        alignItems: 'center'
+        alignItems: 'center',
+        zIndex: 1150
+    },
+    huddleDragHandle: {
+        width: 22,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 6
     },
     huddleBannerInfo: {
         flex: 1,
@@ -421,47 +816,214 @@ const styles = StyleSheet.create({
         fontSize: 12,
         marginTop: 2
     },
-    lockOverlay: {
+    setupPromptOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(12, 16, 23, 0.55)',
+        backgroundColor: 'rgba(2, 20, 21, 0.72)',
+        zIndex: 1180,
         alignItems: 'center',
         justifyContent: 'center',
+        paddingHorizontal: 20
+    },
+    setupPromptCard: {
+        width: '100%',
+        maxWidth: 360,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 22,
         paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 16,
+        borderWidth: 1,
+        borderColor: '#CCFBF1'
+    },
+    setupPromptIconWrap: {
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        backgroundColor: '#00A99D',
+        alignItems: 'center',
+        justifyContent: 'center',
+        alignSelf: 'center',
+        marginBottom: 10
+    },
+    setupPromptTitle: {
+        fontSize: 21,
+        fontWeight: '800',
+        color: '#0F172A',
+        textAlign: 'center'
+    },
+    setupPromptBody: {
+        marginTop: 8,
+        fontSize: 14,
+        lineHeight: 20,
+        color: '#334155',
+        textAlign: 'center'
+    },
+    setupPromptError: {
+        marginTop: 10,
+        fontSize: 13,
+        color: '#DC2626',
+        textAlign: 'center',
+        fontWeight: '600'
+    },
+    setupEnableButton: {
+        marginTop: 14,
+        backgroundColor: '#00A99D',
+        borderRadius: 14,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    setupEnableButtonText: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '800'
+    },
+    setupSkipButton: {
+        marginTop: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#D1D5DB',
+        paddingVertical: 11,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    setupSkipButtonText: {
+        color: '#475569',
+        fontSize: 14,
+        fontWeight: '700'
+    },
+    lockOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#032826',
         zIndex: 1200
+    },
+    lockOverlayBackground: {
+        ...StyleSheet.absoluteFillObject
+    },
+    lockOverlayContent: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 20
     },
     lockCard: {
         width: '100%',
-        maxWidth: 340,
+        maxWidth: 370,
         backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 18,
+        borderRadius: 24,
+        paddingHorizontal: 20,
+        paddingTop: 22,
+        paddingBottom: 18,
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#E5E7EB'
+        borderWidth: 1.5,
+        borderColor: '#CCFBF1',
+        overflow: 'hidden'
+    },
+    lockPulse: {
+        position: 'absolute',
+        top: 8,
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        backgroundColor: '#2DD4BF'
+    },
+    lockIconWrap: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#00A99D',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
     lockTitle: {
-        fontSize: 18,
+        fontSize: 24,
         fontWeight: '800',
-        color: '#111827',
-        marginTop: 8
+        color: '#0B1324',
+        marginTop: 12
     },
     lockSubtitle: {
-        marginTop: 8,
-        fontSize: 13,
-        color: '#4B5563',
+        marginTop: 10,
+        fontSize: 14,
+        color: '#475569',
         textAlign: 'center',
-        lineHeight: 18
+        lineHeight: 21
     },
     unlockButton: {
-        marginTop: 14,
+        marginTop: 16,
         backgroundColor: '#00A99D',
-        borderRadius: 12,
-        paddingHorizontal: 18,
-        paddingVertical: 10
+        borderRadius: 14,
+        width: '100%',
+        minHeight: 46,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
     unlockButtonText: {
         color: '#FFFFFF',
         fontSize: 14,
+        fontWeight: '800',
+        marginLeft: 8
+    },
+    passwordDivider: {
+        marginTop: 14,
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    passwordDividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#E2E8F0'
+    },
+    passwordDividerText: {
+        marginHorizontal: 8,
+        fontSize: 12,
+        color: '#64748B',
+        fontWeight: '700'
+    },
+    passwordInput: {
+        marginTop: 12,
+        width: '100%',
+        minHeight: 46,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+        backgroundColor: '#F8FAFC',
+        paddingHorizontal: 12,
+        color: '#0F172A',
+        fontSize: 14
+    },
+    passwordUnlockButton: {
+        marginTop: 10,
+        width: '100%',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#14B8A6',
+        backgroundColor: '#ECFEFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 44,
+        paddingHorizontal: 12
+    },
+    passwordUnlockButtonText: {
+        color: '#0F766E',
+        fontSize: 14,
+        fontWeight: '800'
+    },
+    passwordFallbackHint: {
+        marginTop: 12,
+        fontSize: 12,
+        color: '#64748B',
+        textAlign: 'center',
+        lineHeight: 18
+    },
+    unlockError: {
+        marginTop: 10,
+        fontSize: 12,
+        color: '#DC2626',
+        textAlign: 'center',
         fontWeight: '700'
     }
 });

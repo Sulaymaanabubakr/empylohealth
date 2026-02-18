@@ -93,6 +93,16 @@ const decodeSvgDataUri = (uri = '') => {
     }
 };
 
+const getInitial = (name = '') => {
+    const parts = String(name || '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return `${parts[0].charAt(0).toUpperCase()}.${parts[1].charAt(0).toUpperCase()}`;
+};
+
 const CircularProgress = ({ score, label }) => {
     const size = 120;
     const strokeWidth = 14;
@@ -547,19 +557,26 @@ const DashboardScreen = ({ navigation }) => {
                                                 <View
                                                     key={memberId}
                                                     style={[
-                                                        styles.memberAvatarContainer,
+                                                        styles.memberAvatarWithInitial,
                                                         {
                                                             zIndex: 10 - index,
                                                             marginLeft: index === 0 ? 0 : -18,
-                                                            borderColor: getMemberRingColor(profile)
                                                         }
                                                     ]}
                                                 >
-                                                    <Avatar
-                                                        uri={profile.photoURL}
-                                                        name={profile.name}
-                                                        size={40}
-                                                    />
+                                                    <View
+                                                        style={[
+                                                            styles.memberAvatarContainer,
+                                                            { borderColor: getMemberRingColor(profile) }
+                                                        ]}
+                                                    >
+                                                        <Avatar
+                                                            uri={profile.photoURL}
+                                                            name={profile.name}
+                                                            size={40}
+                                                        />
+                                                    </View>
+                                                    <Text style={styles.memberInitialText}>{getInitial(profile.name)}</Text>
                                                 </View>
                                             );
                                         })}
@@ -957,6 +974,16 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.15,
         shadowRadius: 4,
+    },
+    memberAvatarWithInitial: {
+        width: 48,
+        alignItems: 'center',
+    },
+    memberInitialText: {
+        marginTop: 4,
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#616161',
     },
     moreMembersBadge: {
         width: 42,

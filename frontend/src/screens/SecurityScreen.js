@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { userService } from '../services/api/userService';
 import { LEGAL_LINKS } from '../constants/legalLinks';
+import { biometricPrefs } from '../services/security/biometricPrefs';
 
 const SecurityScreen = ({ navigation }) => {
     const { user, userData, deleteAccount } = useAuth();
@@ -15,13 +16,30 @@ const SecurityScreen = ({ navigation }) => {
     const [biometrics, setBiometrics] = useState(true);
 
     useEffect(() => {
-        setSecurityNotif(userData?.settings?.securityNotifications ?? true);
-        setBiometrics(userData?.settings?.biometrics ?? false);
-    }, [userData]);
+        let mounted = true;
+        const load = async () => {
+            const remoteEnabled = userData?.settings?.biometrics ?? false;
+            const localEnabled = await biometricPrefs.isDeviceBiometricEnabled(user?.uid);
+            if (!mounted) return;
+            setSecurityNotif(userData?.settings?.securityNotifications ?? true);
+            setBiometrics(Boolean(remoteEnabled && localEnabled));
+        };
+        load().catch(() => {
+            setSecurityNotif(userData?.settings?.securityNotifications ?? true);
+            setBiometrics(userData?.settings?.biometrics ?? false);
+        });
+        return () => {
+            mounted = false;
+        };
+    }, [userData, user?.uid]);
 
     const persistSetting = async (field, value) => {
         if (!user?.uid) return;
         try {
+            if (field === 'biometrics') {
+                await biometricPrefs.markSetupPromptSeen(user.uid);
+                await biometricPrefs.setDeviceBiometricEnabled(user.uid, value);
+            }
             await userService.updateUserDocument(user.uid, {
                 settings: {
                     ...(userData?.settings || {}),

@@ -38,6 +38,16 @@ const calculateCircleRating = (circle) => {
     return Math.min(score, 5.0).toFixed(1);
 };
 
+const getInitial = (name = '') => {
+    const parts = String(name || '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return `${parts[0].charAt(0).toUpperCase()}.${parts[1].charAt(0).toUpperCase()}`;
+};
+
 const SupportGroupsScreen = ({ route }) => {
     const navigation = useNavigation();
     const { user } = useAuth();
@@ -158,10 +168,13 @@ const SupportGroupsScreen = ({ route }) => {
                         {(memberPreviewMap[item.id] || []).map((member, index) => (
                             <View
                                 key={`${item.id}_${member.uid}`}
-                                style={{
-                                    marginLeft: index === 0 ? 0 : -14,
-                                    zIndex: 10 - index
-                                }}
+                                style={[
+                                    styles.memberAvatarWithInitial,
+                                    {
+                                        marginLeft: index === 0 ? 0 : -14,
+                                        zIndex: 10 - index
+                                    }
+                                ]}
                             >
                                 <Avatar
                                     uri={member.photoURL}
@@ -171,6 +184,7 @@ const SupportGroupsScreen = ({ route }) => {
                                     wellbeingScore={member?.wellbeingScore}
                                     wellbeingLabel={member?.wellbeingLabel}
                                 />
+                                <Text style={styles.memberInitialText}>{getInitial(member.name)}</Text>
                             </View>
                         ))}
                         {Array.isArray(item.members) && item.members.length > 3 && (
@@ -509,6 +523,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 12,
+    },
+    memberAvatarWithInitial: {
+        width: 40,
+        alignItems: 'center',
+    },
+    memberInitialText: {
+        marginTop: 4,
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#616161',
     },
     moreMembersBadge: {
         width: 34,

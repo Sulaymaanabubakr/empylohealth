@@ -30,7 +30,8 @@
                 "autoIncrement": "buildNumber"
             },
             "android": {
-                "buildType": "apk"
+                "buildType": "app-bundle",
+                "autoIncrement": "versionCode"
             }
         }
     },

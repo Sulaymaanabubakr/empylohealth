@@ -19,6 +19,7 @@
       "infoPlist": {
         "CFBundleDisplayName": "Circles Health App",
         "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "Use Face ID to quickly and securely unlock Circles Health App.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": false
         },
@@ -51,6 +52,12 @@
     "plugins": [
       "expo-font",
       "expo-apple-authentication",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to quickly and securely unlock Circles Health App."
+        }
+      ],
       "@daily-co/config-plugin-rn-daily-js",
       "./plugins/withVoipCallkit",
       [
