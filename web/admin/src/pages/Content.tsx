@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
-import { Search, Filter, BookOpen, Users, MessageCircle, Calendar, Plus, RotateCcw } from 'lucide-react';
+import { Search, Filter, BookOpen, Users, MessageCircle, Calendar, Plus, RotateCcw, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { useSearchParams } from 'react-router-dom';
 
@@ -19,11 +19,30 @@ interface ContentItem {
     title?: string;
     content?: string;
     description?: string;
+    image?: string;
+    type?: string;
+    category?: string;
+    tag?: string;
+    time?: string;
     email?: string;
     status?: string;
     isNew?: boolean;
     scheduledDate?: string;
     createdAt?: string | TimestampLike;
+}
+
+interface EditFormState {
+    name: string;
+    title: string;
+    description: string;
+    content: string;
+    image: string;
+    type: string;
+    category: string;
+    tag: string;
+    time: string;
+    status: string;
+    scheduledDate: string;
 }
 
 interface ContentListResponse {
@@ -54,6 +73,21 @@ export const Content = () => {
     const [affirmationText, setAffirmationText] = useState('');
     const [affirmationDate, setAffirmationDate] = useState(new Date().toISOString().split('T')[0]);
     const [submitting, setSubmitting] = useState(false);
+    const [editingItem, setEditingItem] = useState<ContentItem | null>(null);
+    const [editForm, setEditForm] = useState<EditFormState>({
+        name: '',
+        title: '',
+        description: '',
+        content: '',
+        image: '',
+        type: '',
+        category: '',
+        tag: '',
+        time: '',
+        status: '',
+        scheduledDate: ''
+    });
+    const [savingEdit, setSavingEdit] = useState(false);
 
     useEffect(() => {
         const queryParam = searchParams.get('query');
@@ -159,6 +193,79 @@ export const Content = () => {
             setMessage({ type: 'error', text: 'Failed to delete item.' });
         } finally {
             setActionLoading((prev) => ({ ...prev, [id]: false }));
+        }
+    };
+
+    const openEditModal = (item: ContentItem) => {
+        setEditingItem(item);
+        setEditForm({
+            name: item.name || '',
+            title: item.title || '',
+            description: item.description || '',
+            content: item.content || '',
+            image: item.image || '',
+            type: item.type || '',
+            category: item.category || '',
+            tag: item.tag || '',
+            time: item.time || '',
+            status: item.status || '',
+            scheduledDate: item.scheduledDate || ''
+        });
+    };
+
+    const closeEditModal = () => {
+        if (savingEdit) return;
+        setEditingItem(null);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingItem) return;
+        setSavingEdit(true);
+        setMessage(null);
+        try {
+            const updateContentItem = httpsCallable(functions, 'updateContentItem');
+            const updates: Record<string, string> = {};
+
+            if (activeTab === 'circles') {
+                updates.name = editForm.name;
+                updates.description = editForm.description;
+                updates.image = editForm.image;
+                updates.type = editForm.type;
+                updates.category = editForm.category;
+                updates.status = editForm.status;
+            } else if (activeTab === 'resources') {
+                updates.title = editForm.title;
+                updates.description = editForm.description;
+                updates.content = editForm.content;
+                updates.image = editForm.image;
+                updates.category = editForm.category;
+                updates.tag = editForm.tag;
+                updates.time = editForm.time;
+                updates.status = editForm.status;
+            } else {
+                updates.content = editForm.content;
+                updates.scheduledDate = editForm.scheduledDate;
+                updates.status = editForm.status;
+            }
+
+            await updateContentItem({
+                collection: activeTab,
+                id: editingItem.id,
+                updates
+            });
+
+            if (activeTab === 'affirmations') {
+                await fetchAffirmations();
+            } else {
+                await fetchContent();
+            }
+            setEditingItem(null);
+            setMessage({ type: 'success', text: 'Content updated successfully.' });
+        } catch (error) {
+            console.error('Failed to edit content', error);
+            setMessage({ type: 'error', text: 'Failed to update content.' });
+        } finally {
+            setSavingEdit(false);
         }
     };
 
@@ -384,6 +491,13 @@ export const Content = () => {
                                             {activeTab === 'affirmations' ? (
                                                 <div className="flex items-center justify-end gap-3">
                                                     <button
+                                                        onClick={() => openEditModal(item)}
+                                                        className="text-gray-500 hover:text-primary transition-colors flex items-center gap-1 text-xs"
+                                                        title="Edit affirmation"
+                                                    >
+                                                        <Pencil size={14} /> Edit
+                                                    </button>
+                                                    <button
                                                         onClick={() => setAffirmationText(item.content ?? '')}
                                                         className="text-gray-400 hover:text-primary transition-colors flex items-center gap-1 text-xs"
                                                         title="Reuse this affirmation"
@@ -400,6 +514,13 @@ export const Content = () => {
                                                 </div>
                                             ) : (
                                                 <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => openEditModal(item)}
+                                                        disabled={actionLoading[item.id]}
+                                                        className="text-xs px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
+                                                    >
+                                                        Edit
+                                                    </button>
                                                     <button
                                                         onClick={() => handleUpdateStatus(item.id, 'active')}
                                                         disabled={actionLoading[item.id]}
@@ -453,6 +574,167 @@ export const Content = () => {
                     </div>
                 </div>
             </div>
+
+            {editingItem && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                                Edit {activeTab === 'affirmations' ? 'Affirmation' : activeTab === 'resources' ? 'Resource' : 'Circle'}
+                            </h3>
+                            <button
+                                onClick={closeEditModal}
+                                disabled={savingEdit}
+                                className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            {activeTab === 'circles' && (
+                                <>
+                                    <input
+                                        value={editForm.name}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                        placeholder="Circle name"
+                                    />
+                                    <textarea
+                                        value={editForm.description}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm h-28 resize-none"
+                                        placeholder="Description"
+                                    />
+                                    <input
+                                        value={editForm.image}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, image: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                        placeholder="Image URL"
+                                    />
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <input
+                                            value={editForm.type}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, type: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                            placeholder="Type (public/private)"
+                                        />
+                                        <input
+                                            value={editForm.category}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                            placeholder="Category"
+                                        />
+                                        <input
+                                            value={editForm.status}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, status: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                            placeholder="Status"
+                                        />
+                                    </div>
+                                </>
+                            )}
+
+                            {activeTab === 'resources' && (
+                                <>
+                                    <input
+                                        value={editForm.title}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                        placeholder="Title"
+                                    />
+                                    <textarea
+                                        value={editForm.description}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm h-24 resize-none"
+                                        placeholder="Short description"
+                                    />
+                                    <textarea
+                                        value={editForm.content}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, content: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm h-40 resize-y"
+                                        placeholder="Full article content"
+                                    />
+                                    <input
+                                        value={editForm.image}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, image: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                        placeholder="Image URL"
+                                    />
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                        <input
+                                            value={editForm.category}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                            placeholder="Category"
+                                        />
+                                        <input
+                                            value={editForm.tag}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, tag: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                            placeholder="Tag"
+                                        />
+                                        <input
+                                            value={editForm.time}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, time: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                            placeholder="Time (e.g. 10 min)"
+                                        />
+                                        <input
+                                            value={editForm.status}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, status: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                            placeholder="Status"
+                                        />
+                                    </div>
+                                </>
+                            )}
+
+                            {activeTab === 'affirmations' && (
+                                <>
+                                    <textarea
+                                        value={editForm.content}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, content: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm h-36 resize-none"
+                                        placeholder="Affirmation content"
+                                    />
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <input
+                                            type="date"
+                                            value={editForm.scheduledDate || ''}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, scheduledDate: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                        />
+                                        <input
+                                            value={editForm.status}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, status: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                                            placeholder="Status"
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                            <button
+                                onClick={closeEditModal}
+                                disabled={savingEdit}
+                                className="px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveEdit}
+                                disabled={savingEdit}
+                                className="px-4 py-2 rounded-lg text-sm bg-primary text-white hover:bg-[#008f85] disabled:opacity-50"
+                            >
+                                {savingEdit ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

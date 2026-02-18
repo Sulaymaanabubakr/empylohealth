@@ -20,6 +20,10 @@ export declare const getAllContent: functions.HttpsFunction & functions.Runnable
  */
 export declare const updateContentStatus: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Edit Content Item (Circles / Resources / Affirmations)
+ */
+export declare const updateContentItem: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Suspend/Activate User
  */
 export declare const toggleUserStatus: functions.HttpsFunction & functions.Runnable<any>;

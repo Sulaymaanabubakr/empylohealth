@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = void 0;
+exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 // Re-initialize if needed (though index.ts usually handles this)
@@ -189,6 +189,50 @@ exports.updateContentStatus = regionalFunctions.https.onCall(async (data, contex
     catch (error) {
         console.error("Error updating status:", error);
         throw new functions.https.HttpsError('internal', 'Unable to update status.');
+    }
+});
+/**
+ * Edit Content Item (Circles / Resources / Affirmations)
+ */
+exports.updateContentItem = regionalFunctions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { collection, id, updates } = data || {};
+    if (!collection || !id || !updates || typeof updates !== 'object') {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing collection, id, or updates.');
+    }
+    const allowedCollections = ['circles', 'resources', 'affirmations'];
+    if (!allowedCollections.includes(collection)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid collection type.');
+    }
+    const editableFields = {
+        circles: ['name', 'description', 'image', 'type', 'category', 'status'],
+        resources: ['title', 'description', 'content', 'image', 'category', 'tag', 'time', 'status'],
+        affirmations: ['content', 'scheduledDate', 'status']
+    };
+    const allowed = editableFields[collection] || [];
+    const sanitizedUpdates = {};
+    for (const [key, value] of Object.entries(updates)) {
+        if (!allowed.includes(key))
+            continue;
+        if (typeof value === 'string') {
+            sanitizedUpdates[key] = value.trim();
+        }
+        else {
+            sanitizedUpdates[key] = value;
+        }
+    }
+    if (Object.keys(sanitizedUpdates).length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'No editable fields provided.');
+    }
+    sanitizedUpdates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    sanitizedUpdates.updatedBy = context.auth.uid;
+    try {
+        await db.collection(collection).doc(id).update(sanitizedUpdates);
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error editing content item:', error);
+        throw new functions.https.HttpsError('internal', 'Unable to update content item.');
     }
 });
 /**

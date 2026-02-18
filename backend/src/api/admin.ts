@@ -176,6 +176,56 @@ export const updateContentStatus = regionalFunctions.https.onCall(async (data, c
 });
 
 /**
+ * Edit Content Item (Circles / Resources / Affirmations)
+ */
+export const updateContentItem = regionalFunctions.https.onCall(async (data, context) => {
+    requireAdmin(context);
+    const { collection, id, updates } = data || {};
+
+    if (!collection || !id || !updates || typeof updates !== 'object') {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing collection, id, or updates.');
+    }
+
+    const allowedCollections = ['circles', 'resources', 'affirmations'];
+    if (!allowedCollections.includes(collection)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid collection type.');
+    }
+
+    const editableFields: Record<string, string[]> = {
+        circles: ['name', 'description', 'image', 'type', 'category', 'status'],
+        resources: ['title', 'description', 'content', 'image', 'category', 'tag', 'time', 'status'],
+        affirmations: ['content', 'scheduledDate', 'status']
+    };
+
+    const allowed = editableFields[collection] || [];
+    const sanitizedUpdates: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(updates)) {
+        if (!allowed.includes(key)) continue;
+        if (typeof value === 'string') {
+            sanitizedUpdates[key] = value.trim();
+        } else {
+            sanitizedUpdates[key] = value;
+        }
+    }
+
+    if (Object.keys(sanitizedUpdates).length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'No editable fields provided.');
+    }
+
+    sanitizedUpdates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    sanitizedUpdates.updatedBy = context.auth!.uid;
+
+    try {
+        await db.collection(collection).doc(id).update(sanitizedUpdates);
+        return { success: true };
+    } catch (error) {
+        console.error('Error editing content item:', error);
+        throw new functions.https.HttpsError('internal', 'Unable to update content item.');
+    }
+});
+
+/**
  * Suspend/Activate User
  */
 export const toggleUserStatus = regionalFunctions.https.onCall(async (data, context) => {

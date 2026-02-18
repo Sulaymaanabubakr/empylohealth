@@ -75,6 +75,7 @@ export const getAllUsers = adminApi.getAllUsers;
 export const getPendingContent = adminApi.getPendingContent;
 export const getAllContent = adminApi.getAllContent;
 export const updateContentStatus = adminApi.updateContentStatus;
+export const updateContentItem = adminApi.updateContentItem;
 export const toggleUserStatus = adminApi.toggleUserStatus;
 export const deleteItem = adminApi.deleteItem;
 export const getAdminAffirmations = adminApi.getAdminAffirmations;
