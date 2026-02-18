@@ -3,6 +3,13 @@ import { callableClient } from './callableClient';
 
 export const resourceService = {
     getExploreContent: async () => {
+        try {
+            const result = await callableClient.invokeWithAuth('getExploreContent', {});
+            const items = Array.isArray(result?.items) ? result.items : [];
+            if (items.length > 0) return items;
+        } catch (error) {
+            console.warn('getExploreContent callable failed, using fallback:', error?.message || error);
+        }
         return contentRepository.getExploreContent();
     },
 

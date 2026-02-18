@@ -72,6 +72,14 @@ const recommendationPalettes = [
     { bg: ['#F3E5F5', '#E1BEE7'], accent: '#8E24AA', shape: '#BA68C8' },
     { bg: ['#E0F7FA', '#B2EBF2'], accent: '#00838F', shape: '#4DD0E1' }
 ];
+const explorePalettes = [
+    { card: '#0052CC', accent: '#4C9AFF', shape: '#80B3FF', text: '#FFFFFF', tag: '#FFE082' },
+    { card: '#00695C', accent: '#26A69A', shape: '#80CBC4', text: '#FFFFFF', tag: '#FFF59D' },
+    { card: '#6A1B9A', accent: '#AB47BC', shape: '#CE93D8', text: '#FFFFFF', tag: '#FFE082' },
+    { card: '#C62828', accent: '#EF5350', shape: '#EF9A9A', text: '#FFFFFF', tag: '#FFE082' },
+    { card: '#0D47A1', accent: '#42A5F5', shape: '#90CAF9', text: '#FFFFFF', tag: '#FFF59D' },
+    { card: '#1B5E20', accent: '#66BB6A', shape: '#A5D6A7', text: '#FFFFFF', tag: '#FFF59D' }
+];
 const hashText = (input) => {
     let hash = 0;
     for (let i = 0; i < input.length; i += 1) {
@@ -120,6 +128,61 @@ const mapRecommendedItem = (item) => ({
         category: item?.category
     })
 });
+const createExploreActivitySvgDataUri = (input) => {
+    const title = String(input?.title || 'Activity');
+    const tag = String(input?.tag || 'LEARN');
+    const category = String(input?.category || 'Self-development');
+    const seed = `${input?.id || ''}|${title}|${tag}|${category}`;
+    const palette = explorePalettes[hashText(seed) % explorePalettes.length];
+    const safeTitle = escapeXml(title.length > 24 ? `${title.slice(0, 24)}...` : title);
+    const safeTag = escapeXml(tag.length > 12 ? `${tag.slice(0, 12)}...` : tag);
+    const safeCategory = escapeXml(category.length > 20 ? `${category.slice(0, 20)}...` : category);
+    const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${palette.card}"/>
+      <stop offset="100%" stop-color="${palette.accent}"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="420" fill="url(#g)"/>
+  <circle cx="620" cy="90" r="86" fill="${palette.shape}" opacity="0.35"/>
+  <circle cx="120" cy="350" r="126" fill="${palette.shape}" opacity="0.22"/>
+  <rect x="42" y="44" width="174" height="62" rx="20" fill="rgba(255,255,255,0.22)"/>
+  <text x="129" y="84" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#FFFFFF">${safeTag}</text>
+  <text x="42" y="250" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700" fill="#FFFFFF">${safeTitle}</text>
+  <text x="42" y="300" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="${palette.tag}">${safeCategory}</text>
+</svg>`.trim();
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+const mapExploreItem = (item) => {
+    const normalizedTitle = String(item?.title || item?.name || item?.label || '').trim() || 'Wellbeing Activity';
+    const normalizedDescription = String(item?.description || item?.summary || '').trim() || 'A guided activity to support your wellbeing today.';
+    const normalizedTag = String(item?.tag || item?.type || 'LEARN').trim().toUpperCase();
+    const normalizedCategory = String(item?.category || 'Self-development').trim() || 'Self-development';
+    const seed = `${item?.id || ''}|${item?.title || ''}|${item?.category || ''}`;
+    const palette = explorePalettes[hashText(seed) % explorePalettes.length];
+    return {
+        ...item,
+        title: normalizedTitle,
+        description: normalizedDescription,
+        time: item?.time || '5 min',
+        tag: normalizedTag,
+        category: normalizedCategory,
+        color: palette.card,
+        textColor: palette.text,
+        tagColor: palette.tag,
+        timeBadgeBg: 'rgba(255,255,255,0.22)',
+        timeBadgeText: '#FFFFFF',
+        isDarkText: false,
+        image: createExploreActivitySvgDataUri({
+            id: item?.id,
+            title: normalizedTitle,
+            tag: normalizedTag,
+            category: normalizedCategory
+        })
+    };
+};
 const requireAdmin = (context) => {
     if (!context.auth?.token?.admin) {
         throw new functions.https.HttpsError('permission-denied', 'Admin privileges required.');
@@ -3244,7 +3307,7 @@ exports.getExploreContent = regionalFunctions.https.onCall(async (data, context)
             .orderBy('publishedAt', 'desc')
             .limit(30)
             .get();
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).map(mapExploreItem);
         return { items };
     }
     catch (error) {

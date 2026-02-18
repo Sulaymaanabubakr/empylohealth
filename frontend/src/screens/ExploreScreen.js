@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { SvgXml } from 'react-native-svg';
 import { COLORS, SPACING } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
 import { resourceService } from '../services/api/resourceService';
@@ -10,6 +11,19 @@ import { screenCacheService } from '../services/bootstrap/screenCacheService';
 
 
 const { width } = Dimensions.get('window');
+
+const decodeSvgDataUri = (uri = '') => {
+    if (!uri || typeof uri !== 'string') return null;
+    if (!uri.startsWith('data:image/svg+xml')) return null;
+    const commaIndex = uri.indexOf(',');
+    if (commaIndex < 0) return null;
+    const encoded = uri.slice(commaIndex + 1);
+    try {
+        return decodeURIComponent(encoded);
+    } catch {
+        return encoded;
+    }
+};
 
 const ExploreScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets(); // Add hook
@@ -74,10 +88,15 @@ const ExploreScreen = ({ navigation }) => {
         loadContent();
     }, []);
 
-    const displayedActivities = activities.filter(item =>
-        activeTab === 'Self-development' ? item.category === 'Self-development' : item.category === 'Group activities'
-    );
-    const visibleActivities = showAllActivities ? displayedActivities : displayedActivities.slice(0, 3);
+    const displayedActivities = activities.filter((item) => {
+        const category = String(item?.category || '').toLowerCase();
+        if (activeTab === 'Self-development') {
+            return category.includes('self') || category.includes('development');
+        }
+        return category.includes('group');
+    });
+    const visibleActivitiesSource = displayedActivities.length > 0 ? displayedActivities : activities;
+    const visibleActivities = showAllActivities ? visibleActivitiesSource : visibleActivitiesSource.slice(0, 3);
     // If empty (e.g. first run before seed), maybe show static fallback or specific empty state.
     // For now, assuming backend seed is run or will be run.
 
@@ -174,33 +193,51 @@ const ExploreScreen = ({ navigation }) => {
                     ) : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
                             {visibleActivities.map((item) => (
-                                <TouchableOpacity
-                                    key={item.id}
-                                    style={[styles.activityCard, { backgroundColor: item.color || '#F3F4F6' }]}
-                                    onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
-                                >
-                                    <View style={styles.timeBadge}>
-                                        <Text style={styles.timeText}>{item.time}</Text>
-                                    </View>
-                                    {item.image ? (
-                                        <Image
-                                            source={{ uri: item.image }}
-                                            style={styles.activityImage}
-                                            resizeMode="contain"
-                                        />
-                                    ) : null}
-                                    <View style={styles.activityContent}>
-                                        <Text style={styles.activityTitle}>{item.title}</Text>
-                                        <Text style={[styles.activityTag, { color: item.tag === 'LEARN' ? '#EF6C00' : '#00695C' }]}>
-                                            {item.tag}
-                                        </Text>
-                                    </View>
-                                </TouchableOpacity>
+                                (() => {
+                                    const svgXml = decodeSvgDataUri(item.image);
+                                    const title = String(item?.title || item?.name || item?.label || '').trim() || 'Wellbeing Activity';
+                                    const tag = String(item?.tag || item?.type || 'LEARN').trim().toUpperCase();
+                                    const time = String(item?.time || '5 min').trim() || '5 min';
+                                    const textColor = item.textColor || '#FFFFFF';
+                                    const tagColor = item.tagColor || '#FFE082';
+                                    return (
+                                        <TouchableOpacity
+                                            key={item.id}
+                                            style={[styles.activityCard, { backgroundColor: item.color || '#0052CC' }]}
+                                            onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                                        >
+                                            <View style={[styles.timeBadge, { backgroundColor: item.timeBadgeBg || 'rgba(255,255,255,0.22)' }]}>
+                                                <Text style={[styles.timeText, { color: item.timeBadgeText || '#FFFFFF' }]}>{time}</Text>
+                                            </View>
+                                            {svgXml ? (
+                                                <View style={styles.activityImageWrap}>
+                                                    <SvgXml xml={svgXml} width="100%" height="100%" />
+                                                </View>
+                                            ) : item.image ? (
+                                                <Image
+                                                    source={{ uri: item.image }}
+                                                    style={styles.activityImage}
+                                                    resizeMode="contain"
+                                                />
+                                            ) : (
+                                                <View style={styles.activityImageFallback}>
+                                                    <MaterialCommunityIcons name="lightbulb-on-outline" size={40} color="#FFFFFF" />
+                                                </View>
+                                            )}
+                                            <View style={styles.activityContent}>
+                                                <Text style={[styles.activityTitle, { color: textColor }]} numberOfLines={2}>{title}</Text>
+                                                <Text style={[styles.activityTag, { color: tagColor }]}>
+                                                    {tag}
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })()
                             ))}
                         </ScrollView>
                     )}
 
-                    {!loading && displayedActivities.length === 0 && (
+                    {!loading && visibleActivitiesSource.length === 0 && (
                         <Text style={styles.emptyStateText}>No activities yet.</Text>
                     )}
 
@@ -452,13 +489,29 @@ const styles = StyleSheet.create({
         height: 100,
         marginBottom: 10,
     },
+    activityImageWrap: {
+        width: '100%',
+        height: 100,
+        marginBottom: 10,
+        borderRadius: 16,
+        overflow: 'hidden'
+    },
+    activityImageFallback: {
+        width: '100%',
+        height: 100,
+        marginBottom: 10,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.2)'
+    },
     activityContent: {
 
     },
     activityTitle: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#1A1A1A',
+        color: '#FFFFFF',
         marginBottom: 4,
         lineHeight: 22,
     },
@@ -466,6 +519,7 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '800',
         textTransform: 'uppercase',
+        color: '#FFE082'
     },
     filterScroll: {
         flexDirection: 'row',
