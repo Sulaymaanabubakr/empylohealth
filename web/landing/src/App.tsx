@@ -6,6 +6,7 @@ import Contact from './pages/Contact';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
 import Terms from './pages/legal/Terms';
 import DeleteAccount from './pages/legal/DeleteAccount';
+import CommunityGuidelines from './pages/legal/CommunityGuidelines';
 import Download from './pages/Download';
 
 function App() {
@@ -22,6 +23,11 @@ function App() {
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/delete-account" element={<DeleteAccount />} />
+
+          <Route path="/legal/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/legal/terms" element={<Terms />} />
+          <Route path="/legal/delete-account" element={<DeleteAccount />} />
+          <Route path="/legal/community-guidelines" element={<CommunityGuidelines />} />
         </Routes>
       </Layout>
     </BrowserRouter>

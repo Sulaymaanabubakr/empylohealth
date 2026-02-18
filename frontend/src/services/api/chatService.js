@@ -60,6 +60,13 @@ export const chatService = {
             orderBy('updatedAt', 'desc')
         );
         return onSnapshot(q, async (snapshot) => {
+            let blockedUserIds = [];
+            try {
+                const selfDoc = await getDoc(doc(db, 'users', uid));
+                blockedUserIds = Array.isArray(selfDoc.data()?.blockedUserIds) ? selfDoc.data().blockedUserIds : [];
+            } catch {
+                blockedUserIds = [];
+            }
             const circleCache = new Map();
             const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
                 const data = docSnap.data();
@@ -120,7 +127,14 @@ export const chatService = {
                     me: auth.currentUser?.uid || uid
                 };
             }));
-            callback(chats);
+            const visibleChats = chats.filter((chat) => {
+                if (chat?.isGroup) return true;
+                const otherId = Array.isArray(chat?.participants)
+                    ? chat.participants.find((id) => id !== uid)
+                    : null;
+                return !otherId || !blockedUserIds.includes(otherId);
+            });
+            callback(visibleChats);
         });
     },
 
@@ -177,7 +191,11 @@ export const chatService = {
             where('participants', 'array-contains', uid),
             orderBy('updatedAt', 'desc')
         );
-        const snapshot = await getDocs(q);
+        const [snapshot, selfDoc] = await Promise.all([
+            getDocs(q),
+            getDoc(doc(db, 'users', uid)).catch(() => null)
+        ]);
+        const blockedUserIds = Array.isArray(selfDoc?.data?.()?.blockedUserIds) ? selfDoc.data().blockedUserIds : [];
         const circleCache = new Map();
         const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
             const data = docSnap.data();
@@ -237,7 +255,13 @@ export const chatService = {
                 me: auth.currentUser?.uid || uid
             };
         }));
-        return chats;
+        return chats.filter((chat) => {
+            if (chat?.isGroup) return true;
+            const otherId = Array.isArray(chat?.participants)
+                ? chat.participants.find((id) => id !== uid)
+                : null;
+            return !otherId || !blockedUserIds.includes(otherId);
+        });
     },
 
     setTyping: (chatId, isTyping) => {

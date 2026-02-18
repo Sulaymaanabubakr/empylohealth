@@ -233,6 +233,9 @@ const PersonalProfileScreen = ({ navigation }) => {
             { icon: 'notifications-outline', label: 'Notifications', type: 'ionic' },
             { icon: 'person-outline', label: 'Personal Information', type: 'ionic' },
             { icon: 'lock-closed-outline', label: 'Security', type: 'ionic' },
+            { icon: 'information-circle-outline', label: 'About Circles Health App', type: 'ionic' },
+            { icon: 'school-outline', label: 'Community Education', type: 'ionic' },
+            { icon: 'shield-checkmark-outline', label: 'Community Guidelines', type: 'ionic' },
             { icon: 'help-circle-outline', label: 'My Circles FAQ', type: 'ionic' },
             { icon: 'heart-outline', label: 'Tell a friend', type: 'ionic' },
         ];
@@ -259,6 +262,12 @@ const PersonalProfileScreen = ({ navigation }) => {
                                     navigation.navigate('PersonalInformation');
                                 } else if (item.label === 'Security') {
                                     navigation.navigate('Security');
+                                } else if (item.label === 'About Circles Health App') {
+                                    navigation.navigate('AboutCircles');
+                                } else if (item.label === 'Community Education') {
+                                    navigation.navigate('CommunityEducation');
+                                } else if (item.label === 'Community Guidelines') {
+                                    navigation.navigate('CommunityGuidelines');
                                 } else if (item.label === 'Tell a friend') {
                                     navigation.navigate('TellAFriend');
                                 } else if (item.label === 'My Circles FAQ') {

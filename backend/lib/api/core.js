@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -121,6 +121,30 @@ const deleteCollectionDocs = async (ref, batchSize = 300) => {
             break;
     }
 };
+const deleteDocsFromQuery = async (query, batchSize = 300) => {
+    while (true) {
+        const snap = await query.limit(batchSize).get();
+        if (snap.empty)
+            break;
+        const batch = db.batch();
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+        if (snap.size < batchSize)
+            break;
+    }
+};
+const updateDocsFromQuery = async (query, updater, batchSize = 300) => {
+    while (true) {
+        const snap = await query.limit(batchSize).get();
+        if (snap.empty)
+            break;
+        const batch = db.batch();
+        snap.docs.forEach((d) => batch.update(d.ref, updater(d)));
+        await batch.commit();
+        if (snap.size < batchSize)
+            break;
+    }
+};
 const deleteChatCascade = async (chatId) => {
     const chatRef = db.collection('chats').doc(chatId);
     await deleteCollectionDocs(chatRef.collection('messages'));
@@ -156,6 +180,18 @@ const removeUserFromCircle = async (circleId, uid) => {
             });
         }
     });
+};
+const getBlockedUserIds = async (uid) => {
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.data() || {};
+    return Array.isArray(data.blockedUserIds) ? data.blockedUserIds : [];
+};
+const isEitherUserBlocked = async (uidA, uidB) => {
+    const [aBlocked, bBlocked] = await Promise.all([
+        getBlockedUserIds(uidA),
+        getBlockedUserIds(uidB)
+    ]);
+    return aBlocked.includes(uidB) || bBlocked.includes(uidA);
 };
 const deleteCircleCascade = async (circleId) => {
     const circleRef = db.collection('circles').doc(circleId);
@@ -927,6 +963,10 @@ exports.createDirectChat = regionalFunctions.https.onCall(async (data, context) 
         throw new functions.https.HttpsError('invalid-argument', 'Recipient must be a different user.');
     }
     try {
+        const blocked = await isEitherUserBlocked(uid, recipientId);
+        if (blocked) {
+            throw new functions.https.HttpsError('permission-denied', 'You cannot start a chat with this user.');
+        }
         // Check if chat already exists
         const snapshot = await db.collection('chats')
             .where('type', '==', 'direct')
@@ -1101,6 +1141,15 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
         if (!participants.includes(uid)) {
             throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
         }
+        if (chatData?.type === 'direct' && participants.length === 2) {
+            const otherId = participants.find((participantUid) => participantUid !== uid);
+            if (otherId) {
+                const blocked = await isEitherUserBlocked(uid, otherId);
+                if (blocked) {
+                    throw new functions.https.HttpsError('permission-denied', 'Message blocked for this conversation.');
+                }
+            }
+        }
         const messageData = {
             senderId: uid,
             text,
@@ -1126,6 +1175,36 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
         console.error("Error sending message:", error);
         throw new functions.https.HttpsError('internal', 'Unable to send message.');
     }
+});
+exports.blockUser = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+    const uid = context.auth.uid;
+    const { targetUid } = data || {};
+    if (!targetUid || targetUid === uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid target user is required.');
+    }
+    await db.collection('users').doc(uid).set({
+        blockedUserIds: admin.firestore.FieldValue.arrayUnion(targetUid),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { success: true };
+});
+exports.unblockUser = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+    const uid = context.auth.uid;
+    const { targetUid } = data || {};
+    if (!targetUid || targetUid === uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid target user is required.');
+    }
+    await db.collection('users').doc(uid).set({
+        blockedUserIds: admin.firestore.FieldValue.arrayRemove(targetUid),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { success: true };
 });
 // ==========================================
 // ASSESSMENT FUNCTIONS
@@ -3068,16 +3147,20 @@ exports.resolveCircleReport = regionalFunctions.https.onCall(async (data, contex
         });
         await batch.commit();
         if (action === 'warn' && targetType === 'member' && targetId) {
-            await db.collection('notifications').add({
-                uid: targetId,
-                title: 'Community Warning',
-                subtitle: 'A moderator reviewed a report about your behavior. Please follow circle guidelines.',
-                type: 'MODERATION_WARNING',
-                circleId,
-                read: false,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }).catch(() => { });
+            const targetUser = await db.collection('users').doc(targetId).get().catch(() => null);
+            const targetSettings = targetUser?.data?.()?.settings || {};
+            if (targetSettings.securityNotifications ?? true) {
+                await db.collection('notifications').add({
+                    uid: targetId,
+                    title: 'Community Warning',
+                    subtitle: 'A moderator reviewed a report about your behavior. Please follow circle guidelines.',
+                    type: 'MODERATION_WARNING',
+                    circleId,
+                    read: false,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }).catch(() => { });
+            }
         }
         return { success: true };
     }
@@ -3552,36 +3635,66 @@ exports.deleteUserAccount = regionalFunctions.https.onCall(async (data, context)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const uid = context.auth.uid;
     try {
-        const batch = db.batch();
-        batch.delete(db.collection('users').doc(uid));
-        const circlesSnap = await db.collection('circles').where('members', 'array-contains', uid).get();
-        circlesSnap.docs.forEach(doc => {
-            batch.update(doc.ref, { members: admin.firestore.FieldValue.arrayRemove(uid) });
-        });
-        const chatsSnap = await db.collection('chats').where('participants', 'array-contains', uid).get();
-        chatsSnap.docs.forEach(doc => {
-            batch.update(doc.ref, { participants: admin.firestore.FieldValue.arrayRemove(uid) });
-        });
-        await batch.commit();
-        const assessmentsSnap = await db.collection('assessments').where('uid', '==', uid).get();
-        if (!assessmentsSnap.empty) {
-            const deleteBatches = [];
-            let currentBatch = db.batch();
-            let count = 0;
-            assessmentsSnap.docs.forEach((docSnap) => {
-                currentBatch.delete(docSnap.ref);
-                count += 1;
-                if (count === 400) {
-                    deleteBatches.push(currentBatch.commit());
-                    currentBatch = db.batch();
-                    count = 0;
-                }
-            });
-            deleteBatches.push(currentBatch.commit());
-            await Promise.all(deleteBatches);
+        const userRef = db.collection('users').doc(uid);
+        const userSnap = await userRef.get();
+        const userData = userSnap.data() || {};
+        const circlesOwnedSnap = await db.collection('circles').where('createdBy', '==', uid).get();
+        for (const ownedCircle of circlesOwnedSnap.docs) {
+            await deleteCircleCascade(ownedCircle.id);
         }
+        const circlesMemberSnap = await db.collection('circles').where('members', 'array-contains', uid).get();
+        for (const circleDoc of circlesMemberSnap.docs) {
+            if (circleDoc.data()?.createdBy === uid)
+                continue;
+            await removeUserFromCircle(circleDoc.id, uid);
+        }
+        await deleteDocsFromQuery(db.collection('notifications').where('uid', '==', uid));
+        await deleteDocsFromQuery(db.collection('notifications').where('senderId', '==', uid));
+        await deleteDocsFromQuery(db.collection('assessments').where('uid', '==', uid));
+        await deleteDocsFromQuery(db.collection('support_tickets').where('uid', '==', uid));
+        await deleteDocsFromQuery(db.collection('reports').where('reporterId', '==', uid));
+        const userCirclesRef = db.collection('userCircles').doc(uid);
+        await deleteCollectionDocs(userCirclesRef.collection('circles'));
+        await userCirclesRef.delete().catch(() => { });
+        const chatsSnap = await db.collection('chats').where('participants', 'array-contains', uid).get();
+        for (const chatDoc of chatsSnap.docs) {
+            const chatData = chatDoc.data() || {};
+            const participants = Array.isArray(chatData.participants) ? chatData.participants : [];
+            const nextParticipants = participants.filter((id) => id !== uid);
+            const updates = {
+                participants: nextParticipants,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+            if (typeof chatData.participantsCount === 'number') {
+                updates.participantsCount = Math.max(0, nextParticipants.length);
+            }
+            await chatDoc.ref.set(updates, { merge: true });
+        }
+        const anonymizedName = 'Deleted User';
+        const anonymizedAvatar = '';
+        await updateDocsFromQuery(db.collectionGroup('messages').where('senderId', '==', uid), () => ({
+            senderName: anonymizedName,
+            senderAvatar: anonymizedAvatar,
+            senderId: `deleted:${uid}`,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }));
+        await userRef.delete().catch(() => { });
         await admin.auth().deleteUser(uid);
-        return { success: true };
+        return {
+            success: true,
+            deleted: {
+                userProfile: true,
+                circlesDeleted: circlesOwnedSnap.size,
+                circlesLeft: circlesMemberSnap.size - circlesOwnedSnap.size,
+                notificationsDeleted: true,
+                assessmentsDeleted: true
+            },
+            retained: {
+                messages: 'anonymized',
+                moderationRecords: 'retained_for_safety'
+            },
+            previousName: String(userData?.name || '')
+        };
     }
     catch (error) {
         console.error('Error deleting user account:', error);

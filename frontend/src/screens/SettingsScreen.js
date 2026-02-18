@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, View, Linking } from 'react-native';
 import { Screen } from '../components/Screen';
 import { AppBar } from '../components/AppBar';
 import { Card } from '../components/Card';
@@ -9,6 +9,7 @@ import { theme } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/api/userService';
 import { authService } from '../services/auth/authService';
+import { LEGAL_LINKS } from '../constants/legalLinks';
 
 export function SettingsScreen({ navigation }) {
   const { user, userData } = useAuth();
@@ -66,20 +67,49 @@ export function SettingsScreen({ navigation }) {
           />
         </View>
       </Card>
+      <Card>
+        <View>
+          <ListRow
+            title="Terms of Service"
+            onPress={() => Linking.openURL(LEGAL_LINKS.terms)}
+          />
+          <View style={styles.divider} />
+          <ListRow
+            title="Privacy Policy"
+            onPress={() => Linking.openURL(LEGAL_LINKS.privacy)}
+          />
+          <View style={styles.divider} />
+          <ListRow
+            title="About Circles Health App"
+            onPress={() => navigation.navigate('AboutCircles')}
+          />
+          <View style={styles.divider} />
+          <ListRow
+            title="Community Education"
+            onPress={() => navigation.navigate('CommunityEducation')}
+          />
+          <View style={styles.divider} />
+          <ListRow
+            title="Community Guidelines"
+            onPress={() => navigation.navigate('CommunityGuidelines')}
+          />
+        </View>
+      </Card>
       <SecondaryButton
         label="Sign out"
         onPress={async () => {
           await authService.logout();
-          // Navigation is handled automatically by Navigation.js when user becomes null
         }}
       />
     </Screen>
   );
+}
 
-  const styles = StyleSheet.create({
-    divider: {
-      height: 1,
-      backgroundColor: theme.colors.divider,
-    },
-  });
-  export default SettingsScreen;
+const styles = StyleSheet.create({
+  divider: {
+    height: 1,
+    backgroundColor: theme.colors.divider,
+  },
+});
+
+export default SettingsScreen;

@@ -38,9 +38,8 @@
       "package": "com.empylo.circlesapp",
       "permissions": [
         "RECORD_AUDIO",
-        "READ_PHONE_STATE",
-        "CALL_PHONE",
-        "READ_CALL_LOG"
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
       ],
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true

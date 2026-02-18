@@ -188,7 +188,7 @@ const PrivacyPolicy = () => {
                             <li><strong>A right to lodge a complaint with the competent supervisory authority:</strong> you have the right to contact the supervisory authority to complain about Empylo ’s personal data protection practices.</li>
                             <li><strong>A right to give instructions concerning the use of your data after your death:</strong> as required by applicable law, you may have the right to give Empylo instructions concerning the use of your personal data after your death.</li>
                         </ul>
-                        <p>To exercise one or more of these rights, you can email g.musariri@empylo.com. You may access your personal data to modify or update at any time via an online account, or by emailing g.musariri@empylo.com. We will respond to your request in a reasonable timeframe in accordance with applicable law.</p>
+                        <p>To exercise one or more of these rights, you can email support@empylo.com. You may access your personal data to modify or update at any time via an online account, or by emailing support@empylo.com. We will respond to your request in a reasonable timeframe in accordance with applicable law.</p>
                     </section>
 
                     <section>
@@ -219,7 +219,7 @@ const PrivacyPolicy = () => {
 
                     <section>
                         <h2>Contact Us</h2>
-                        <p>If you have any questions about this Privacy Policy, You can contact us by email: <a href="mailto:g.musariri@empylo.com">g.musariri@empylo.com</a></p>
+                        <p>If you have any questions about this Privacy Policy, You can contact us by email: <a href="mailto:support@empylo.com">support@empylo.com</a></p>
                     </section>
                 </div>
             </div>

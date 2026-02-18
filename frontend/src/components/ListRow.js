@@ -1,11 +1,12 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { theme } from '../theme/theme';
 
 
-export const ListRow = ({ title, subtitle, right, icon }) => {
+export const ListRow = ({ title, subtitle, right, icon, onPress }) => {
+  const Row = onPress ? TouchableOpacity : View;
   return (
-    <View style={styles.listRow}>
+    <Row style={styles.listRow} onPress={onPress} activeOpacity={onPress ? 0.75 : 1}>
       <View style={styles.listRowLeft}>
         {icon ? <View style={styles.listRowIcon}>{icon}</View> : null}
         <View>
@@ -14,7 +15,7 @@ export const ListRow = ({ title, subtitle, right, icon }) => {
         </View>
       </View>
       {right}
-    </View>
+    </Row>
   );
 };
 

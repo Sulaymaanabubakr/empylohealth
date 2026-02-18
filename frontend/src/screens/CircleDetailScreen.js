@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
+import { buildCircleShareText } from '../utils/deepLinks';
 
 const { width } = Dimensions.get('window');
 
@@ -317,7 +318,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const handleInvite = async () => {
         try {
             await Share.share({
-                message: `Join my circle "${circle.name}" on Empylo! Use code: ${circle.id}`,
+                message: buildCircleShareText({ circleName: circle?.name, circleId: circle?.id }),
             });
         } catch (error) {
             console.error('Error sharing', error);
@@ -358,6 +359,32 @@ const CircleDetailScreen = ({ navigation, route }) => {
             setMemberModalVisible(false);
             showModal({ type: 'error', title: 'Error', message: 'Unable to open chat right now.' });
         }
+    };
+
+    const reportMember = () => {
+        if (!selectedMember?.id || selectedMember.id === user?.uid || !circle?.id) return;
+        showModal({
+            type: 'confirmation',
+            title: 'Report Member',
+            message: `Report ${selectedMember.name || 'this member'} for inappropriate behavior?`,
+            confirmText: 'Report',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    await circleService.submitReport(
+                        circle.id,
+                        selectedMember.id,
+                        'member',
+                        'Inappropriate behavior',
+                        `Reported from circle profile modal by ${user?.uid || 'member'}`
+                    );
+                    setMemberModalVisible(false);
+                    showModal({ type: 'success', title: 'Reported', message: 'Thank you. Moderators will review this report.' });
+                } catch (error) {
+                    showModal({ type: 'error', title: 'Error', message: error?.message || 'Unable to submit report.' });
+                }
+            }
+        });
     };
 
     if (!circle) {
@@ -799,6 +826,12 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     >
                                         <Text style={styles.profileActionSecondaryText}>Call</Text>
                                     </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.profileActionBtn, styles.profileActionDanger]}
+                                        onPress={reportMember}
+                                    >
+                                        <Text style={styles.profileActionDangerText}>Report</Text>
+                                    </TouchableOpacity>
                                 </>
                             )}
                             <TouchableOpacity
@@ -923,6 +956,13 @@ const styles = StyleSheet.create({
     },
     profileActionSecondaryText: {
         color: COLORS.primary,
+        fontWeight: '700'
+    },
+    profileActionDanger: {
+        backgroundColor: '#FFEBEE'
+    },
+    profileActionDangerText: {
+        color: '#D32F2F',
         fontWeight: '700'
     },
     profileActionGhost: {

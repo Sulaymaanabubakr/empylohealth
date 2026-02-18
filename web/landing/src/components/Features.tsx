@@ -20,7 +20,7 @@ const Features = () => {
         {
             icon: ShieldCheck,
             title: "Secure & Anonymous",
-            desc: "Your privacy is our priority. Anonymous profiles and end-to-end encryption keep you safe."
+            desc: "Your privacy is our priority. Anonymous profiles, secure transport (HTTPS/TLS), and strong access controls help protect your data."
         },
         {
             icon: HeartPulse,

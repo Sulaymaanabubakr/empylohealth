@@ -37,9 +37,10 @@ const Footer = () => {
                 <div className="footer-links-group">
                     <h4>Legal</h4>
                     <ul>
-                        <li><Link to="/privacy-policy">Privacy Policy</Link></li>
-                        <li><Link to="/terms">Terms of Service</Link></li>
-                        <li><Link to="/delete-account">Delete Account</Link></li>
+                        <li><Link to="/legal/privacy-policy">Privacy Policy</Link></li>
+                        <li><Link to="/legal/terms">Terms of Service</Link></li>
+                        <li><Link to="/legal/community-guidelines">Community Guidelines</Link></li>
+                        <li><Link to="/legal/delete-account">Delete Account</Link></li>
                     </ul>
                 </div>
 

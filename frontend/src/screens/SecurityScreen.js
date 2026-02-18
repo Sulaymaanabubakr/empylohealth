@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { userService } from '../services/api/userService';
+import { LEGAL_LINKS } from '../constants/legalLinks';
 
 const SecurityScreen = ({ navigation }) => {
     const { user, userData, deleteAccount } = useAuth();
@@ -59,11 +60,6 @@ const SecurityScreen = ({ navigation }) => {
         });
     };
 
-    const handleDeleteComplete = () => {
-        setIsDeleteSuccessVisible(false);
-        navigation.navigate('SignIn');
-    };
-
     const renderToggleCard = (label, description, value, onValueChange, iconName) => (
         <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -109,7 +105,7 @@ const SecurityScreen = ({ navigation }) => {
 
                 {renderToggleCard(
                     "Security Notifications",
-                    "Get notified when your security code changes for a contact's phone in an end-to-end encrypted chat.",
+                    "Get notified about important account and chat security events.",
                     securityNotif,
                     (value) => {
                         setSecurityNotif(value);
@@ -148,6 +144,9 @@ const SecurityScreen = ({ navigation }) => {
                         <Text style={styles.bulletItem}>• Your message history on this device</Text>
                         <Text style={styles.bulletItem}>• Any Circle that you created</Text>
                     </View>
+                    <TouchableOpacity style={styles.learnMoreBtn} onPress={() => Linking.openURL(LEGAL_LINKS.deletionPolicy)}>
+                        <Text style={styles.learnMoreText}>Learn what is retained and why</Text>
+                    </TouchableOpacity>
                 </TouchableOpacity>
 
             </ScrollView>
@@ -268,6 +267,16 @@ const styles = StyleSheet.create({
         color: '#D32F2F',
         marginBottom: 4,
         lineHeight: 18,
+    },
+    learnMoreBtn: {
+        marginTop: 10,
+        alignSelf: 'flex-start'
+    },
+    learnMoreText: {
+        color: '#C62828',
+        fontSize: 12,
+        fontWeight: '700',
+        textDecorationLine: 'underline'
     },
 });
 

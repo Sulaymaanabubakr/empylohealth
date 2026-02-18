@@ -71,6 +71,8 @@ export declare const getPublicProfile: functions.HttpsFunction & functions.Runna
  * Callable Function: 'sendMessage'
  */
 export declare const sendMessage: functions.HttpsFunction & functions.Runnable<any>;
+export declare const blockUser: functions.HttpsFunction & functions.Runnable<any>;
+export declare const unblockUser: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Submit Daily Check-in / Assessment
  * Callable Function: 'submitAssessment'

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
-import { View, Pressable, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Pressable, Text, StyleSheet, TouchableOpacity, AppState, Linking as RnLinking } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -43,16 +43,75 @@ import PersonalInformationScreen from './screens/PersonalInformationScreen';
 import SecurityScreen from './screens/SecurityScreen';
 import TellAFriendScreen from './screens/TellAFriendScreen';
 import FAQScreen from './screens/FAQScreen';
-import { navigationRef, flushPendingNavigation } from './navigation/navigationRef';
+import CommunityGuidelinesScreen from './screens/CommunityGuidelinesScreen';
+import CommunityEducationScreen from './screens/CommunityEducationScreen';
+import AboutCirclesScreen from './screens/AboutCirclesScreen';
+import { navigationRef, flushPendingNavigation, navigate } from './navigation/navigationRef';
 import { huddleService } from './services/api/huddleService';
+import { parseDeepLink } from './utils/deepLinks';
 
 const Stack = createNativeStackNavigator();
 
+let LocalAuthentication = null;
+try {
+    // Optional native module: available on new builds.
+    // Keep app functional on older debug APKs that do not include it yet.
+    LocalAuthentication = require('expo-local-authentication');
+} catch {
+    LocalAuthentication = null;
+}
+
 export default function Navigation() {
-    const { routeTarget } = useAuth();
+    const { routeTarget, userData } = useAuth();
     const [activeHuddleSession, setActiveHuddleSession] = useState(null);
     const [currentRouteName, setCurrentRouteName] = useState('');
+    const [biometricLocked, setBiometricLocked] = useState(false);
+    const [unlocking, setUnlocking] = useState(false);
     const firstRenderLoggedRef = useRef(false);
+    const appStateRef = useRef(AppState.currentState);
+    const unlockInFlightRef = useRef(false);
+
+    const biometricsEnabled = routeTarget !== 'UNAUTH' && Boolean(userData?.settings?.biometrics);
+
+    const unlockWithBiometrics = async () => {
+        if (!biometricsEnabled) {
+            setBiometricLocked(false);
+            return true;
+        }
+        if (!LocalAuthentication) {
+            setBiometricLocked(false);
+            return true;
+        }
+        if (unlockInFlightRef.current) return false;
+        unlockInFlightRef.current = true;
+        setUnlocking(true);
+        try {
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const supported = await LocalAuthentication.supportedAuthenticationTypesAsync();
+            if (!hasHardware || !supported?.length) {
+                // Do not hard-lock users on devices without biometric capability.
+                setBiometricLocked(false);
+                return true;
+            }
+
+            const result = await LocalAuthentication.authenticateAsync({
+                promptMessage: 'Unlock Circles',
+                cancelLabel: 'Cancel',
+                fallbackLabel: 'Use device passcode',
+                disableDeviceFallback: false
+            });
+
+            const success = Boolean(result?.success);
+            setBiometricLocked(!success);
+            return success;
+        } catch (error) {
+            setBiometricLocked(true);
+            return false;
+        } finally {
+            setUnlocking(false);
+            unlockInFlightRef.current = false;
+        }
+    };
 
     useEffect(() => {
         const unsubscribe = huddleService.subscribeToActiveLocalSession((session) => {
@@ -65,6 +124,28 @@ export default function Navigation() {
         console.log('[Navigation] Route target:', routeTarget);
         flushPendingNavigation();
     }, [routeTarget]);
+
+    useEffect(() => {
+        if (!biometricsEnabled) {
+            setBiometricLocked(false);
+            return;
+        }
+        setBiometricLocked(true);
+        unlockWithBiometrics().catch(() => {});
+    }, [biometricsEnabled, routeTarget]);
+
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (nextState) => {
+            const previous = appStateRef.current;
+            appStateRef.current = nextState;
+            const comingToForeground =
+                (previous === 'background' || previous === 'inactive') && nextState === 'active';
+            if (!comingToForeground || !biometricsEnabled) return;
+            setBiometricLocked(true);
+            unlockWithBiometrics().catch(() => {});
+        });
+        return () => sub.remove();
+    }, [biometricsEnabled, routeTarget]);
 
     if (!firstRenderLoggedRef.current) {
         firstRenderLoggedRef.current = true;
@@ -87,6 +168,36 @@ export default function Navigation() {
             }
         });
     };
+
+    const routeFromDeepLink = (url) => {
+        const parsed = parseDeepLink(url);
+        if (!parsed) return false;
+
+        if (parsed.type === 'circle' && parsed.id) {
+            return navigate('CircleDetail', { circle: { id: parsed.id } });
+        }
+        if (parsed.type === 'affirmation' && parsed.id) {
+            return navigate('Affirmations', { affirmationId: parsed.id });
+        }
+        if (parsed.type === 'invite') {
+            if (routeTarget === 'UNAUTH') return navigate('Onboarding');
+            return navigate('MainTabs');
+        }
+        return false;
+    };
+
+    useEffect(() => {
+        RnLinking.getInitialURL()
+            .then((url) => {
+                if (url) routeFromDeepLink(url);
+            })
+            .catch(() => {});
+
+        const sub = RnLinking.addEventListener('url', ({ url }) => {
+            if (url) routeFromDeepLink(url);
+        });
+        return () => sub.remove();
+    }, [routeTarget]);
 
     return (
         <View style={styles.root}>
@@ -142,6 +253,9 @@ export default function Navigation() {
                         <Stack.Screen name="Security" component={SecurityScreen} />
                         <Stack.Screen name="TellAFriend" component={TellAFriendScreen} />
                         <Stack.Screen name="FAQ" component={FAQScreen} />
+                        <Stack.Screen name="AboutCircles" component={AboutCirclesScreen} />
+                        <Stack.Screen name="CommunityEducation" component={CommunityEducationScreen} />
+                        <Stack.Screen name="CommunityGuidelines" component={CommunityGuidelinesScreen} />
                         <Stack.Screen name="Assessment" component={AssessmentScreen} />
                         <Stack.Screen name="NineIndex" component={NineIndexScreen} />
                         <Stack.Screen name="Stats" component={StatsScreen} />
@@ -173,6 +287,27 @@ export default function Navigation() {
                             onPress={() => huddleService.hangupActiveSession()}
                         >
                             <MaterialIcons name="call-end" size={20} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+
+            {biometricLocked && (
+                <View style={styles.lockOverlay}>
+                    <View style={styles.lockCard}>
+                        <Ionicons name="lock-closed" size={22} color="#0F766E" />
+                        <Text style={styles.lockTitle}>App Locked</Text>
+                        <Text style={styles.lockSubtitle}>
+                            Unlock with biometrics or your device passcode to continue.
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.unlockButton}
+                            onPress={() => unlockWithBiometrics()}
+                            disabled={unlocking}
+                        >
+                            <Text style={styles.unlockButtonText}>
+                                {unlocking ? 'Unlocking...' : 'Unlock'}
+                            </Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -228,5 +363,48 @@ const styles = StyleSheet.create({
         color: '#D0D0D0',
         fontSize: 12,
         marginTop: 2
+    },
+    lockOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(12, 16, 23, 0.55)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+        zIndex: 1200
+    },
+    lockCard: {
+        width: '100%',
+        maxWidth: 340,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 18,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E5E7EB'
+    },
+    lockTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#111827',
+        marginTop: 8
+    },
+    lockSubtitle: {
+        marginTop: 8,
+        fontSize: 13,
+        color: '#4B5563',
+        textAlign: 'center',
+        lineHeight: 18
+    },
+    unlockButton: {
+        marginTop: 14,
+        backgroundColor: '#00A99D',
+        borderRadius: 12,
+        paddingHorizontal: 18,
+        paddingVertical: 10
+    },
+    unlockButtonText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700'
     }
 });

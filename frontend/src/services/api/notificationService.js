@@ -401,6 +401,20 @@ export const notificationService = {
                     vibrationPattern: [0, 250, 250, 250],
                     lightColor: '#FF231F7C',
                 });
+                await Notifications.setNotificationChannelAsync('messages-default', {
+                    name: 'Messages',
+                    importance: Notifications.AndroidImportance.MAX,
+                    vibrationPattern: [0, 180, 120, 180],
+                    sound: 'default',
+                    lightColor: '#00A99D'
+                });
+                await Notifications.setNotificationChannelAsync('messages-silent', {
+                    name: 'Messages (Silent)',
+                    importance: Notifications.AndroidImportance.HIGH,
+                    vibrationPattern: [0],
+                    sound: null,
+                    lightColor: '#9CA3AF'
+                });
                 await Notifications.setNotificationChannelAsync('huddle-calls', {
                     name: 'Huddle Calls',
                     importance: Notifications.AndroidImportance.MAX,

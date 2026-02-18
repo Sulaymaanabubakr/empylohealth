@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Dimensions, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
+import { LEGAL_LINKS } from '../constants/legalLinks';
 
 const { width } = Dimensions.get('window');
 
@@ -136,11 +137,11 @@ const SubscriptionScreen = ({ navigation }) => {
                         <Text style={styles.linkText}>Restore Purchases</Text>
                     </TouchableOpacity>
                     <View style={styles.divider} />
-                    <TouchableOpacity style={styles.footerLink}>
+                    <TouchableOpacity style={styles.footerLink} onPress={() => Linking.openURL(LEGAL_LINKS.terms)}>
                         <Text style={styles.linkText}>Terms of Service</Text>
                     </TouchableOpacity>
                     <View style={styles.divider} />
-                    <TouchableOpacity style={styles.footerLink}>
+                    <TouchableOpacity style={styles.footerLink} onPress={() => Linking.openURL(LEGAL_LINKS.privacy)}>
                         <Text style={styles.linkText}>Privacy Policy</Text>
                     </TouchableOpacity>
                 </View>

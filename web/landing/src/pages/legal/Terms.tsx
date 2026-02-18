@@ -26,7 +26,7 @@ const Terms = () => {
 
                     <section>
                         <h2>3. Your compliance with these Terms</h2>
-                        <p><strong>3.1</strong> If you wish to delete your account with Circles Health App, you may do so within the app, alternatively you can do so at any time by sending an email to g.musariri@empylo.com requesting account deletion. We respond within three working days. You can email us on the aforementioned address should you wish to be removed from our database.</p>
+                        <p><strong>3.1</strong> If you wish to delete your account with Circles Health App, you may do so within the app via Profile {'>'} Account {'>'} Security {'>'} Delete Account, or by emailing <a href="mailto:support@empylo.com">support@empylo.com</a> with an account deletion request. We respond within three working days.</p>
                         <p><strong>3.2</strong> We have the right to terminate any user account and remove any user from our database if we receive complaints about that user, or for any other reason at our entire discretion.</p>
                         <p><strong>3.3</strong> If you breach these Terms, or if we reasonably suspect that you have breached these Terms, we may:</p>
                         <ul>

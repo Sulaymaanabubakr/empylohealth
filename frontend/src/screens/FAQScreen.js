@@ -10,29 +10,74 @@ const FAQScreen = ({ navigation }) => {
     const faqs = [
         {
             id: 1,
-            question: "What is Empylo Circle?",
-            answer: "Empylo Circle is a space for teams and individuals to connect, track their wellbeing, and participate in group activities."
+            question: "What is Circles Health App?",
+            answer: "Circles Health App by Empylo is a wellbeing and community platform for check-ins, chats, huddles, assessments, and support circles."
         },
         {
             id: 2,
-            question: "Can I create a group?",
-            answer: "Yes! If you are a Personal User, you can create circles from your profile page."
+            question: "Can I create a circle?",
+            answer: "Yes. Personal users can create circles from the Profile area and invite others to join."
         },
         {
             id: 3,
-            question: "Can users personalize the app?",
-            answer: "Absolutely. You can customize your notification settings, profile picture, and security preferences."
+            question: "What is the difference between a public and private circle?",
+            answer: "Public circles are discoverable by other users. Private circles require approval and are not shown in public search."
         },
         {
             id: 4,
-            question: "Is My Circles app free to use?",
-            answer: "Usage is free for basic features."
+            question: "How does my wellbeing score work?",
+            answer: "Your score is primarily based on weekly assessment trend, while daily check-ins provide supporting signal for more current status."
         },
         {
             id: 5,
-            question: "Is my data safe?",
-            answer: "Yes, we use end-to-end encryption for security notification alerts and follow strict data privacy guidelines."
+            question: "Can I edit my profile information?",
+            answer: "Yes. You can update your name, photo, bio, and other profile details from Personal Information."
         },
+        {
+            id: 6,
+            question: "How do huddles work?",
+            answer: "Huddles are live calls. You can start one from chat/circle and members can join from in-app or notification prompts."
+        },
+        {
+            id: 7,
+            question: "Can I schedule a huddle?",
+            answer: "Yes. Scheduled huddles appear in circle areas with countdown timing, and members can opt into reminders."
+        },
+        {
+            id: 8,
+            question: "How do notifications behave?",
+            answer: "Message, affirmation, and huddle notifications are routed to the relevant screen so you can continue directly in context."
+        },
+        {
+            id: 9,
+            question: "Can I mute or delete chats?",
+            answer: "Yes. Chat list swipe actions support mute and delete with confirmation prompts."
+        },
+        {
+            id: 10,
+            question: "How do I report harmful behavior?",
+            answer: "You can report both messages and members. Reports are reviewed by admins/moderators who can warn, remove content, or ban members."
+        },
+        {
+            id: 11,
+            question: "Can I block another user?",
+            answer: "Yes. You can block users from profile actions in chat contexts to prevent direct messaging."
+        },
+        {
+            id: 12,
+            question: "Is my data safe?",
+            answer: "We protect data in transit using HTTPS/TLS and secure cloud storage controls. We also apply moderation and account security safeguards."
+        },
+        {
+            id: 13,
+            question: "How do I delete my account?",
+            answer: "Go to Profile > Account > Security > Delete Account. This is permanent. Some records may be retained or anonymized for safety/legal obligations."
+        },
+        {
+            id: 14,
+            question: "Is Circles Health App free to use?",
+            answer: "Core usage is available with basic access. Subscription plans may unlock additional benefits where configured."
+        }
     ];
 
     const [expandedId, setExpandedId] = useState(null);
@@ -57,7 +102,7 @@ const FAQScreen = ({ navigation }) => {
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <Text style={styles.description}>
-                    This FAQ provides answers to basic questions about My Circles
+                    This FAQ provides quick answers on circles, chats, huddles, scores, safety, and account controls.
                 </Text>
 
                 {faqs.map((faq) => (

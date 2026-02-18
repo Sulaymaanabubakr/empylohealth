@@ -16,7 +16,7 @@ case "$GROUP" in
     FUNCTIONS_FILTER="startHuddle,joinHuddle,endHuddle,ringHuddleParticipants,ringPendingHuddles,updateHuddleState,scheduleHuddle,deleteScheduledHuddle,toggleScheduledHuddleReminder,processScheduledHuddles"
     ;;
   chat)
-    FUNCTIONS_FILTER="onMessageCreate,createDirectChat,sendMessage"
+    FUNCTIONS_FILTER="onMessageCreate,createDirectChat,sendMessage,blockUser,unblockUser"
     ;;
   circles)
     FUNCTIONS_FILTER="createCircle,joinCircle,updateCircle,leaveCircle,manageMember,handleJoinRequest,resolveCircleReport,submitReport"

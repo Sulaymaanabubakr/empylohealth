@@ -94,6 +94,32 @@ const deleteCollectionDocs = async (ref: admin.firestore.CollectionReference, ba
     }
 };
 
+const deleteDocsFromQuery = async (query: admin.firestore.Query, batchSize = 300) => {
+    while (true) {
+        const snap = await query.limit(batchSize).get();
+        if (snap.empty) break;
+        const batch = db.batch();
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+        if (snap.size < batchSize) break;
+    }
+};
+
+const updateDocsFromQuery = async (
+    query: admin.firestore.Query,
+    updater: (doc: admin.firestore.QueryDocumentSnapshot) => Record<string, any>,
+    batchSize = 300
+) => {
+    while (true) {
+        const snap = await query.limit(batchSize).get();
+        if (snap.empty) break;
+        const batch = db.batch();
+        snap.docs.forEach((d) => batch.update(d.ref, updater(d)));
+        await batch.commit();
+        if (snap.size < batchSize) break;
+    }
+};
+
 const deleteChatCascade = async (chatId: string) => {
     const chatRef = db.collection('chats').doc(chatId);
     await deleteCollectionDocs(chatRef.collection('messages'));
@@ -132,6 +158,20 @@ const removeUserFromCircle = async (circleId: string, uid: string) => {
             });
         }
     });
+};
+
+const getBlockedUserIds = async (uid: string): Promise<string[]> => {
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.data() || {};
+    return Array.isArray(data.blockedUserIds) ? data.blockedUserIds : [];
+};
+
+const isEitherUserBlocked = async (uidA: string, uidB: string) => {
+    const [aBlocked, bBlocked] = await Promise.all([
+        getBlockedUserIds(uidA),
+        getBlockedUserIds(uidB)
+    ]);
+    return aBlocked.includes(uidB) || bBlocked.includes(uidA);
 };
 
 const deleteCircleCascade = async (circleId: string) => {
@@ -990,6 +1030,11 @@ export const createDirectChat = regionalFunctions.https.onCall(async (data, cont
     }
 
     try {
+        const blocked = await isEitherUserBlocked(uid, recipientId);
+        if (blocked) {
+            throw new functions.https.HttpsError('permission-denied', 'You cannot start a chat with this user.');
+        }
+
         // Check if chat already exists
         const snapshot = await db.collection('chats')
             .where('type', '==', 'direct')
@@ -1179,6 +1224,16 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
             throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
         }
 
+        if (chatData?.type === 'direct' && participants.length === 2) {
+            const otherId = participants.find((participantUid: string) => participantUid !== uid);
+            if (otherId) {
+                const blocked = await isEitherUserBlocked(uid, otherId);
+                if (blocked) {
+                    throw new functions.https.HttpsError('permission-denied', 'Message blocked for this conversation.');
+                }
+            }
+        }
+
         const messageData = {
             senderId: uid,
             text,
@@ -1206,6 +1261,42 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
         console.error("Error sending message:", error);
         throw new functions.https.HttpsError('internal', 'Unable to send message.');
     }
+});
+
+export const blockUser = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+    const uid = context.auth.uid;
+    const { targetUid } = data || {};
+    if (!targetUid || targetUid === uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid target user is required.');
+    }
+
+    await db.collection('users').doc(uid).set({
+        blockedUserIds: admin.firestore.FieldValue.arrayUnion(targetUid),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    return { success: true };
+});
+
+export const unblockUser = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+    const uid = context.auth.uid;
+    const { targetUid } = data || {};
+    if (!targetUid || targetUid === uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid target user is required.');
+    }
+
+    await db.collection('users').doc(uid).set({
+        blockedUserIds: admin.firestore.FieldValue.arrayRemove(targetUid),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    return { success: true };
 });
 
 // ==========================================
@@ -3386,16 +3477,20 @@ export const resolveCircleReport = regionalFunctions.https.onCall(async (data, c
         await batch.commit();
 
         if (action === 'warn' && targetType === 'member' && targetId) {
-            await db.collection('notifications').add({
-                uid: targetId,
-                title: 'Community Warning',
-                subtitle: 'A moderator reviewed a report about your behavior. Please follow circle guidelines.',
-                type: 'MODERATION_WARNING',
-                circleId,
-                read: false,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }).catch(() => {});
+            const targetUser = await db.collection('users').doc(targetId).get().catch(() => null);
+            const targetSettings = targetUser?.data?.()?.settings || {};
+            if (targetSettings.securityNotifications ?? true) {
+                await db.collection('notifications').add({
+                    uid: targetId,
+                    title: 'Community Warning',
+                    subtitle: 'A moderator reviewed a report about your behavior. Please follow circle guidelines.',
+                    type: 'MODERATION_WARNING',
+                    circleId,
+                    read: false,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }).catch(() => {});
+            }
         }
         return { success: true };
 
@@ -3928,42 +4023,77 @@ export const deleteUserAccount = regionalFunctions.https.onCall(async (data, con
     const uid = context.auth.uid;
 
     try {
-        const batch = db.batch();
-        batch.delete(db.collection('users').doc(uid));
+        const userRef = db.collection('users').doc(uid);
+        const userSnap = await userRef.get();
+        const userData = userSnap.data() || {};
 
-        const circlesSnap = await db.collection('circles').where('members', 'array-contains', uid).get();
-        circlesSnap.docs.forEach(doc => {
-            batch.update(doc.ref, { members: admin.firestore.FieldValue.arrayRemove(uid) });
-        });
+        const circlesOwnedSnap = await db.collection('circles').where('createdBy', '==', uid).get();
+        for (const ownedCircle of circlesOwnedSnap.docs) {
+            await deleteCircleCascade(ownedCircle.id);
+        }
+
+        const circlesMemberSnap = await db.collection('circles').where('members', 'array-contains', uid).get();
+        for (const circleDoc of circlesMemberSnap.docs) {
+            if (circleDoc.data()?.createdBy === uid) continue;
+            await removeUserFromCircle(circleDoc.id, uid);
+        }
+
+        await deleteDocsFromQuery(db.collection('notifications').where('uid', '==', uid));
+        await deleteDocsFromQuery(db.collection('notifications').where('senderId', '==', uid));
+        await deleteDocsFromQuery(db.collection('assessments').where('uid', '==', uid));
+        await deleteDocsFromQuery(db.collection('support_tickets').where('uid', '==', uid));
+        await deleteDocsFromQuery(db.collection('reports').where('reporterId', '==', uid));
+
+        const userCirclesRef = db.collection('userCircles').doc(uid);
+        await deleteCollectionDocs(userCirclesRef.collection('circles'));
+        await userCirclesRef.delete().catch(() => {});
 
         const chatsSnap = await db.collection('chats').where('participants', 'array-contains', uid).get();
-        chatsSnap.docs.forEach(doc => {
-            batch.update(doc.ref, { participants: admin.firestore.FieldValue.arrayRemove(uid) });
-        });
-
-        await batch.commit();
-
-        const assessmentsSnap = await db.collection('assessments').where('uid', '==', uid).get();
-        if (!assessmentsSnap.empty) {
-            const deleteBatches = [];
-            let currentBatch = db.batch();
-            let count = 0;
-            assessmentsSnap.docs.forEach((docSnap) => {
-                currentBatch.delete(docSnap.ref);
-                count += 1;
-                if (count === 400) {
-                    deleteBatches.push(currentBatch.commit());
-                    currentBatch = db.batch();
-                    count = 0;
-                }
-            });
-            deleteBatches.push(currentBatch.commit());
-            await Promise.all(deleteBatches);
+        for (const chatDoc of chatsSnap.docs) {
+            const chatData = chatDoc.data() || {};
+            const participants = Array.isArray(chatData.participants) ? chatData.participants : [];
+            const nextParticipants = participants.filter((id: string) => id !== uid);
+            const updates: Record<string, any> = {
+                participants: nextParticipants,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+            if (typeof chatData.participantsCount === 'number') {
+                updates.participantsCount = Math.max(0, nextParticipants.length);
+            }
+            await chatDoc.ref.set(updates, { merge: true });
         }
+
+        const anonymizedName = 'Deleted User';
+        const anonymizedAvatar = '';
+        await updateDocsFromQuery(
+            db.collectionGroup('messages').where('senderId', '==', uid),
+            () => ({
+                senderName: anonymizedName,
+                senderAvatar: anonymizedAvatar,
+                senderId: `deleted:${uid}`,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            })
+        );
+
+        await userRef.delete().catch(() => {});
 
         await admin.auth().deleteUser(uid);
 
-        return { success: true };
+        return {
+            success: true,
+            deleted: {
+                userProfile: true,
+                circlesDeleted: circlesOwnedSnap.size,
+                circlesLeft: circlesMemberSnap.size - circlesOwnedSnap.size,
+                notificationsDeleted: true,
+                assessmentsDeleted: true
+            },
+            retained: {
+                messages: 'anonymized',
+                moderationRecords: 'retained_for_safety'
+            },
+            previousName: String(userData?.name || '')
+        };
     } catch (error) {
         console.error('Error deleting user account:', error);
         throw new functions.https.HttpsError('internal', 'Unable to delete account.');

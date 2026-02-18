@@ -4,15 +4,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
+import QRCode from 'react-native-qrcode-svg';
+import { buildInviteLink, buildInviteShareText } from '../utils/deepLinks';
 
 const TellAFriendScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
     const avatarUri = userData?.photoURL || user?.photoURL || '';
+    const inviteLink = buildInviteLink(user?.uid || '');
 
     const handleShare = async () => {
         try {
             await Share.share({
-                message: 'Join me on Empylo Circles! Here is my invite link: https://empylo.com/invite/12345',
+                message: buildInviteShareText(user?.uid || ''),
             });
         } catch (error) {
             console.log(error);
@@ -47,9 +50,13 @@ const TellAFriendScreen = ({ navigation }) => {
                         />
                     </View>
 
-                    {/* QR Code Placeholder - In a real app we'd use react-native-qrcode-svg */}
                     <View style={styles.qrPlaceholder}>
-                        <Ionicons name="qr-code-outline" size={150} color="#000" />
+                        <QRCode
+                            value={inviteLink}
+                            size={170}
+                            color="#0F172A"
+                            backgroundColor="#FFFFFF"
+                        />
                     </View>
                 </View>
 
@@ -62,9 +69,9 @@ const TellAFriendScreen = ({ navigation }) => {
                     <Text style={styles.outlineButtonText}>Share Invite Link</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.outlineButton} onPress={() => { }}>
+                <TouchableOpacity style={styles.outlineButton} onPress={handleShare}>
                     <Ionicons name="copy-outline" size={20} color="#009688" style={{ marginRight: 8 }} />
-                    <Text style={styles.outlineButtonText}>Copy Link</Text>
+                    <Text style={styles.outlineButtonText}>Share Link</Text>
                 </TouchableOpacity>
 
             </View>

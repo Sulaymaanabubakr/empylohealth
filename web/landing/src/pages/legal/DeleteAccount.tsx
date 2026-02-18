@@ -15,8 +15,7 @@ const DeleteAccount = () => {
                         <h3>Option 1: In-App Deletion</h3>
                         <ol>
                             <li>Open the Circles Health App.</li>
-                            <li>Go to <strong>Profile</strong> {'>'} <strong>Settings</strong>.</li>
-                            <li>Scroll down to <strong>Security</strong>.</li>
+                            <li>Go to <strong>Profile</strong> {'>'} <strong>Account</strong> {'>'} <strong>Security</strong>.</li>
                             <li>Tap <strong>Delete Account</strong> and confirm.</li>
                         </ol>
                     </div>
@@ -32,8 +31,7 @@ const DeleteAccount = () => {
                     </div>
 
                     <div className="warning-box">
-                        <p><strong>Warning:</strong> Deleting your account is permanent. All your mood logs,
-                            chat history, and community contributions will be erased and cannot be recovered.</p>
+                        <p><strong>Warning:</strong> Deleting your account is permanent. Your profile and account access are removed immediately. Some records may be retained for legal/safety obligations, and message history may be anonymized instead of fully deleted where required for integrity and moderation.</p>
                     </div>
                 </div>
             </div>

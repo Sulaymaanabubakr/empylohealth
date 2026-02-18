@@ -15,6 +15,7 @@ import Avatar from '../components/Avatar';
 import { resolveWellbeingScore } from '../utils/wellbeing';
 import { circleService } from '../services/api/circleService';
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
+import { userService } from '../services/api/userService';
 
 const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
 
@@ -589,6 +590,67 @@ const ChatDetailScreen = ({ navigation, route }) => {
         };
     };
 
+    const handleBlockUser = (targetUid, targetName) => {
+        if (!targetUid || targetUid === user?.uid) return;
+        showModal({
+            type: 'confirmation',
+            title: 'Block User',
+            message: `Block ${targetName || 'this user'}? You will no longer receive direct messages from them.`,
+            confirmText: 'Block',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    await userService.blockUser(targetUid);
+                    setProfileModalVisible(false);
+                    showModal({
+                        type: 'success',
+                        title: 'User Blocked',
+                        message: 'You can unblock this user later from account support.'
+                    });
+                } catch (error) {
+                    showModal({
+                        type: 'error',
+                        title: 'Block Failed',
+                        message: error?.message || 'Unable to block this user.'
+                    });
+                }
+            }
+        });
+    };
+
+    const handleReportUser = (targetUid, targetName) => {
+        if (!chat?.circleId || !targetUid || targetUid === user?.uid) return;
+        showModal({
+            type: 'confirmation',
+            title: 'Report Member',
+            message: `Report ${targetName || 'this member'} for review by moderators?`,
+            confirmText: 'Report',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    await circleService.submitReport(
+                        chat.circleId,
+                        targetUid,
+                        'member',
+                        'Inappropriate Behavior',
+                        `${targetName || 'Member'} reported from chat profile action.`
+                    );
+                    showModal({
+                        type: 'success',
+                        title: 'Report Sent',
+                        message: 'Thank you. Moderators will review this member.'
+                    });
+                } catch (error) {
+                    showModal({
+                        type: 'error',
+                        title: 'Error',
+                        message: error?.message || 'Could not submit member report.'
+                    });
+                }
+            }
+        });
+    };
+
     const renderMessage = ({ item }) => {
         if (item?.type === 'private_system' || item?.systemKind === 'role_update') {
             return (
@@ -877,6 +939,20 @@ const ChatDetailScreen = ({ navigation, route }) => {
                                     >
                                         <Text style={styles.profileActionSecondaryText}>Call</Text>
                                     </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.profileActionBtn, styles.profileActionDanger]}
+                                        onPress={() => handleBlockUser(selectedProfile?.uid, selectedProfile?.name)}
+                                    >
+                                        <Text style={styles.profileActionDangerText}>Block</Text>
+                                    </TouchableOpacity>
+                                    {chat?.circleId ? (
+                                        <TouchableOpacity
+                                            style={[styles.profileActionBtn, styles.profileActionSecondary]}
+                                            onPress={() => handleReportUser(selectedProfile?.uid, selectedProfile?.name)}
+                                        >
+                                            <Text style={styles.profileActionSecondaryText}>Report Member</Text>
+                                        </TouchableOpacity>
+                                    ) : null}
                                 </>
                             )}
                             <TouchableOpacity
@@ -1246,6 +1322,13 @@ const styles = StyleSheet.create({
     },
     profileActionSecondaryText: {
         color: COLORS.primary,
+        fontWeight: '700'
+    },
+    profileActionDanger: {
+        backgroundColor: '#FFEBEE'
+    },
+    profileActionDangerText: {
+        color: '#D32F2F',
         fontWeight: '700'
     },
     profileActionGhost: {

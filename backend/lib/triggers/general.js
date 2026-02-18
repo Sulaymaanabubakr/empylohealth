@@ -58,7 +58,13 @@ exports.onUserCreate = regionalFunctions.auth.user().onCreate(async (user) => {
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             settings: {
                 notifications: true,
-                biometrics: false
+                biometrics: false,
+                securityNotifications: true,
+                msgShow: true,
+                msgSound: true,
+                groupShow: true,
+                groupSound: true,
+                showPreview: true
             }
         };
         await db.collection('users').doc(uid).set(userDoc);
@@ -109,25 +115,41 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
         const recipients = participants.filter((uid) => uid !== senderId);
         if (recipients.length === 0)
             return;
-        // 3. Get Recipient Tokens (Expo + FCM)
-        const expoTokens = [];
-        const fcmTokens = [];
-        for (const uid of recipients) {
+        // 3. Resolve per-recipient notification preferences
+        const recipientPrefs = (await Promise.all(recipients.map(async (uid) => {
             const userDoc = await db.collection('users').doc(uid).get();
             const userData = userDoc.data() || {};
-            const userExpoTokens = userData.expoPushTokens || [];
-            const userFcmTokens = userData.fcmTokens || [];
-            expoTokens.push(...userExpoTokens);
-            fcmTokens.push(...userFcmTokens);
-        }
+            const settings = userData?.settings || {};
+            const showNotifications = isGroup
+                ? (settings.groupShow ?? true)
+                : (settings.msgShow ?? true);
+            const showPreview = settings.showPreview ?? true;
+            const playSound = isGroup
+                ? (settings.groupSound ?? true)
+                : (settings.msgSound ?? true);
+            return {
+                uid,
+                showNotifications,
+                showPreview,
+                playSound,
+                expoTokens: Array.isArray(userData.expoPushTokens) ? userData.expoPushTokens : [],
+                fcmTokens: Array.isArray(userData.fcmTokens) ? userData.fcmTokens : []
+            };
+        }))).filter((row) => row.showNotifications);
+        if (recipientPrefs.length === 0)
+            return;
         // 3b. Write in-app notifications for recipients
         const notificationBatch = db.batch();
-        recipients.forEach((uid) => {
+        const messageText = String(message?.text || '').trim();
+        recipientPrefs.forEach((recipient) => {
+            const subtitle = recipient.showPreview
+                ? String(messageText || 'New message')
+                : 'New message';
             const notifRef = db.collection('notifications').doc();
             notificationBatch.set(notifRef, {
-                uid,
+                uid: recipient.uid,
                 title: isGroup ? circleName : senderName,
-                subtitle: String(message.text || 'New message'),
+                subtitle,
                 type: 'CHAT_MESSAGE',
                 chatId,
                 senderId,
@@ -139,15 +161,15 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
             });
         });
         await notificationBatch.commit();
-        if (expoTokens.length === 0 && fcmTokens.length === 0)
-            return;
-        const messageText = String(message?.text || '').trim();
-        const payload = {
-            title: isGroup ? circleName : senderName,
-            body: isGroup ? `${senderName}: ${messageText || 'New message'}` : (messageText || 'New message'),
-            categoryId: 'chat-message-actions',
-            data: {
-                chatId: chatId,
+        // 4. Send recipient-specific push payloads (filters + preview masking + sound settings)
+        const fcmMessages = [];
+        const expoMessages = [];
+        recipientPrefs.forEach((recipient) => {
+            const body = recipient.showPreview
+                ? (isGroup ? `${senderName}: ${messageText || 'New message'}` : (messageText || 'New message'))
+                : (isGroup ? `${senderName}: New message` : 'New message');
+            const data = {
+                chatId,
                 conversationId: chatId,
                 messageId,
                 senderId: String(senderId || ''),
@@ -158,61 +180,71 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                 chatAvatar: isGroup ? circleImage : senderImage,
                 type: 'CHAT_MESSAGE',
                 categoryId: 'chat-message-actions'
-            }
-        };
-        // 4a. Send FCM notifications (native tokens)
-        if (fcmTokens.length > 0) {
-            const androidNotification = {
-                channelId: 'default',
-                tag: chatId
             };
-            const apnsConfig = {
-                headers: {
-                    'apns-push-type': 'alert',
-                    'apns-priority': '10'
-                },
-                payload: {
-                    aps: {
-                        category: 'chat-message-actions',
-                        'thread-id': chatId
-                    }
-                }
-            };
-            const messagePayload = {
-                tokens: fcmTokens,
-                notification: {
-                    title: payload.title,
-                    body: payload.body,
-                },
-                data: payload.data,
-                android: {
-                    priority: 'high',
-                    notification: androidNotification
-                },
-                apns: apnsConfig
-            };
-            const response = await admin.messaging().sendEachForMulticast(messagePayload);
-            console.log(`[Backend] FCM notifications sent: ${response.successCount}`);
-        }
-        // 4b. Send Expo notifications (Expo push tokens)
-        if (expoTokens.length > 0) {
-            const expoMessages = expoTokens.map((token) => ({
-                to: token,
-                title: payload.title,
-                body: payload.body,
-                data: payload.data,
-                categoryId: payload.categoryId
-            }));
-            try {
-                const response = await fetch('https://exp.host/--/api/v2/push/send', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
+            recipient.fcmTokens.forEach((token) => {
+                fcmMessages.push({
+                    token,
+                    notification: {
+                        title: isGroup ? circleName : senderName,
+                        body
                     },
-                    body: JSON.stringify(expoMessages)
+                    data,
+                    android: {
+                        priority: 'high',
+                        notification: {
+                            channelId: recipient.playSound ? 'messages-default' : 'messages-silent',
+                            tag: chatId
+                        }
+                    },
+                    apns: {
+                        headers: {
+                            'apns-push-type': 'alert',
+                            'apns-priority': '10'
+                        },
+                        payload: {
+                            aps: {
+                                category: 'chat-message-actions',
+                                'thread-id': chatId,
+                                ...(recipient.playSound ? { sound: 'default' } : {})
+                            }
+                        }
+                    }
                 });
-                const result = await response.json();
-                console.log('[Backend] Expo notifications sent:', result?.data?.length || 0);
+            });
+            recipient.expoTokens.forEach((token) => {
+                expoMessages.push({
+                    to: token,
+                    title: isGroup ? circleName : senderName,
+                    body,
+                    data,
+                    categoryId: 'chat-message-actions',
+                    channelId: recipient.playSound ? 'messages-default' : 'messages-silent',
+                    ...(recipient.playSound ? { sound: 'default' } : {})
+                });
+            });
+        });
+        if (fcmMessages.length > 0) {
+            const response = await admin.messaging().sendEach(fcmMessages);
+            const successCount = response.responses.filter((r) => r.success).length;
+            console.log(`[Backend] FCM notifications sent: ${successCount}/${fcmMessages.length}`);
+        }
+        if (expoMessages.length > 0) {
+            try {
+                const chunkSize = 100;
+                let sent = 0;
+                for (let i = 0; i < expoMessages.length; i += chunkSize) {
+                    const chunk = expoMessages.slice(i, i + chunkSize);
+                    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(chunk)
+                    });
+                    const result = await response.json();
+                    sent += Array.isArray(result?.data) ? result.data.length : chunk.length;
+                }
+                console.log('[Backend] Expo notifications sent:', sent);
             }
             catch (error) {
                 console.error('[Backend] Expo push error:', error);

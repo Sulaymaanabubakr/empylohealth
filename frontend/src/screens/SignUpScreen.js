@@ -10,13 +10,15 @@ import {
     TouchableOpacity,
     Dimensions,
     KeyboardAvoidingView,
-    Platform
+    Platform,
+    Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { MaterialCommunityIcons, AntDesign, FontAwesome } from '@expo/vector-icons';
+import { LEGAL_LINKS } from '../constants/legalLinks';
 // import { Checkbox } from 'expo-checkbox'; // Removed unused import to avoid dependency error
 
 const { width } = Dimensions.get('window');
@@ -122,7 +124,12 @@ const SignUpScreen = ({ navigation }) => {
                             >
                                 {agree && <MaterialCommunityIcons name="check" size={14} color="white" />}
                             </TouchableOpacity>
-                            <Text style={styles.checkboxLabel}>I agree to the <Text style={styles.boldLink}>Terms</Text> and <Text style={styles.boldLink}>Privacy</Text></Text>
+                            <Text style={styles.checkboxLabel}>
+                                I agree to the{' '}
+                                <Text style={styles.boldLink} onPress={() => Linking.openURL(LEGAL_LINKS.terms)}>Terms</Text>
+                                {' '}and{' '}
+                                <Text style={styles.boldLink} onPress={() => Linking.openURL(LEGAL_LINKS.privacy)}>Privacy</Text>
+                            </Text>
                         </View>
 
                         <Button
