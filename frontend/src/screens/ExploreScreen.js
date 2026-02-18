@@ -191,23 +191,26 @@ const ExploreScreen = ({ navigation }) => {
                             <ActivityIndicator size="small" color={COLORS.primary} />
                         </View>
                     ) : (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.horizontalScroll}
+                            contentContainerStyle={styles.horizontalScrollContent}
+                        >
                             {visibleActivities.map((item) => (
                                 (() => {
                                     const svgXml = decodeSvgDataUri(item.image);
                                     const title = String(item?.title || item?.name || item?.label || '').trim() || 'Wellbeing Activity';
                                     const tag = String(item?.tag || item?.type || 'LEARN').trim().toUpperCase();
                                     const time = String(item?.time || '5 min').trim() || '5 min';
-                                    const textColor = item.textColor || '#FFFFFF';
-                                    const tagColor = item.tagColor || '#FFE082';
                                     return (
                                         <TouchableOpacity
                                             key={item.id}
-                                            style={[styles.activityCard, { backgroundColor: item.color || '#0052CC' }]}
+                                            style={styles.activityCard}
                                             onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
                                         >
-                                            <View style={[styles.timeBadge, { backgroundColor: item.timeBadgeBg || 'rgba(255,255,255,0.22)' }]}>
-                                                <Text style={[styles.timeText, { color: item.timeBadgeText || '#FFFFFF' }]}>{time}</Text>
+                                            <View style={styles.timeBadge}>
+                                                <Text style={styles.timeText}>{time}</Text>
                                             </View>
                                             {svgXml ? (
                                                 <View style={styles.activityImageWrap}>
@@ -221,12 +224,12 @@ const ExploreScreen = ({ navigation }) => {
                                                 />
                                             ) : (
                                                 <View style={styles.activityImageFallback}>
-                                                    <MaterialCommunityIcons name="lightbulb-on-outline" size={40} color="#FFFFFF" />
+                                                    <MaterialCommunityIcons name="lightbulb-on-outline" size={40} color="#607D8B" />
                                                 </View>
                                             )}
                                             <View style={styles.activityContent}>
-                                                <Text style={[styles.activityTitle, { color: textColor }]} numberOfLines={2}>{title}</Text>
-                                                <Text style={[styles.activityTag, { color: tagColor }]}>
+                                                <Text style={[styles.activityTitle, { color: '#000000' }]} numberOfLines={2}>{title}</Text>
+                                                <Text style={[styles.activityTag, { color: '#E38B15' }]}>
                                                     {tag}
                                                 </Text>
                                             </View>
@@ -464,25 +467,39 @@ const styles = StyleSheet.create({
         marginHorizontal: -SPACING.lg, // Allow full bleed
         paddingHorizontal: SPACING.lg,
     },
+    horizontalScrollContent: {
+        paddingBottom: 6,
+    },
     activityCard: {
         width: width * 0.42,
         height: 220,
         borderRadius: 24,
         padding: 16,
+        paddingBottom: 14,
         marginRight: 16,
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
+        backgroundColor: '#F4F6F8',
+        borderWidth: 1,
+        borderColor: '#E3E8EE',
+        shadowColor: '#111827',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        elevation: 2,
     },
     timeBadge: {
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        backgroundColor: '#FFCF4A',
         alignSelf: 'flex-start',
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#F59E0B',
     },
     timeText: {
-        fontSize: 10,
-        fontWeight: '800',
-        color: '#1A1A1A',
+        fontSize: 12,
+        fontWeight: '900',
+        color: '#C2410C',
     },
     activityImage: {
         width: '100%',
@@ -506,12 +523,12 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.2)'
     },
     activityContent: {
-
+        marginTop: 'auto',
     },
     activityTitle: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#FFFFFF',
+        color: '#1A1A1A',
         marginBottom: 4,
         lineHeight: 22,
     },
@@ -519,7 +536,7 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '800',
         textTransform: 'uppercase',
-        color: '#FFE082'
+        color: '#E38B15'
     },
     filterScroll: {
         flexDirection: 'row',

@@ -1,24 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, Feather } from '@expo/vector-icons';
-import { SvgXml } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
-
-const { width } = Dimensions.get('window');
-
-const decodeSvgDataUri = (uri = '') => {
-    if (!uri || typeof uri !== 'string') return null;
-    if (!uri.startsWith('data:image/svg+xml')) return null;
-    const commaIndex = uri.indexOf(',');
-    if (commaIndex < 0) return null;
-    const encoded = uri.slice(commaIndex + 1);
-    try {
-        return decodeURIComponent(encoded);
-    } catch {
-        return encoded;
-    }
-};
 
 const ActivityDetailScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
@@ -34,24 +18,34 @@ const ActivityDetailScreen = ({ navigation, route }) => {
             </View>
         );
     }
-    const { headerColor = activity.color, isDarkText = false } = activity;
-    const svgXml = decodeSvgDataUri(activity.image);
-    const isGeneratedActivityArtwork = Boolean(svgXml);
+    const accentColor = COLORS.primary;
     const tagLabel = String(activity?.tag || activity?.type || 'LEARN').toUpperCase();
     const durationLabel = String(activity?.time || '5 min');
-    const categoryLabel = String(activity?.category || 'Self-development');
     const descriptionText = String(activity?.description || '').trim() || 'This guided activity helps you build healthy wellbeing habits in small, consistent steps.';
-    const textColor = isDarkText ? '#1A1A1A' : '#FFFFFF';
-    const badgeBg = isDarkText ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.25)';
-    const badgeBorder = isDarkText ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.4)';
+    const rawContent = String(activity?.content || '').trim();
+    const parsedParagraphs = (rawContent || descriptionText)
+        .split(/\n{2,}/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    const contentParagraphs = parsedParagraphs.length > 0
+        ? parsedParagraphs
+        : [
+            descriptionText,
+            'Take your time with this activity and focus on steady progress. You can pause and return anytime.',
+            'Consistency matters more than speed. Even short sessions can make a meaningful difference over time.'
+        ];
+    const useDarkText = accentColor === COLORS.lightBlue || accentColor === COLORS.secondary;
+    const textColor = useDarkText ? COLORS.black : '#FFFFFF';
+    const badgeBg = useDarkText ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.25)';
+    const badgeBorder = useDarkText ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.4)';
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle={isDarkText ? "dark-content" : "light-content"} backgroundColor={headerColor} />
+            <StatusBar barStyle={useDarkText ? 'dark-content' : 'light-content'} backgroundColor={accentColor} />
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 {/* Curved Header */}
-                <View style={[styles.headerContainer, { paddingTop: insets.top, backgroundColor: headerColor }]}>
+                <View style={[styles.headerContainer, { paddingTop: insets.top, backgroundColor: accentColor }]}>
                     <View style={styles.navBar}>
                         <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
                             <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
@@ -76,28 +70,11 @@ const ActivityDetailScreen = ({ navigation, route }) => {
 
                 {/* Content Area */}
                 <View style={styles.contentContainer}>
-                    {activity.image && !isGeneratedActivityArtwork ? (
-                        <View style={styles.imageContainer}>
-                            {svgXml ? (
-                                <SvgXml xml={svgXml} width="100%" height="100%" />
-                            ) : (
-                                <Image
-                                    source={{ uri: activity.image }}
-                                    style={styles.illustration}
-                                    resizeMode="contain"
-                                />
-                            )}
-                        </View>
-                    ) : null}
-
-                    <View style={styles.infoCard}>
-                        <Text style={styles.infoTitle}>Overview</Text>
-                        <Text style={styles.sectionText}>{descriptionText}</Text>
-                        <Text style={styles.infoTitle}>Focus Area</Text>
-                        <Text style={styles.sectionText}>{categoryLabel}</Text>
-                        <Text style={styles.infoTitle}>How Long</Text>
-                        <Text style={styles.sectionText}>{durationLabel}</Text>
-                    </View>
+                    {contentParagraphs.map((paragraph, index) => (
+                        <Text key={`${index}-${paragraph.slice(0, 20)}`} style={styles.sectionText}>
+                            {paragraph}
+                        </Text>
+                    ))}
 
                     {activity.steps && activity.steps.map((step, index) => (
                         <Text key={index} style={styles.sectionText}>
@@ -113,7 +90,7 @@ const ActivityDetailScreen = ({ navigation, route }) => {
             {/* Floating Bottom Button */}
             <View style={[styles.bottomContainer, { paddingBottom: Platform.OS === 'ios' ? insets.bottom : 24 }]}>
                 <TouchableOpacity
-                    style={[styles.completeButton, { backgroundColor: headerColor, shadowColor: headerColor }]}
+                    style={[styles.completeButton, { backgroundColor: accentColor, shadowColor: accentColor }]}
                     onPress={() => navigation.goBack()}
                 >
                     <Text style={[styles.completeButtonText, { color: textColor }]}>Complete!</Text>
@@ -188,37 +165,14 @@ const styles = StyleSheet.create({
     },
     contentContainer: {
         paddingHorizontal: 24,
-        paddingTop: 30,
-    },
-    imageContainer: {
-        alignItems: 'center',
-        marginBottom: 30,
-    },
-    illustration: {
-        width: width - 80,
-        height: 200,
+        paddingTop: 18,
     },
     sectionText: {
         fontSize: 16,
-        lineHeight: 26,
+        lineHeight: 28,
         color: '#424242',
-        marginBottom: 14,
-        fontWeight: '400',
-    },
-    infoCard: {
-        backgroundColor: '#F8FAFC',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 18,
-        padding: 16,
         marginBottom: 18,
-    },
-    infoTitle: {
-        fontSize: 13,
-        fontWeight: '800',
-        color: '#334155',
-        marginBottom: 6,
-        textTransform: 'uppercase',
+        fontWeight: '400',
     },
     boldText: {
         fontWeight: '700',

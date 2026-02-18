@@ -143,13 +143,6 @@ const createExploreActivitySvgDataUri = (input) => {
     const hairColor = variant === 0 ? '#1A2B40' : (variant === 1 ? '#243447' : '#203143');
     const bookAccent = variant === 0 ? '#45C2A2' : (variant === 1 ? '#3FA7B8' : '#53C985');
     const iconColor = variant === 0 ? '#8FA0B6' : (variant === 1 ? '#95A4BA' : '#91A7BB');
-    const backgroundBlob = isSleep
-        ? `<ellipse cx="352" cy="214" rx="236" ry="152" fill="#DDEAC0" opacity="0.72"/>`
-        : isFocus
-            ? `<ellipse cx="352" cy="214" rx="236" ry="152" fill="#CFE6DE" opacity="0.72"/>`
-            : isListening
-                ? `<ellipse cx="352" cy="214" rx="236" ry="152" fill="#D9EEE9" opacity="0.72"/>`
-                : `<ellipse cx="352" cy="214" rx="236" ry="152" fill="${palette.shape}" opacity="0.58"/>`;
     const sleepScene = `
   <path d="M170 298 q34 -32 82 -34 q44 2 78 24 q-18 24 -52 34 q-68 20 -108 -24z" fill="#EAF2D6"/>
   <rect x="178" y="226" width="196" height="72" rx="22" fill="#F6FAFF" stroke="#203547" stroke-width="4"/>
@@ -230,7 +223,6 @@ const createExploreActivitySvgDataUri = (input) => {
     const sceneMarkup = isSleep ? sleepScene : (isFocus ? focusScene : (isListening ? listeningScene : genericScene));
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">
-  ${backgroundBlob}
   ${sceneMarkup}
 </svg>`.trim();
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
