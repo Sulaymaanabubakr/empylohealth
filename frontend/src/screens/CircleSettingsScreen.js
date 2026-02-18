@@ -169,6 +169,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [members, setMembers] = useState([]);
     const [requests, setRequests] = useState([]);
     const [reports, setReports] = useState([]);
+    const [enrichedReports, setEnrichedReports] = useState([]);
     const [events, setEvents] = useState([]);
     const [initialLoading, setInitialLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
@@ -413,6 +414,40 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         fetchProfiles();
     }, [members, requests]);
 
+    useEffect(() => {
+        const enrichReports = async () => {
+            if (!reports.length) {
+                setEnrichedReports([]);
+                return;
+            }
+
+            try {
+                const next = await Promise.all(reports.map(async (rep) => {
+                    const reporterUid = rep?.reporterId || rep?.reportedBy || '';
+                    const targetUid = rep?.targetType === 'member' ? rep?.targetId : '';
+
+                    const [reporterDoc, targetDoc] = await Promise.all([
+                        reporterUid ? userService.getUserDocument(reporterUid).catch(() => null) : Promise.resolve(null),
+                        targetUid ? userService.getUserDocument(targetUid).catch(() => null) : Promise.resolve(null)
+                    ]);
+
+                    return {
+                        ...rep,
+                        reporterName: reporterDoc?.name || reporterDoc?.displayName || reporterUid || 'Unknown',
+                        targetName: targetDoc?.name || targetDoc?.displayName || targetUid || rep?.targetId || 'Unknown',
+                        targetAvatar: targetDoc?.photoURL || '',
+                        targetEmail: targetDoc?.email || ''
+                    };
+                }));
+                setEnrichedReports(next);
+            } catch {
+                setEnrichedReports(reports);
+            }
+        };
+
+        enrichReports();
+    }, [reports]);
+
 
     const handleAcceptRequest = async (req) => {
         setProcessingId(req.uid);
@@ -616,10 +651,13 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     );
 
     const handleResolveReport = async (report, action) => {
+        const actionLabel = action === 'delete_content'
+            ? 'delete this content'
+            : `${action} this report`;
         showModal({
             type: 'confirmation',
             title: 'Confirm Action',
-            message: `Are you sure you want to ${action} this report?`,
+            message: `Are you sure you want to ${actionLabel}?`,
             confirmText: 'Confirm',
             onConfirm: async () => {
                 setActionLoading(true);
@@ -641,17 +679,20 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
     const ReportsTab = () => (
         <View style={styles.tabContent}>
-            <Text style={styles.sectionTitle}>Reports ({reports.length})</Text>
-            {reports.length === 0 ? (
+            <Text style={styles.sectionTitle}>Reports ({enrichedReports.length})</Text>
+            {enrichedReports.length === 0 ? (
                 <Text style={styles.emptyText}>No pending reports.</Text>
             ) : (
-                reports.map(rep => (
+                enrichedReports.map(rep => (
                     <View key={rep.id} style={styles.listItem}>
                         <View style={styles.listItemContent}>
                             <Text style={styles.itemTitle}>{rep.reason}</Text>
                             <Text style={styles.itemSubtitle}>{rep.description}</Text>
                             <Text style={{ fontSize: 12, color: '#9E9E9E', marginTop: 4 }}>
-                                Target: {rep.targetType} ({rep.targetId})
+                                Reported by: {rep.reporterName}
+                            </Text>
+                            <Text style={{ fontSize: 12, color: '#9E9E9E' }}>
+                                Target: {rep.targetType === 'member' ? rep.targetName : rep.targetId}
                             </Text>
                             <Text style={{ fontSize: 12, color: '#9E9E9E' }}>Status: {rep.status}</Text>
                         </View>
@@ -660,9 +701,21 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                                 <TouchableOpacity onPress={() => handleResolveReport(rep, 'dismiss')} style={[styles.smBtn, { backgroundColor: '#E0E0E0', width: 'auto', paddingHorizontal: 12 }]}>
                                     <Text style={{ fontSize: 12, fontWeight: '600' }}>Dismiss</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={() => handleResolveReport(rep, 'ban')} style={[styles.smBtn, { backgroundColor: '#FFEBEE', width: 'auto', paddingHorizontal: 12 }]}>
-                                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#D32F2F' }}>Ban</Text>
-                                </TouchableOpacity>
+                                {rep.targetType === 'member' && (
+                                    <>
+                                        <TouchableOpacity onPress={() => handleResolveReport(rep, 'warn')} style={[styles.smBtn, { backgroundColor: '#FFF8E1', width: 'auto', paddingHorizontal: 12 }]}>
+                                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#EF6C00' }}>Warn</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => handleResolveReport(rep, 'ban')} style={[styles.smBtn, { backgroundColor: '#FFEBEE', width: 'auto', paddingHorizontal: 12 }]}>
+                                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#D32F2F' }}>Ban</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
+                                {rep.targetType === 'message' && (
+                                    <TouchableOpacity onPress={() => handleResolveReport(rep, 'delete_content')} style={[styles.smBtn, { backgroundColor: '#FFEBEE', width: 'auto', paddingHorizontal: 12 }]}>
+                                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#D32F2F' }}>Delete Message</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         )}
                     </View>

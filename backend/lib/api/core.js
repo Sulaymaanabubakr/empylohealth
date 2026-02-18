@@ -3006,6 +3006,10 @@ exports.resolveCircleReport = regionalFunctions.https.onCall(async (data, contex
     // action: 'dismiss' | 'warn' | 'ban' | 'delete_content'
     const uid = context.auth.uid;
     try {
+        const allowedActions = ['dismiss', 'warn', 'ban', 'delete_content'];
+        if (!allowedActions.includes(action)) {
+            throw new functions.https.HttpsError('invalid-argument', 'Invalid resolution action.');
+        }
         const circleRef = db.collection('circles').doc(circleId);
         // 1. Permission Check
         const memberRef = circleRef.collection('members').doc(uid);
@@ -3063,10 +3067,24 @@ exports.resolveCircleReport = regionalFunctions.https.onCall(async (data, contex
             resolvedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         await batch.commit();
+        if (action === 'warn' && targetType === 'member' && targetId) {
+            await db.collection('notifications').add({
+                uid: targetId,
+                title: 'Community Warning',
+                subtitle: 'A moderator reviewed a report about your behavior. Please follow circle guidelines.',
+                type: 'MODERATION_WARNING',
+                circleId,
+                read: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }).catch(() => { });
+        }
         return { success: true };
     }
     catch (error) {
         console.error("Error resolving report:", error);
+        if (error instanceof functions.https.HttpsError)
+            throw error;
         throw new functions.https.HttpsError('internal', 'Resolution failed.');
     }
 });
