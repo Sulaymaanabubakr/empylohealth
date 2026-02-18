@@ -10,7 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 
-import { View, Platform, Text } from 'react-native';
+import { View, Platform, Text, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { perfLogger } from './src/services/diagnostics/perfLogger';
 
@@ -34,6 +34,12 @@ class ErrorBoundary extends React.Component {
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
+
+// Keep typography consistent across OEM/device accessibility defaults.
+if (Text.defaultProps == null) Text.defaultProps = {};
+if (TextInput.defaultProps == null) TextInput.defaultProps = {};
+Text.defaultProps.maxFontSizeMultiplier = 1.1;
+TextInput.defaultProps.maxFontSizeMultiplier = 1.1;
 
 export default function App() {
   console.log('[PERF] App: Starting...');

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { db } from '../services/firebaseConfig';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
+import DatePicker from '../components/DatePicker';
+import TimePicker from '../components/TimePicker';
 import ImageCropper from '../components/ImageCropper';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
@@ -140,43 +142,19 @@ const TabButton = ({ title, active, onPress, badge, alert }) => (
     </TouchableOpacity>
 );
 
-const buildDateOptions = (count = 14) => {
-    const now = new Date();
-    return Array.from({ length: count }).map((_, idx) => {
-        const date = new Date(now);
-        date.setHours(0, 0, 0, 0);
-        date.setDate(now.getDate() + idx);
-        return {
-            key: date.toISOString().slice(0, 10),
-            label: idx === 0 ? 'Today' : (idx === 1 ? 'Tomorrow' : date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })),
-            date
-        };
-    });
-};
-
-const buildTimeOptions = () => {
-    const slots = [];
-    for (let hour = 0; hour < 24; hour += 1) {
-        for (let minute = 0; minute < 60; minute += 30) {
-            const date = new Date();
-            date.setHours(hour, minute, 0, 0);
-            slots.push({
-                key: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
-                label: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                hour,
-                minute
-            });
-        }
-    }
-    return slots;
-};
-
 const getInitialScheduleDate = () => {
     const d = new Date();
     d.setSeconds(0, 0);
     const nextMinute = d.getMinutes() < 30 ? 30 : 60;
     d.setMinutes(nextMinute, 0, 0);
     return d;
+};
+
+const formatDateForPicker = (date) => {
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${mm}.${dd}.${yyyy}`;
 };
 
 const CircleSettingsScreen = ({ navigation, route }) => {
@@ -251,19 +229,24 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [editName, setEditName] = useState('');
     const [editDesc, setEditDesc] = useState('');
 
-    const dateOptions = useMemo(() => buildDateOptions(14), []);
-    const timeOptions = useMemo(() => buildTimeOptions(), []);
+    const selectedTime24 = `${String(eventDate.getHours()).padStart(2, '0')}:${String(eventDate.getMinutes()).padStart(2, '0')}`;
 
-    const selectedDateKey = eventDate.toISOString().slice(0, 10);
-    const selectedTimeKey = `${String(eventDate.getHours()).padStart(2, '0')}:${String(eventDate.getMinutes() < 30 ? 0 : 30).padStart(2, '0')}`;
-
-    const setDatePart = (dateValue) => {
+    const setDatePart = (formattedDate) => {
+        const [mm, dd, yyyy] = String(formattedDate || '').split('.');
+        const month = Number(mm);
+        const day = Number(dd);
+        const year = Number(yyyy);
+        if (!Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(year)) return;
         const next = new Date(eventDate);
-        next.setFullYear(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate());
+        next.setFullYear(year, month - 1, day);
         setEventDate(next);
     };
 
-    const setTimePart = (hour, minute) => {
+    const setTimePart = (time24) => {
+        const [h, m] = String(time24 || '').split(':');
+        const hour = Number(h);
+        const minute = Number(m);
+        if (!Number.isFinite(hour) || !Number.isFinite(minute)) return;
         const next = new Date(eventDate);
         next.setHours(hour, minute, 0, 0);
         setEventDate(next);
@@ -797,35 +780,22 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         />
 
                         {/* Simple Date Input for MVP */}
-                        <Text style={styles.label}>Date</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scheduleSelectorRow}>
-                            {dateOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option.key}
-                                    style={[styles.scheduleChip, selectedDateKey === option.key && styles.scheduleChipActive]}
-                                    onPress={() => setDatePart(option.date)}
-                                >
-                                    <Text style={[styles.scheduleChipText, selectedDateKey === option.key && styles.scheduleChipTextActive]}>
-                                        {option.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                        <DatePicker
+                            label="Date"
+                            value={formatDateForPicker(eventDate)}
+                            onSelect={setDatePart}
+                            placeholder="Select date"
+                            icon={<Ionicons name="calendar-outline" size={18} color={COLORS.primary} />}
+                        />
 
-                        <Text style={styles.label}>Time</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scheduleSelectorRow}>
-                            {timeOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option.key}
-                                    style={[styles.scheduleChip, selectedTimeKey === option.key && styles.scheduleChipActive]}
-                                    onPress={() => setTimePart(option.hour, option.minute)}
-                                >
-                                    <Text style={[styles.scheduleChipText, selectedTimeKey === option.key && styles.scheduleChipTextActive]}>
-                                        {option.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                        <TimePicker
+                            label="Time"
+                            value={eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            time24Value={selectedTime24}
+                            onSelect={setTimePart}
+                            placeholder="Select time"
+                            icon={<Ionicons name="time-outline" size={18} color={COLORS.primary} />}
+                        />
                         <Text style={styles.schedulePreview}>Scheduled for {eventDate.toLocaleString()}</Text>
 
                         <View style={styles.modalActions}>
@@ -1139,30 +1109,6 @@ const styles = StyleSheet.create({
         fontWeight: '700'
     },
     chip: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#E0F2F1', borderRadius: 20, marginRight: 8 },
-    scheduleSelectorRow: {
-        paddingBottom: 8,
-        gap: 8
-    },
-    scheduleChip: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 18,
-        backgroundColor: '#F1F5F9',
-        borderWidth: 1,
-        borderColor: '#E2E8F0'
-    },
-    scheduleChipActive: {
-        backgroundColor: '#E0F2F1',
-        borderColor: COLORS.primary
-    },
-    scheduleChipText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#5F6C80'
-    },
-    scheduleChipTextActive: {
-        color: COLORS.primary
-    },
     schedulePreview: {
         marginBottom: 20,
         color: '#3F4A5A',

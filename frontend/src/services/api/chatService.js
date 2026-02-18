@@ -26,12 +26,16 @@ export const chatService = {
             limit(50)
         );
         return onSnapshot(q, (snapshot) => {
+            const currentUid = auth.currentUser?.uid || null;
             const messages = snapshot.docs.map((docSnap) => {
                 const data = docSnap.data();
                 return {
                     _id: docSnap.id,
                     clientMessageId: data.clientMessageId || null,
                     text: data.text,
+                    type: data.type || 'text',
+                    systemKind: data.systemKind || null,
+                    visibleTo: Array.isArray(data.visibleTo) ? data.visibleTo : [],
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
                     createdAtMs: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
                     readBy: Array.isArray(data.readBy) ? data.readBy : [],
@@ -40,6 +44,10 @@ export const chatService = {
                     },
                     image: data.mediaUrl || undefined
                 };
+            }).filter((message) => {
+                if (!Array.isArray(message.visibleTo) || message.visibleTo.length === 0) return true;
+                if (!currentUid) return false;
+                return message.visibleTo.includes(currentUid);
             });
             callback(messages);
         });

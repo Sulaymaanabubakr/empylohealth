@@ -353,18 +353,21 @@ const styles = StyleSheet.create({
     },
     headerTextWrap: {
         flex: 1,
-        marginLeft: 12
+        marginLeft: 0,
+        alignItems: 'center'
     },
     headerTitle: {
         fontSize: 26,
         fontWeight: '800',
-        color: '#1A1A1A'
+        color: '#1A1A1A',
+        textAlign: 'center'
     },
     headerSubtitle: {
         marginTop: 2,
         fontSize: 13,
         color: '#6A7385',
-        fontWeight: '500'
+        fontWeight: '500',
+        textAlign: 'center'
     },
     searchContainer: {
         flexDirection: 'row',

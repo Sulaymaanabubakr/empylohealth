@@ -590,6 +590,16 @@ const ChatDetailScreen = ({ navigation, route }) => {
     };
 
     const renderMessage = ({ item }) => {
+        if (item?.type === 'private_system' || item?.systemKind === 'role_update') {
+            return (
+                <View style={styles.systemNoticeWrap}>
+                    <View style={styles.systemNoticePill}>
+                        <Text style={styles.systemNoticeText}>{item.text}</Text>
+                    </View>
+                </View>
+            );
+        }
+
         const isMe = item.isMe;
         const senderId = item?.user?._id;
         const senderProfile = senderId ? profileCache[senderId] : null;
@@ -1049,6 +1059,26 @@ const styles = StyleSheet.create({
     listContent: {
         paddingHorizontal: SPACING.lg,
         paddingTop: 14,
+    },
+    systemNoticeWrap: {
+        alignItems: 'center',
+        marginBottom: 10
+    },
+    systemNoticePill: {
+        backgroundColor: '#EEF2F7',
+        borderWidth: 1,
+        borderColor: '#D8E0EA',
+        borderRadius: 14,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        maxWidth: '88%'
+    },
+    systemNoticeText: {
+        fontSize: 12,
+        lineHeight: 16,
+        color: '#5A687D',
+        textAlign: 'center',
+        fontWeight: '600'
     },
     messageRow: {
         flexDirection: 'row',

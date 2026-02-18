@@ -726,13 +726,27 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
         if (requestorRole === 'admin' && targetRole === 'admin') throw new functions.https.HttpsError('permission-denied', 'Admins cannot modify other Admins.');
 
         const batch = db.batch();
+        let roleChangeNotification: { title: string; body: string } | null = null;
+        const circleDoc = await circleRef.get();
+        const circleData = circleDoc.data() || {};
+        const circleName = String(circleData?.name || 'Circle');
+        const requestorUserDoc = await db.collection('users').doc(uid).get();
+        const requestorName = String(requestorUserDoc.data()?.name || requestorUserDoc.data()?.displayName || 'A circle admin');
 
         switch (action) {
             case 'promote_admin':
                 batch.update(targetRef, { role: 'admin' });
+                roleChangeNotification = {
+                    title: 'You are now an admin',
+                    body: `${requestorName} promoted you to admin in ${circleName}.`
+                };
                 break;
             case 'promote_mod':
                 batch.update(targetRef, { role: 'moderator' });
+                roleChangeNotification = {
+                    title: 'You are now a moderator',
+                    body: `${requestorName} promoted you to moderator in ${circleName}.`
+                };
                 break;
             case 'demote':
                 batch.update(targetRef, { role: 'member' });
@@ -780,6 +794,69 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
         }
 
         await batch.commit();
+
+        if (roleChangeNotification) {
+            const notifRef = db.collection('notifications').doc();
+            await notifRef.set({
+                uid: targetUid,
+                title: roleChangeNotification.title,
+                subtitle: roleChangeNotification.body,
+                type: 'ROLE_UPDATED',
+                circleId,
+                read: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            const chatId = String(circleData?.chatId || '').trim();
+            if (chatId) {
+                await db.collection('chats').doc(chatId).collection('messages').add({
+                    text: roleChangeNotification.body,
+                    type: 'private_system',
+                    systemKind: 'role_update',
+                    visibleTo: [targetUid],
+                    senderId: 'system',
+                    createdAt: admin.firestore.FieldValue.serverTimestamp()
+                }).catch(() => {});
+            }
+
+            const targetUserDoc = await db.collection('users').doc(targetUid).get();
+            const targetUserData = targetUserDoc.data() || {};
+            const fcmTokens: string[] = Array.isArray(targetUserData?.fcmTokens) ? targetUserData.fcmTokens : [];
+            const expoTokens: string[] = Array.isArray(targetUserData?.expoPushTokens) ? targetUserData.expoPushTokens : [];
+
+            if (fcmTokens.length > 0) {
+                await admin.messaging().sendEachForMulticast({
+                    tokens: fcmTokens,
+                    notification: {
+                        title: roleChangeNotification.title,
+                        body: roleChangeNotification.body
+                    },
+                    data: {
+                        type: 'ROLE_UPDATED',
+                        circleId
+                    }
+                }).catch(() => {});
+            }
+
+            if (expoTokens.length > 0) {
+                const messages = expoTokens.map((token: string) => ({
+                    to: token,
+                    title: roleChangeNotification?.title,
+                    body: roleChangeNotification?.body,
+                    data: {
+                        type: 'ROLE_UPDATED',
+                        circleId
+                    }
+                }));
+                await fetch('https://exp.host/--/api/v2/push/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(messages)
+                }).catch(() => {});
+            }
+        }
+
         return { success: true };
 
     } catch (error) {

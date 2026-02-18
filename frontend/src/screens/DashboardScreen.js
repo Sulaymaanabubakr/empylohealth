@@ -403,7 +403,12 @@ const DashboardScreen = ({ navigation }) => {
             <StatusBar barStyle="dark-content" backgroundColor="#FAFAFA" />
 
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[
+                styles.header,
+                Platform.OS === 'ios'
+                    ? { marginTop: 0, paddingTop: Math.max(2, insets.top * 0.15) }
+                    : null
+            ]}>
                 <View style={styles.dateContainer}>
                     <View style={styles.calendarIconContainer}>
                         <Ionicons name="calendar" size={18} color={COLORS.primary} />
@@ -674,7 +679,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: SPACING.lg,
         paddingTop: 0,
-        marginTop: -24, // Increased negative margin greatly
+        marginTop: -24,
         paddingBottom: SPACING.md,
     },
     dateContainer: {
