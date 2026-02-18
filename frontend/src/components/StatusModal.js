@@ -1,11 +1,19 @@
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
 const StatusModal = ({ visible, type, title, message, onClose, onConfirm, confirmText = 'Confirm', cancelText = 'Cancel' }) => {
+    const [confirmLoading, setConfirmLoading] = useState(false);
+
+    useEffect(() => {
+        if (!visible) {
+            setConfirmLoading(false);
+        }
+    }, [visible]);
+
     // Configuration based on type
     const getConfig = () => {
         switch (type) {
@@ -46,12 +54,34 @@ const StatusModal = ({ visible, type, title, message, onClose, onConfirm, confir
 
     const config = getConfig();
 
+    const handleConfirm = async () => {
+        if (!onConfirm || confirmLoading) {
+            onClose();
+            return;
+        }
+
+        setConfirmLoading(true);
+        try {
+            const result = await Promise.resolve(onConfirm());
+            if (result !== false) {
+                onClose();
+            }
+        } catch (error) {
+            // Keep modal open so user can retry/cancel if action failed.
+            console.error('[StatusModal] Confirmation action failed', error);
+        } finally {
+            setConfirmLoading(false);
+        }
+    };
+
     return (
         <Modal
             animationType="fade"
             transparent={true}
             visible={visible}
-            onRequestClose={onClose}
+            onRequestClose={() => {
+                if (!confirmLoading) onClose();
+            }}
         >
             <View style={styles.centeredView}>
                 <View style={[styles.modalView, { borderTopWidth: 4, borderTopColor: config.color }]}>
@@ -70,17 +100,20 @@ const StatusModal = ({ visible, type, title, message, onClose, onConfirm, confir
                                 <TouchableOpacity
                                     style={[styles.button, styles.buttonCancel]}
                                     onPress={onClose}
+                                    disabled={confirmLoading}
                                 >
                                     <Text style={styles.textStyleCancel}>{cancelText}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={[styles.button, { backgroundColor: config.color }]}
-                                    onPress={() => {
-                                        if (onConfirm) onConfirm();
-                                        onClose();
-                                    }}
+                                    style={[styles.button, { backgroundColor: config.color }, confirmLoading && styles.buttonDisabled]}
+                                    onPress={handleConfirm}
+                                    disabled={confirmLoading}
                                 >
-                                    <Text style={styles.textStyle}>{confirmText}</Text>
+                                    {confirmLoading ? (
+                                        <ActivityIndicator color="#FFF" />
+                                    ) : (
+                                        <Text style={styles.textStyle}>{confirmText}</Text>
+                                    )}
                                 </TouchableOpacity>
                             </>
                         ) : (
@@ -104,6 +137,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: 'rgba(0,0,0,0.5)', // Semi-transparent background
+    },
+    buttonDisabled: {
+        opacity: 0.7,
     },
     modalView: {
         width: width * 0.85,

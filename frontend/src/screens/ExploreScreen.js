@@ -110,6 +110,9 @@ const ExploreScreen = ({ navigation }) => {
         return tags.includes(activeFilter);
     });
     const visibleAffirmations = filteredAffirmations.slice(0, 3);
+    const openAffirmation = (item) => {
+        navigation.navigate('Affirmations', { affirmationId: item?.id || null });
+    };
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -306,7 +309,7 @@ const ExploreScreen = ({ navigation }) => {
                             <TouchableOpacity
                                 key={item.id}
                                 style={styles.affirmationCard}
-                                onPress={() => navigation.navigate('Affirmations')}
+                                onPress={() => openAffirmation(item)}
                             >
                                 {item.image ? (
                                     <Image source={{ uri: item.image }} style={styles.affirmationImage} />
@@ -314,7 +317,11 @@ const ExploreScreen = ({ navigation }) => {
                                 <View style={styles.affirmationOverlay}>
                                     <View style={styles.affirmationHeader}>
                                         <Text style={styles.affirmationDate}>{(item.tags && item.tags[0]) || item.tag || item.date || ''}</Text>
-                                        <TouchableOpacity style={styles.expandButton}>
+                                        <TouchableOpacity
+                                            style={styles.expandButton}
+                                            onPress={() => openAffirmation(item)}
+                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        >
                                             <Ionicons name="resize" size={12} color="#FFF" />
                                         </TouchableOpacity>
                                     </View>

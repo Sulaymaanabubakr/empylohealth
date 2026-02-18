@@ -17,7 +17,7 @@ import { mediaService } from '../services/api/mediaService';
 import * as ImagePicker from 'expo-image-picker';
 
 // Components for different tabs
-const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto }) => (
+const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto, busy }) => (
     <View style={styles.tabContent}>
         <Text style={styles.sectionTitle}>General Information</Text>
         <View style={styles.infoCard}>
@@ -38,10 +38,10 @@ const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto }) => (
         </View>
         {canEdit && (
             <View style={{ gap: 10 }}>
-                <TouchableOpacity style={[styles.updateButton, { backgroundColor: '#E0F2F1' }]} onPress={onEditPhoto}>
+                <TouchableOpacity style={[styles.updateButton, { backgroundColor: '#E0F2F1' }, busy && styles.disabledButton]} onPress={onEditPhoto} disabled={busy}>
                     <Text style={[styles.updateButtonText, { color: COLORS.primary }]}>Change Photo</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.updateButton} onPress={onEdit}>
+                <TouchableOpacity style={[styles.updateButton, busy && styles.disabledButton]} onPress={onEdit} disabled={busy}>
                     <Text style={styles.updateButtonText}>Edit Details</Text>
                 </TouchableOpacity>
             </View>
@@ -51,6 +51,7 @@ const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto }) => (
 
 const RequestItem = ({ request, onAccept, onReject, processingId }) => {
     const isProcessing = processingId === request.uid;
+    const anyProcessing = Boolean(processingId);
     return (
         <View style={styles.listItem}>
             <Avatar
@@ -70,10 +71,10 @@ const RequestItem = ({ request, onAccept, onReject, processingId }) => {
                 <ActivityIndicator color={COLORS.primary} />
             ) : (
                 <View style={styles.actionButtons}>
-                    <TouchableOpacity onPress={() => onReject(request)} style={[styles.smBtn, styles.rejectBtn]}>
+                    <TouchableOpacity onPress={() => onReject(request)} style={[styles.smBtn, styles.rejectBtn]} disabled={anyProcessing}>
                         <Ionicons name="close" size={20} color="#D32F2F" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => onAccept(request)} style={[styles.smBtn, styles.acceptBtn]}>
+                    <TouchableOpacity onPress={() => onAccept(request)} style={[styles.smBtn, styles.acceptBtn]} disabled={anyProcessing}>
                         <Ionicons name="checkmark" size={20} color="#FFF" />
                     </TouchableOpacity>
                 </View>
@@ -82,7 +83,7 @@ const RequestItem = ({ request, onAccept, onReject, processingId }) => {
     );
 };
 
-const MemberItem = ({ member, currentUserUid, onManage, currentMemberRole }) => {
+const MemberItem = ({ member, currentUserUid, onManage, currentMemberRole, disabled }) => {
     // Helper to get badge color
     const getRoleBadge = (role) => {
         switch (role) {
@@ -120,7 +121,7 @@ const MemberItem = ({ member, currentUserUid, onManage, currentMemberRole }) => 
                 <Text style={styles.itemSubtitle}>{member.email || 'Member'}</Text>
             </View>
             {showOptions && (
-                <TouchableOpacity onPress={() => onManage(member)} style={styles.moreBtn}>
+                <TouchableOpacity onPress={() => onManage(member)} style={styles.moreBtn} disabled={disabled}>
                     <Ionicons name="ellipsis-vertical" size={20} color="#757575" />
                 </TouchableOpacity>
             )}
@@ -596,6 +597,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     };
 
     const handleDeleteEvent = async (eventId) => {
+        if (actionLoading) return;
         showModal({
             type: 'confirmation',
             title: 'Delete Event',
@@ -604,18 +606,14 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             cancelText: 'Cancel',
             onConfirm: async () => {
                 try {
+                    setActionLoading(true);
                     await circleService.deleteScheduledHuddle(circleId, eventId);
-                    // Short delay to allow modal to close before showing success? 
-                    // Or modal handles replacement? The current StatusModal design only supports one at a time.
-                    // We need to wait for close.
-                    setTimeout(() => {
-                        showModal({ type: 'success', title: 'Deleted', message: 'Event successfully deleted.' });
-                    }, 500);
+                    showModal({ type: 'success', title: 'Deleted', message: 'Event successfully deleted.' });
                 } catch (error) {
                     console.error("Error deleting event:", error);
-                    setTimeout(() => {
-                        showModal({ type: 'error', title: 'Error', message: 'Failed to delete event.' });
-                    }, 500);
+                    showModal({ type: 'error', title: 'Error', message: 'Failed to delete event.' });
+                } finally {
+                    setActionLoading(false);
                 }
             }
         });
@@ -628,7 +626,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             <View style={styles.tabContent}>
                 <Text style={styles.sectionTitle}>Members ({members.length})</Text>
                 {enrichedMembers.map(mem => (
-                    <MemberItem key={mem.uid} member={mem} currentUserUid={user.uid} onManage={handleManageMember} currentMemberRole={myRole} />
+                    <MemberItem key={mem.uid} member={mem} currentUserUid={user.uid} onManage={handleManageMember} currentMemberRole={myRole} disabled={actionLoading} />
                 ))}
             </View>
         );
@@ -698,21 +696,21 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         </View>
                         {rep.status === 'pending' && (
                             <View style={{ gap: 8 }}>
-                                <TouchableOpacity onPress={() => handleResolveReport(rep, 'dismiss')} style={[styles.smBtn, { backgroundColor: '#E0E0E0', width: 'auto', paddingHorizontal: 12 }]}>
+                                <TouchableOpacity onPress={() => handleResolveReport(rep, 'dismiss')} style={[styles.smBtn, { backgroundColor: '#E0E0E0', width: 'auto', paddingHorizontal: 12 }]} disabled={actionLoading}>
                                     <Text style={{ fontSize: 12, fontWeight: '600' }}>Dismiss</Text>
                                 </TouchableOpacity>
                                 {rep.targetType === 'member' && (
                                     <>
-                                        <TouchableOpacity onPress={() => handleResolveReport(rep, 'warn')} style={[styles.smBtn, { backgroundColor: '#FFF8E1', width: 'auto', paddingHorizontal: 12 }]}>
+                                        <TouchableOpacity onPress={() => handleResolveReport(rep, 'warn')} style={[styles.smBtn, { backgroundColor: '#FFF8E1', width: 'auto', paddingHorizontal: 12 }]} disabled={actionLoading}>
                                             <Text style={{ fontSize: 12, fontWeight: '600', color: '#EF6C00' }}>Warn</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity onPress={() => handleResolveReport(rep, 'ban')} style={[styles.smBtn, { backgroundColor: '#FFEBEE', width: 'auto', paddingHorizontal: 12 }]}>
+                                        <TouchableOpacity onPress={() => handleResolveReport(rep, 'ban')} style={[styles.smBtn, { backgroundColor: '#FFEBEE', width: 'auto', paddingHorizontal: 12 }]} disabled={actionLoading}>
                                             <Text style={{ fontSize: 12, fontWeight: '600', color: '#D32F2F' }}>Ban</Text>
                                         </TouchableOpacity>
                                     </>
                                 )}
                                 {rep.targetType === 'message' && (
-                                    <TouchableOpacity onPress={() => handleResolveReport(rep, 'delete_content')} style={[styles.smBtn, { backgroundColor: '#FFEBEE', width: 'auto', paddingHorizontal: 12 }]}>
+                                    <TouchableOpacity onPress={() => handleResolveReport(rep, 'delete_content')} style={[styles.smBtn, { backgroundColor: '#FFEBEE', width: 'auto', paddingHorizontal: 12 }]} disabled={actionLoading}>
                                         <Text style={{ fontSize: 12, fontWeight: '600', color: '#D32F2F' }}>Delete Message</Text>
                                     </TouchableOpacity>
                                 )}
@@ -726,7 +724,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
     const EventsTab = () => (
         <View style={styles.tabContent}>
-            <TouchableOpacity style={styles.addButton} onPress={() => setShowScheduleModal(true)}>
+            <TouchableOpacity style={[styles.addButton, actionLoading && styles.disabledButton]} onPress={() => setShowScheduleModal(true)} disabled={actionLoading}>
                 <Ionicons name="add" size={20} color="#FFF" />
                 <Text style={styles.addButtonText}>Schedule Huddle</Text>
             </TouchableOpacity>
@@ -744,7 +742,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                                 {item.scheduledAt?.toDate ? item.scheduledAt.toDate().toLocaleString() : new Date(item.scheduledAt).toLocaleString()}
                             </Text>
                         </View>
-                        <TouchableOpacity onPress={() => handleDeleteEvent(item.id)} style={styles.actionButtonSmall}>
+                        <TouchableOpacity onPress={() => handleDeleteEvent(item.id)} style={[styles.actionButtonSmall, actionLoading && styles.disabledButton]} disabled={actionLoading}>
                             <Ionicons name="trash-outline" size={18} color="#FF5252" />
                         </TouchableOpacity>
                     </View>
@@ -800,7 +798,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                {activeTab === 'General' && <GeneralSettings circle={circle} onEdit={openEditModal} canEdit={isAdminOrCreator} onEditPhoto={handleUpdatePhoto} />}
+                {activeTab === 'General' && <GeneralSettings circle={circle} onEdit={openEditModal} canEdit={isAdminOrCreator} onEditPhoto={handleUpdatePhoto} busy={actionLoading} />}
                 {activeTab === 'Members' && <MembersTab />}
                 {activeTab === 'Requests' && isModOrAbove && <RequestsTab />}
                 {activeTab === 'Reports' && isModOrAbove && <ReportsTab />}
@@ -852,10 +850,10 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         <Text style={styles.schedulePreview}>Scheduled for {eventDate.toLocaleString()}</Text>
 
                         <View style={styles.modalActions}>
-                            <TouchableOpacity onPress={() => setShowScheduleModal(false)} style={styles.modalCancel}>
+                            <TouchableOpacity onPress={() => setShowScheduleModal(false)} style={styles.modalCancel} disabled={actionLoading}>
                                 <Text style={styles.modalCancelText}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={handleScheduleEvent} style={styles.modalConfirm}>
+                            <TouchableOpacity onPress={handleScheduleEvent} style={[styles.modalConfirm, actionLoading && styles.disabledButton]} disabled={actionLoading}>
                                 <Text style={styles.modalConfirmText}>{actionLoading ? 'Saving...' : 'Schedule'}</Text>
                             </TouchableOpacity>
                         </View>
@@ -889,11 +887,11 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         />
 
                         <View style={styles.modalActions}>
-                            <TouchableOpacity onPress={() => setShowEditModal(false)} style={styles.modalCancel}>
+                            <TouchableOpacity onPress={() => setShowEditModal(false)} style={styles.modalCancel} disabled={actionLoading}>
                                 <Text style={styles.modalCancelText}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={handleUpdateCircle} style={styles.modalConfirm}>
-                                <Text style={styles.modalConfirmText}>Save Changes</Text>
+                            <TouchableOpacity onPress={handleUpdateCircle} style={[styles.modalConfirm, actionLoading && styles.disabledButton]} disabled={actionLoading}>
+                                <Text style={styles.modalConfirmText}>{actionLoading ? 'Saving...' : 'Save Changes'}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -928,11 +926,11 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         />
 
                         <View style={styles.modalActions}>
-                            <TouchableOpacity onPress={() => setShowReportModal(false)} style={styles.modalCancel}>
+                            <TouchableOpacity onPress={() => setShowReportModal(false)} style={styles.modalCancel} disabled={actionLoading}>
                                 <Text style={styles.modalCancelText}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={handleSubmitReport} style={[styles.modalConfirm, { backgroundColor: '#D32F2F' }]}>
-                                <Text style={styles.modalConfirmText}>Submit Report</Text>
+                            <TouchableOpacity onPress={handleSubmitReport} style={[styles.modalConfirm, { backgroundColor: '#D32F2F' }, actionLoading && styles.disabledButton]} disabled={actionLoading}>
+                                <Text style={styles.modalConfirmText}>{actionLoading ? 'Submitting...' : 'Submit Report'}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -958,6 +956,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                                         option.style === 'destructive' && styles.memberActionButtonDestructive
                                     ]}
                                     onPress={() => runMemberAction(option)}
+                                    disabled={actionLoading}
                                 >
                                     <Text
                                         style={[
@@ -972,6 +971,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                             <TouchableOpacity
                                 style={[styles.memberActionButton, styles.memberActionCancel]}
                                 onPress={() => setMemberActionSheet({ visible: false, title: '', options: [] })}
+                                disabled={actionLoading}
                             >
                                 <Text style={styles.memberActionCancelText}>Cancel</Text>
                             </TouchableOpacity>
@@ -1038,6 +1038,9 @@ const styles = StyleSheet.create({
         marginTop: 10,
         color: '#555',
         fontWeight: '600'
+    },
+    disabledButton: {
+        opacity: 0.6
     },
     backButtonSimple: { padding: 16 },
     emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },

@@ -13,9 +13,13 @@ import { useModal } from '../context/ModalContext';
 const VerificationScreen = ({ navigation, route }) => {
   const { user, refreshUser } = useAuth();
   const { showModal } = useModal();
+  const [verifying, setVerifying] = React.useState(false);
+  const [resending, setResending] = React.useState(false);
 
   const handleVerify = async () => {
+    if (verifying) return;
     console.log('[VerificationScreen] Verify clicked');
+    setVerifying(true);
     try {
       await refreshUser();
       const currentUser = authService.getCurrentUser();
@@ -29,15 +33,21 @@ const VerificationScreen = ({ navigation, route }) => {
     } catch (error) {
       console.error('[VerificationScreen] Error during verify:', error);
       showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to verify email.' });
+    } finally {
+      setVerifying(false);
     }
   };
 
   const handleResend = async () => {
+    if (resending) return;
+    setResending(true);
     try {
       await authService.sendVerificationEmail();
       showModal({ type: 'success', title: 'Email sent', message: 'Check your inbox for the verification link.' });
     } catch (error) {
       showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to resend verification email.' });
+    } finally {
+      setResending(false);
     }
   };
 
@@ -63,14 +73,15 @@ const VerificationScreen = ({ navigation, route }) => {
         </Text>
 
         <Button
-          title="Verify"
+          title={verifying ? 'Verifying...' : 'Verify'}
           onPress={handleVerify}
           style={styles.verifyButton}
+          loading={verifying}
         />
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Didn't receive the email? </Text>
-          <TouchableOpacity onPress={handleResend}>
+          <TouchableOpacity onPress={handleResend} disabled={resending || verifying}>
             <Text style={styles.resendText}>Resend</Text>
           </TouchableOpacity>
         </View>
