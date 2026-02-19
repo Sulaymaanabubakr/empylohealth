@@ -49,6 +49,14 @@ export declare const sendAffirmationsMorning: import("firebase-functions/schedul
 export declare const sendAffirmationsAfternoon: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const sendAffirmationsEvening: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const deleteUserAccount: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const requestOtp: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const verifyOtp: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const registerWithOtp: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const resetPasswordWithOtp: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const changePasswordWithOtp: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const completeEmailVerificationWithOtp: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const changeEmailWithOtp: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const recordLoginDevice: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getDashboardStats: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAllUsers: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getPendingContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

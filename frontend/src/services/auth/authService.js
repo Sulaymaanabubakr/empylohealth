@@ -17,6 +17,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { callableClient } from '../api/callableClient';
 
 /**
  * Service to handle all Authentication logic
@@ -67,6 +68,58 @@ export const authService = {
         } catch (error) {
             throw error;
         }
+    },
+
+    requestOtp: async ({ email, purpose, metadata = {} }) => {
+        return callableClient.invokePublic('requestOtp', { email, purpose, metadata });
+    },
+
+    verifyOtp: async ({ email, purpose, code }) => {
+        return callableClient.invokePublic('verifyOtp', { email, purpose, code });
+    },
+
+    registerWithOtp: async ({ email, password, name, verificationToken }) => {
+        const result = await callableClient.invokePublic('registerWithOtp', {
+            email,
+            password,
+            name,
+            verificationToken
+        });
+        // Sign in immediately after server-side account creation.
+        await signInWithEmailAndPassword(auth, email, password);
+        return result;
+    },
+
+    resetPasswordWithOtp: async ({ email, newPassword, verificationToken }) => {
+        return callableClient.invokePublic('resetPasswordWithOtp', {
+            email,
+            newPassword,
+            verificationToken
+        });
+    },
+
+    changePasswordWithOtp: async ({ newPassword, verificationToken }) => {
+        return callableClient.invokePublic('changePasswordWithOtp', {
+            newPassword,
+            verificationToken
+        });
+    },
+
+    completeEmailVerificationWithOtp: async ({ verificationToken }) => {
+        return callableClient.invokePublic('completeEmailVerificationWithOtp', {
+            verificationToken
+        });
+    },
+
+    changeEmailWithOtp: async ({ newEmail, verificationToken }) => {
+        return callableClient.invokePublic('changeEmailWithOtp', {
+            newEmail,
+            verificationToken
+        });
+    },
+
+    recordLoginDevice: async (payload) => {
+        return callableClient.invokeWithAuth('recordLoginDevice', payload || {});
     },
 
     /**

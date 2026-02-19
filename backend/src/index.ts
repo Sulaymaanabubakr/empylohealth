@@ -10,6 +10,7 @@ import * as generalTriggers from './triggers/general';
 import * as coreApi from './api/core';
 import * as adminApi from './api/admin';
 import * as userMgmtApi from './api/usermanagement';
+import * as securityApi from './api/security';
 
 // Export functions
 // Triggers
@@ -68,6 +69,14 @@ export const sendAffirmationsAfternoon = coreApi.sendAffirmationsAfternoon;
 export const sendAffirmationsEvening = coreApi.sendAffirmationsEvening;
 
 export const deleteUserAccount = coreApi.deleteUserAccount;
+export const requestOtp = securityApi.requestOtp;
+export const verifyOtp = securityApi.verifyOtp;
+export const registerWithOtp = securityApi.registerWithOtp;
+export const resetPasswordWithOtp = securityApi.resetPasswordWithOtp;
+export const changePasswordWithOtp = securityApi.changePasswordWithOtp;
+export const completeEmailVerificationWithOtp = securityApi.completeEmailVerificationWithOtp;
+export const changeEmailWithOtp = securityApi.changeEmailWithOtp;
+export const recordLoginDevice = securityApi.recordLoginDevice;
 
 // Admin API
 export const getDashboardStats = adminApi.getDashboardStats;

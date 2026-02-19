@@ -8,6 +8,7 @@ import { logNetworkRegionDebug } from '../services/diagnostics/networkRegionDebu
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { callableClient } from '../services/api/callableClient';
 import { appPreloadService } from '../services/bootstrap/appPreloadService';
+import { getDeviceIdentity } from '../services/auth/deviceIdentity';
 
 export const AuthContext = createContext(undefined);
 
@@ -43,6 +44,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const hasNotifiedAuthReadyRef = useRef(false);
     const networkProfileBootstrappedRef = useRef(false);
     const preloadedUidRef = useRef(null);
+    const loginDeviceReportedRef = useRef('');
 
     const loading = bootPhase !== BOOT_PHASES.READY;
 
@@ -89,7 +91,17 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                 setRouteTarget(ROUTE_TARGETS.UNAUTH);
                 setBootPhase(BOOT_PHASES.READY);
                 preloadedUidRef.current = null;
+                loginDeviceReportedRef.current = '';
                 return;
+            }
+
+            if (loginDeviceReportedRef.current !== currentUser.uid) {
+                loginDeviceReportedRef.current = currentUser.uid;
+                getDeviceIdentity()
+                    .then((deviceIdentity) => authService.recordLoginDevice(deviceIdentity))
+                    .catch((error) => {
+                        console.warn('[AuthContext] recordLoginDevice failed', error?.message || error);
+                    });
             }
 
             setBootPhase(BOOT_PHASES.PROFILE_RESOLVING);

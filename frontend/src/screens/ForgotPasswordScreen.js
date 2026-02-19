@@ -8,6 +8,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import EmailIllustration from '../../assets/images/email_icon.svg';
 import { authService } from '../services/auth/authService';
 import { useModal } from '../context/ModalContext';
+import { getDeviceIdentity } from '../services/auth/deviceIdentity';
 
 const ForgotPasswordScreen = ({ navigation }) => {
     const { showModal } = useModal();
@@ -21,15 +22,25 @@ const ForgotPasswordScreen = ({ navigation }) => {
         }
         setIsSubmitting(true);
         try {
-            await authService.sendPasswordReset(email);
-            showModal({
-                type: 'success',
-                title: 'Email sent',
-                message: 'Check your inbox for reset instructions.',
-                onConfirm: () => navigation.navigate('SignIn')
+            const metadata = await getDeviceIdentity();
+            const result = await authService.requestOtp({
+                email,
+                purpose: 'RESET_PASSWORD',
+                metadata
+            });
+            navigation.navigate('OtpVerification', {
+                email,
+                purpose: 'RESET_PASSWORD',
+                title: 'Reset Password',
+                subtitle: `Enter the code sent to ${email} to continue.`,
+                initialCooldownSeconds: Number(result?.cooldownSeconds || 60),
+                nextAction: {
+                    type: 'reset_password',
+                    email
+                }
             });
         } catch (error) {
-            showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to send reset email.' });
+            showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to send reset code.' });
         } finally {
             setIsSubmitting(false);
         }

@@ -12,8 +12,8 @@ import { useModal } from '../context/ModalContext';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
 import Avatar from '../components/Avatar';
-import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
-import { auth } from '../services/firebaseConfig';
+import { authService } from '../services/auth/authService';
+import { getDeviceIdentity } from '../services/auth/deviceIdentity';
 
 const PersonalInformationScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
@@ -21,7 +21,6 @@ const PersonalInformationScreen = ({ navigation }) => {
 
     // Form State (initialized with userData)
     const [name, setName] = useState(userData?.name || '');
-    const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [dob, setDob] = useState(userData?.dob || '');
     const [gender, setGender] = useState(userData?.gender || 'Prefer not to say');
@@ -91,22 +90,33 @@ const PersonalInformationScreen = ({ navigation }) => {
                 updatedAt: new Date()
             };
 
-            if (newPassword) {
-                if (!currentPassword) {
-                    showModal({ type: 'error', title: 'Missing password', message: 'Enter your current password to update it.' });
-                    setIsSubmitting(false);
-                    return;
-                }
-                const credential = EmailAuthProvider.credential(user.email, currentPassword);
-                await reauthenticateWithCredential(auth.currentUser, credential);
-                await updatePassword(auth.currentUser, newPassword);
-            }
-
             // 3. Update Firestore via userService
             if (user?.uid) {
                 await userService.updateUserDocument(user.uid, updateData);
-                showModal({ type: 'success', title: 'Success', message: 'Profile updated successfully!' });
-                navigation.goBack();
+                if (newPassword) {
+                    const metadata = await getDeviceIdentity();
+                    const otpResult = await authService.requestOtp({
+                        email: user?.email,
+                        purpose: 'CHANGE_PASSWORD',
+                        metadata
+                    });
+                    showModal({ type: 'success', title: 'Code sent', message: 'Enter the OTP code to confirm your password change.' });
+                    navigation.navigate('OtpVerification', {
+                        email: user?.email,
+                        purpose: 'CHANGE_PASSWORD',
+                        title: 'Confirm Password Change',
+                        subtitle: `Enter the 6-digit code sent to ${user?.email}.`,
+                        initialCooldownSeconds: Number(otpResult?.cooldownSeconds || 60),
+                        nextAction: {
+                            type: 'change_password',
+                            newPassword
+                        }
+                    });
+                    setNewPassword('');
+                } else {
+                    showModal({ type: 'success', title: 'Success', message: 'Profile updated successfully!' });
+                    navigation.goBack();
+                }
             } else {
                 showModal({ type: 'error', title: 'Error', message: 'User not found. Please login again.' });
             }
@@ -168,20 +178,11 @@ const PersonalInformationScreen = ({ navigation }) => {
                         />
 
                         <Input
-                            label="Current password"
-                            value={currentPassword}
-                            onChangeText={setCurrentPassword}
-                            secureTextEntry
-                            placeholder="Enter current password"
-                            icon={<Ionicons name="lock-closed-outline" size={20} color="#009688" />}
-                        />
-
-                        <Input
-                            label="New password"
+                            label="New password (optional)"
                             value={newPassword}
                             onChangeText={setNewPassword}
                             secureTextEntry
-                            placeholder="Enter new password"
+                            placeholder="Enter new password to change it"
                             icon={<Ionicons name="lock-closed-outline" size={20} color="#009688" />}
                         />
 

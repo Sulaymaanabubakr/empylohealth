@@ -19,13 +19,15 @@ import Input from '../components/Input';
 import Button from '../components/Button';
 import { MaterialCommunityIcons, AntDesign, FontAwesome } from '@expo/vector-icons';
 import { LEGAL_LINKS } from '../constants/legalLinks';
+import { authService } from '../services/auth/authService';
+import { getDeviceIdentity } from '../services/auth/deviceIdentity';
 // import { Checkbox } from 'expo-checkbox'; // Removed unused import to avoid dependency error
 
 const { width } = Dimensions.get('window');
 
 const SignUpScreen = ({ navigation }) => {
     // const { type = 'personal' } = route.params || {}; // Removed param usage
-    const { register, loginWithGoogle, loginWithApple } = useAuth();
+    const { loginWithGoogle, loginWithApple } = useAuth();
     const { showToast } = useToast();
 
     const [name, setName] = useState('');
@@ -52,14 +54,30 @@ const SignUpScreen = ({ navigation }) => {
         }
 
         setLoading(true);
-        // Call register from AuthContext - hardcoded 'personal'
-        const result = await register(email, password, name, 'personal');
-        setLoading(false);
-
-        if (result.success) {
-            navigation.replace('ProfileSetup');
-        } else {
-            showToast(result.error || "Registration failed", 'error');
+        try {
+            const metadata = await getDeviceIdentity();
+            const otpResult = await authService.requestOtp({
+                email,
+                purpose: 'SIGNUP_VERIFY',
+                metadata
+            });
+            setLoading(false);
+            navigation.navigate('OtpVerification', {
+                email,
+                purpose: 'SIGNUP_VERIFY',
+                title: 'Verify Your Email',
+                subtitle: `We sent a 6-digit code to ${email}. Enter it to create your account.`,
+                initialCooldownSeconds: Number(otpResult?.cooldownSeconds || 60),
+                nextAction: {
+                    type: 'signup',
+                    email,
+                    password,
+                    name
+                }
+            });
+        } catch (error) {
+            setLoading(false);
+            showToast(error?.message || "Unable to send verification code", 'error');
         }
     };
 

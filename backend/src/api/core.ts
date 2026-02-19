@@ -4,6 +4,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import apn from 'apn';
 import { v2 as cloudinary } from 'cloudinary';
 import { seedChallengeData, seedResourceData, seedAffirmationData, seedAffirmationImages } from '../seedData';
+import { sendAccountDeletedEmail, sendCircleDeletedEmails } from './security';
 
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -834,7 +835,23 @@ export const deleteCircle = regionalFunctions.https.onCall(async (data, context)
 
         const role = memberSnap.data()?.role || 'member';
         if (role === 'creator' || role === 'admin') {
+            const circleData = circleSnap.data() || {};
+            const circleName = String(circleData?.name || 'Circle');
+            const members = Array.isArray(circleData?.members) ? circleData.members : [];
+            let memberEmails: string[] = [];
+            if (members.length > 0) {
+                const userSnaps = await Promise.all(
+                    members.map((memberUid: string) => db.collection('users').doc(memberUid).get())
+                );
+                memberEmails = userSnaps
+                    .filter((snap) => (snap.data()?.settings?.securityNotifications ?? true) !== false)
+                    .map((snap) => String(snap.data()?.email || '').trim())
+                    .filter(Boolean);
+            }
             await deleteCircleCascade(circleId);
+            await sendCircleDeletedEmails({ circleName, memberEmails }).catch((error) => {
+                console.error('[Email] Failed to send circle deleted notification:', error);
+            });
             return { success: true, action: 'deleted_circle' };
         }
 
@@ -912,7 +929,20 @@ export const deleteChat = regionalFunctions.https.onCall(async (data, context) =
                     message: 'You are the last admin in this circle. Delete the entire circle to continue.'
                 };
             }
+            const circleSnap = await circleRef.get();
+            const circleData = circleSnap.data() || {};
+            const members = Array.isArray(circleData?.members) ? circleData.members : [];
+            const circleName = String(circleData?.name || 'Circle');
+            const memberEmails = (await Promise.all(
+                members.map((memberUid: string) => db.collection('users').doc(memberUid).get())
+            ))
+                .filter((snap) => (snap.data()?.settings?.securityNotifications ?? true) !== false)
+                .map((snap) => String(snap.data()?.email || '').trim())
+                .filter(Boolean);
             await deleteCircleCascade(circleId);
+            await sendCircleDeletedEmails({ circleName, memberEmails }).catch((error) => {
+                console.error('[Email] Failed to send circle deleted notification:', error);
+            });
             return { success: true, action: 'deleted_circle' };
         }
 
@@ -4291,6 +4321,7 @@ export const deleteUserAccount = regionalFunctions.https.onCall(async (data, con
         const userRef = db.collection('users').doc(uid);
         const userSnap = await userRef.get();
         const userData = userSnap.data() || {};
+        const userEmail = String(userData?.email || context.auth.token.email || '').trim();
 
         const circlesOwnedSnap = await db.collection('circles').where('createdBy', '==', uid).get();
         for (const ownedCircle of circlesOwnedSnap.docs) {
@@ -4341,6 +4372,12 @@ export const deleteUserAccount = regionalFunctions.https.onCall(async (data, con
         );
 
         await userRef.delete().catch(() => {});
+
+        if (userEmail) {
+            await sendAccountDeletedEmail({ email: userEmail }).catch((error) => {
+                console.error('[Email] Failed to send account deleted confirmation:', error);
+            });
+        }
 
         await admin.auth().deleteUser(uid);
 

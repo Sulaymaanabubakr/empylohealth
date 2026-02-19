@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.submitContactForm = exports.getAffirmations = exports.getRecommendedContent = exports.getExploreContent = exports.updateSubscription = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.seedResources = exports.seedChallenges = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.deleteChat = exports.sendMessage = exports.getPublicProfile = exports.unblockUser = exports.blockUser = exports.createDirectChat = exports.processScheduledHuddles = exports.toggleScheduledHuddleReminder = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleConnection = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.submitReport = exports.resolveCircleReport = exports.handleJoinRequest = exports.manageMember = exports.deleteCircle = exports.leaveCircle = exports.updateCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
-exports.createEmployee = exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.deleteUserAccount = void 0;
+exports.createEmployee = exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.recordLoginDevice = exports.changeEmailWithOtp = exports.completeEmailVerificationWithOtp = exports.changePasswordWithOtp = exports.resetPasswordWithOtp = exports.registerWithOtp = exports.verifyOtp = exports.requestOtp = exports.deleteUserAccount = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Admin SDK once at entry point
 if (admin.apps.length === 0) {
@@ -45,6 +45,7 @@ const generalTriggers = __importStar(require("./triggers/general"));
 const coreApi = __importStar(require("./api/core"));
 const adminApi = __importStar(require("./api/admin"));
 const userMgmtApi = __importStar(require("./api/usermanagement"));
+const securityApi = __importStar(require("./api/security"));
 // Export functions
 // Triggers
 exports.onUserCreate = generalTriggers.onUserCreate;
@@ -99,6 +100,14 @@ exports.sendAffirmationsMorning = coreApi.sendAffirmationsMorning;
 exports.sendAffirmationsAfternoon = coreApi.sendAffirmationsAfternoon;
 exports.sendAffirmationsEvening = coreApi.sendAffirmationsEvening;
 exports.deleteUserAccount = coreApi.deleteUserAccount;
+exports.requestOtp = securityApi.requestOtp;
+exports.verifyOtp = securityApi.verifyOtp;
+exports.registerWithOtp = securityApi.registerWithOtp;
+exports.resetPasswordWithOtp = securityApi.resetPasswordWithOtp;
+exports.changePasswordWithOtp = securityApi.changePasswordWithOtp;
+exports.completeEmailVerificationWithOtp = securityApi.completeEmailVerificationWithOtp;
+exports.changeEmailWithOtp = securityApi.changeEmailWithOtp;
+exports.recordLoginDevice = securityApi.recordLoginDevice;
 // Admin API
 exports.getDashboardStats = adminApi.getDashboardStats;
 exports.getAllUsers = adminApi.getAllUsers;

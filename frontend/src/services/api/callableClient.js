@@ -93,6 +93,13 @@ const invokeViaSdk = async (functionName, payload) => {
 };
 
 export const callableClient = {
+  invokePublic: async (functionName, payload) => {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.log(`[CallableClient] invoking public ${functionName}`);
+    }
+    return invokeViaSdk(functionName, payload);
+  },
+
   invokeWithAuth: async (functionName, payload) => {
     const { user, token } = await ensureToken(false);
     if (typeof __DEV__ !== 'undefined' && __DEV__) {

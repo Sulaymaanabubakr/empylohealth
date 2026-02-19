@@ -43,6 +43,7 @@ const scheduler_1 = require("firebase-functions/v2/scheduler");
 const apn_1 = __importDefault(require("apn"));
 const cloudinary_1 = require("cloudinary");
 const seedData_1 = require("../seedData");
+const security_1 = require("./security");
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
@@ -783,7 +784,21 @@ exports.deleteCircle = regionalFunctions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('permission-denied', 'Not a circle member.');
         const role = memberSnap.data()?.role || 'member';
         if (role === 'creator' || role === 'admin') {
+            const circleData = circleSnap.data() || {};
+            const circleName = String(circleData?.name || 'Circle');
+            const members = Array.isArray(circleData?.members) ? circleData.members : [];
+            let memberEmails = [];
+            if (members.length > 0) {
+                const userSnaps = await Promise.all(members.map((memberUid) => db.collection('users').doc(memberUid).get()));
+                memberEmails = userSnaps
+                    .filter((snap) => (snap.data()?.settings?.securityNotifications ?? true) !== false)
+                    .map((snap) => String(snap.data()?.email || '').trim())
+                    .filter(Boolean);
+            }
             await deleteCircleCascade(circleId);
+            await (0, security_1.sendCircleDeletedEmails)({ circleName, memberEmails }).catch((error) => {
+                console.error('[Email] Failed to send circle deleted notification:', error);
+            });
             return { success: true, action: 'deleted_circle' };
         }
         await removeUserFromCircle(circleId, uid);
@@ -859,7 +874,18 @@ exports.deleteChat = regionalFunctions.https.onCall(async (data, context) => {
                     message: 'You are the last admin in this circle. Delete the entire circle to continue.'
                 };
             }
+            const circleSnap = await circleRef.get();
+            const circleData = circleSnap.data() || {};
+            const members = Array.isArray(circleData?.members) ? circleData.members : [];
+            const circleName = String(circleData?.name || 'Circle');
+            const memberEmails = (await Promise.all(members.map((memberUid) => db.collection('users').doc(memberUid).get())))
+                .filter((snap) => (snap.data()?.settings?.securityNotifications ?? true) !== false)
+                .map((snap) => String(snap.data()?.email || '').trim())
+                .filter(Boolean);
             await deleteCircleCascade(circleId);
+            await (0, security_1.sendCircleDeletedEmails)({ circleName, memberEmails }).catch((error) => {
+                console.error('[Email] Failed to send circle deleted notification:', error);
+            });
             return { success: true, action: 'deleted_circle' };
         }
         if (role === 'creator') {
@@ -3888,6 +3914,7 @@ exports.deleteUserAccount = regionalFunctions.https.onCall(async (data, context)
         const userRef = db.collection('users').doc(uid);
         const userSnap = await userRef.get();
         const userData = userSnap.data() || {};
+        const userEmail = String(userData?.email || context.auth.token.email || '').trim();
         const circlesOwnedSnap = await db.collection('circles').where('createdBy', '==', uid).get();
         for (const ownedCircle of circlesOwnedSnap.docs) {
             await deleteCircleCascade(ownedCircle.id);
@@ -3929,6 +3956,11 @@ exports.deleteUserAccount = regionalFunctions.https.onCall(async (data, context)
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }));
         await userRef.delete().catch(() => { });
+        if (userEmail) {
+            await (0, security_1.sendAccountDeletedEmail)({ email: userEmail }).catch((error) => {
+                console.error('[Email] Failed to send account deleted confirmation:', error);
+            });
+        }
         await admin.auth().deleteUser(uid);
         return {
             success: true,

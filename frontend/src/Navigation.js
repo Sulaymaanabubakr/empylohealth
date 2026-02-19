@@ -16,6 +16,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import SignInScreen from './screens/SignInScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import VerificationScreen from './screens/VerificationScreen';
+import OtpVerificationScreen from './screens/OtpVerificationScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import ProfileSetupScreen from './screens/ProfileSetupScreen';
@@ -409,6 +410,7 @@ export default function Navigation() {
                         <Stack.Screen name="SignUp" component={SignUpScreen} />
                         <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
                         <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+                        <Stack.Screen name="OtpVerification" component={OtpVerificationScreen} />
                     </Stack.Navigator>
                 ) : routeTarget === 'PROFILE_SETUP' ? (
                     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
@@ -449,6 +451,7 @@ export default function Navigation() {
                         <Stack.Screen name="Assessment" component={AssessmentScreen} />
                         <Stack.Screen name="NineIndex" component={NineIndexScreen} />
                         <Stack.Screen name="Stats" component={StatsScreen} />
+                        <Stack.Screen name="OtpVerification" component={OtpVerificationScreen} />
                     </Stack.Navigator>
                     )}
                 </NavigationContainer>

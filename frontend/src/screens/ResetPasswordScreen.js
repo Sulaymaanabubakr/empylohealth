@@ -10,23 +10,38 @@ import { useModal } from '../context/ModalContext';
 
 const ResetPasswordScreen = ({ navigation, route }) => {
     const { oobCode } = route.params || {};
+    const { email, verificationToken, viaOtp } = route.params || {};
     const { showModal } = useModal();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleReset = async () => {
-        if (!oobCode) {
-            showModal({ type: 'error', title: 'Missing code', message: 'Open the reset link from your email.' });
-            return;
-        }
         if (!password || password !== confirmPassword) {
             showModal({ type: 'error', title: 'Password mismatch', message: 'Please enter matching passwords.' });
             return;
         }
         setIsSubmitting(true);
         try {
-            await authService.confirmPasswordReset(oobCode, password);
+            if (viaOtp) {
+                if (!email || !verificationToken) {
+                    showModal({ type: 'error', title: 'Missing code', message: 'Verification session expired. Restart reset flow.' });
+                    setIsSubmitting(false);
+                    return;
+                }
+                await authService.resetPasswordWithOtp({
+                    email,
+                    newPassword: password,
+                    verificationToken
+                });
+            } else {
+                if (!oobCode) {
+                    showModal({ type: 'error', title: 'Missing code', message: 'Open the reset link from your email.' });
+                    setIsSubmitting(false);
+                    return;
+                }
+                await authService.confirmPasswordReset(oobCode, password);
+            }
             showModal({
                 type: 'success',
                 title: 'Success',
