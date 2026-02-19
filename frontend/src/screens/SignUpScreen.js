@@ -166,12 +166,14 @@ const SignUpScreen = ({ navigation }) => {
                             }}>
                                 <AntDesign name="google" size={24} color="black" />
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-                                const res = await loginWithApple();
-                                if (res.success) navigation.replace('ProfileSetup');
-                            }}>
-                                <FontAwesome name="apple" size={24} color="black" />
-                            </TouchableOpacity>
+                            {Platform.OS === 'ios' && (
+                                <TouchableOpacity style={styles.socialIcon} onPress={async () => {
+                                    const res = await loginWithApple();
+                                    if (res.success) navigation.replace('ProfileSetup');
+                                }}>
+                                    <FontAwesome name="apple" size={24} color="black" />
+                                </TouchableOpacity>
+                            )}
                         </View>
 
                         <View style={styles.footer}>

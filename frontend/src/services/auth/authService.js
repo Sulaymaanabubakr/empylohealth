@@ -18,6 +18,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { callableClient } from '../api/callableClient';
+import { Platform } from 'react-native';
 
 /**
  * Service to handle all Authentication logic
@@ -236,6 +237,13 @@ export const authService = {
      */
     loginWithApple: async () => {
         try {
+            if (Platform.OS !== 'ios') {
+                return { success: false, cancelled: true, message: 'Apple Sign-In is only available on iOS.' };
+            }
+            const isAvailable = await AppleAuthentication.isAvailableAsync();
+            if (!isAvailable) {
+                throw new Error('Apple Sign-In is not available on this device/build.');
+            }
             const csrf = Math.random().toString(36).substring(2, 15);
             const nonce = Math.random().toString(36).substring(2, 10);
             const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, nonce);
@@ -249,6 +257,9 @@ export const authService = {
             });
 
             const { identityToken } = appleCredential;
+            if (!identityToken) {
+                throw new Error('Apple Sign-In failed: missing identity token.');
+            }
 
             const provider = new OAuthProvider('apple.com');
             const credential = provider.credential({

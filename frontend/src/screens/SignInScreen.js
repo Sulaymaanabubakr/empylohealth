@@ -122,25 +122,27 @@ const SignInScreen = ({ navigation }) => {
                   <AntDesign name="google" size={24} color="black" />
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.socialIcon, (isAuthenticating || socialLoading) && styles.socialIconDisabled]}
-                onPress={async () => {
-                  if (isAuthenticating || socialLoading) return;
-                  setSocialLoading('apple');
-                  try {
-                    await loginWithApple();
-                  } finally {
-                    setSocialLoading(null);
-                  }
-                }}
-                disabled={isAuthenticating || socialLoading}
-              >
-                {socialLoading === 'apple' ? (
-                  <ActivityIndicator size="small" color={COLORS.secondary} />
-                ) : (
-                  <FontAwesome name="apple" size={24} color="black" />
-                )}
-              </TouchableOpacity>
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  style={[styles.socialIcon, (isAuthenticating || socialLoading) && styles.socialIconDisabled]}
+                  onPress={async () => {
+                    if (isAuthenticating || socialLoading) return;
+                    setSocialLoading('apple');
+                    try {
+                      await loginWithApple();
+                    } finally {
+                      setSocialLoading(null);
+                    }
+                  }}
+                  disabled={isAuthenticating || socialLoading}
+                >
+                  {socialLoading === 'apple' ? (
+                    <ActivityIndicator size="small" color={COLORS.secondary} />
+                  ) : (
+                    <FontAwesome name="apple" size={24} color="black" />
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.footer}>

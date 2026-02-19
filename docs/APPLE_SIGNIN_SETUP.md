@@ -1,61 +1,92 @@
-# Apple Sign-In Setup (Circles)
+# Apple Sign-In Setup (Circles Health App)
 
-## Purpose
-This guide explains how to make Apple Sign-In work correctly for the Circles app.
+## Scope
+This runbook makes Apple Sign-In production-ready for this project:
+- iOS bundle ID: `com.empylo.circlesapp`
+- Expo app: `frontend/app.json`
+- Firebase project: `circles-app-by-empylo`
 
-## 1) Apple Developer Configuration
-1. Go to Apple Developer Console.
-2. Open your App ID (bundle ID used by Circles iOS app).
-3. Enable capability: **Sign in with Apple**.
-4. Regenerate provisioning profiles after enabling capability.
-5. Ensure certificates/profiles are valid for the target app.
+It covers Apple Developer, Firebase Auth, EAS build, and app-level verification.
 
-## 2) Firebase Configuration
-1. Firebase Console -> Authentication -> Sign-in method.
-2. Enable provider: **Apple**.
-3. Add:
+## Current Code Status
+Already implemented in app code:
+- Apple provider login flow in `frontend/src/services/auth/authService.js`
+- Nonce + hashed nonce passed to Firebase credential exchange (`OAuthProvider('apple.com')`)
+- iOS-only button rendering in:
+  - `frontend/src/screens/SignInScreen.js`
+  - `frontend/src/screens/SignUpScreen.js`
+- Availability guard (`AppleAuthentication.isAvailableAsync`) and identity token checks.
+
+## 1) Apple Developer Console Setup
+1. Open Apple Developer -> Identifiers -> App IDs.
+2. Select App ID for `com.empylo.circlesapp`.
+3. Enable capability: **Sign In with Apple**.
+4. Save and regenerate provisioning profiles.
+5. Confirm profile is active and attached to the correct team.
+
+## 2) Firebase Auth Provider Setup
+1. Firebase Console -> Authentication -> Sign-in method -> Apple.
+2. Enable Apple provider.
+3. Fill these values from Apple Developer:
 - Apple Team ID
-- Apple Key ID
-- Apple private key (`.p8`)
-- Service ID (if required for your flow)
-4. Save and verify provider is enabled.
+- Key ID
+- Private key (`.p8` contents)
+- Service ID (only if your chosen flow requires it)
+4. Save.
 
-## 3) Expo / App Config Requirements
-1. Confirm iOS bundle identifier in app config matches Apple Developer App ID.
-2. Ensure project uses dev build/TestFlight build (not Expo Go).
-3. Keep `expo-apple-authentication` installed and linked in native build.
-4. Rebuild app after capability/config changes.
+## 3) Expo / EAS Config Validation
+From `frontend/app.json` ensure:
+- `ios.bundleIdentifier` is `com.empylo.circlesapp`
+- plugin includes `expo-apple-authentication`
 
-## 4) Client Flow Requirements
-- Use `AppleAuthentication.signInAsync(...)` on iOS.
-- Generate nonce and hashed nonce.
-- Exchange Apple credential with Firebase using:
-  - `OAuthProvider('apple.com')`
-  - `idToken`
-  - `rawNonce`
-- Store name/email on first sign-in (Apple may only provide once).
+From `frontend/eas.json` ensure:
+- production iOS profile exists
+- build number auto increment is enabled
 
-## 5) Testing Checklist
-- Test on a **real iPhone**.
-- Verify first-time consent flow.
-- Verify returning user login flow.
-- Verify app handles missing name/email on subsequent logins.
-- Verify user record is created/updated in Firestore.
+## 4) Build & Deploy (Required)
+Apple capability changes require a new native build.
 
-## 6) Common Failure Causes
-- Sign in with Apple capability not enabled on App ID.
-- Firebase Apple provider missing/wrong keys.
-- Bundle ID mismatch between Expo app config and Apple App ID.
-- Using Expo Go instead of a native dev/TestFlight build.
-- Not rebuilding after entitlement/capability changes.
+Run iOS build:
+```bash
+cd frontend
+npx eas build -p ios --profile production --clear-cache
+```
 
-## 7) Deployment Notes
-- iOS native capability changes require a new EAS iOS build.
-- Test in TestFlight before App Store release.
+Submit to TestFlight:
+```bash
+npx eas submit -p ios --profile production
+```
 
-## 8) Operational Notes
-- If Apple login fails for specific users, capture:
-  - Firebase auth error code
-  - device iOS version
-  - whether it is first login or returning login
-- Log and monitor auth failures to detect config regressions.
+## 5) Runtime Verification Checklist (Real iPhone)
+Test on a physical iPhone (not simulator, not Expo Go):
+1. Fresh install from TestFlight.
+2. Tap Apple sign-in on Sign In screen.
+3. Complete Apple consent.
+4. Verify Firebase user is created and authenticated.
+5. Sign out and sign in again with Apple.
+6. Confirm returning sign-in works when Apple no longer returns name/email.
+7. Confirm app profile document exists/updates in Firestore.
+
+## 6) Failure Diagnostics
+If Apple sign-in fails, capture:
+- app log error code/message
+- iOS version and device model
+- whether first-time or returning Apple sign-in
+- Firebase Auth error code in console/logs
+
+Common causes:
+- Sign in with Apple not enabled on App ID
+- Firebase Apple provider misconfigured keys
+- Bundle ID mismatch
+- stale provisioning profile/cert
+- using an old build before capability was enabled
+
+## 7) App Behavior Notes
+- Apple sign-in is intentionally iOS-only in UI.
+- On non-iOS platforms, Apple path is blocked in service layer.
+- Apple may return name/email only once; app handles missing fields on subsequent logins.
+
+## 8) Security Notes
+- Keep Apple private key out of repo.
+- Rotate compromised Apple keys immediately.
+- Ensure Firebase project and Apple Team match production ownership.

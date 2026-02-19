@@ -1,31 +1,39 @@
 const APP_SCHEMES = ['circlesapp://', 'exp+circles-app://', 'circles-app://', 'circles://'];
-const WEB_BASE = 'https://www.empylo.com';
+const APP_BASE_SCHEME = 'circlesapp://';
+const IOS_STORE_URL = 'https://apps.apple.com';
+const ANDROID_STORE_URL = 'https://play.google.com/store/apps/details?id=com.empylo.circlesapp';
 
-const buildWebOpenLink = (type, id = '') => {
+const buildAppLink = (type, id = '') => {
     const safeType = encodeURIComponent(String(type || '').trim());
     const safeId = encodeURIComponent(String(id || '').trim());
     const path = safeId ? `${safeType}/${safeId}` : safeType;
-    return `${WEB_BASE}/open/${path}`;
+    return `${APP_BASE_SCHEME}${path}`;
 };
 
-export const buildInviteLink = (uid) => buildWebOpenLink('invite', uid);
-export const buildCircleLink = (circleId) => buildWebOpenLink('circle', circleId);
-export const buildAffirmationLink = (affirmationId) => buildWebOpenLink('affirmation', affirmationId);
+export const buildInviteLink = (uid) => buildAppLink('invite', uid);
+export const buildCircleLink = (circleId) => buildAppLink('circle', circleId);
+export const buildAffirmationLink = (affirmationId) => buildAppLink('affirmation', affirmationId);
+
+export const buildStoreFallbackText = () => (
+    `If the app does not open, install Circles Health App:\n` +
+    `iOS: ${IOS_STORE_URL}\n` +
+    `Android: ${ANDROID_STORE_URL}`
+);
 
 export const buildInviteShareText = (uid) => {
     const appLink = buildInviteLink(uid);
-    return `Join me on Circles Health App by Empylo.\n\n${appLink}`;
+    return `Join me on Circles Health App by Empylo.\n\nOpen in app:\n${appLink}\n\n${buildStoreFallbackText()}`;
 };
 
 export const buildCircleShareText = ({ circleName, circleId }) => {
     const appLink = buildCircleLink(circleId);
-    return `Join my circle "${circleName || 'Circle'}" on Circles Health App.\n\n${appLink}`;
+    return `Join my circle "${circleName || 'Circle'}" on Circles Health App.\n\nOpen in app:\n${appLink}\n\n${buildStoreFallbackText()}`;
 };
 
 export const buildAffirmationShareText = ({ text, affirmationId }) => {
     const appLink = buildAffirmationLink(affirmationId);
     const safeText = String(text || '').trim();
-    return `${safeText}\n\nView this affirmation in Circles:\n${appLink}`;
+    return `${safeText}\n\nView this affirmation in Circles:\n${appLink}\n\n${buildStoreFallbackText()}`;
 };
 
 export const parseDeepLink = (url) => {

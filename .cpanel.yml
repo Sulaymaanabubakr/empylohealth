@@ -3,5 +3,6 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home/$USER/public_html
     - /bin/mkdir -p $DEPLOYPATH/admin
-    - /bin/cp -R web/landing/dist/* $DEPLOYPATH
-    - /bin/cp -R web/admin/dist/* $DEPLOYPATH/admin
+    # Copy built files INCLUDING dotfiles (critical for SPA rewrites via .htaccess)
+    - /bin/cp -a web/landing/dist/. $DEPLOYPATH/
+    - /bin/cp -a web/admin/dist/. $DEPLOYPATH/admin/
