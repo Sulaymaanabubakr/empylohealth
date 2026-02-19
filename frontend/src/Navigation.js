@@ -55,6 +55,8 @@ import { parseDeepLink } from './utils/deepLinks';
 import { pendingDeepLink } from './services/deepLink/pendingDeepLink';
 import { biometricPrefs } from './services/security/biometricPrefs';
 import { useAppLockController } from './services/security/useAppLockController';
+import { isProtectedRoute } from './security/protectedRoutes';
+import { screenProtectionService } from './security/screenProtectionService';
 import { userService } from './services/api/userService';
 import { auth } from './services/firebaseConfig';
 
@@ -86,6 +88,7 @@ export default function Navigation() {
     const [setupPromptBusy, setSetupPromptBusy] = useState(false);
     const [setupPromptError, setSetupPromptError] = useState('');
     const [deepLinkBannerText, setDeepLinkBannerText] = useState('');
+    const [privacyMaskVisible, setPrivacyMaskVisible] = useState(false);
     const firstRenderLoggedRef = useRef(false);
     const passwordUnlockInFlightRef = useRef(false);
     const deepLinkBannerTimerRef = useRef(null);
@@ -147,6 +150,25 @@ export default function Navigation() {
         console.log('[Navigation] Route target:', routeTarget);
         flushPendingNavigation();
     }, [routeTarget]);
+
+    useEffect(() => {
+        const unsubscribe = screenProtectionService.subscribe((snapshot) => {
+            setPrivacyMaskVisible(Boolean(snapshot?.maskVisible));
+        });
+        return unsubscribe;
+    }, []);
+
+    useEffect(() => {
+        if (routeTarget === 'UNAUTH') {
+            screenProtectionService.clearRouteProtection().catch(() => {});
+            return;
+        }
+
+        const enhancedPrivacyMode = Boolean(userData?.settings?.enhancedPrivacyMode);
+        const routeKnown = Boolean(currentRouteName);
+        const shouldProtect = !routeKnown || isProtectedRoute(currentRouteName, { enhancedPrivacyMode });
+        screenProtectionService.setRouteProtection(shouldProtect, routeKnown ? currentRouteName : '__boot__').catch(() => {});
+    }, [currentRouteName, routeTarget, userData?.settings?.enhancedPrivacyMode]);
 
     useEffect(() => {
         if (!user?.uid || routeTarget === 'UNAUTH') return;
@@ -361,6 +383,7 @@ export default function Navigation() {
                 clearTimeout(deepLinkBannerTimerRef.current);
                 deepLinkBannerTimerRef.current = null;
             }
+            screenProtectionService.cleanup().catch(() => {});
         };
     }, []);
 
@@ -535,6 +558,15 @@ export default function Navigation() {
                     <View style={styles.privacyCard}>
                         <Ionicons name="shield-checkmark" size={22} color="#FFFFFF" />
                         <Text style={styles.privacyCoverText}>Circles Health App</Text>
+                    </View>
+                </View>
+            )}
+
+            {privacyMaskVisible && !isLocked && (
+                <View style={styles.screenProtectionMask}>
+                    <View style={styles.screenProtectionMaskCard}>
+                        <Ionicons name="shield-checkmark" size={24} color="#FFFFFF" />
+                        <Text style={styles.screenProtectionMaskTitle}>Protected View</Text>
                     </View>
                 </View>
             )}
@@ -713,5 +745,26 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 14,
         fontWeight: '700'
+    },
+    screenProtectionMask: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(3, 35, 34, 0.96)',
+        zIndex: 1310,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    screenProtectionMaskCard: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 18,
+        paddingVertical: 16,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255,255,255,0.16)'
+    },
+    screenProtectionMaskTitle: {
+        marginTop: 8,
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '800'
     }
 });
