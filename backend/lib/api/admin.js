@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = void 0;
+exports.backfillUserCircles = exports.getAdminAuditLogs = exports.bulkUpdateContent = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 // Re-initialize if needed (though index.ts usually handles this)
@@ -43,23 +43,134 @@ if (admin.apps.length === 0) {
 const db = admin.firestore();
 const regionalFunctions = functions.region('europe-west1');
 const auth = admin.auth();
-// Helper to enforce admin permissions
-const requireAdmin = (context) => {
+const SUPER_ADMINS = ['sulaymaanabubakr@gmail.com', 'gcmusariri@gmail.com'];
+const ROLE_PERMISSIONS = {
+    admin: [
+        'dashboard.view',
+        'users.view',
+        'users.manage',
+        'users.delete',
+        'employees.manage',
+        'content.view',
+        'content.edit',
+        'content.delete',
+        'moderation.view',
+        'moderation.resolve',
+        'support.view',
+        'support.manage',
+        'finance.view',
+        'audit.view'
+    ],
+    editor: ['dashboard.view', 'content.view', 'content.edit', 'moderation.view'],
+    moderator: ['dashboard.view', 'users.view', 'content.view', 'moderation.view', 'moderation.resolve', 'support.view'],
+    support: ['dashboard.view', 'users.view', 'support.view', 'support.manage', 'moderation.view'],
+    finance: ['dashboard.view', 'finance.view'],
+    viewer: ['dashboard.view', 'users.view', 'content.view', 'moderation.view', 'support.view', 'finance.view', 'audit.view']
+};
+const getActor = (context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'You must be logged in.');
     }
-    // Check custom claim 'admin' or hardcoded super admins
-    const SUPER_ADMINS = ['sulaymaanabubakr@gmail.com', 'gcmusariri@gmail.com'];
-    const userEmail = (context.auth.token.email || '').toLowerCase();
-    if (context.auth.token.admin !== true && !SUPER_ADMINS.includes(userEmail)) {
+    const uid = context.auth.uid;
+    const email = String(context.auth.token.email || '').toLowerCase();
+    const role = String(context.auth.token.role || 'admin').toLowerCase();
+    const customPermissions = Array.isArray(context.auth.token.permissions)
+        ? context.auth.token.permissions.map((p) => String(p))
+        : [];
+    const isAdminClaim = context.auth.token.admin === true;
+    const isSuperAdmin = context.auth.token.superAdmin === true || SUPER_ADMINS.includes(email);
+    if (!isAdminClaim && !isSuperAdmin) {
         throw new functions.https.HttpsError('permission-denied', 'Admin privileges required.');
     }
+    return {
+        uid,
+        email,
+        role: isSuperAdmin ? 'super_admin' : role,
+        isSuperAdmin,
+        permissions: customPermissions
+    };
+};
+const requireAdmin = (context, permission) => {
+    const actor = getActor(context);
+    if (!permission || actor.isSuperAdmin || actor.role === 'super_admin')
+        return actor;
+    const allowed = new Set([
+        ...(ROLE_PERMISSIONS[actor.role] || []),
+        ...actor.permissions
+    ]);
+    if (!allowed.has(permission)) {
+        throw new functions.https.HttpsError('permission-denied', `Missing permission: ${permission}`);
+    }
+    return actor;
+};
+const toSerializable = (value) => {
+    if (!value || typeof value !== 'object')
+        return value;
+    if (value instanceof admin.firestore.Timestamp)
+        return value.toDate().toISOString();
+    if (Array.isArray(value))
+        return value.map((item) => toSerializable(item));
+    const out = {};
+    Object.entries(value).forEach(([key, item]) => {
+        out[key] = toSerializable(item);
+    });
+    return out;
+};
+const writeAuditLog = async (params) => {
+    try {
+        const actor = getActor(params.context);
+        const forwardedFor = String(params.context.rawRequest?.headers?.['x-forwarded-for'] || '');
+        const ip = forwardedFor.split(',')[0]?.trim() || params.context.rawRequest?.ip || null;
+        const userAgent = String(params.context.rawRequest?.headers?.['user-agent'] || '');
+        await db.collection('adminAuditLogs').add({
+            action: params.action,
+            actorUid: actor.uid,
+            actorEmail: actor.email,
+            actorRole: actor.role,
+            targetCollection: params.targetCollection || null,
+            targetId: params.targetId || null,
+            before: params.before ? toSerializable(params.before) : null,
+            after: params.after ? toSerializable(params.after) : null,
+            metadata: params.metadata || {},
+            sourceIp: ip,
+            userAgent,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    }
+    catch (error) {
+        console.error('Failed to write admin audit log', error);
+    }
+};
+const softDeleteDocument = async (collection, id, context, reason = 'admin_delete') => {
+    const docRef = db.collection(collection).doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', `Document not found in ${collection}: ${id}`);
+    }
+    const before = snap.data() || {};
+    await docRef.set({
+        isDeleted: true,
+        status: 'deleted',
+        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        deletedBy: context.auth?.uid || null,
+        deletedReason: reason
+    }, { merge: true });
+    const afterSnap = await docRef.get();
+    await writeAuditLog({
+        context,
+        action: 'soft_delete',
+        targetCollection: collection,
+        targetId: id,
+        before,
+        after: afterSnap.data() || {},
+        metadata: { reason }
+    });
 };
 /**
  * Get Dashboard Stats
  */
 exports.getDashboardStats = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'dashboard.view');
     try {
         const usersCount = (await db.collection('users').count().get()).data().count;
         const circlesCount = (await db.collection('circles').count().get()).data().count;
@@ -82,7 +193,7 @@ exports.getDashboardStats = regionalFunctions.https.onCall(async (data, context)
  * Get All Users (Paginated)
  */
 exports.getAllUsers = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'users.view');
     const { limit = 20, startAfterId, roles } = data; // roles: string[]
     try {
         let query = db.collection('users').orderBy('createdAt', 'desc').limit(limit);
@@ -120,7 +231,7 @@ exports.getAllUsers = regionalFunctions.https.onCall(async (data, context) => {
  * Get Pending Circles/Content
  */
 exports.getPendingContent = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'content.view');
     try {
         const circlesSnap = await db.collection('circles')
             .where('status', '==', 'pending')
@@ -143,7 +254,7 @@ exports.getPendingContent = regionalFunctions.https.onCall(async (data, context)
  * Get All Content (Circles/Resources)
  */
 exports.getAllContent = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'content.view');
     const { type = 'circles', limit = 20, startAfterId } = data;
     if (!['circles', 'resources'].includes(type)) {
         throw new functions.https.HttpsError('invalid-argument', 'Invalid content type.');
@@ -161,7 +272,7 @@ exports.getAllContent = regionalFunctions.https.onCall(async (data, context) => 
             id: doc.id,
             ...doc.data(),
             createdAt: doc.data().createdAt?.toDate().toISOString()
-        }));
+        })).filter((item) => item.isDeleted !== true);
         return { items, lastId: items.length > 0 ? items[items.length - 1]?.id : null };
     }
     catch (error) {
@@ -173,16 +284,29 @@ exports.getAllContent = regionalFunctions.https.onCall(async (data, context) => 
  * Approve or Reject Content
  */
 exports.updateContentStatus = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'content.edit');
     const { collection, docId, status } = data; // status: 'active' | 'rejected' | 'suspended'
     if (!['circles', 'resources'].includes(collection)) {
         throw new functions.https.HttpsError('invalid-argument', 'Invalid collection type.');
     }
     try {
+        const docRef = db.collection(collection).doc(docId);
+        const beforeSnap = await docRef.get();
+        const before = beforeSnap.data() || null;
         await db.collection(collection).doc(docId).update({
             status: status,
             reviewedBy: context.auth.uid,
             reviewedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        const afterSnap = await docRef.get();
+        await writeAuditLog({
+            context,
+            action: 'update_content_status',
+            targetCollection: collection,
+            targetId: docId,
+            before,
+            after: afterSnap.data() || null,
+            metadata: { status }
         });
         return { success: true };
     }
@@ -195,7 +319,7 @@ exports.updateContentStatus = regionalFunctions.https.onCall(async (data, contex
  * Edit Content Item (Circles / Resources / Affirmations)
  */
 exports.updateContentItem = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'content.edit');
     const { collection, id, updates } = data || {};
     if (!collection || !id || !updates || typeof updates !== 'object') {
         throw new functions.https.HttpsError('invalid-argument', 'Missing collection, id, or updates.');
@@ -227,7 +351,19 @@ exports.updateContentItem = regionalFunctions.https.onCall(async (data, context)
     sanitizedUpdates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
     sanitizedUpdates.updatedBy = context.auth.uid;
     try {
-        await db.collection(collection).doc(id).update(sanitizedUpdates);
+        const docRef = db.collection(collection).doc(id);
+        const beforeSnap = await docRef.get();
+        const before = beforeSnap.data() || null;
+        await docRef.update(sanitizedUpdates);
+        const afterSnap = await docRef.get();
+        await writeAuditLog({
+            context,
+            action: 'update_content_item',
+            targetCollection: collection,
+            targetId: id,
+            before,
+            after: afterSnap.data() || null
+        });
         return { success: true };
     }
     catch (error) {
@@ -239,16 +375,29 @@ exports.updateContentItem = regionalFunctions.https.onCall(async (data, context)
  * Suspend/Activate User
  */
 exports.toggleUserStatus = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'users.manage');
     const { uid, status } = data; // 'active' | 'suspended'
     if (!uid || !status) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing uid or status.');
     }
     try {
+        const userRef = db.collection('users').doc(uid);
+        const beforeSnap = await userRef.get();
+        const before = beforeSnap.data() || null;
         // Toggle Firestore status
-        await db.collection('users').doc(uid).update({ status });
+        await userRef.update({ status });
         // Toggle Auth status
         await auth.updateUser(uid, { disabled: status === 'suspended' });
+        const afterSnap = await userRef.get();
+        await writeAuditLog({
+            context,
+            action: 'toggle_user_status',
+            targetCollection: 'users',
+            targetId: uid,
+            before,
+            after: afterSnap.data() || null,
+            metadata: { status }
+        });
         return { success: true };
     }
     catch (error) {
@@ -260,19 +409,32 @@ exports.toggleUserStatus = regionalFunctions.https.onCall(async (data, context) 
  * Delete Item (User, Circle, Resource)
  */
 exports.deleteItem = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
-    const { collection, id } = data;
+    const { collection, id } = data || {};
     if (!collection || !id) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing collection or id.');
     }
+    const allowedCollections = ['users', 'circles', 'resources', 'affirmations', 'challenges'];
+    if (!allowedCollections.includes(collection)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Unsupported collection.');
+    }
+    requireAdmin(context, collection === 'users' ? 'users.delete' : 'content.delete');
     try {
         if (collection === 'users') {
+            const beforeSnap = await db.collection('users').doc(id).get();
+            const before = beforeSnap.data() || null;
             await auth.deleteUser(id);
             await db.collection('users').doc(id).delete();
+            await writeAuditLog({
+                context,
+                action: 'delete_user',
+                targetCollection: 'users',
+                targetId: id,
+                before,
+                after: null
+            });
         }
         else {
-            // For content
-            await db.collection(collection).doc(id).delete();
+            await softDeleteDocument(collection, id, context, 'admin_delete');
         }
         return { success: true };
     }
@@ -285,7 +447,7 @@ exports.deleteItem = regionalFunctions.https.onCall(async (data, context) => {
  * Get Admin Affirmations
  */
 exports.getAdminAffirmations = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'content.view');
     const { limit = 50, startAfterId } = data || {};
     try {
         // Use publishedAt for stable ordering (always present in seeded + created items)
@@ -301,7 +463,7 @@ exports.getAdminAffirmations = regionalFunctions.https.onCall(async (data, conte
             id: doc.id,
             ...doc.data(),
             createdAt: doc.data().createdAt?.toDate().toISOString() || doc.data().publishedAt?.toDate().toISOString()
-        }));
+        })).filter((item) => item.isDeleted !== true);
         return { items, lastId: items.length > 0 ? items[items.length - 1]?.id : null };
     }
     catch (error) {
@@ -313,7 +475,7 @@ exports.getAdminAffirmations = regionalFunctions.https.onCall(async (data, conte
  * Create Admin Affirmation
  */
 exports.createAffirmation = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'content.edit');
     const { content, scheduledDate } = data || {};
     if (!content) {
         throw new functions.https.HttpsError('invalid-argument', 'Affirmation content is required.');
@@ -327,6 +489,14 @@ exports.createAffirmation = regionalFunctions.https.onCall(async (data, context)
             createdBy: context.auth.uid,
             isNew: true
         });
+        const afterSnap = await ref.get();
+        await writeAuditLog({
+            context,
+            action: 'create_affirmation',
+            targetCollection: 'affirmations',
+            targetId: ref.id,
+            after: afterSnap.data() || null
+        });
         return { success: true, id: ref.id };
     }
     catch (error) {
@@ -338,13 +508,13 @@ exports.createAffirmation = regionalFunctions.https.onCall(async (data, context)
  * Delete Admin Affirmation
  */
 exports.deleteAffirmation = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'content.delete');
     const { id } = data || {};
     if (!id) {
         throw new functions.https.HttpsError('invalid-argument', 'Affirmation id is required.');
     }
     try {
-        await db.collection('affirmations').doc(id).delete();
+        await softDeleteDocument('affirmations', id, context, 'admin_delete');
         return { success: true };
     }
     catch (error) {
@@ -356,7 +526,7 @@ exports.deleteAffirmation = regionalFunctions.https.onCall(async (data, context)
  * Get Transactions (Admin)
  */
 exports.getTransactions = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'finance.view');
     const { limit = 50, startAfterId } = data || {};
     try {
         let query = db.collection('transactions').orderBy('createdAt', 'desc').limit(limit);
@@ -383,7 +553,7 @@ exports.getTransactions = regionalFunctions.https.onCall(async (data, context) =
  * Get Reports (Moderation)
  */
 exports.getReports = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'moderation.view');
     const { limit = 50, startAfterId, status } = data; // status: 'pending' | 'resolved'
     try {
         let query = db.collection('reports').orderBy('createdAt', 'desc').limit(limit);
@@ -412,7 +582,7 @@ exports.getReports = regionalFunctions.https.onCall(async (data, context) => {
  * Resolve Report
  */
 exports.resolveReport = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'moderation.resolve');
     const { reportId, action, notes } = data;
     // action: 'dismiss' | 'warning' | 'suspend_user' | 'delete_content'
     if (!reportId || !action)
@@ -421,6 +591,7 @@ exports.resolveReport = regionalFunctions.https.onCall(async (data, context) => 
         const reportRef = db.collection('reports').doc(reportId);
         const reportDoc = await reportRef.get();
         const reportData = reportDoc.data();
+        const beforeReport = reportData || null;
         const batch = db.batch();
         // 1. Update Report Status
         batch.update(reportRef, {
@@ -439,11 +610,26 @@ exports.resolveReport = regionalFunctions.https.onCall(async (data, context) => 
         else if (action === 'delete_content' && reportData?.contentId && reportData?.contentType) {
             const deletableCollections = ['circles', 'resources', 'users', 'challenges', 'affirmations'];
             if (deletableCollections.includes(reportData.contentType)) {
-                const contentRef = db.collection(reportData.contentType).doc(reportData.contentId);
-                batch.delete(contentRef);
+                if (reportData.contentType === 'users') {
+                    const contentRef = db.collection(reportData.contentType).doc(reportData.contentId);
+                    batch.delete(contentRef);
+                }
+                else {
+                    await softDeleteDocument(reportData.contentType, reportData.contentId, context, 'report_resolution');
+                }
             }
         }
         await batch.commit();
+        const afterReport = (await reportRef.get()).data() || null;
+        await writeAuditLog({
+            context,
+            action: 'resolve_report',
+            targetCollection: 'reports',
+            targetId: reportId,
+            before: beforeReport,
+            after: afterReport,
+            metadata: { action, notes: notes || '' }
+        });
         return { success: true };
     }
     catch (error) {
@@ -455,7 +641,7 @@ exports.resolveReport = regionalFunctions.https.onCall(async (data, context) => 
  * Get Support Tickets
  */
 exports.getSupportTickets = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'support.view');
     const { limit = 50, startAfterId, status } = data;
     try {
         let query = db.collection('support_tickets').orderBy('createdAt', 'desc').limit(limit);
@@ -484,14 +670,27 @@ exports.getSupportTickets = regionalFunctions.https.onCall(async (data, context)
  * Update Ticket Status
  */
 exports.updateTicketStatus = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'support.manage');
     const { ticketId, status, reply } = data; // status: 'open' | 'resolved' | 'pending'
     try {
-        await db.collection('support_tickets').doc(ticketId).update({
+        const ticketRef = db.collection('support_tickets').doc(ticketId);
+        const beforeSnap = await ticketRef.get();
+        const before = beforeSnap.data() || null;
+        await ticketRef.update({
             status,
             lastReply: reply || null,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedBy: context.auth.uid
+        });
+        const afterSnap = await ticketRef.get();
+        await writeAuditLog({
+            context,
+            action: 'update_ticket_status',
+            targetCollection: 'support_tickets',
+            targetId: ticketId,
+            before,
+            after: afterSnap.data() || null,
+            metadata: { status }
         });
         return { success: true };
     }
@@ -500,11 +699,107 @@ exports.updateTicketStatus = regionalFunctions.https.onCall(async (data, context
     }
 });
 /**
+ * Bulk Content Action (status update / soft delete)
+ */
+exports.bulkUpdateContent = regionalFunctions.https.onCall(async (data, context) => {
+    requireAdmin(context, 'content.edit');
+    const { collection, ids, action, status } = data || {};
+    if (!['circles', 'resources', 'affirmations'].includes(collection)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid collection.');
+    }
+    if (!Array.isArray(ids) || ids.length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'No ids provided.');
+    }
+    if (!['set_status', 'soft_delete'].includes(action)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid action.');
+    }
+    if (action === 'set_status' && !status) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing status for set_status action.');
+    }
+    const safeIds = ids.map((id) => String(id)).filter(Boolean).slice(0, 100);
+    const updated = [];
+    if (action === 'set_status') {
+        const batch = db.batch();
+        const beforeById = {};
+        for (const id of safeIds) {
+            const ref = db.collection(collection).doc(id);
+            const snap = await ref.get();
+            if (!snap.exists)
+                continue;
+            beforeById[id] = snap.data() || null;
+            batch.update(ref, {
+                status,
+                reviewedBy: context.auth.uid,
+                reviewedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            updated.push(id);
+        }
+        await batch.commit();
+        for (const id of updated) {
+            const afterSnap = await db.collection(collection).doc(id).get();
+            await writeAuditLog({
+                context,
+                action: 'bulk_set_status',
+                targetCollection: collection,
+                targetId: id,
+                before: beforeById[id] || null,
+                after: afterSnap.data() || null,
+                metadata: { status, bulkSize: updated.length }
+            });
+        }
+    }
+    else {
+        for (const id of safeIds) {
+            await softDeleteDocument(collection, id, context, 'bulk_admin_delete');
+            updated.push(id);
+        }
+    }
+    return { success: true, updatedCount: updated.length, ids: updated };
+});
+/**
+ * Immutable admin audit trail fetch
+ */
+exports.getAdminAuditLogs = regionalFunctions.https.onCall(async (data, context) => {
+    requireAdmin(context, 'audit.view');
+    const { limit = 100, actorEmail, action, startAfterId } = data || {};
+    try {
+        let query = db.collection('adminAuditLogs').orderBy('createdAt', 'desc').limit(Math.min(limit, 250));
+        if (actorEmail) {
+            query = db.collection('adminAuditLogs')
+                .where('actorEmail', '==', String(actorEmail).toLowerCase())
+                .orderBy('createdAt', 'desc')
+                .limit(Math.min(limit, 250));
+        }
+        else if (action) {
+            query = db.collection('adminAuditLogs')
+                .where('action', '==', String(action))
+                .orderBy('createdAt', 'desc')
+                .limit(Math.min(limit, 250));
+        }
+        if (startAfterId) {
+            const lastDoc = await db.collection('adminAuditLogs').doc(startAfterId).get();
+            if (lastDoc.exists)
+                query = query.startAfter(lastDoc);
+        }
+        const snapshot = await query.get();
+        const items = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate().toISOString()
+        }));
+        return { items, lastId: items.length > 0 ? items[items.length - 1]?.id : null };
+    }
+    catch (error) {
+        console.error('Failed to fetch audit logs', error);
+        throw new functions.https.HttpsError('internal', 'Unable to fetch audit logs.');
+    }
+});
+/**
  * Backfill userCircles index from circles.members arrays
  * Callable Function: 'backfillUserCircles'
  */
 exports.backfillUserCircles = regionalFunctions.https.onCall(async (data, context) => {
-    requireAdmin(context);
+    requireAdmin(context, 'content.edit');
     const { limit = 100, startAfterId = null } = data || {};
     try {
         let query = db.collection('circles').orderBy('createdAt', 'desc').limit(limit);

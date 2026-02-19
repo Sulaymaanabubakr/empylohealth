@@ -96,6 +96,8 @@ export const resolveReport = adminApi.resolveReport;
 export const getSupportTickets = adminApi.getSupportTickets;
 export const updateTicketStatus = adminApi.updateTicketStatus;
 export const backfillUserCircles = adminApi.backfillUserCircles;
+export const bulkUpdateContent = adminApi.bulkUpdateContent;
+export const getAdminAuditLogs = adminApi.getAdminAuditLogs;
 
 // User Management
 export const createEmployee = userMgmtApi.createEmployee;

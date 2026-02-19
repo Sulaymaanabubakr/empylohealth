@@ -64,6 +64,14 @@ export declare const getSupportTickets: functions.HttpsFunction & functions.Runn
  */
 export declare const updateTicketStatus: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Bulk Content Action (status update / soft delete)
+ */
+export declare const bulkUpdateContent: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * Immutable admin audit trail fetch
+ */
+export declare const getAdminAuditLogs: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Backfill userCircles index from circles.members arrays
  * Callable Function: 'backfillUserCircles'
  */

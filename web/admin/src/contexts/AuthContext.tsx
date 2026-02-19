@@ -7,6 +7,9 @@ interface AuthContextType {
     user: User | null;
     loading: boolean;
     isAdmin: boolean;
+    role: string;
+    permissions: string[];
+    can: (permission: string) => boolean;
     login: (email: string, pass: string) => Promise<void>;
     logout: () => Promise<void>;
 }
@@ -22,23 +25,60 @@ const SUPER_ADMINS = [
     'gcmusariri@gmail.com'
 ];
 
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+    admin: [
+        'dashboard.view',
+        'users.view',
+        'users.manage',
+        'users.delete',
+        'employees.manage',
+        'content.view',
+        'content.edit',
+        'content.delete',
+        'moderation.view',
+        'moderation.resolve',
+        'support.view',
+        'support.manage',
+        'finance.view',
+        'audit.view'
+    ],
+    editor: ['dashboard.view', 'content.view', 'content.edit', 'moderation.view'],
+    moderator: ['dashboard.view', 'users.view', 'content.view', 'moderation.view', 'moderation.resolve', 'support.view'],
+    support: ['dashboard.view', 'users.view', 'support.view', 'support.manage', 'moderation.view'],
+    finance: ['dashboard.view', 'finance.view'],
+    viewer: ['dashboard.view', 'users.view', 'content.view', 'moderation.view', 'support.view', 'finance.view', 'audit.view']
+};
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [role, setRole] = useState('viewer');
+    const [permissions, setPermissions] = useState<string[]>([]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currUser) => {
             setUser(currUser);
             if (currUser) {
-                if (SUPER_ADMINS.includes((currUser.email || '').toLowerCase())) {
+                const normalizedEmail = (currUser.email || '').toLowerCase();
+                if (SUPER_ADMINS.includes(normalizedEmail)) {
                     setIsAdmin(true);
+                    setRole('super_admin');
+                    setPermissions(['*']);
                 } else {
-                    const token = await currUser.getIdTokenResult();
+                    const token = await currUser.getIdTokenResult(true);
+                    const tokenRole = String(token.claims.role || 'viewer').toLowerCase();
+                    const tokenPermissions = Array.isArray(token.claims.permissions)
+                        ? token.claims.permissions.map((p) => String(p))
+                        : [];
+                    setRole(tokenRole);
+                    setPermissions(Array.from(new Set([...(ROLE_PERMISSIONS[tokenRole] || []), ...tokenPermissions])));
                     setIsAdmin(!!token.claims.admin);
                 }
             } else {
                 setIsAdmin(false);
+                setRole('viewer');
+                setPermissions([]);
             }
             setLoading(false);
         });
@@ -52,6 +92,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const logout = () => signOut(auth);
+    const can = (permission: string) => permissions.includes('*') || permissions.includes(permission);
 
     if (loading) return (
         <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -63,7 +104,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     );
 
     return (
-        <AuthContext.Provider value={{ user, loading, isAdmin, login, logout }}>
+        <AuthContext.Provider value={{ user, loading, isAdmin, role, permissions, can, login, logout }}>
             {children}
         </AuthContext.Provider>
     );

@@ -47,6 +47,7 @@ const SUPER_ADMINS = [
     'sulaymaanabubakr@gmail.com',
     'gcmusariri@gmail.com'
 ];
+const ALLOWED_EMPLOYEE_ROLES = ['admin', 'editor', 'viewer', 'moderator', 'support', 'finance'];
 /**
  * Create Employee Account
  * Creates a new user in Firebase Auth and sets admin claims.
@@ -63,9 +64,13 @@ exports.createEmployee = regionalFunctions.https.onCall(async (data, context) =>
         throw new functions.https.HttpsError('permission-denied', 'Only Super Admins can add employees.');
     }
     const { email, password, displayName, role } = data;
+    const normalizedRole = String(role || 'editor').toLowerCase();
     // 3. Validation
     if (!email || !password || !displayName) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+    if (!ALLOWED_EMPLOYEE_ROLES.includes(normalizedRole)) {
+        throw new functions.https.HttpsError('invalid-argument', `Invalid role. Allowed: ${ALLOWED_EMPLOYEE_ROLES.join(', ')}`);
     }
     try {
         // 4. Create Authentication User
@@ -78,14 +83,14 @@ exports.createEmployee = regionalFunctions.https.onCall(async (data, context) =>
         // 5. Set Custom Claims (Admin access)
         await admin.auth().setCustomUserClaims(userRecord.uid, {
             admin: true,
-            role: role || 'editor' // 'admin', 'editor', 'viewer'
+            role: normalizedRole // 'admin', 'editor', 'viewer', 'moderator', 'support', 'finance'
         });
         // 6. Create Firestore Document (for listing in dashboard)
         await db.collection('users').doc(userRecord.uid).set({
             email,
             displayName,
             photoURL: null,
-            role: role || 'editor',
+            role: normalizedRole,
             isAdmin: true,
             createdBy: context.auth.uid,
             createdAt: admin.firestore.FieldValue.serverTimestamp()

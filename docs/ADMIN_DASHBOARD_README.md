@@ -9,8 +9,8 @@ This document explains:
 - what is still missing before calling it "full app management".
 
 ## Current Status
-- Status: **Usable in production for core admin workflows**
-- Completeness: **Partial (not full control plane yet)**
+- Status: **Production-ready for core operations + V2 security controls**
+- Completeness: **Advanced partial (RBAC + audit trail + safer deletes now live)**
 
 ## What Is Implemented
 
@@ -47,52 +47,73 @@ This document explains:
 ### 5) Analytics / Finance Pages
 - Dashboard stats and transaction views are available.
 
+### 6) Granular RBAC (Implemented)
+- Permission-gated backend actions by module/action.
+- Role permission templates added:
+  - `admin`, `editor`, `viewer`, `moderator`, `support`, `finance`, `super_admin`.
+- Frontend action controls now respect permissions:
+  - user suspension/deletion,
+  - employee creation,
+  - moderation resolution,
+  - content edit/delete.
+
+### 7) Full Audit Trail (Implemented)
+- Immutable admin audit logs now recorded in Firestore collection:
+  - `adminAuditLogs`
+- Logged fields include:
+  - actor uid/email/role,
+  - action,
+  - target collection/id,
+  - before/after snapshots,
+  - metadata,
+  - source IP and user agent,
+  - timestamp.
+- New admin API:
+  - `getAdminAuditLogs`
+- New admin UI page:
+  - `Audit Logs` (`/audit-logs`)
+
+### 8) Safer Destructive Flows + Bulk Operations (Implemented)
+- Content deletion now defaults to soft-delete (`isDeleted`, `deletedAt`, `deletedBy`, `deletedReason`) instead of hard delete.
+- Affirmation deletion in admin now uses soft-delete.
+- New bulk content operation API:
+  - `bulkUpdateContent`
+  - supports `set_status` and `soft_delete` for circles/resources/affirmations.
+- Content page now supports bulk approve/suspend/delete actions.
+
 ## What Is Partially Implemented
-- Role model exists, but permissions are still broad in practice.
 - Content workflows are present, but not fully standardized across all entities.
 - Operational visibility exists, but lacks deeper diagnostics and audit UX.
+- Recovery workflows (restore from soft-delete) are not exposed in UI yet.
 
 ## What Is Missing (To Be "Complete")
 
-### 1) Granular RBAC
-- Fine-grained permissions by module/action:
-  - view/edit/delete/publish per feature,
-  - role templates (support, moderator, content editor, finance).
-
-### 2) Full Audit Trail
-- Immutable audit logs for every admin action:
-  - who changed what,
-  - before/after values,
-  - timestamp,
-  - source IP/session.
-- Admin UI for searching/filtering/exporting audit records.
-
-### 3) Full CRUD Coverage
+### 1) Full CRUD Coverage + Restore
 - Consistent create/edit/delete flows for all entities and metadata.
-- Safer destructive flows with confirmations and optional soft-delete.
+- Restore workflow from soft-delete states.
 
-### 4) Huddle and Notification Operations Console
+### 2) Huddle and Notification Operations Console
 - Live huddle/job monitoring.
 - Push delivery diagnostics and retry visibility.
 - Scheduler health and failure history in one admin page.
 
-### 5) Bulk and Safety Tooling
-- Bulk actions (approve/suspend/delete).
-- Recovery workflows (restore from soft-delete where applicable).
+### 3) Bulk and Safety Tooling
+- Bulk actions for users/reports/tickets (content bulk actions are already implemented).
 - Stronger guardrails for high-risk actions.
 
 ## Recommendation
 Treat current admin dashboard as **V1 production-ready for core operations**, not final.
 
 ## Suggested Next Milestone (Admin V2)
-1. Implement granular RBAC.
-2. Add full audit trail + audit UI.
-3. Add ops console (huddles, scheduler, notifications).
-4. Add bulk tools and safer delete/recovery workflows.
+1. Add restore-from-soft-delete UI + APIs.
+2. Add ops console (huddles, scheduler, notifications).
+3. Add bulk tools for users/reports/support workflows.
+4. Add export CSV for audit logs.
 5. Standardize all entity CRUD and validation.
 
 ## Related Files
 - Admin app: `web/admin`
 - Admin backend APIs: `backend/src/api/admin.ts`
+- Employee API: `backend/src/api/usermanagement.ts`
 - Functions exports: `backend/src/index.ts`
 - Store compliance notes: `docs/STORE_COMPLIANCE_README.md`

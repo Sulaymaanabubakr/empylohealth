@@ -3841,7 +3841,9 @@ export const getAffirmations = regionalFunctions.https.onCall(async (data, conte
                 .get();
             const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             // Accept active/published or missing status; filter out suspended/rejected
-            const filtered = all.filter((a: any) => !a.status || ['active', 'published'].includes(a.status));
+            const filtered = all.filter((a: any) =>
+                a.isDeleted !== true && (!a.status || ['active', 'published'].includes(a.status))
+            );
             if (filtered.length === 0) return [];
             const picks = pickRandomItems(filtered, 3);
             const ids = picks.map((item: any) => item.id);
@@ -3864,7 +3866,9 @@ export const getAffirmations = regionalFunctions.https.onCall(async (data, conte
                 .where(admin.firestore.FieldPath.documentId(), 'in', ids)
                 .get();
             const byId = new Map(snapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() }]));
-            return ids.map(id => byId.get(id)).filter(Boolean);
+            return ids
+                .map(id => byId.get(id))
+                .filter((item: any) => item && item.isDeleted !== true);
         };
 
         let items = await fetchByIds(affirmationIds);
@@ -3906,7 +3910,9 @@ const ensureDailyAffirmations = async () => {
             all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         }
 
-        const filtered = all.filter((item: any) => !item.status || ['active', 'published'].includes(item.status));
+        const filtered = all.filter((item: any) =>
+            item.isDeleted !== true && (!item.status || ['active', 'published'].includes(item.status))
+        );
         const picks = pickRandomItems(filtered, 3);
         affirmationIds = picks.map((item: any) => item.id);
         await dailyRef.set({

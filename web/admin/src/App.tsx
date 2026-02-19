@@ -13,6 +13,7 @@ import { Support } from './pages/Support';
 import { Settings } from './pages/Settings';
 import { Transactions } from './pages/Transactions';
 import { Assessments } from './pages/Assessments';
+import { AuditLogs } from './pages/AuditLogs';
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
@@ -35,6 +36,7 @@ const AppContent = () => {
           <Route path="/moderation" element={<Moderation />} />
           <Route path="/support" element={<Support />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </MainLayout>

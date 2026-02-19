@@ -6,6 +6,7 @@ import { Search, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import { useNotification } from '../contexts/NotificationContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Report {
     id: string;
@@ -24,6 +25,7 @@ interface ReportsResponse {
 }
 
 export const Moderation = () => {
+    const { can } = useAuth();
     const { showNotification } = useNotification();
     const [reports, setReports] = useState<Report[]>([]);
     const [loading, setLoading] = useState(true);
@@ -40,6 +42,7 @@ export const Moderation = () => {
     }>({ title: '', message: '', onConfirm: () => { }, type: 'danger' });
 
     const fetchReports = useCallback(async () => {
+        if (!can('moderation.view')) return;
         setLoading(true);
         try {
             const getReports = httpsCallable(functions, 'getReports');
@@ -52,7 +55,7 @@ export const Moderation = () => {
         } finally {
             setLoading(false);
         }
-    }, [activeTab]);
+    }, [activeTab, can]);
 
     useEffect(() => {
         void fetchReports();
@@ -64,6 +67,7 @@ export const Moderation = () => {
     };
 
     const handleResolve = async (id: string, action: 'dismiss' | 'suspend_user' | 'delete_content') => {
+        if (!can('moderation.resolve')) return;
         confirmAction(
             action === 'dismiss' ? 'Dismiss Report?' : (action === 'suspend_user' ? 'Suspend & Resolve?' : 'Delete & Resolve?'),
             action === 'dismiss'
@@ -89,6 +93,13 @@ export const Moderation = () => {
 
     return (
         <div className="space-y-6">
+            {!can('moderation.view') && (
+                <div className="rounded-2xl border border-border bg-surface p-8 text-center text-gray-500">
+                    You do not have permission to view moderation reports.
+                </div>
+            )}
+            {can('moderation.view') && (
+                <>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-3xl font-display text-gray-900">Moderation Center</h2>
@@ -163,6 +174,7 @@ export const Moderation = () => {
                                         <div className="flex flex-col gap-2 shrink-0">
                                             <button
                                                 onClick={() => handleResolve(report.id, 'dismiss')}
+                                                disabled={!can('moderation.resolve')}
                                                 className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100"
                                             >
                                                 Dismiss (Ignore)
@@ -170,6 +182,7 @@ export const Moderation = () => {
                                             {report.contentType === 'users' && (
                                                 <button
                                                     onClick={() => handleResolve(report.id, 'suspend_user')}
+                                                    disabled={!can('moderation.resolve')}
                                                     className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-medium hover:bg-rose-100"
                                                 >
                                                     Suspend User
@@ -178,6 +191,7 @@ export const Moderation = () => {
                                             {report.contentType !== 'users' && (
                                                 <button
                                                     onClick={() => handleResolve(report.id, 'delete_content')}
+                                                    disabled={!can('moderation.resolve')}
                                                     className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-medium hover:bg-rose-100"
                                                 >
                                                     Delete Content
@@ -200,6 +214,8 @@ export const Moderation = () => {
                 message={confirmConfig.message}
                 type={confirmConfig.type}
             />
+                </>
+            )}
         </div>
     );
 };

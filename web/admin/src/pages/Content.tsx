@@ -5,6 +5,7 @@ import { functions } from '../lib/firebase';
 import { Search, Filter, BookOpen, Users, MessageCircle, Calendar, Plus, RotateCcw, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 type ContentTab = 'circles' | 'resources' | 'affirmations';
 type ContentStatus = 'all' | 'active' | 'pending' | 'suspended' | 'rejected';
@@ -60,6 +61,9 @@ const STATUS_OPTIONS: ContentStatus[] = ['all', 'active', 'pending', 'suspended'
 const isContentStatus = (value: string): value is ContentStatus => STATUS_OPTIONS.includes(value as ContentStatus);
 
 export const Content = () => {
+    const { can } = useAuth();
+    const canEditContent = can('content.edit');
+    const canDeleteContent = can('content.delete');
     const [activeTab, setActiveTab] = useState<ContentTab>('circles');
     const [items, setItems] = useState<ContentItem[]>([]);
     const [loading, setLoading] = useState(false);
@@ -135,6 +139,7 @@ export const Content = () => {
     }, [activeTab, fetchAffirmations, fetchContent]);
 
     const handlePostAffirmation = async () => {
+        if (!canEditContent) return;
         if (!affirmationText) return;
         setSubmitting(true);
         setMessage(null);
@@ -157,6 +162,7 @@ export const Content = () => {
     };
 
     const handleUpdateStatus = async (id: string, status: string) => {
+        if (!canEditContent) return;
         if (!confirm(`Update status to "${status}"?`)) return;
         setActionLoading((prev) => ({ ...prev, [id]: true }));
         setMessage(null);
@@ -174,6 +180,7 @@ export const Content = () => {
     };
 
     const handleDelete = async (id: string) => {
+        if (!canDeleteContent) return;
         if (!confirm("Delete this item? This cannot be undone.")) return;
         setActionLoading((prev) => ({ ...prev, [id]: true }));
         setMessage(null);
@@ -219,6 +226,7 @@ export const Content = () => {
     };
 
     const handleSaveEdit = async () => {
+        if (!canEditContent) return;
         if (!editingItem) return;
         setSavingEdit(true);
         setMessage(null);
@@ -266,6 +274,35 @@ export const Content = () => {
             setMessage({ type: 'error', text: 'Failed to update content.' });
         } finally {
             setSavingEdit(false);
+        }
+    };
+
+    const handleBulkAction = async (action: 'set_status' | 'soft_delete', status?: string) => {
+        if (action === 'soft_delete' && !canDeleteContent) return;
+        if (action === 'set_status' && !canEditContent) return;
+        const ids = filteredItems.map((item) => item.id);
+        if (ids.length === 0) return;
+        const label = action === 'soft_delete' ? 'delete' : `set status to "${status}"`;
+        if (!confirm(`Bulk action will ${label} for ${ids.length} item(s). Continue?`)) return;
+
+        setMessage(null);
+        try {
+            const bulkUpdateContent = httpsCallable(functions, 'bulkUpdateContent');
+            await bulkUpdateContent({
+                collection: activeTab,
+                ids,
+                action,
+                status: status || null
+            });
+            if (activeTab === 'affirmations') {
+                await fetchAffirmations();
+            } else {
+                await fetchContent();
+            }
+            setMessage({ type: 'success', text: `Bulk action complete for ${ids.length} item(s).` });
+        } catch (error) {
+            console.error('Bulk content action failed', error);
+            setMessage({ type: 'error', text: 'Bulk action failed.' });
         }
     };
 
@@ -360,7 +397,7 @@ export const Content = () => {
                             </div>
                             <button
                                 onClick={handlePostAffirmation}
-                                disabled={submitting || !affirmationText}
+                                disabled={!canEditContent || submitting || !affirmationText}
                                 className="flex items-center gap-2 bg-primary text-white px-6 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-[#008f85] disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <Plus size={18} />
@@ -410,23 +447,49 @@ export const Content = () => {
                             />
                         </div>
                         {activeTab !== 'affirmations' && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-600 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-300">
-                                <Filter size={16} />
-                                <select
-                                    value={statusFilter}
-                                    onChange={(e) => {
-                                        if (isContentStatus(e.target.value)) {
-                                            setStatusFilter(e.target.value);
-                                        }
-                                    }}
-                                    className="bg-transparent border-none text-sm focus:ring-0 outline-none"
-                                >
-                                    <option value="all">All</option>
-                                    <option value="active">Active</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="suspended">Suspended</option>
-                                    <option value="rejected">Rejected</option>
-                                </select>
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-600 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-300">
+                                    <Filter size={16} />
+                                    <select
+                                        value={statusFilter}
+                                        onChange={(e) => {
+                                            if (isContentStatus(e.target.value)) {
+                                                setStatusFilter(e.target.value);
+                                            }
+                                        }}
+                                        className="bg-transparent border-none text-sm focus:ring-0 outline-none"
+                                    >
+                                        <option value="all">All</option>
+                                        <option value="active">Active</option>
+                                        <option value="pending">Pending</option>
+                                        <option value="suspended">Suspended</option>
+                                        <option value="rejected">Rejected</option>
+                                    </select>
+                                </div>
+                                {canEditContent && (
+                                    <>
+                                        <button
+                                            onClick={() => handleBulkAction('set_status', 'active')}
+                                            className="text-xs px-2.5 py-2 rounded-md bg-green-50 text-green-700 hover:bg-green-100"
+                                        >
+                                            Bulk Approve
+                                        </button>
+                                        <button
+                                            onClick={() => handleBulkAction('set_status', 'suspended')}
+                                            className="text-xs px-2.5 py-2 rounded-md bg-orange-50 text-orange-700 hover:bg-orange-100"
+                                        >
+                                            Bulk Suspend
+                                        </button>
+                                    </>
+                                )}
+                                {canDeleteContent && (
+                                    <button
+                                        onClick={() => handleBulkAction('soft_delete')}
+                                        className="text-xs px-2.5 py-2 rounded-md bg-red-50 text-red-700 hover:bg-red-100"
+                                    >
+                                        Bulk Delete
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -492,6 +555,7 @@ export const Content = () => {
                                                 <div className="flex items-center justify-end gap-3">
                                                     <button
                                                         onClick={() => openEditModal(item)}
+                                                        disabled={!canEditContent}
                                                         className="text-gray-500 hover:text-primary transition-colors flex items-center gap-1 text-xs"
                                                         title="Edit affirmation"
                                                     >
@@ -506,7 +570,7 @@ export const Content = () => {
                                                     </button>
                                                     <button
                                                         onClick={() => handleDelete(item.id)}
-                                                        disabled={actionLoading[item.id]}
+                                                        disabled={!canDeleteContent || actionLoading[item.id]}
                                                         className="text-red-500 hover:text-red-600 transition-colors text-xs disabled:opacity-50"
                                                     >
                                                         Delete
@@ -516,35 +580,35 @@ export const Content = () => {
                                                 <div className="flex items-center justify-end gap-2">
                                                     <button
                                                         onClick={() => openEditModal(item)}
-                                                        disabled={actionLoading[item.id]}
+                                                        disabled={!canEditContent || actionLoading[item.id]}
                                                         className="text-xs px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
                                                     >
                                                         Edit
                                                     </button>
                                                     <button
                                                         onClick={() => handleUpdateStatus(item.id, 'active')}
-                                                        disabled={actionLoading[item.id]}
+                                                        disabled={!canEditContent || actionLoading[item.id]}
                                                         className="text-xs px-2.5 py-1 rounded-md bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50"
                                                     >
                                                         Approve
                                                     </button>
                                                     <button
                                                         onClick={() => handleUpdateStatus(item.id, 'suspended')}
-                                                        disabled={actionLoading[item.id]}
+                                                        disabled={!canEditContent || actionLoading[item.id]}
                                                         className="text-xs px-2.5 py-1 rounded-md bg-orange-50 text-orange-700 hover:bg-orange-100 disabled:opacity-50"
                                                     >
                                                         Suspend
                                                     </button>
                                                     <button
                                                         onClick={() => handleUpdateStatus(item.id, 'rejected')}
-                                                        disabled={actionLoading[item.id]}
+                                                        disabled={!canEditContent || actionLoading[item.id]}
                                                         className="text-xs px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
                                                     >
                                                         Reject
                                                     </button>
                                                     <button
                                                         onClick={() => handleDelete(item.id)}
-                                                        disabled={actionLoading[item.id]}
+                                                        disabled={!canDeleteContent || actionLoading[item.id]}
                                                         className="text-xs px-2.5 py-1 rounded-md bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
                                                     >
                                                         Delete
@@ -726,7 +790,7 @@ export const Content = () => {
                             </button>
                             <button
                                 onClick={handleSaveEdit}
-                                disabled={savingEdit}
+                                disabled={!canEditContent || savingEdit}
                                 className="px-4 py-2 rounded-lg text-sm bg-primary text-white hover:bg-[#008f85] disabled:opacity-50"
                             >
                                 {savingEdit ? 'Saving...' : 'Save Changes'}

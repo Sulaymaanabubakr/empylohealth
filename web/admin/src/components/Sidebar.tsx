@@ -9,7 +9,8 @@ import {
     LogOut,
     ClipboardList,
     UserCog,
-    MessageSquare
+    MessageSquare,
+    History
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Logo } from './Logo';
@@ -92,6 +93,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                     <SidebarItem icon={<CreditCard size={18} />} label="Transactions" path="/transactions" onNavigate={onClose} />
                     <SidebarItem icon={<ShieldCheck size={18} />} label="Moderation" path="/moderation" onNavigate={onClose} />
                     <SidebarItem icon={<MessageSquare size={18} />} label="Support" path="/support" onNavigate={onClose} />
+                    <SidebarItem icon={<History size={18} />} label="Audit Logs" path="/audit-logs" onNavigate={onClose} />
 
                     <div className="px-6 mb-2 mt-6 text-xs font-semibold text-gray-400 uppercase tracking-wider">System</div>
                     <SidebarItem icon={<Settings size={18} />} label="Settings" path="/settings" onNavigate={onClose} />

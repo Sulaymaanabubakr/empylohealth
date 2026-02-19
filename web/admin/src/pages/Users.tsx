@@ -6,6 +6,7 @@ import { functions } from '../lib/firebase';
 import clsx from 'clsx';
 import { useNotification } from '../contexts/NotificationContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useAuth } from '../contexts/AuthContext';
 
 interface UserData {
     id: string;
@@ -22,6 +23,7 @@ interface GetUsersResponse {
 }
 
 export const Users = () => {
+    const { can } = useAuth();
     const { showNotification } = useNotification();
     const [users, setUsers] = useState<UserData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -38,6 +40,7 @@ export const Users = () => {
     }>({ title: '', message: '', onConfirm: () => { }, type: 'danger' });
 
     const fetchUsers = useCallback(async () => {
+        if (!can('users.view')) return;
         setLoading(true);
         try {
             const getAllUsers = httpsCallable(functions, 'getAllUsers');
@@ -51,7 +54,7 @@ export const Users = () => {
         } finally {
             setLoading(false);
         }
-    }, [showNotification]);
+    }, [can, showNotification]);
 
     useEffect(() => {
         void fetchUsers();
@@ -63,6 +66,7 @@ export const Users = () => {
     };
 
     const handleToggleStatus = async (id: string, currentStatus: string) => {
+        if (!can('users.manage')) return;
         const nextStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
 
         confirmAction(
@@ -88,6 +92,7 @@ export const Users = () => {
     };
 
     const handleDelete = async (id: string) => {
+        if (!can('users.delete')) return;
         confirmAction(
             'Delete User Account?',
             'This action cannot be undone. All user data, including circles and messages, will be permanently removed.',
@@ -128,6 +133,13 @@ export const Users = () => {
 
     return (
         <div className="space-y-6">
+            {!can('users.view') && (
+                <div className="rounded-2xl border border-border bg-surface p-8 text-center text-gray-500">
+                    You do not have permission to view app users.
+                </div>
+            )}
+            {can('users.view') && (
+                <>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-3xl font-display text-gray-900">App Users</h2>
@@ -226,7 +238,7 @@ export const Users = () => {
                                         <div className="flex items-center justify-end gap-2">
                                             <button
                                                 onClick={() => handleToggleStatus(user.id, user.status || 'active')}
-                                                disabled={actionLoading[user.id]}
+                                                disabled={!can('users.manage') || actionLoading[user.id]}
                                                 className={clsx(
                                                     "p-1.5 rounded-md transition-colors disabled:opacity-50",
                                                     user.status === 'suspended'
@@ -239,7 +251,7 @@ export const Users = () => {
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(user.id)}
-                                                disabled={actionLoading[user.id]}
+                                                disabled={!can('users.delete') || actionLoading[user.id]}
                                                 className="p-1.5 rounded-md text-red-600 hover:bg-red-50 disabled:opacity-50"
                                                 title="Delete"
                                             >
@@ -262,6 +274,8 @@ export const Users = () => {
                 message={confirmConfig.message}
                 type={confirmConfig.type}
             />
+                </>
+            )}
         </div>
     );
 };

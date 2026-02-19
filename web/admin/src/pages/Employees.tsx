@@ -6,6 +6,7 @@ import { functions } from '../lib/firebase';
 import clsx from 'clsx';
 import { useNotification } from '../contexts/NotificationContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useAuth } from '../contexts/AuthContext';
 
 
 interface UserData {
@@ -27,7 +28,7 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 export const Employees = () => {
-    // const { isAdmin } = useAuth();
+    const { can } = useAuth();
     const { showNotification } = useNotification();
     const [employees, setEmployees] = useState<UserData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -56,11 +57,12 @@ export const Employees = () => {
     const [error, setError] = useState('');
 
     const fetchEmployees = useCallback(async () => {
+        if (!can('users.view')) return;
         setLoading(true);
         try {
             const getAllUsers = httpsCallable(functions, 'getAllUsers');
             // Filter for employees only
-            const result = await getAllUsers({ limit: 100, roles: ['admin', 'editor', 'viewer'] });
+            const result = await getAllUsers({ limit: 100, roles: ['admin', 'editor', 'viewer', 'moderator', 'support', 'finance'] });
             const data = (result.data ?? {}) as GetAllUsersResponse;
             setEmployees(data.users || []);
         } catch (err) {
@@ -69,13 +71,14 @@ export const Employees = () => {
         } finally {
             setLoading(false);
         }
-    }, [showNotification]);
+    }, [can, showNotification]);
 
     useEffect(() => {
         void fetchEmployees();
     }, [fetchEmployees]);
 
     const handleCreate = async (e: React.FormEvent) => {
+        if (!can('employees.manage')) return;
         e.preventDefault();
         setCreating(true);
         setError('');
@@ -101,6 +104,7 @@ export const Employees = () => {
     };
 
     const handleToggleStatus = async (id: string, currentStatus: string) => {
+        if (!can('users.manage')) return;
         const nextStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
 
         confirmAction(
@@ -126,6 +130,7 @@ export const Employees = () => {
     };
 
     const handleDelete = async (id: string) => {
+        if (!can('users.delete')) return;
         confirmAction(
             'Delete Employee?',
             'This action cannot be undone. The account will be permanently removed.',
@@ -174,6 +179,7 @@ export const Employees = () => {
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
+                    disabled={!can('employees.manage')}
                     className="flex items-center justify-center bg-primary hover:bg-[#008f85] text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-primary/30 transition-all active:scale-95"
                 >
                     <Plus size={18} className="mr-2" />
@@ -273,7 +279,7 @@ export const Employees = () => {
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
                                                     onClick={() => handleToggleStatus(emp.id, emp.status || 'active')}
-                                                    disabled={actionLoading[emp.id]}
+                                                    disabled={!can('users.manage') || actionLoading[emp.id]}
                                                     className={clsx(
                                                         "text-xs px-2.5 py-1 rounded-md border transition-colors disabled:opacity-50",
                                                         emp.status === 'suspended'
@@ -286,7 +292,7 @@ export const Employees = () => {
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(emp.id)}
-                                                    disabled={actionLoading[emp.id]}
+                                                    disabled={!can('users.delete') || actionLoading[emp.id]}
                                                     className="text-xs px-2.5 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
                                                 >
                                                     <Trash2 size={14} className="inline-block mr-1" />
@@ -310,6 +316,9 @@ export const Employees = () => {
                         {[
                             { label: 'Admins', value: stats.admins, note: 'Full access' },
                             { label: 'Editors', value: employees.filter((emp) => emp.role === 'editor').length, note: 'Content & moderation' },
+                            { label: 'Moderators', value: employees.filter((emp) => emp.role === 'moderator').length, note: 'Reports & safety' },
+                            { label: 'Support', value: employees.filter((emp) => emp.role === 'support').length, note: 'Tickets & user help' },
+                            { label: 'Finance', value: employees.filter((emp) => emp.role === 'finance').length, note: 'Transactions only' },
                             { label: 'Viewers', value: employees.filter((emp) => emp.role === 'viewer').length, note: 'Read-only' },
                         ].map((item) => (
                             <div key={item.label} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
@@ -400,6 +409,9 @@ export const Employees = () => {
                                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                                     >
                                         <option value="editor">Editor</option>
+                                        <option value="moderator">Moderator</option>
+                                        <option value="support">Support</option>
+                                        <option value="finance">Finance</option>
                                         <option value="admin">Admin</option>
                                         <option value="viewer">Viewer</option>
                                     </select>

@@ -74,5 +74,7 @@ export declare const resolveReport: import("firebase-functions/v1").HttpsFunctio
 export declare const getSupportTickets: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateTicketStatus: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const backfillUserCircles: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const bulkUpdateContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const getAdminAuditLogs: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const createEmployee: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 //# sourceMappingURL=index.d.ts.map
