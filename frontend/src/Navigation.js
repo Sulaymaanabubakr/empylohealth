@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
-import { View, Pressable, Text, StyleSheet, TouchableOpacity, AppState, Linking as RnLinking, Animated, PanResponder, Dimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Pressable, Text, StyleSheet, TouchableOpacity, Linking as RnLinking, Animated, PanResponder, Dimensions } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { LinearGradient } from 'expo-linear-gradient';
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import MainTabs from './navigation/MainTabs';
 
@@ -49,17 +48,18 @@ import CommunityGuidelinesScreen from './screens/CommunityGuidelinesScreen';
 import CommunityEducationScreen from './screens/CommunityEducationScreen';
 import CommunityEducationTopicScreen from './screens/CommunityEducationTopicScreen';
 import AboutCirclesScreen from './screens/AboutCirclesScreen';
+import AppLockScreen from './screens/AppLockScreen';
 import { navigationRef, flushPendingNavigation, navigate } from './navigation/navigationRef';
 import { huddleService } from './services/api/huddleService';
 import { parseDeepLink } from './utils/deepLinks';
 import { pendingDeepLink } from './services/deepLink/pendingDeepLink';
 import { biometricPrefs } from './services/security/biometricPrefs';
+import { useAppLockController } from './services/security/useAppLockController';
 import { userService } from './services/api/userService';
 import { auth } from './services/firebaseConfig';
 
 const Stack = createNativeStackNavigator();
 const DRAG_MARGIN = 12;
-const LOCK_TIMEOUT_MS = 10 * 60 * 1000;
 const formatCallDuration = (seconds = 0) => {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
     const mins = Math.floor(total / 60);
@@ -80,104 +80,48 @@ export default function Navigation() {
     const { routeTarget, userData, user } = useAuth();
     const [activeHuddleSession, setActiveHuddleSession] = useState(null);
     const [currentRouteName, setCurrentRouteName] = useState('');
-    const [biometricLocked, setBiometricLocked] = useState(false);
-    const [unlocking, setUnlocking] = useState(false);
     const [passwordUnlocking, setPasswordUnlocking] = useState(false);
     const [unlockPassword, setUnlockPassword] = useState('');
-    const [unlockError, setUnlockError] = useState('');
-    const [deviceBiometricEnabled, setDeviceBiometricEnabled] = useState(false);
     const [setupPromptVisible, setSetupPromptVisible] = useState(false);
     const [setupPromptBusy, setSetupPromptBusy] = useState(false);
     const [setupPromptError, setSetupPromptError] = useState('');
     const [deepLinkBannerText, setDeepLinkBannerText] = useState('');
     const firstRenderLoggedRef = useRef(false);
-    const appStateRef = useRef(AppState.currentState);
-    const unlockInFlightRef = useRef(false);
     const passwordUnlockInFlightRef = useRef(false);
     const deepLinkBannerTimerRef = useRef(null);
-    const lockPulseLoopRef = useRef(null);
-    const backgroundAtRef = useRef(0);
     const screenSizeRef = useRef(Dimensions.get('window'));
     const floatingPos = useRef(new Animated.ValueXY({ x: 14, y: Math.max(100, Dimensions.get('window').height - 130) })).current;
-    const lockOpacity = useRef(new Animated.Value(0)).current;
-    const lockScale = useRef(new Animated.Value(0.97)).current;
-    const lockPulse = useRef(new Animated.Value(0)).current;
     const [floatingBox, setFloatingBox] = useState({ width: 320, height: 68 });
     const [nowMs, setNowMs] = useState(Date.now());
 
-    const accountBiometricsEnabled = routeTarget !== 'UNAUTH' && Boolean(userData?.settings?.biometrics);
-    const biometricsEnabled = accountBiometricsEnabled && deviceBiometricEnabled;
+    const appLock = useAppLockController({ user, userData, routeTarget });
+    const lockEnabled = appLock.state.lockEnabled;
+    const isLocked = appLock.state.isLocked;
+    const unlocking = appLock.state.unlockInProgress;
     const canUsePasswordFallback = Boolean(user?.email && user?.providerData?.some((provider) => provider?.providerId === 'password'));
-
-    const unlockWithBiometrics = async () => {
-        if (!biometricsEnabled) {
-            setBiometricLocked(false);
-            return true;
-        }
-        if (!LocalAuthentication) {
-            setBiometricLocked(false);
-            return true;
-        }
-        if (unlockInFlightRef.current) return false;
-        unlockInFlightRef.current = true;
-        setUnlocking(true);
-        try {
-            const hasHardware = await LocalAuthentication.hasHardwareAsync();
-            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-            const supported = await LocalAuthentication.supportedAuthenticationTypesAsync();
-            if (!hasHardware || !isEnrolled || !supported?.length) {
-                // Do not hard-lock users on devices without biometric capability.
-                setBiometricLocked(false);
-                return true;
-            }
-
-            const result = await LocalAuthentication.authenticateAsync({
-                promptMessage: 'Unlock Circles',
-                cancelLabel: 'Cancel',
-                fallbackLabel: 'Use device passcode',
-                disableDeviceFallback: false
-            });
-
-            const success = Boolean(result?.success);
-            setBiometricLocked(!success);
-            if (!success) {
-                setUnlockError('Unlock was cancelled. Use biometrics or your password.');
-            } else {
-                setUnlockError('');
-            }
-            return success;
-        } catch (error) {
-            setBiometricLocked(true);
-            setUnlockError('Could not verify biometrics. Try again or use password.');
-            return false;
-        } finally {
-            setUnlocking(false);
-            unlockInFlightRef.current = false;
-        }
-    };
 
     const unlockWithPassword = async () => {
         if (passwordUnlockInFlightRef.current) return false;
         const password = String(unlockPassword || '').trim();
         if (!password) {
-            setUnlockError('Enter your account password.');
+            appLock.setUnlockError('Enter your account password.');
             return false;
         }
         if (!auth.currentUser?.email) {
-            setUnlockError('Password unlock is only available for email/password accounts.');
+            appLock.setUnlockError('Password unlock is only available for email/password accounts.');
             return false;
         }
         passwordUnlockInFlightRef.current = true;
         setPasswordUnlocking(true);
-        setUnlockError('');
+        appLock.setUnlockError('');
         try {
             const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
             await reauthenticateWithCredential(auth.currentUser, credential);
-            setBiometricLocked(false);
+            appLock.forceUnlock('password');
             setUnlockPassword('');
             return true;
         } catch (error) {
-            setUnlockError('Password is incorrect. Please try again.');
+            appLock.setUnlockError('Password is incorrect. Please try again.');
             return false;
         } finally {
             setPasswordUnlocking(false);
@@ -200,55 +144,9 @@ export default function Navigation() {
     }, []);
 
     useEffect(() => {
-        let mounted = true;
-        const loadDevicePreference = async () => {
-            if (!user?.uid || routeTarget === 'UNAUTH') {
-                setDeviceBiometricEnabled(false);
-                return;
-            }
-            const enabled = await biometricPrefs.isDeviceBiometricEnabled(user.uid);
-            const lastBackgroundAt = await biometricPrefs.getLastBackgroundAt(user.uid);
-            if (!mounted) return;
-            setDeviceBiometricEnabled(enabled);
-            backgroundAtRef.current = lastBackgroundAt;
-        };
-        loadDevicePreference().catch(() => {
-            if (mounted) setDeviceBiometricEnabled(false);
-        });
-        return () => {
-            mounted = false;
-        };
-    }, [user?.uid, routeTarget]);
-
-    useEffect(() => {
         console.log('[Navigation] Route target:', routeTarget);
         flushPendingNavigation();
     }, [routeTarget]);
-
-    useEffect(() => {
-        if (!biometricsEnabled) {
-            setBiometricLocked(false);
-            setUnlockPassword('');
-            setUnlockError('');
-            return;
-        }
-        if (!user?.uid || routeTarget === 'UNAUTH') return;
-        let cancelled = false;
-        const run = async () => {
-            const lastBackgroundAt = await biometricPrefs.getLastBackgroundAt(user.uid);
-            backgroundAtRef.current = lastBackgroundAt;
-            if (cancelled || !lastBackgroundAt) return;
-            const awayDuration = Date.now() - lastBackgroundAt;
-            if (awayDuration >= LOCK_TIMEOUT_MS) {
-                setBiometricLocked(true);
-                await unlockWithBiometrics();
-            }
-        };
-        run().catch(() => {});
-        return () => {
-            cancelled = true;
-        };
-    }, [biometricsEnabled, routeTarget, user?.uid]);
 
     useEffect(() => {
         if (!user?.uid || routeTarget === 'UNAUTH') return;
@@ -284,7 +182,7 @@ export default function Navigation() {
             if (!enableBiometrics) {
                 await biometricPrefs.setDeviceBiometricEnabled(user.uid, false);
                 await biometricPrefs.markSetupPromptSeen(user.uid);
-                setDeviceBiometricEnabled(false);
+                appLock.setDeviceBiometricEnabled(false);
                 setSetupPromptVisible(false);
                 return;
             }
@@ -306,7 +204,7 @@ export default function Navigation() {
                     biometrics: true
                 }
             });
-            setDeviceBiometricEnabled(true);
+            appLock.setDeviceBiometricEnabled(true);
             setSetupPromptVisible(false);
         } catch (error) {
             setSetupPromptError('Could not enable biometrics right now. Try again.');
@@ -314,65 +212,6 @@ export default function Navigation() {
             setSetupPromptBusy(false);
         }
     };
-
-    useEffect(() => {
-        const sub = AppState.addEventListener('change', (nextState) => {
-            const previous = appStateRef.current;
-            appStateRef.current = nextState;
-            if ((nextState === 'inactive' || nextState === 'background') && user?.uid) {
-                const now = Date.now();
-                backgroundAtRef.current = now;
-                biometricPrefs.setLastBackgroundAt(user.uid, now).catch(() => {});
-            }
-            const comingToForeground =
-                (previous === 'background' || previous === 'inactive') && nextState === 'active';
-            if (!comingToForeground || !biometricsEnabled) return;
-            const awayDuration = Date.now() - Number(backgroundAtRef.current || 0);
-            if (awayDuration < LOCK_TIMEOUT_MS) return;
-            setBiometricLocked(true);
-            unlockWithBiometrics().catch(() => {});
-        });
-        return () => sub.remove();
-    }, [biometricsEnabled, routeTarget, user?.uid]);
-
-    useEffect(() => {
-        if (!biometricLocked) {
-            if (lockPulseLoopRef.current) {
-                lockPulseLoopRef.current.stop();
-                lockPulseLoopRef.current = null;
-            }
-            return;
-        }
-        lockOpacity.setValue(0);
-        lockScale.setValue(0.97);
-        lockPulse.setValue(0);
-        Animated.parallel([
-            Animated.timing(lockOpacity, {
-                toValue: 1,
-                duration: 240,
-                useNativeDriver: true
-            }),
-            Animated.spring(lockScale, {
-                toValue: 1,
-                useNativeDriver: true,
-                bounciness: 8
-            })
-        ]).start();
-        const pulseLoop = Animated.loop(
-            Animated.sequence([
-                Animated.timing(lockPulse, { toValue: 1, duration: 1300, useNativeDriver: true }),
-                Animated.timing(lockPulse, { toValue: 0, duration: 1300, useNativeDriver: true })
-            ])
-        );
-        lockPulseLoopRef.current = pulseLoop;
-        pulseLoop.start();
-        return () => {
-            if (lockPulseLoopRef.current) {
-                lockPulseLoopRef.current.stop();
-                lockPulseLoopRef.current = null;
-            }
-        };
-    }, [biometricLocked, lockOpacity, lockPulse, lockScale]);
 
     if (!firstRenderLoggedRef.current) {
         firstRenderLoggedRef.current = true;
@@ -527,18 +366,19 @@ export default function Navigation() {
 
     return (
         <View style={styles.root}>
-            <NavigationContainer
-                ref={navigationRef}
-                onReady={() => {
-                    flushPendingNavigation();
-                    setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
-                }}
-                onStateChange={() => {
-                    flushPendingNavigation();
-                    setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
-                }}
-            >
-                {routeTarget === 'UNAUTH' ? (
+            {!appLock.initializing && !(lockEnabled && isLocked) && (
+                <NavigationContainer
+                    ref={navigationRef}
+                    onReady={() => {
+                        flushPendingNavigation();
+                        setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
+                    }}
+                    onStateChange={() => {
+                        flushPendingNavigation();
+                        setCurrentRouteName(navigationRef.getCurrentRoute()?.name || '');
+                    }}
+                >
+                    {routeTarget === 'UNAUTH' ? (
                     <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FA' } }}>
                         <Stack.Screen name="Splash" component={SplashScreen} />
                         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -587,8 +427,9 @@ export default function Navigation() {
                         <Stack.Screen name="NineIndex" component={NineIndexScreen} />
                         <Stack.Screen name="Stats" component={StatsScreen} />
                     </Stack.Navigator>
-                )}
-            </NavigationContainer>
+                    )}
+                </NavigationContainer>
+            )}
 
             {!!deepLinkBannerText && (
                 <View style={styles.deepLinkBanner}>
@@ -641,7 +482,7 @@ export default function Navigation() {
                 </Animated.View>
             )}
 
-            {setupPromptVisible && !biometricLocked && routeTarget !== 'UNAUTH' && (
+            {setupPromptVisible && !(lockEnabled && isLocked) && routeTarget !== 'UNAUTH' && (
                 <View style={styles.setupPromptOverlay}>
                     <View style={styles.setupPromptCard}>
                         <View style={styles.setupPromptIconWrap}>
@@ -674,92 +515,28 @@ export default function Navigation() {
                 </View>
             )}
 
-            {biometricLocked && (
-                <Animated.View style={[styles.lockOverlay, { opacity: lockOpacity }]}>
-                    <LinearGradient
-                        colors={['#033D3A', '#056761', '#012625']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.lockOverlayBackground}
-                    />
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                        style={styles.lockOverlayContent}
-                    >
-                        <Animated.View style={[styles.lockCard, { transform: [{ scale: lockScale }] }]}>
-                            <Animated.View
-                                style={[
-                                    styles.lockPulse,
-                                    {
-                                        opacity: lockPulse.interpolate({ inputRange: [0, 1], outputRange: [0.24, 0.58] }),
-                                        transform: [
-                                            {
-                                                scale: lockPulse.interpolate({
-                                                    inputRange: [0, 1],
-                                                    outputRange: [1, 1.34]
-                                                })
-                                            }
-                                        ]
-                                    }
-                                ]}
-                            />
-                            <View style={styles.lockIconWrap}>
-                                <Ionicons name="lock-closed" size={24} color="#FFFFFF" />
-                            </View>
-                            <Text style={styles.lockTitle}>Circles is locked</Text>
-                            <Text style={styles.lockSubtitle}>
-                                Unlock with biometrics to continue. Your app content stays hidden until verified.
-                            </Text>
+            {(lockEnabled && isLocked) && (
+                <AppLockScreen
+                    user={user}
+                    unlocking={unlocking}
+                    passwordUnlocking={passwordUnlocking}
+                    unlockPassword={unlockPassword}
+                    setUnlockPassword={setUnlockPassword}
+                    unlockError={appLock.unlockError}
+                    canUsePasswordFallback={canUsePasswordFallback}
+                    onUnlockBiometric={appLock.tryBiometricUnlock}
+                    onUnlockPassword={unlockWithPassword}
+                    promptEpoch={appLock.promptEpoch}
+                />
+            )}
 
-                            <TouchableOpacity
-                                style={styles.unlockButton}
-                                onPress={() => unlockWithBiometrics()}
-                                disabled={unlocking || passwordUnlocking}
-                            >
-                                <Ionicons name="finger-print" size={18} color="#FFFFFF" />
-                                <Text style={styles.unlockButtonText}>
-                                    {unlocking ? 'Verifying...' : 'Unlock with biometrics'}
-                                </Text>
-                            </TouchableOpacity>
-
-                            <View style={styles.passwordDivider}>
-                                <View style={styles.passwordDividerLine} />
-                                <Text style={styles.passwordDividerText}>or</Text>
-                                <View style={styles.passwordDividerLine} />
-                            </View>
-
-                            {canUsePasswordFallback ? (
-                                <>
-                                    <TextInput
-                                        style={styles.passwordInput}
-                                        placeholder="Enter account password"
-                                        placeholderTextColor="#9CA3AF"
-                                        value={unlockPassword}
-                                        onChangeText={setUnlockPassword}
-                                        secureTextEntry
-                                        editable={!unlocking && !passwordUnlocking}
-                                        autoCapitalize="none"
-                                    />
-                                    <TouchableOpacity
-                                        style={styles.passwordUnlockButton}
-                                        onPress={unlockWithPassword}
-                                        disabled={unlocking || passwordUnlocking}
-                                    >
-                                        <Text style={styles.passwordUnlockButtonText}>
-                                            {passwordUnlocking ? 'Checking password...' : 'Unlock with password'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </>
-                            ) : (
-                                <Text style={styles.passwordFallbackHint}>
-                                    Password fallback is available for email/password accounts.
-                                </Text>
-                            )}
-
-                            {!!unlockError && <Text style={styles.unlockError}>{unlockError}</Text>}
-                        </Animated.View>
-                    </KeyboardAvoidingView>
-                </Animated.View>
+            {appLock.privacyCoverVisible && !isLocked && (
+                <View style={styles.privacyCover}>
+                    <View style={styles.privacyCard}>
+                        <Ionicons name="shield-checkmark" size={22} color="#FFFFFF" />
+                        <Text style={styles.privacyCoverText}>Circles Health App</Text>
+                    </View>
+                </View>
             )}
         </View>
     );
@@ -916,138 +693,25 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '700'
     },
-    lockOverlay: {
+    privacyCover: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#032826',
-        zIndex: 1200
-    },
-    lockOverlayBackground: {
-        ...StyleSheet.absoluteFillObject
-    },
-    lockOverlayContent: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 20
-    },
-    lockCard: {
-        width: '100%',
-        maxWidth: 370,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 24,
-        paddingHorizontal: 20,
-        paddingTop: 22,
-        paddingBottom: 18,
-        alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: '#CCFBF1',
-        overflow: 'hidden'
-    },
-    lockPulse: {
-        position: 'absolute',
-        top: 8,
-        width: 88,
-        height: 88,
-        borderRadius: 44,
-        backgroundColor: '#2DD4BF'
-    },
-    lockIconWrap: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#00A99D',
+        backgroundColor: '#042726',
+        zIndex: 1300,
         alignItems: 'center',
         justifyContent: 'center'
     },
-    lockTitle: {
-        fontSize: 24,
-        fontWeight: '800',
-        color: '#0B1324',
-        marginTop: 12
-    },
-    lockSubtitle: {
-        marginTop: 10,
-        fontSize: 14,
-        color: '#475569',
-        textAlign: 'center',
-        lineHeight: 21
-    },
-    unlockButton: {
-        marginTop: 16,
-        backgroundColor: '#00A99D',
-        borderRadius: 14,
-        width: '100%',
-        minHeight: 46,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+    privacyCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center'
+        gap: 8,
+        backgroundColor: 'rgba(255,255,255,0.14)',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 16
     },
-    unlockButtonText: {
+    privacyCoverText: {
         color: '#FFFFFF',
         fontSize: 14,
-        fontWeight: '800',
-        marginLeft: 8
-    },
-    passwordDivider: {
-        marginTop: 14,
-        width: '100%',
-        flexDirection: 'row',
-        alignItems: 'center'
-    },
-    passwordDividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#E2E8F0'
-    },
-    passwordDividerText: {
-        marginHorizontal: 8,
-        fontSize: 12,
-        color: '#64748B',
-        fontWeight: '700'
-    },
-    passwordInput: {
-        marginTop: 12,
-        width: '100%',
-        minHeight: 46,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#CBD5E1',
-        backgroundColor: '#F8FAFC',
-        paddingHorizontal: 12,
-        color: '#0F172A',
-        fontSize: 14
-    },
-    passwordUnlockButton: {
-        marginTop: 10,
-        width: '100%',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#14B8A6',
-        backgroundColor: '#ECFEFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 44,
-        paddingHorizontal: 12
-    },
-    passwordUnlockButtonText: {
-        color: '#0F766E',
-        fontSize: 14,
-        fontWeight: '800'
-    },
-    passwordFallbackHint: {
-        marginTop: 12,
-        fontSize: 12,
-        color: '#64748B',
-        textAlign: 'center',
-        lineHeight: 18
-    },
-    unlockError: {
-        marginTop: 10,
-        fontSize: 12,
-        color: '#DC2626',
-        textAlign: 'center',
         fontWeight: '700'
     }
 });
