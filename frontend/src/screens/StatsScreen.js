@@ -126,7 +126,6 @@ const StatsScreen = ({ navigation }) => {
                                         {item.mood ? `Feeling ${item.mood}` : getScoreLabel(item.score)}
                                     </Text>
                                 </View>
-                                <Ionicons name="chevron-forward" size={20} color="#D1D9E6" />
                             </View>
                         ))}
                     </>

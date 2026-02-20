@@ -29,6 +29,7 @@ const NineIndexScreen = ({ navigation }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [answers, setAnswers] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
 
     useEffect(() => {
         loadQuestions();
@@ -72,6 +73,7 @@ const NineIndexScreen = ({ navigation }) => {
 
     const handleSave = async () => {
         if (!allAnswered || isSubmitting) return;
+        setSaveSuccess(false);
         setIsSubmitting(true);
         try {
             const optionScore = {
@@ -100,7 +102,10 @@ const NineIndexScreen = ({ navigation }) => {
                 ['lastDailyCheckInDate', now.toDateString()]
             ]);
             await AsyncStorage.removeItem('pendingWeeklyAssessment');
-            navigation.navigate('MainTabs', { screen: 'Dashboard' });
+            setSaveSuccess(true);
+            setTimeout(() => {
+                navigation.navigate('MainTabs', { screen: 'Dashboard' });
+            }, 500);
         } catch (error) {
             console.error('Questionnaire submission failed', error);
         } finally {
@@ -149,11 +154,14 @@ const NineIndexScreen = ({ navigation }) => {
                 ))}
 
                 <Button
-                    title={isSubmitting ? "Saving..." : "Save"}
+                    title={isSubmitting ? "Saving..." : (saveSuccess ? "Saved" : "Save")}
                     onPress={handleSave}
                     style={styles.saveButton}
                     disabled={!allAnswered || isSubmitting}
                 />
+                <Text style={styles.saveHint}>
+                    {saveSuccess ? 'Assessment saved. Returning to dashboard...' : 'Tap Save to store your weekly assessment.'}
+                </Text>
             </ScrollView>
         </SafeAreaView>
     );
@@ -238,6 +246,13 @@ const styles = StyleSheet.create({
     },
     saveButton: {
         marginTop: SPACING.xl,
+    },
+    saveHint: {
+        marginTop: SPACING.sm,
+        textAlign: 'center',
+        color: '#607D8B',
+        fontSize: 12,
+        fontWeight: '600',
     },
 });
 

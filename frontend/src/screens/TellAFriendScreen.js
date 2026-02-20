@@ -3,12 +3,15 @@ import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Share } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import Avatar from '../components/Avatar';
 import QRCode from 'react-native-qrcode-svg';
 import { buildInviteLink, buildInviteShareText } from '../utils/deepLinks';
+import * as Clipboard from 'expo-clipboard';
 
 const TellAFriendScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
+    const { showToast } = useToast();
     const avatarUri = userData?.photoURL || user?.photoURL || '';
     const inviteLink = buildInviteLink(user?.uid || '');
 
@@ -19,6 +22,15 @@ const TellAFriendScreen = ({ navigation }) => {
             });
         } catch (error) {
             console.log(error);
+        }
+    };
+
+    const handleCopyLink = async () => {
+        try {
+            await Clipboard.setStringAsync(inviteLink);
+            showToast('Invite link copied', 'success');
+        } catch (error) {
+            showToast('Could not copy link right now', 'error');
         }
     };
 
@@ -69,9 +81,9 @@ const TellAFriendScreen = ({ navigation }) => {
                     <Text style={styles.outlineButtonText}>Share Invite Link</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.outlineButton} onPress={handleShare}>
+                <TouchableOpacity style={styles.outlineButton} onPress={handleCopyLink}>
                     <Ionicons name="copy-outline" size={20} color="#009688" style={{ marginRight: 8 }} />
-                    <Text style={styles.outlineButtonText}>Share Link</Text>
+                    <Text style={styles.outlineButtonText}>Copy Invite Link</Text>
                 </TouchableOpacity>
 
             </View>

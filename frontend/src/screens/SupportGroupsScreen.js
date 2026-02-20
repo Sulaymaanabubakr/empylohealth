@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, StatusBar, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,8 +13,15 @@ import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { useModal } from '../context/ModalContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FILTERS = ['All', 'Connect', 'Culture', 'Enablement', 'Green Activities', 'Mental health', 'Physical health'];
+const normalizeText = (value = '') => String(value || '').trim().toLowerCase();
+const buildCircleFilterTerms = (group = {}) => {
+    const tags = Array.isArray(group.tags) ? group.tags : [];
+    const derived = [group.category, group.location, group.type, group.visibility, ...tags];
+    return new Set(derived.map(normalizeText).filter(Boolean));
+};
 
 const calculateCircleRating = (circle) => {
     if (!circle) return '4.2';
@@ -60,12 +67,32 @@ const SupportGroupsScreen = ({ route }) => {
     const [memberPreviewMap, setMemberPreviewMap] = useState({});
     const [deleteInProgress, setDeleteInProgress] = useState(false);
     const [deletingCircleId, setDeletingCircleId] = useState(null);
+    const filterStateStorageKey = `support_groups_filter:${scope}:${user?.uid || 'guest'}`;
+    const resetFilters = () => {
+        setActiveFilter('All');
+        setSearchQuery('');
+    };
 
     useFocusEffect(
         React.useCallback(() => {
             const cacheKey = `${showJoinedOnly ? 'support_groups_joined' : 'support_groups_public'}:${user?.uid || 'guest'}`;
             const loadGroups = async () => {
                 try {
+                    const savedFilterState = await AsyncStorage.getItem(filterStateStorageKey).catch(() => '');
+                    if (savedFilterState) {
+                        let parsed = null;
+                        try {
+                            parsed = JSON.parse(savedFilterState);
+                        } catch {
+                            parsed = null;
+                        }
+                        if (parsed?.activeFilter && FILTERS.includes(parsed.activeFilter)) {
+                            setActiveFilter(parsed.activeFilter);
+                        }
+                        if (typeof parsed?.searchQuery === 'string') {
+                            setSearchQuery(parsed.searchQuery);
+                        }
+                    }
                     const cached = await screenCacheService.get(cacheKey);
                     if (Array.isArray(cached) && cached.length > 0) {
                         setGroups(cached);
@@ -88,22 +115,35 @@ const SupportGroupsScreen = ({ route }) => {
                 }
             };
             loadGroups();
-        }, [showJoinedOnly, user?.uid])
+        }, [showJoinedOnly, user?.uid, filterStateStorageKey])
     );
 
-    const filteredGroups = groups.filter(group => {
-        const matchesSearch = (group.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-        const tags = group.tags || (group.category ? [group.category] : []);
-        const matchesFilter = activeFilter === 'All' || tags.includes(activeFilter);
-        const isMember = !!user?.uid && Array.isArray(group.members) && group.members.includes(user.uid);
-        if (showJoinedOnly) {
-            return matchesSearch && matchesFilter && isMember;
-        }
+    useEffect(() => {
+        AsyncStorage.setItem(filterStateStorageKey, JSON.stringify({ activeFilter, searchQuery })).catch(() => {});
+    }, [filterStateStorageKey, activeFilter, searchQuery]);
 
-        const isPublic = (group?.type || 'public') === 'public';
-        const isFull = !isMember && getCircleMemberCount(group) >= MAX_CIRCLE_MEMBERS;
-        return matchesSearch && matchesFilter && isPublic && !isFull;
-    });
+    const filteredGroups = useMemo(() => {
+        const normalizedFilter = normalizeText(activeFilter);
+        const normalizedSearch = normalizeText(searchQuery);
+        return groups.filter((group) => {
+            const normalizedName = normalizeText(group.name);
+            const filterTerms = buildCircleFilterTerms(group);
+            const matchesSearch =
+                !normalizedSearch ||
+                normalizedName.includes(normalizedSearch) ||
+                Array.from(filterTerms).some((term) => term.includes(normalizedSearch));
+            const matchesFilter =
+                normalizedFilter === 'all' ||
+                filterTerms.has(normalizedFilter);
+            const isMember = !!user?.uid && Array.isArray(group.members) && group.members.includes(user.uid);
+            if (showJoinedOnly) {
+                return matchesSearch && matchesFilter && isMember;
+            }
+            const isPublic = (group?.type || 'public') === 'public';
+            const isFull = !isMember && getCircleMemberCount(group) >= MAX_CIRCLE_MEMBERS;
+            return matchesSearch && matchesFilter && isPublic && !isFull;
+        });
+    }, [activeFilter, groups, searchQuery, showJoinedOnly, user?.uid]);
 
     useEffect(() => {
         let cancelled = false;
@@ -324,6 +364,13 @@ const SupportGroupsScreen = ({ route }) => {
                     ))}
                 </ScrollView>
             </View>
+            <View style={styles.filterActionsRow}>
+                <TouchableOpacity style={styles.resetFiltersButton} onPress={resetFilters}>
+                    <Ionicons name="refresh-outline" size={14} color="#475467" />
+                    <Text style={styles.resetFiltersText}>Reset filters</Text>
+                </TouchableOpacity>
+            </View>
+            <Text style={styles.filterHintText}>Filter matches circle tags/category (case-insensitive).</Text>
 
             {showJoinedOnly && (
                 <View style={styles.deleteHintBanner}>
@@ -433,8 +480,37 @@ const styles = StyleSheet.create({
         color: '#1A1A1A',
     },
     filterContainer: {
-        marginBottom: 16,
+        marginBottom: 8,
         height: 40,
+    },
+    filterHintText: {
+        marginHorizontal: 20,
+        marginBottom: 12,
+        color: '#64748B',
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    filterActionsRow: {
+        marginHorizontal: 20,
+        marginBottom: 8,
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+    },
+    resetFiltersButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E4E7EC',
+        borderRadius: 12,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+    },
+    resetFiltersText: {
+        color: '#475467',
+        fontSize: 12,
+        fontWeight: '600',
     },
     filterContent: {
         paddingHorizontal: 20,

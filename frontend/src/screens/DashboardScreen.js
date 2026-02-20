@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions, RefreshControl, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,7 +16,7 @@ import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/fire
 import Avatar from '../components/Avatar';
 import { getWellbeingRingColor } from '../utils/wellbeing';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
-import { formatDateUK } from '../utils/dateFormat';
+import { formatDateUK, formatTimeUK } from '../utils/dateFormat';
 
 import { assessmentService } from '../services/api/assessmentService';
 
@@ -160,7 +160,8 @@ const CircularProgress = ({ score, label }) => {
 const DashboardScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const { userData, user } = useAuth();
-    const [circles, setCircles] = useState([]);
+    const [allCircles, setAllCircles] = useState([]);
+    const [selectedCircleId, setSelectedCircleId] = useState('');
     const [wellbeing, setWellbeing] = useState({ score: 0, label: 'Loading...' });
     const [challenges, setChallenges] = useState([]);
     const [recommendations, setRecommendations] = useState([]);
@@ -169,6 +170,8 @@ const DashboardScreen = ({ navigation }) => {
     const [memberProfiles, setMemberProfiles] = useState({});
     const [refreshing, setRefreshing] = useState(false);
     const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+    const [lastUpdatedAt, setLastUpdatedAt] = useState(0);
+    const primaryCircleStorageKey = user?.uid ? `dashboard_primary_circle:${user.uid}` : '';
 
     const localWellbeingFallback = useCallback(() => {
         const resolved = resolveMemberWellbeing(userData || {});
@@ -197,6 +200,15 @@ const DashboardScreen = ({ navigation }) => {
 
         return () => unsubscribe();
     }, [user?.uid]);
+
+    useEffect(() => {
+        if (!primaryCircleStorageKey) return;
+        AsyncStorage.getItem(primaryCircleStorageKey)
+            .then((saved) => {
+                if (saved) setSelectedCircleId(saved);
+            })
+            .catch(() => {});
+    }, [primaryCircleStorageKey]);
 
     useEffect(() => {
         console.log('DashboardScreen mounted. User:', user?.email);
@@ -231,18 +243,36 @@ const DashboardScreen = ({ navigation }) => {
                     const timeB = b.updatedAt?.toMillis?.() || 0;
                     return timeB - timeA;
                 });
-                // Only keep the top circle
-                const topCircle = sorted.slice(0, 1);
-                setCircles(topCircle);
-
-                // Fetch member profiles for the top circle
-                if (topCircle.length > 0 && topCircle[0].members) {
-                    loadMemberProfiles(topCircle[0]);
-                }
+                setAllCircles(sorted);
+                setLastUpdatedAt(Date.now());
+                setSelectedCircleId((previous) => {
+                    if (!sorted.length) return '';
+                    const selectedStillExists = previous && sorted.some((item) => item.id === previous);
+                    if (selectedStillExists) return previous;
+                    const fallbackId = sorted[0].id;
+                    if (primaryCircleStorageKey) {
+                        AsyncStorage.setItem(primaryCircleStorageKey, fallbackId).catch(() => {});
+                    }
+                    return fallbackId;
+                });
             });
             return () => unsubscribe();
         }
-    }, [user]);
+    }, [user, primaryCircleStorageKey]);
+
+    const selectedCircle = useMemo(() => {
+        if (!allCircles.length) return null;
+        const found = allCircles.find((item) => item.id === selectedCircleId);
+        return found || allCircles[0] || null;
+    }, [allCircles, selectedCircleId]);
+
+    useEffect(() => {
+        if (selectedCircle?.members?.length) {
+            loadMemberProfiles(selectedCircle);
+        } else {
+            setMemberProfiles({});
+        }
+    }, [selectedCircle?.id]);
 
     useEffect(() => {
         if (!user?.uid) return undefined;
@@ -278,6 +308,7 @@ const DashboardScreen = ({ navigation }) => {
             console.log("Error fetching dashboard data", err);
             setWellbeing(localWellbeingFallback());
         } finally {
+            setLastUpdatedAt(Date.now());
             setRefreshing(false);
         }
     };
@@ -412,11 +443,18 @@ const DashboardScreen = ({ navigation }) => {
 
 
     const currentDate = formatDateUK(new Date());
+    const lastSyncLabel = lastUpdatedAt ? formatTimeUK(new Date(lastUpdatedAt)) : 'now';
     const selfResolvedWellbeing = resolveMemberWellbeing(userData || {});
     const selfRingFallbackScore = typeof selfResolvedWellbeing.score === 'number'
         ? selfResolvedWellbeing.score
         : (typeof wellbeing?.score === 'number' ? wellbeing.score : null);
     const selfRingFallbackLabel = selfResolvedWellbeing.label || wellbeing?.label || '';
+    const handleSelectPrimaryCircle = async (circleId) => {
+        setSelectedCircleId(circleId);
+        if (primaryCircleStorageKey) {
+            await AsyncStorage.setItem(primaryCircleStorageKey, circleId).catch(() => {});
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
@@ -435,13 +473,18 @@ const DashboardScreen = ({ navigation }) => {
                     </View>
                     <Text style={styles.dateText}>{currentDate}</Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.notificationButton}
-                    onPress={() => navigation.navigate('Notifications')}
-                >
-                    <Ionicons name="notifications" size={24} color="#333" />
-                    {hasUnreadNotifications && <View style={styles.notificationDot} />}
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+                        <Feather name="refresh-cw" size={18} color="#333" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.notificationButton}
+                        onPress={() => navigation.navigate('Notifications')}
+                    >
+                        <Ionicons name="notifications" size={24} color="#333" />
+                        {hasUnreadNotifications && <View style={styles.notificationDot} />}
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <ScrollView
@@ -505,9 +548,29 @@ const DashboardScreen = ({ navigation }) => {
                         <Ionicons name="chevron-forward" size={14} color="#FFA726" />
                     </TouchableOpacity>
                 </View>
+                <Text style={styles.refreshHintText}>Live circle updates. Pull down or tap refresh. Last synced {lastSyncLabel}.</Text>
 
-                {/* Real Circles List */}
-                {circles.length === 0 ? (
+                {allCircles.length > 1 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.primaryChipsRow}>
+                        {allCircles.map((item) => {
+                            const selected = selectedCircle?.id === item.id;
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={[styles.primaryChip, selected && styles.primaryChipActive]}
+                                    onPress={() => handleSelectPrimaryCircle(item.id)}
+                                >
+                                    <Text style={[styles.primaryChipText, selected && styles.primaryChipTextActive]} numberOfLines={1}>
+                                        {item.name}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </ScrollView>
+                )}
+
+                {/* User-selected primary circle card */}
+                {!selectedCircle ? (
                     <View style={styles.circleCard}>
                         <Text style={{ textAlign: 'center', color: '#757575', padding: 20 }}>
                             You haven't joined any circles yet.
@@ -515,29 +578,28 @@ const DashboardScreen = ({ navigation }) => {
                         </Text>
                     </View>
                 ) : (
-                    circles.map((circle) => (
                         <TouchableOpacity
-                            key={circle.id}
+                            key={selectedCircle.id}
                             style={styles.circleCard}
                             disabled={true} // Disable card click, using buttons instead
                         >
                             <View style={styles.circleHeader}>
                                 <View>
-                                    <Text style={styles.circleTitle}>{circle.name}</Text>
-                                    <Text style={styles.circleMembers}>{circle.members?.length || 0} Members • High Activity</Text>
+                                    <Text style={styles.circleTitle}>{selectedCircle.name}</Text>
+                                    <Text style={styles.circleMembers}>{selectedCircle.members?.length || 0} Members • High Activity</Text>
                                 </View>
                                 {/* Rating Badge */}
                                 <View style={styles.scoreBadge}>
                                     <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
-                                    <Text style={styles.scoreBadgeText}>{calculateCircleRating(circle)}</Text>
+                                    <Text style={styles.scoreBadgeText}>{calculateCircleRating(selectedCircle)}</Text>
                                 </View>
                             </View>
 
                             {/* Premium Member Stack */}
-                            {circle.members && circle.members.length > 0 && Object.keys(memberProfiles).length > 0 ? (
+                            {selectedCircle.members && selectedCircle.members.length > 0 && Object.keys(memberProfiles).length > 0 ? (
                                 <View style={styles.memberStackContainer}>
                                     <View style={styles.avatarStack}>
-                                        {circle.members.slice(0, 5).map((memberId, index) => {
+                                        {selectedCircle.members.slice(0, 5).map((memberId, index) => {
                                             const profile = memberProfiles[memberId] || (
                                                 memberId === user?.uid
                                                     ? {
@@ -577,15 +639,15 @@ const DashboardScreen = ({ navigation }) => {
                                                 </View>
                                             );
                                         })}
-                                        {circle.members.length > 5 && (
+                                        {selectedCircle.members.length > 5 && (
                                             <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -18 }]}>
-                                                <Text style={styles.moreMembersText}>+{circle.members.length - 5}</Text>
+                                                <Text style={styles.moreMembersText}>+{selectedCircle.members.length - 5}</Text>
                                             </View>
                                         )}
                                     </View>
                                     <View style={styles.stackInfoContainer}>
                                         <Text style={styles.stackInfoText}>
-                                            <Text style={styles.highlightText}>{circle.members.length} members</Text> are active
+                                            <Text style={styles.highlightText}>{selectedCircle.members.length} members</Text> are active
                                         </Text>
                                         <View style={styles.activeIndicator} />
                                     </View>
@@ -598,16 +660,35 @@ const DashboardScreen = ({ navigation }) => {
 
                             <TouchableOpacity
                                 style={styles.viewCircleButton}
-                                onPress={() => navigation.navigate('CircleAnalysis', { circle })}
+                                onPress={() => navigation.navigate('CircleAnalysis', { circle: selectedCircle })}
                             >
                                 <Text style={styles.viewCircleButtonText}>View Circle Analysis</Text>
                             </TouchableOpacity>
                         </TouchableOpacity>
-                    ))
+                )}
+
+                {allCircles.length > 1 && (
+                    <View style={styles.analysisQuickList}>
+                        <Text style={styles.analysisQuickListTitle}>Analyze Other Joined Circles</Text>
+                        <View style={styles.analysisQuickButtonsRow}>
+                            {allCircles
+                                .filter((item) => item.id !== selectedCircle?.id)
+                                .map((item) => (
+                                    <TouchableOpacity
+                                        key={`analysis_${item.id}`}
+                                        style={styles.analysisQuickButton}
+                                        onPress={() => navigation.navigate('CircleAnalysis', { circle: item })}
+                                    >
+                                        <Text style={styles.analysisQuickButtonText} numberOfLines={1}>{item.name}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                        </View>
+                    </View>
                 )}
 
                 {/* Key Challenges */}
                 <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Key Challenges</Text>
+                <Text style={styles.keyChallengesHint}>Insights only</Text>
 
                 <View style={styles.challengeRow}>
                     {challenges.length > 0 ? challenges.slice(0, 2).map((challenge, index) => {
@@ -749,6 +830,18 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 5,
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    refreshButton: {
+        backgroundColor: '#FFF',
+        padding: 10,
+        borderRadius: 50,
         borderWidth: 1,
         borderColor: '#F0F0F0',
     },
@@ -899,6 +992,38 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginRight: 2,
     },
+    refreshHintText: {
+        marginTop: -8,
+        marginBottom: 10,
+        fontSize: 12,
+        color: '#667085',
+        fontWeight: '500',
+    },
+    primaryChipsRow: {
+        marginBottom: 10,
+    },
+    primaryChip: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        marginRight: 8,
+        maxWidth: 170,
+    },
+    primaryChipActive: {
+        backgroundColor: '#E0F2F1',
+        borderColor: COLORS.primary,
+    },
+    primaryChipText: {
+        color: '#4B5563',
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    primaryChipTextActive: {
+        color: COLORS.primary,
+    },
     circleCard: {
         backgroundColor: '#FFF',
         borderRadius: 32,
@@ -911,6 +1036,42 @@ const styles = StyleSheet.create({
         elevation: 10,
         borderWidth: 1,
         borderColor: '#F5F5F5',
+    },
+    analysisQuickList: {
+        marginTop: -12,
+        marginBottom: 18,
+    },
+    analysisQuickListTitle: {
+        fontSize: 13,
+        color: '#4B5563',
+        marginBottom: 8,
+        fontWeight: '600',
+    },
+    analysisQuickButtonsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    analysisQuickButton: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        maxWidth: '48%',
+    },
+    analysisQuickButtonText: {
+        color: '#1F2937',
+        fontWeight: '600',
+        fontSize: 12,
+    },
+    keyChallengesHint: {
+        marginTop: -8,
+        marginBottom: 10,
+        fontSize: 12,
+        color: '#94A3B8',
+        fontWeight: '600',
     },
     circleHeader: {
         flexDirection: 'row',

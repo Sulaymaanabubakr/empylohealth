@@ -67,11 +67,12 @@ const AssessmentScreen = ({ navigation }) => {
                     </View>
 
                     <Button
-                        title={isSubmitting ? "Saving..." : "Continue"}
+                        title={isSubmitting ? "Saving..." : "Save & Continue"}
                         onPress={handleContinue}
                         style={styles.continueButton}
                         disabled={isSubmitting}
                     />
+                    <Text style={styles.saveHint}>Your response is saved before moving to the next step.</Text>
                 </View>
             </View>
         </SafeAreaView>
@@ -179,6 +180,13 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 20,
         elevation: 10,
+    },
+    saveHint: {
+        marginTop: 10,
+        fontSize: 12,
+        color: '#607D8B',
+        fontWeight: '600',
+        textAlign: 'center',
     },
 });
 
