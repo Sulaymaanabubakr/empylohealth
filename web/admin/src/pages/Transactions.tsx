@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Download, Search, ArrowDownLeft, CreditCard } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
+import { formatDateUK } from '../lib/date';
 
 interface TransactionRaw {
     id: string;
@@ -54,7 +55,7 @@ export const Transactions = () => {
             email: trx.email || '',
             amount: Number(trx.amount || 0),
             status: trx.status || 'pending',
-            date: trx.createdAt ? new Date(trx.createdAt).toLocaleDateString() : (trx.date || 'N/A'),
+            date: trx.createdAt ? formatDateUK(trx.createdAt) : (trx.date || 'N/A'),
             type: trx.type || 'subscription'
         }));
     }, [transactions]);

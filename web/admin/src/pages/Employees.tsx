@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Shield, Mail, User as UserIcon, Ban, CheckCircle, Trash2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
+import { formatDateUK } from '../lib/date';
 import clsx from 'clsx';
 import { useNotification } from '../contexts/NotificationContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -273,7 +274,7 @@ export const Employees = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-500">
-                                            {emp.createdAt ? new Date(emp.createdAt).toLocaleDateString() : 'N/A'}
+                                            {emp.createdAt ? formatDateUK(emp.createdAt) : 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">

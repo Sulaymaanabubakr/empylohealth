@@ -14,6 +14,7 @@ import { mediaService } from '../services/api/mediaService';
 import Avatar from '../components/Avatar';
 import { authService } from '../services/auth/authService';
 import { getDeviceIdentity } from '../services/auth/deviceIdentity';
+import { COUNTRY_OPTIONS } from '../constants/countries';
 
 const PersonalInformationScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
@@ -33,20 +34,6 @@ const PersonalInformationScreen = ({ navigation }) => {
     const [hasNewAvatar, setHasNewAvatar] = useState(false);
 
     const genderOptions = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
-    const locationOptions = [
-        'England - East Midlands',
-        'England - East of England',
-        'England - London',
-        'England - North East',
-        'England - North West',
-        'England - South East',
-        'England - South West',
-        'England - West Midlands',
-        'England - Yorkshire and the Humber',
-        'Scotland',
-        'Wales',
-        'Northern Ireland'
-    ];
 
     const pickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -71,6 +58,7 @@ const PersonalInformationScreen = ({ navigation }) => {
     const handleSave = async () => {
         setIsSubmitting(true);
         try {
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || userData?.timezone || 'UTC';
             let photoURL = avatarUri;
 
             // 1. Upload new avatar if selected
@@ -84,6 +72,7 @@ const PersonalInformationScreen = ({ navigation }) => {
                 dob,
                 gender,
                 location,
+                timezone,
                 bio: bio.trim(),
                 about: bio.trim(), // Keep legacy field in sync for older readers.
                 photoURL,
@@ -203,9 +192,9 @@ const PersonalInformationScreen = ({ navigation }) => {
                         />
 
                         <Dropdown
-                            label="Location"
+                            label="Country"
                             value={location}
-                            options={locationOptions}
+                            options={COUNTRY_OPTIONS}
                             onSelect={setLocation}
                             icon={<Ionicons name="location-outline" size={20} color="#009688" />}
                         />

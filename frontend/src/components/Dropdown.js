@@ -1,15 +1,36 @@
-import React, { useState, ReactNode } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Feather } from '@expo/vector-icons';
 
 
 
-const Dropdown = ({ label, value, options, onSelect, icon, placeholder = 'Select' }) => {
+const normalizeOption = (option) => {
+    if (typeof option === 'string') {
+        return { label: option, value: option };
+    }
+    if (option && typeof option === 'object') {
+        return {
+            label: option.label || option.value || '',
+            value: option.value || option.label || ''
+        };
+    }
+    return { label: '', value: '' };
+};
+
+const Dropdown = ({ label, value, options = [], onSelect, icon, placeholder = 'Select' }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const normalizedOptions = useMemo(
+        () => options.map(normalizeOption).filter((item) => item.value),
+        [options]
+    );
+    const selectedOption = useMemo(
+        () => normalizedOptions.find((item) => item.value === value || item.label === value) || null,
+        [normalizedOptions, value]
+    );
 
     const handleSelect = (option) => {
-        onSelect(option);
+        onSelect(option.value);
         setIsOpen(false);
     };
 
@@ -24,7 +45,7 @@ const Dropdown = ({ label, value, options, onSelect, icon, placeholder = 'Select
             >
                 {icon && <View style={styles.iconContainer}>{icon}</View>}
                 <Text style={[styles.dropdownText, value && { color: COLORS.text }]}>
-                    {value || placeholder}
+                    {selectedOption?.label || value || placeholder}
                 </Text>
                 <Feather name="chevron-down" size={20} color="black" />
             </TouchableOpacity>
@@ -49,22 +70,22 @@ const Dropdown = ({ label, value, options, onSelect, icon, placeholder = 'Select
                         </View>
 
                         <ScrollView style={styles.optionsList}>
-                            {options.map((option, index) => (
+                            {normalizedOptions.map((option, index) => (
                                 <TouchableOpacity
-                                    key={index}
+                                    key={`${option.value}-${index}`}
                                     style={[
                                         styles.optionItem,
-                                        value === option && styles.optionItemSelected
+                                        selectedOption?.value === option.value && styles.optionItemSelected
                                     ]}
                                     onPress={() => handleSelect(option)}
                                 >
                                     <Text style={[
                                         styles.optionText,
-                                        value === option && styles.optionTextSelected
+                                        selectedOption?.value === option.value && styles.optionTextSelected
                                     ]}>
-                                        {option}
+                                        {option.label}
                                     </Text>
-                                    {value === option && (
+                                    {selectedOption?.value === option.value && (
                                         <Feather name="check" size={20} color={COLORS.primary} />
                                     )}
                                 </TouchableOpacity>

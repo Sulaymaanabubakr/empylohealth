@@ -9,12 +9,14 @@ import { db } from '../services/firebaseConfig';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
+import { formatDateUK } from '../utils/dateFormat';
 import DatePicker from '../components/DatePicker';
 import TimePicker from '../components/TimePicker';
 import ImageCropper from '../components/ImageCropper';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
 import * as ImagePicker from 'expo-image-picker';
+import { formatDateTimeUK } from '../utils/dateFormat';
 
 // Components for different tabs
 const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto, busy }) => (
@@ -64,7 +66,7 @@ const RequestItem = ({ request, onAccept, onReject, processingId }) => {
             />
             <View style={styles.listItemContent}>
                 <Text style={styles.itemTitle}>{request.displayName}</Text>
-                <Text style={styles.itemSubtitle}>Requested {new Date(request.createdAt?.toDate()).toLocaleDateString()}</Text>
+                <Text style={styles.itemSubtitle}>Requested {formatDateUK(request.createdAt)}</Text>
                 {/* Show answers if any */}
             </View>
             {isProcessing ? (
@@ -739,7 +741,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         <View style={{ flex: 1 }}>
                             <Text style={styles.itemTitle}>{item.title}</Text>
                             <Text style={styles.itemSubtitle}>
-                                {item.scheduledAt?.toDate ? item.scheduledAt.toDate().toLocaleString() : new Date(item.scheduledAt).toLocaleString()}
+                                {formatDateTimeUK(item.scheduledAt)}
                             </Text>
                         </View>
                         <TouchableOpacity onPress={() => handleDeleteEvent(item.id)} style={[styles.actionButtonSmall, actionLoading && styles.disabledButton]} disabled={actionLoading}>
@@ -847,7 +849,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                             placeholder="Select time"
                             icon={<Ionicons name="time-outline" size={18} color={COLORS.primary} />}
                         />
-                        <Text style={styles.schedulePreview}>Scheduled for {eventDate.toLocaleString()}</Text>
+                        <Text style={styles.schedulePreview}>Scheduled for {formatDateTimeUK(eventDate)}</Text>
 
                         <View style={styles.modalActions}>
                             <TouchableOpacity onPress={() => setShowScheduleModal(false)} style={styles.modalCancel} disabled={actionLoading}>

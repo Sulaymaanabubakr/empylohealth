@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
+import { formatDateTimeUK } from '../lib/date';
 import { Search, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -112,7 +113,7 @@ export const AuditLogs = () => {
                                 <tr><td colSpan={5} className="p-8 text-center text-gray-400">No audit records found.</td></tr>
                             ) : filteredLogs.map((log) => (
                                 <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
-                                    <td className="px-6 py-4 text-sm text-gray-600">{log.createdAt ? new Date(log.createdAt).toLocaleString() : 'N/A'}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">{log.createdAt ? formatDateTimeUK(log.createdAt) : 'N/A'}</td>
                                     <td className="px-6 py-4">
                                         <p className="text-sm font-medium text-gray-900">{log.actorEmail || 'Unknown'}</p>
                                         <p className="text-xs text-gray-500">{log.actorRole || 'N/A'}</p>

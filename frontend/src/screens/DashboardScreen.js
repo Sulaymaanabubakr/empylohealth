@@ -16,6 +16,7 @@ import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/fire
 import Avatar from '../components/Avatar';
 import { getWellbeingRingColor } from '../utils/wellbeing';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
+import { formatDateUK } from '../utils/dateFormat';
 
 import { assessmentService } from '../services/api/assessmentService';
 
@@ -410,11 +411,7 @@ const DashboardScreen = ({ navigation }) => {
 
 
 
-    const currentDate = new Date().toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long'
-    });
+    const currentDate = formatDateUK(new Date());
     const selfResolvedWellbeing = resolveMemberWellbeing(userData || {});
     const selfRingFallbackScore = typeof selfResolvedWellbeing.score === 'number'
         ? selfResolvedWellbeing.score

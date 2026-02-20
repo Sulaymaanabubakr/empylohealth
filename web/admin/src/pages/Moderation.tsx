@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
+import { formatDateUK } from '../lib/date';
 import { Search, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import { useNotification } from '../contexts/NotificationContext';
@@ -161,7 +162,7 @@ export const Moderation = () => {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className="font-bold text-gray-900 text-sm uppercase tracking-wide">{report.reason}</span>
-                                            <span className="text-xs text-gray-400">• {new Date(report.createdAt).toLocaleDateString()}</span>
+                                            <span className="text-xs text-gray-400">• {formatDateUK(report.createdAt)}</span>
                                         </div>
                                         <p className="text-gray-600 text-sm mb-2">{report.details}</p>
                                         <div className="flex gap-4 text-xs text-gray-500 bg-gray-50 p-2 rounded-lg w-fit">

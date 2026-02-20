@@ -1,3 +1,5 @@
+import { formatDateUK, formatTimeUK } from './dateFormat';
+
 export const toMillis = (scheduledAt) => {
     if (!scheduledAt) return 0;
     if (typeof scheduledAt?.toMillis === 'function') return scheduledAt.toMillis();
@@ -22,5 +24,5 @@ export const formatCountdown = (targetMs, nowMs = Date.now()) => {
 export const formatEventDateTime = (scheduledAt) => {
     const date = scheduledAt?.toDate ? scheduledAt.toDate() : new Date(scheduledAt);
     if (!date || Number.isNaN(date.getTime())) return 'Unknown time';
-    return `${date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} • ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return `${formatDateUK(date)} • ${formatTimeUK(date)}`;
 };

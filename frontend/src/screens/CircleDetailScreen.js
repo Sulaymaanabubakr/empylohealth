@@ -17,6 +17,7 @@ import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/ci
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 import { buildCircleShareText } from '../utils/deepLinks';
 import { isPresenceOnline, presenceFreshnessMs } from '../utils/presence';
+import { formatDateUK } from '../utils/dateFormat';
 
 const { width } = Dimensions.get('window');
 
@@ -629,10 +630,10 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                 <View key={event.id} style={styles.eventCard}>
                                     <View style={styles.eventDateBox}>
                                         <Text style={styles.eventMonth}>
-                                            {event.scheduledAt?.toDate ? event.scheduledAt.toDate().toLocaleString('default', { month: 'short' }) : new Date(event.scheduledAt).toLocaleString('default', { month: 'short' })}
+                                            {formatDateUK(event.scheduledAt, { month: 'short' })}
                                         </Text>
                                         <Text style={styles.eventDay}>
-                                            {event.scheduledAt?.toDate ? event.scheduledAt.toDate().getDate() : new Date(event.scheduledAt).getDate()}
+                                            {formatDateUK(event.scheduledAt, { day: '2-digit' })}
                                         </Text>
                                     </View>
                                     <View style={styles.eventInfo}>

@@ -22,7 +22,7 @@ const DatePicker = ({ label, value, onSelect, icon, placeholder = 'Select date' 
     ];
 
     const handleDateSelect = (day) => {
-        const formattedDate = `${String(day.month).padStart(2, '0')}.${String(day.day).padStart(2, '0')}.${day.year}`;
+        const formattedDate = `${String(day.day).padStart(2, '0')}/${String(day.month).padStart(2, '0')}/${day.year}`;
         setSelectedDate(day.dateString);
         onSelect(formattedDate);
         setIsOpen(false);

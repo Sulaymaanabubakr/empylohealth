@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
+import { formatDateUK } from '../lib/date';
 import { Search, Filter, BookOpen, Users, MessageCircle, Calendar, Plus, RotateCcw, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { useSearchParams } from 'react-router-dom';
@@ -545,9 +546,9 @@ export const Content = () => {
                                         )}
                                         <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                             {activeTab === 'affirmations' && item.scheduledDate
-                                                ? new Date(item.scheduledDate).toLocaleDateString()
+                                                ? formatDateUK(item.scheduledDate)
                                                 : item.createdAt
-                                                    ? (typeof item.createdAt === 'object' ? item.createdAt.toDate().toLocaleDateString() : new Date(item.createdAt).toLocaleDateString())
+                                                    ? (typeof item.createdAt === 'object' ? formatDateUK(item.createdAt.toDate()) : formatDateUK(item.createdAt))
                                                     : 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 text-right">

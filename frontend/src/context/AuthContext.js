@@ -45,6 +45,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const networkProfileBootstrappedRef = useRef(false);
     const preloadedUidRef = useRef(null);
     const loginDeviceReportedRef = useRef('');
+    const timezoneSyncedRef = useRef('');
 
     const loading = bootPhase !== BOOT_PHASES.READY;
 
@@ -102,6 +103,15 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                     .catch((error) => {
                         console.warn('[AuthContext] recordLoginDevice failed', error?.message || error);
                     });
+            }
+
+            const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+            const timezoneSyncKey = `${currentUser.uid}:${currentTz}`;
+            if (timezoneSyncedRef.current !== timezoneSyncKey) {
+                timezoneSyncedRef.current = timezoneSyncKey;
+                profileRepository.updateProfile(currentUser.uid, { timezone: currentTz }).catch((error) => {
+                    console.warn('[AuthContext] timezone sync failed', error?.message || error);
+                });
             }
 
             setBootPhase(BOOT_PHASES.PROFILE_RESOLVING);

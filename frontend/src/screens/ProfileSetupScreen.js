@@ -14,6 +14,7 @@ import { useToast } from '../context/ToastContext';
 import { userService } from '../services/api/userService';
 import { authService } from '../services/auth/authService';
 import { mediaService } from '../services/api/mediaService';
+import { COUNTRY_OPTIONS } from '../constants/countries';
 
 const { width } = Dimensions.get('window');
 
@@ -29,12 +30,6 @@ const ProfileSetupScreen = ({ navigation }) => {
     const [uploading, setUploading] = useState(false);
 
     const genderOptions = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
-    const locationOptions = [
-        'England - East Midlands', 'England - East of England', 'England - London',
-        'England - North East', 'England - North West', 'England - South East',
-        'England - South West', 'England - West Midlands', 'England - Yorkshire and the Humber',
-        'Scotland', 'Wales', 'Northern Ireland'
-    ];
 
     const pickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -67,6 +62,7 @@ const ProfileSetupScreen = ({ navigation }) => {
 
         setUploading(true);
         try {
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
             let photoURL = avatarUri;
             if (avatarUri && avatarUri !== user.photoURL) {
                 photoURL = await mediaService.uploadAsset(avatarUri, 'avatars');
@@ -77,6 +73,7 @@ const ProfileSetupScreen = ({ navigation }) => {
                 dob: dateOfBirth,
                 gender,
                 location,
+                timezone,
                 photoURL,
                 role: 'personal',
                 onboardingCompleted: true,
@@ -177,9 +174,9 @@ const ProfileSetupScreen = ({ navigation }) => {
                     />
 
                     <Dropdown
-                        label="Your region"
+                        label="Country"
                         value={location}
-                        options={locationOptions}
+                        options={COUNTRY_OPTIONS}
                         onSelect={setLocation}
                         icon={<MaterialCommunityIcons name="map-marker-radius" size={20} color={COLORS.primary} />}
                     />

@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { assessmentService } from '../services/api/assessmentService';
+import { formatDateUK, formatTimeUK } from '../utils/dateFormat';
 
 const StatsScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
@@ -50,7 +51,7 @@ const StatsScreen = ({ navigation }) => {
     const formatDate = (dateObj) => {
         if (!dateObj) return '';
         let d = dateObj.toDate ? dateObj.toDate() : new Date(dateObj);
-        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        return formatDateUK(d);
     };
 
     return (
@@ -118,7 +119,7 @@ const StatsScreen = ({ navigation }) => {
                                     <View style={styles.historyHeader}>
                                         <Text style={styles.historyDate}>{formatDate(item.createdAt)}</Text>
                                         <Text style={styles.historyTime}>
-                                            {item.createdAt ? new Date(item.createdAt.toDate ? item.createdAt.toDate() : item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                            {item.createdAt ? formatTimeUK(item.createdAt) : ''}
                                         </Text>
                                     </View>
                                     <Text style={styles.historyMood}>

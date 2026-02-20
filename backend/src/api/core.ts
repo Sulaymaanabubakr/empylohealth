@@ -3925,6 +3925,51 @@ const ensureDailyAffirmations = async () => {
     return affirmationIds;
 };
 
+const isValidIanaTimezone = (tz?: string | null) => {
+    if (!tz || typeof tz !== 'string') return false;
+    try {
+        Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date());
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const getUserTimezone = (userData: any) => {
+    const fromTopLevel = String(userData?.timezone || '').trim();
+    const fromSettings = String(userData?.settings?.timezone || '').trim();
+    if (isValidIanaTimezone(fromTopLevel)) return fromTopLevel;
+    if (isValidIanaTimezone(fromSettings)) return fromSettings;
+    return 'UTC';
+};
+
+const getZonedParts = (date: Date, timeZone: string) => {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+    const parts = fmt.formatToParts(date);
+    const map = new Map(parts.map((p) => [p.type, p.value]));
+    const year = Number(map.get('year') || '0');
+    const month = Number(map.get('month') || '0');
+    const day = Number(map.get('day') || '0');
+    const hour = Number(map.get('hour') || '0');
+    const minute = Number(map.get('minute') || '0');
+    const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return { year, month, day, hour, minute, dateKey };
+};
+
+const SLOT_TARGETS: Record<number, { hour: number; title: string; key: string }> = {
+    0: { hour: 8, title: 'Morning Affirmation', key: 'morning' },
+    1: { hour: 13, title: 'Afternoon Affirmation', key: 'afternoon' },
+    2: { hour: 19, title: 'Evening Affirmation', key: 'evening' }
+};
+
 const sendDailyAffirmationsNotification = async (slotIndex: number, title: string) => {
     const affirmationIds = await ensureDailyAffirmations();
     if (affirmationIds.length === 0) {
@@ -3938,19 +3983,64 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
     const affirmationAvatar = String(affirmationDoc.data()?.image || '');
 
     const usersSnap = await db.collection('users').get();
-    const users = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const users: any[] = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    const now = new Date();
+    const slot = SLOT_TARGETS[slotIndex];
+    const slotTitle = title || slot?.title || 'Daily Affirmation';
+    const targetHour = slot?.hour ?? 8;
+    const slotKey = slot?.key ?? `slot_${slotIndex}`;
+    const sendWindowMinutes = 10;
+
+    const targetUsers: any[] = [];
+    for (const user of users) {
+        // Respect user notification preference if explicitly turned off.
+        if (user?.settings?.dailyReminders === false) continue;
+
+        const timeZone = getUserTimezone(user);
+        const zoned = getZonedParts(now, timeZone);
+        const withinWindow = zoned.hour === targetHour && zoned.minute >= 0 && zoned.minute < sendWindowMinutes;
+        if (!withinWindow) continue;
+
+        const deliveryId = `${user.id}_${zoned.dateKey}_${slotKey}`;
+        const deliveryRef = db.collection('affirmation_deliveries').doc(deliveryId);
+        try {
+            await deliveryRef.create({
+                uid: user.id,
+                slot: slotKey,
+                slotIndex,
+                localDate: zoned.dateKey,
+                timezone: timeZone,
+                affirmationId: pickId,
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            targetUsers.push(user);
+        } catch (error: any) {
+            // already exists => already sent for this user/day/slot
+            if (error?.code === 6 || String(error?.message || '').toLowerCase().includes('already exists')) {
+                continue;
+            }
+            console.error('[Affirmations] Failed to create delivery lock', { uid: user.id, slotKey, error: error?.message || error });
+        }
+    }
+
+    if (targetUsers.length === 0) {
+        console.log(`[Affirmations] No eligible users for slot=${slotKey} at ${now.toISOString()}`);
+        return;
+    }
 
     const batchSize = 400;
-    for (let i = 0; i < users.length; i += batchSize) {
+    for (let i = 0; i < targetUsers.length; i += batchSize) {
         const batch = db.batch();
-        users.slice(i, i + batchSize).forEach((user: any) => {
+        targetUsers.slice(i, i + batchSize).forEach((user: any) => {
             const notifRef = db.collection('notifications').doc();
             batch.set(notifRef, {
                 uid: user.id,
-                title,
+                title: slotTitle,
                 subtitle: content,
                 type: 'DAILY_AFFIRMATION',
                 slot: slotIndex,
+                slotKey,
                 affirmationId: pickId,
                 avatar: affirmationAvatar,
                 read: false,
@@ -3964,14 +4054,14 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
     // Best-effort push notifications (if tokens exist)
     const expoMessages: any[] = [];
     const fcmTokens: string[] = [];
-    users.forEach((user: any) => {
+    targetUsers.forEach((user: any) => {
         if (Array.isArray(user.expoPushTokens)) {
             user.expoPushTokens.forEach((token: string) => {
                 expoMessages.push({
                     to: token,
-                    title,
+                    title: slotTitle,
                     body: content,
-                    data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId, avatar: affirmationAvatar }
+                    data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId, avatar: affirmationAvatar, slot: slotKey }
                 });
             });
         }
@@ -3986,8 +4076,8 @@ const sendDailyAffirmationsNotification = async (slotIndex: number, title: strin
         const chunk = fcmTokens.slice(i, i + fcmChunkSize);
         const messagePayload: admin.messaging.MulticastMessage = {
             tokens: chunk,
-            notification: { title, body: content },
-            data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId, avatar: affirmationAvatar }
+            notification: { title: slotTitle, body: content },
+            data: { type: 'DAILY_AFFIRMATION', affirmationId: pickId, avatar: affirmationAvatar, slot: slotKey }
         };
         await admin.messaging().sendEachForMulticast(messagePayload);
     }
@@ -4225,25 +4315,24 @@ export const getSeedStatus = regionalFunctions.https.onRequest(async (req, res) 
     }
 });
 
-// UK time (DST-safe). Intentionally not configurable: app-wide scheduling is UK-local.
-const AFFIRMATION_TIMEZONE = 'Europe/London';
+const AFFIRMATION_SCHEDULER_TIMEZONE = 'Etc/UTC';
 
 export const sendAffirmationsMorning = onSchedule(
-    { schedule: '0 8 * * *', timeZone: AFFIRMATION_TIMEZONE, region: 'europe-west1' },
+    { schedule: '*/10 * * * *', timeZone: AFFIRMATION_SCHEDULER_TIMEZONE, region: 'europe-west1' },
     async () => {
         await sendDailyAffirmationsNotification(0, 'Morning Affirmation');
     }
 );
 
 export const sendAffirmationsAfternoon = onSchedule(
-    { schedule: '0 13 * * *', timeZone: AFFIRMATION_TIMEZONE, region: 'europe-west1' },
+    { schedule: '*/10 * * * *', timeZone: AFFIRMATION_SCHEDULER_TIMEZONE, region: 'europe-west1' },
     async () => {
         await sendDailyAffirmationsNotification(1, 'Afternoon Affirmation');
     }
 );
 
 export const sendAffirmationsEvening = onSchedule(
-    { schedule: '0 19 * * *', timeZone: AFFIRMATION_TIMEZONE, region: 'europe-west1' },
+    { schedule: '*/10 * * * *', timeZone: AFFIRMATION_SCHEDULER_TIMEZONE, region: 'europe-west1' },
     async () => {
         await sendDailyAffirmationsNotification(2, 'Evening Affirmation');
     }

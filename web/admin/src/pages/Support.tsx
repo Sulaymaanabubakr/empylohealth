@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Search, CheckCircle, Clock, Mail, ExternalLink, RefreshCw, MessageSquare } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
+import { formatDateUK, formatDateTimeUK } from '../lib/date';
 import clsx from 'clsx';
 import { useNotification } from '../contexts/NotificationContext';
 import { Modal } from '../components/Modal';
@@ -77,7 +78,7 @@ export const Support = () => {
         // Prepare mailto link
         if (!selectedTicket) return;
         const subject = encodeURIComponent(`Re: ${selectedTicket.subject}`);
-        const body = encodeURIComponent(`\n\n> On ${new Date(selectedTicket.createdAt).toLocaleDateString()}, ${selectedTicket.email} wrote:\n> ${selectedTicket.message}`);
+        const body = encodeURIComponent(`\n\n> On ${formatDateUK(selectedTicket.createdAt)}, ${selectedTicket.email} wrote:\n> ${selectedTicket.message}`);
         window.open(`mailto:${selectedTicket.email}?subject=${subject}&body=${body}`, '_blank');
         // Optionally mark as pending/resolved or just log text
         setReplyNote('Replied via email');
@@ -213,7 +214,7 @@ export const Support = () => {
                                         {ticket.email}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {new Date(ticket.createdAt).toLocaleDateString()}
+                                        {formatDateUK(ticket.createdAt)}
                                     </td>
                                     <td className="px-6 py-4 text-right text-gray-400">
                                         <ExternalLink size={16} />
@@ -237,7 +238,7 @@ export const Support = () => {
                         <div className="flex justify-between items-start">
                             <div>
                                 <h3 className="text-xl font-bold text-gray-900">{selectedTicket.subject}</h3>
-                                <p className="text-sm text-gray-500 mt-1">From: {selectedTicket.email} • {new Date(selectedTicket.createdAt).toLocaleString()}</p>
+                                <p className="text-sm text-gray-500 mt-1">From: {selectedTicket.email} • {formatDateTimeUK(selectedTicket.createdAt)}</p>
                             </div>
                             <span className={clsx(
                                 "px-3 py-1 rounded-full text-xs font-bold uppercase",
