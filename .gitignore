@@ -46,3 +46,9 @@ backend/.env.backup.*
 
 # generated native folders
 /ios
+
+# local credential files
+frontend/credentials.json
+credentials/
+*service-account*.json
+backend/firebase-debug.log
