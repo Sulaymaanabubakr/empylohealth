@@ -390,7 +390,7 @@ export default function Navigation() {
 
     return (
         <View style={styles.root}>
-            {!appLock.initializing && !(lockEnabled && isLocked) && (
+            {!appLock.initializing && !(lockEnabled && (isLocked || appLock.privacyCoverVisible || unlocking)) && (
                 <NavigationContainer
                     ref={navigationRef}
                     onReady={() => {
@@ -541,7 +541,7 @@ export default function Navigation() {
                 </View>
             )}
 
-            {(lockEnabled && isLocked) && (
+            {(lockEnabled && (isLocked || unlocking)) && (
                 <AppLockScreen
                     user={user}
                     unlocking={unlocking}

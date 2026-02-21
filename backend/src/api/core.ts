@@ -81,14 +81,19 @@ const createRecommendationSvgDataUri = (input: { id?: string; title?: string; ca
       <stop offset="0%" stop-color="${palette.bg[0]}"/>
       <stop offset="100%" stop-color="${palette.bg[1]}"/>
     </linearGradient>
+    <clipPath id="round">
+      <rect width="720" height="420" rx="36" ry="36"/>
+    </clipPath>
   </defs>
-  <rect width="720" height="420" fill="url(#g)"/>
-  <circle cx="620" cy="90" r="84" fill="${palette.shape}" opacity="0.55"/>
-  <circle cx="110" cy="350" r="120" fill="${palette.shape}" opacity="0.35"/>
-  <rect x="42" y="42" width="124" height="124" rx="30" fill="${palette.accent}" opacity="0.93"/>
-  <text x="104" y="124" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700" fill="#FFFFFF">${initial}</text>
-  <text x="42" y="236" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#0F172A">${titleLabel}</text>
-  <text x="42" y="282" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="${palette.accent}">${categoryLabel}</text>
+  <g clip-path="url(#round)">
+    <rect width="720" height="420" fill="url(#g)"/>
+    <circle cx="620" cy="90" r="84" fill="${palette.shape}" opacity="0.55"/>
+    <circle cx="110" cy="350" r="120" fill="${palette.shape}" opacity="0.35"/>
+    <rect x="42" y="42" width="124" height="124" rx="30" fill="${palette.accent}" opacity="0.93"/>
+    <text x="104" y="124" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700" fill="#FFFFFF">${initial}</text>
+    <text x="42" y="236" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#0F172A">${titleLabel}</text>
+    <text x="42" y="282" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="${palette.accent}">${categoryLabel}</text>
+  </g>
 </svg>`.trim();
 
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -202,7 +207,14 @@ const createExploreActivitySvgDataUri = (input: { id?: string; title?: string; t
 
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">
-  ${sceneMarkup}
+  <defs>
+    <clipPath id="round">
+      <rect width="720" height="420" rx="36" ry="36"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    ${sceneMarkup}
+  </g>
 </svg>`.trim();
 
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;

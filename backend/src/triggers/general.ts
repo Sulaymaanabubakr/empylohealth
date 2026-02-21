@@ -79,16 +79,6 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
             const isGroup = chatData.type === 'group' || participants.length > 2;
             const senderName = String(senderData?.name || senderData?.displayName || 'Someone');
             const senderImage = String(senderData?.photoURL || '');
-            const senderExpoTokens = new Set(
-                (Array.isArray(senderData?.expoPushTokens) ? senderData.expoPushTokens : [])
-                    .map((token: any) => String(token || '').trim())
-                    .filter(Boolean)
-            );
-            const senderFcmTokens = new Set(
-                (Array.isArray(senderData?.fcmTokens) ? senderData.fcmTokens : [])
-                    .map((token: any) => String(token || '').trim())
-                    .filter(Boolean)
-            );
 
             let circleImage = '';
             let circleName = String(chatData?.name || 'Circle');
@@ -127,14 +117,12 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                         showNotifications: showNotifications && !chatMuted,
                         showPreview,
                         playSound,
-                        // Defensive filter: exclude sender-owned tokens in case tokens
-                        // were left attached to multiple user accounts on the same device.
                         expoTokens: (Array.isArray(userData.expoPushTokens) ? userData.expoPushTokens : [])
                             .map((token: any) => String(token || '').trim())
-                            .filter((token: string) => token && !senderExpoTokens.has(token)),
+                            .filter((token: string) => token),
                         fcmTokens: (Array.isArray(userData.fcmTokens) ? userData.fcmTokens : [])
                             .map((token: any) => String(token || '').trim())
-                            .filter((token: string) => token && !senderFcmTokens.has(token))
+                            .filter((token: string) => token)
                     };
                 })
             )).filter((row) => row.showNotifications);

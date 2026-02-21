@@ -222,14 +222,16 @@ const ExploreScreen = ({ navigation }) => {
                                             </View>
                                             {svgXml ? (
                                                 <View style={styles.activityImageWrap}>
-                                                    <SvgXml xml={svgXml} width="100%" height="100%" />
+                                                    <SvgXml xml={svgXml} width="100%" height="100%" style={styles.activitySvg} />
                                                 </View>
                                             ) : item.image ? (
-                                                <Image
-                                                    source={{ uri: item.image }}
-                                                    style={styles.activityImage}
-                                                    resizeMode="contain"
-                                                />
+                                                <View style={styles.activityImageWrap}>
+                                                    <Image
+                                                        source={{ uri: item.image }}
+                                                        style={styles.activityImage}
+                                                        resizeMode="contain"
+                                                    />
+                                                </View>
                                             ) : (
                                                 <View style={styles.activityImageFallback}>
                                                     <MaterialCommunityIcons name="lightbulb-on-outline" size={40} color="#607D8B" />
@@ -516,7 +518,10 @@ const styles = StyleSheet.create({
     activityImage: {
         width: '100%',
         height: 100,
-        marginBottom: 10,
+    },
+    activitySvg: {
+        borderRadius: 16,
+        overflow: 'hidden',
     },
     activityImageWrap: {
         width: '100%',

@@ -36,7 +36,11 @@ export const useAppLockController = ({ user, userData, routeTarget }) => {
   const appStateRef = useRef(AppState.currentState);
   const unlockInFlightRef = useRef(false);
 
-  const accountLockEnabled = routeTarget !== 'UNAUTH' && Boolean(userData?.settings?.biometrics);
+  // Pessimistic lock policy:
+  // if device lock is enabled and account setting is not explicitly false yet,
+  // keep app locked to avoid exposing protected screens during profile-load races.
+  const remoteBiometricSetting = userData?.settings?.biometrics;
+  const accountLockEnabled = routeTarget !== 'UNAUTH' && remoteBiometricSetting !== false;
   const thresholdSeconds = parseThresholdSeconds(userData?.settings?.appLockThresholdSeconds);
   const lockEnabled = accountLockEnabled && deviceBiometricEnabled;
 
@@ -132,9 +136,9 @@ export const useAppLockController = ({ user, userData, routeTarget }) => {
       setDeviceBiometricEnabled(enabled);
       setLastBackgroundAt(backgroundAt);
 
-      const shouldLockOnColdStart = Boolean(accountLockEnabled && enabled);
+      const shouldLockOnColdStart = Boolean(routeTarget !== 'UNAUTH' && enabled && remoteBiometricSetting !== false);
       debugLog('coldStartDecision', {
-        lockEnabled: Boolean(accountLockEnabled && enabled),
+        lockEnabled: Boolean(routeTarget !== 'UNAUTH' && enabled && remoteBiometricSetting !== false),
         shouldLockOnColdStart
       });
 
@@ -153,7 +157,7 @@ export const useAppLockController = ({ user, userData, routeTarget }) => {
     return () => {
       mounted = false;
     };
-  }, [user?.uid, routeTarget, accountLockEnabled]);
+  }, [user?.uid, routeTarget]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
@@ -180,6 +184,16 @@ export const useAppLockController = ({ user, userData, routeTarget }) => {
         return;
       }
 
+      // Immediately mask UI while we decide lock state to avoid protected-screen flashes.
+      setPrivacyCoverVisible(true);
+
+      // Biometric prompt itself toggles app state; while unlock is in flight
+      // do not run foreground lock/unlock decisions.
+      if (unlockInFlightRef.current || unlockInProgress) {
+        debugLog('foregroundDecisionSkipped', { reason: 'unlock_in_progress' });
+        return;
+      }
+
       const now = Date.now();
       const timeAwayMs = Math.max(0, now - Number(lastBackgroundAt || 0));
       const shouldLock = timeAwayMs > (thresholdSeconds * 1000);
@@ -189,13 +203,14 @@ export const useAppLockController = ({ user, userData, routeTarget }) => {
         setIsLocked(true);
         setUnlockError('');
         setPromptEpoch((prev) => prev + 1);
+        setPrivacyCoverVisible(true);
         return;
       }
 
       setPrivacyCoverVisible(false);
     });
     return () => sub.remove();
-  }, [lastBackgroundAt, lockEnabled, markBackgroundTimestamp, thresholdSeconds, user?.uid]);
+  }, [lastBackgroundAt, lockEnabled, markBackgroundTimestamp, thresholdSeconds, unlockInProgress, user?.uid]);
 
   useEffect(() => {
     if (!lockEnabled) {

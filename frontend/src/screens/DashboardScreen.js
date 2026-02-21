@@ -746,7 +746,7 @@ const DashboardScreen = ({ navigation }) => {
                                     >
                                         <View style={[styles.recommendationImageContainer, { backgroundColor: item.color || '#E0F7FA' }]}>
                                             {svgXml ? (
-                                                <SvgXml xml={svgXml} width="100%" height="100%" />
+                                                <SvgXml xml={svgXml} width="100%" height="100%" style={styles.recommendationSvg} />
                                             ) : item.image ? (
                                                 <Image source={{ uri: item.image }} style={styles.recommendationImage} resizeMode="contain" />
                                             ) : (
@@ -1316,6 +1316,10 @@ const styles = StyleSheet.create({
     recommendationImage: {
         width: '100%',
         height: '100%',
+    },
+    recommendationSvg: {
+        borderRadius: 20,
+        overflow: 'hidden',
     },
     recommendationContent: {
         paddingHorizontal: 4,

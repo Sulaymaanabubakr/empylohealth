@@ -44,23 +44,39 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
     }, [circle]);
 
     const calculateStreak = (allMessages) => {
-        const activeDays = new Set();
-        allMessages.forEach(msg => {
+        // Only count real member messages for streak; ignore system-only noise.
+        const realMessages = (allMessages || []).filter((msg) => {
+            const type = String(msg?.type || '').toLowerCase();
+            return type !== 'system' && type !== 'private_system';
+        });
+        if (!realMessages.length) return 0;
+
+        const dayMsSet = new Set();
+        realMessages.forEach((msg) => {
             let d = null;
             if (msg.createdAt?.toDate) d = msg.createdAt.toDate();
             else if (msg.createdAt?.toMillis) d = new Date(msg.createdAt.toMillis());
-            if (d) activeDays.add(d.toDateString());
+            else if (msg.createdAt) d = new Date(msg.createdAt);
+            if (!d || Number.isNaN(d.getTime())) return;
+            const dayStartMs = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+            dayMsSet.add(dayStartMs);
         });
 
-        let streak = 0;
-        let checkDate = new Date();
-        if (!activeDays.has(checkDate.toDateString())) {
-            checkDate.setDate(checkDate.getDate() - 1);
-        }
+        const sortedDaysDesc = [...dayMsSet].sort((a, b) => b - a);
+        if (!sortedDaysDesc.length) return 0;
 
-        while (activeDays.has(checkDate.toDateString())) {
-            streak++;
-            checkDate.setDate(checkDate.getDate() - 1);
+        // Streak should be based on consecutive active days ending at latest active day,
+        // not forced to include today.
+        let streak = 1;
+        let cursor = sortedDaysDesc[0];
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        for (let i = 1; i < sortedDaysDesc.length; i += 1) {
+            if ((cursor - sortedDaysDesc[i]) === oneDayMs) {
+                streak += 1;
+                cursor = sortedDaysDesc[i];
+            } else {
+                break;
+            }
         }
         return streak;
     };

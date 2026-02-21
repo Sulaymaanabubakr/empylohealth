@@ -368,6 +368,17 @@ export const notificationService = {
 
         Notifications.setNotificationHandler({
             handleNotification: async (notification) => {
+                const data = extractNotificationData(notification);
+                const currentUid = auth.currentUser?.uid || null;
+                // Never show push for messages authored by the currently signed-in user.
+                if (data?.type === 'CHAT_MESSAGE' && currentUid && String(data?.senderId || '') === currentUid) {
+                    return {
+                        shouldShowBanner: false,
+                        shouldShowList: false,
+                        shouldPlaySound: false,
+                        shouldSetBadge: false
+                    };
+                }
                 const shownAsNativeCall = await maybeShowNativeIncomingCall(notification);
                 return {
                     shouldShowBanner: !shownAsNativeCall,
@@ -379,6 +390,11 @@ export const notificationService = {
         });
 
         receiveSubscription = Notifications.addNotificationReceivedListener((notification) => {
+            const data = extractNotificationData(notification);
+            const currentUid = auth.currentUser?.uid || null;
+            if (data?.type === 'CHAT_MESSAGE' && currentUid && String(data?.senderId || '') === currentUid) {
+                return;
+            }
             maybeShowNativeIncomingCall(notification);
         });
 

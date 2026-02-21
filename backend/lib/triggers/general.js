@@ -101,12 +101,6 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
         const isGroup = chatData.type === 'group' || participants.length > 2;
         const senderName = String(senderData?.name || senderData?.displayName || 'Someone');
         const senderImage = String(senderData?.photoURL || '');
-        const senderExpoTokens = new Set((Array.isArray(senderData?.expoPushTokens) ? senderData.expoPushTokens : [])
-            .map((token) => String(token || '').trim())
-            .filter(Boolean));
-        const senderFcmTokens = new Set((Array.isArray(senderData?.fcmTokens) ? senderData.fcmTokens : [])
-            .map((token) => String(token || '').trim())
-            .filter(Boolean));
         let circleImage = '';
         let circleName = String(chatData?.name || 'Circle');
         if (isGroup && chatData?.circleId) {
@@ -140,14 +134,12 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                 showNotifications: showNotifications && !chatMuted,
                 showPreview,
                 playSound,
-                // Defensive filter: exclude sender-owned tokens in case tokens
-                // were left attached to multiple user accounts on the same device.
                 expoTokens: (Array.isArray(userData.expoPushTokens) ? userData.expoPushTokens : [])
                     .map((token) => String(token || '').trim())
-                    .filter((token) => token && !senderExpoTokens.has(token)),
+                    .filter((token) => token),
                 fcmTokens: (Array.isArray(userData.fcmTokens) ? userData.fcmTokens : [])
                     .map((token) => String(token || '').trim())
-                    .filter((token) => token && !senderFcmTokens.has(token))
+                    .filter((token) => token)
             };
         }))).filter((row) => row.showNotifications);
         if (recipientPrefs.length === 0)
