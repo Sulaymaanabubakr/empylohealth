@@ -27,8 +27,17 @@ const getDocsWithAuthRetry = async (q, label) => {
 };
 
 export const circleService = {
-    createCircle: async (name, description = '', category = 'General', type = 'public', image = null, visibility = 'visible') => {
-        return circleRepository.createCircle({ name, description, category, type, image, visibility });
+    createCircle: async (
+        name,
+        description = '',
+        category = 'General',
+        type = 'public',
+        image = null,
+        visibility = 'visible',
+        location = '',
+        tags = []
+    ) => {
+        return circleRepository.createCircle({ name, description, category, type, image, visibility, location, tags });
     },
 
     updateCircle: async (circleId, data) => {
@@ -151,23 +160,42 @@ export const circleService = {
         return callableClient.invokeWithAuth('deleteScheduledHuddle', { circleId, eventId });
     },
 
-    subscribeToScheduledHuddles: (circleId, callback) => {
+    subscribeToScheduledHuddles: (circleId, callback, onError) => {
         const q = query(
             collection(db, 'circles', circleId, 'scheduledHuddles'),
             where('status', '==', 'scheduled'),
             orderBy('scheduledAt', 'asc')
         );
-        return onSnapshot(q, (snapshot) => {
-            const events = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-            callback(events);
-        });
+        return onSnapshot(
+            q,
+            (snapshot) => {
+                const now = Date.now();
+                const events = snapshot.docs
+                    .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+                    .filter((event) => {
+                        const ms = event?.scheduledAt?.toMillis?.()
+                            || (event?.scheduledAt?.toDate ? event.scheduledAt.toDate().getTime() : new Date(event?.scheduledAt || 0).getTime());
+                        return Number.isFinite(ms) && ms > now;
+                    });
+                callback(events);
+            },
+            (error) => {
+                if (typeof onError === 'function') onError(error);
+            }
+        );
     },
 
-    subscribeToCircleMember: (circleId, uid, callback) => {
+    subscribeToCircleMember: (circleId, uid, callback, onError) => {
         const docRef = doc(db, 'circles', circleId, 'members', uid);
-        return onSnapshot(docRef, (docSnap) => {
-            callback(docSnap.exists() ? docSnap.data() : null);
-        });
+        return onSnapshot(
+            docRef,
+            (docSnap) => {
+                callback(docSnap.exists() ? docSnap.data() : null);
+            },
+            (error) => {
+                if (typeof onError === 'function') onError(error);
+            }
+        );
     },
 
     getCircleById: async (circleId) => {

@@ -15,12 +15,15 @@ import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { useModal } from '../context/ModalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const FILTERS = ['All', 'Connect', 'Culture', 'Enablement', 'Green Activities', 'Mental health', 'Physical health'];
 const normalizeText = (value = '') => String(value || '').trim().toLowerCase();
-const buildCircleFilterTerms = (group = {}) => {
+const getCircleFilterValues = (group = {}) => {
     const tags = Array.isArray(group.tags) ? group.tags : [];
-    const derived = [group.category, group.location, group.type, group.visibility, ...tags];
-    return new Set(derived.map(normalizeText).filter(Boolean));
+    return [group.category, group.location, group.type, group.visibility, ...tags]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+};
+const buildCircleFilterTerms = (group = {}) => {
+    return new Set(getCircleFilterValues(group).map(normalizeText).filter(Boolean));
 };
 
 const calculateCircleRating = (circle) => {
@@ -86,7 +89,7 @@ const SupportGroupsScreen = ({ route }) => {
                         } catch {
                             parsed = null;
                         }
-                        if (parsed?.activeFilter && FILTERS.includes(parsed.activeFilter)) {
+                        if (parsed?.activeFilter) {
                             setActiveFilter(parsed.activeFilter);
                         }
                         if (typeof parsed?.searchQuery === 'string') {
@@ -144,6 +147,26 @@ const SupportGroupsScreen = ({ route }) => {
             return matchesSearch && matchesFilter && isPublic && !isFull;
         });
     }, [activeFilter, groups, searchQuery, showJoinedOnly, user?.uid]);
+
+    const filterOptions = useMemo(() => {
+        const termsByNormalized = new Map();
+        groups.forEach((group) => {
+            getCircleFilterValues(group).forEach((term) => {
+                const normalized = normalizeText(term);
+                if (!normalized || termsByNormalized.has(normalized)) return;
+                termsByNormalized.set(normalized, term);
+            });
+        });
+        const dynamic = Array.from(termsByNormalized.values()).sort((a, b) => a.localeCompare(b));
+        return ['All', ...dynamic];
+    }, [groups]);
+
+    useEffect(() => {
+        if (!activeFilter) return;
+        if (!filterOptions.includes(activeFilter)) {
+            setActiveFilter('All');
+        }
+    }, [activeFilter, filterOptions]);
 
     useEffect(() => {
         let cancelled = false;
@@ -347,7 +370,7 @@ const SupportGroupsScreen = ({ route }) => {
             {/* Filters */}
             <View style={styles.filterContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent}>
-                    {FILTERS.map((filter) => (
+                    {filterOptions.map((filter) => (
                         <TouchableOpacity
                             key={filter}
                             style={[
@@ -370,7 +393,7 @@ const SupportGroupsScreen = ({ route }) => {
                     <Text style={styles.resetFiltersText}>Reset filters</Text>
                 </TouchableOpacity>
             </View>
-            <Text style={styles.filterHintText}>Filter matches circle tags/category (case-insensitive).</Text>
+            <Text style={styles.filterHintText}>Filters are generated from real category, location, type, visibility and tag data.</Text>
 
             {showJoinedOnly && (
                 <View style={styles.deleteHintBanner}>

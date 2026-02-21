@@ -11,6 +11,7 @@ import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
 import { chatService } from '../services/api/chatService';
+import { callableClient } from '../services/api/callableClient';
 import { LinearGradient } from 'expo-linear-gradient';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
@@ -38,6 +39,18 @@ const isPotentiallyActiveHuddle = (huddle) => {
     if (huddle?.isActive === false) return false;
     const status = String(huddle?.status || '').toLowerCase();
     return ACTIVE_HUDDLE_STATUSES.has(status);
+};
+
+const isJoinableHuddleDoc = (huddleData) => {
+    if (!huddleData) return false;
+    const status = String(huddleData?.status || '').toLowerCase();
+    return huddleData?.isActive !== false && status !== 'ended';
+};
+
+const isPermissionDeniedError = (error) => {
+    const code = String(error?.code || '');
+    const message = String(error?.message || '').toLowerCase();
+    return code.includes('permission-denied') || message.includes('permission');
 };
 
 const CircleDetailScreen = ({ navigation, route }) => {
@@ -98,63 +111,89 @@ const CircleDetailScreen = ({ navigation, route }) => {
     }, [circleId]);
 
     useEffect(() => {
+        if (!isPotentiallyActiveHuddle(circle?.activeHuddle)) return undefined;
+        let cancelled = false;
+        const validate = async () => {
+            const snap = await getDoc(doc(db, 'huddles', circle.activeHuddle.huddleId)).catch(() => null);
+            const data = snap?.exists?.() ? (snap.data() || {}) : null;
+            if (!cancelled && !isJoinableHuddleDoc(data)) {
+                setCircle((prev) => (prev ? { ...prev, activeHuddle: null } : prev));
+            }
+        };
+        validate();
+        return () => {
+            cancelled = true;
+        };
+    }, [circle?.activeHuddle?.huddleId]);
+
+    useEffect(() => {
         if (!circleId || !user) return;
 
-        // 1. Subscribe to Real-time Role (Subcollection)
-        const unsubscribe = circleService.subscribeToCircleMember(circleId, user.uid, (member) => {
-            if (member) {
-                // Check for pending status
-                if (member.status === 'pending' || member.role === 'pending') {
-                    setRequestStatus('pending');
-                    setIsMember(false);
-                    setRole(null);
-                } else {
-                    setRole(member.role || 'member');
-                    setIsMember(true);
-                    setRequestStatus('none');
+        const memberIds = Array.isArray(circle?.members) ? circle.members : [];
+        const knownMember = memberIds.includes(user.uid);
+        setIsMember(knownMember);
+        if (!knownMember) {
+            setRole(null);
+        }
 
-                    // Sync local membership check logic
-                    if (!circle.members?.includes(user.uid)) {
-                        refreshCircle(); // Force refresh if array is out of sync
-                    }
-                }
-            } else {
-                setRole(null);
-                setIsMember(false);
-                // Don't auto-reset requestStatus here if it was set by local storage check? 
-                // Actually, if member doc doesn't exist, they definitely aren't pending (unless pending requests are stored elsewhere).
-                // But let's verify if pending requests are in 'members' collection or 'requests' collection.
-                // If they are in 'requests', this subscription won't find them.
-                // But usually for simplicity they are in members with status='pending'.
-                // If not, we rely on AsyncStorage as fallback.
-            }
-        });
-
-        // 2. Load Public Profiles
+        // 1. Load Public Profiles
         const loadMembers = async () => {
             // ... (keep existing loadMembers logic short for brevity, just hook placement)
-            if (!Array.isArray(circle.members) || circle.members.length === 0) {
+            if (!Array.isArray(circle?.members) || circle.members.length === 0) {
                 setMemberProfiles([]);
                 return;
             }
             try {
                 const docs = await Promise.all(
                     circle.members.map(async (uid) => {
-                        const [userDoc, memberDoc, presence] = await Promise.all([
-                            getDoc(doc(db, 'users', uid)),
-                            getDoc(doc(db, 'circles', circle.id, 'members', uid)),
-                            presenceRepository.getPresence(uid).catch(() => ({ state: 'offline' }))
+                        const [presence, memberDoc, profile] = await Promise.all([
+                            presenceRepository.getPresence(uid).catch(() => ({ state: 'offline' })),
+                            knownMember
+                                ? getDoc(doc(db, 'circles', circle.id, 'members', uid)).catch(() => null)
+                                : Promise.resolve(null),
+                            (async () => {
+                                try {
+                                    const userDoc = await getDoc(doc(db, 'users', uid));
+                                    const data = userDoc.exists() ? userDoc.data() : {};
+                                    return {
+                                        name: data?.name || data?.displayName || 'Member',
+                                        photoURL: data?.photoURL || '',
+                                        score: resolveMemberScore(data)
+                                    };
+                                } catch (error) {
+                                    if (!isPermissionDeniedError(error)) {
+                                        return {
+                                            name: 'Member',
+                                            photoURL: '',
+                                            score: null
+                                        };
+                                    }
+                                    try {
+                                        const publicProfile = await callableClient.invokeWithAuth('getPublicProfile', { uid });
+                                        return {
+                                            name: publicProfile?.name || 'Member',
+                                            photoURL: publicProfile?.photoURL || '',
+                                            score: resolveMemberScore(publicProfile)
+                                        };
+                                    } catch {
+                                        return {
+                                            name: 'Member',
+                                            photoURL: '',
+                                            score: null
+                                        };
+                                    }
+                                }
+                            })()
                         ]);
-                        const data = userDoc.exists() ? userDoc.data() : {};
-                        const memberData = memberDoc.exists() ? memberDoc.data() : {};
+                        const memberData = memberDoc?.exists?.() ? memberDoc.data() : {};
                         const memberRole = memberData?.role || (uid === circle.adminId ? 'admin' : 'member');
                         return {
                             id: uid,
-                            name: data?.name || data?.displayName || 'Member',
-                            image: data?.photoURL || '',
+                            name: profile.name,
+                            image: profile.photoURL,
                             role: memberRole,
                             status: isPresenceOnline(presence) ? 'online' : 'offline',
-                            score: resolveMemberScore(data)
+                            score: profile.score
                         };
                     })
                 );
@@ -165,10 +204,51 @@ const CircleDetailScreen = ({ navigation, route }) => {
         };
         loadMembers();
 
-        // 3. Subscribe to Scheduled Huddles
-        const unsubscribeEvents = circleService.subscribeToScheduledHuddles(circleId, (list) => {
-            setEvents(list);
-        });
+        // 2. Member-only subscriptions.
+        let unsubscribe = () => {};
+        let unsubscribeEvents = () => {};
+
+        if (knownMember) {
+            unsubscribe = circleService.subscribeToCircleMember(
+                circleId,
+                user.uid,
+                (member) => {
+                    if (member) {
+                        if (member.status === 'pending' || member.role === 'pending') {
+                            setRequestStatus('pending');
+                            setIsMember(false);
+                            setRole(null);
+                        } else {
+                            setRole(member.role || 'member');
+                            setIsMember(true);
+                            setRequestStatus('none');
+                            if (!circle.members?.includes(user.uid)) {
+                                refreshCircle();
+                            }
+                        }
+                    } else {
+                        setRole(null);
+                        setIsMember(false);
+                    }
+                },
+                (error) => {
+                    console.warn('Failed to subscribe to circle member', error?.code || error?.message || error);
+                    setRole(null);
+                    setIsMember(false);
+                }
+            );
+
+            unsubscribeEvents = circleService.subscribeToScheduledHuddles(
+                circleId,
+                (list) => setEvents(list),
+                (error) => {
+                    console.warn('Failed to subscribe to scheduled huddles', error?.code || error?.message || error);
+                    setEvents([]);
+                }
+            );
+        } else {
+            setEvents([]);
+        }
 
         return () => {
             unsubscribe();
@@ -437,6 +517,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const canStartHuddle = ['creator', 'admin', 'moderator'].includes(role);
     const canManageJoinRequests = ['creator', 'admin', 'moderator'].includes(role);
     const canSeeHuddleAction = hasActiveHuddle || canStartHuddle;
+    const upcomingEvents = events.filter((event) => toMillis(event?.scheduledAt) > nowMs);
 
     return (
         <View style={styles.container}>
@@ -550,12 +631,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                             if (isPotentiallyActiveHuddle(active)) {
                                                 const huddleSnap = await getDoc(doc(db, 'huddles', active.huddleId)).catch(() => null);
                                                 const huddleData = huddleSnap?.exists?.() ? (huddleSnap.data() || {}) : null;
-                                                const status = String(huddleData?.status || '').toLowerCase();
-                                                const canJoinCurrent = Boolean(
-                                                    huddleData &&
-                                                    huddleData?.isActive !== false &&
-                                                    status !== 'ended'
-                                                );
+                                                const canJoinCurrent = isJoinableHuddleDoc(huddleData);
 
                                                 if (canJoinCurrent) {
                                                     navigation.navigate('Huddle', {
@@ -568,9 +644,19 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                                 }
 
                                                 setCircle((prev) => (prev ? { ...prev, activeHuddle: null } : prev));
+                                                showModal({
+                                                    type: 'info',
+                                                    title: 'Huddle ended',
+                                                    message: 'That huddle is no longer active.'
+                                                });
                                             }
 
                                             if (!canStartHuddle) {
+                                                showModal({
+                                                    type: 'info',
+                                                    title: 'Host permissions required',
+                                                    message: 'Only circle creator/admin/moderator can start a new huddle.'
+                                                });
                                                 return;
                                             }
 
@@ -618,7 +704,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                     )}
 
                     {/* Scheduled Events Section */}
-                    {events.length > 0 && (
+                    {upcomingEvents.length > 0 && (
                         <View style={styles.section}>
                             <View style={styles.sectionHeader}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -626,7 +712,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     <Text style={styles.sectionTitle}>Upcoming Huddles</Text>
                                 </View>
                             </View>
-                            {events.map((event) => (
+                            {upcomingEvents.map((event) => (
                                 <View key={event.id} style={styles.eventCard}>
                                     <View style={styles.eventDateBox}>
                                         <Text style={styles.eventMonth}>

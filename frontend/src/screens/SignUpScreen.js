@@ -162,14 +162,18 @@ const SignUpScreen = ({ navigation }) => {
                         <View style={styles.socialContainer}>
                             <TouchableOpacity style={styles.socialIcon} onPress={async () => {
                                 const res = await loginWithGoogle();
-                                if (res.success) navigation.replace('ProfileSetup');
+                                if (!res?.success && !res?.cancelled) {
+                                    showToast(res?.error || 'Google sign-in failed', 'error');
+                                }
                             }}>
                                 <AntDesign name="google" size={24} color="black" />
                             </TouchableOpacity>
                             {Platform.OS === 'ios' && (
                                 <TouchableOpacity style={styles.socialIcon} onPress={async () => {
                                     const res = await loginWithApple();
-                                    if (res.success) navigation.replace('ProfileSetup');
+                                    if (!res?.success && !res?.cancelled) {
+                                        showToast(res?.error || 'Apple sign-in failed', 'error');
+                                    }
                                 }}>
                                     <FontAwesome name="apple" size={24} color="black" />
                                 </TouchableOpacity>

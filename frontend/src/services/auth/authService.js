@@ -219,16 +219,25 @@ export const authService = {
             const response = await GoogleSignin.signIn();
             const idToken = (response).data?.idToken || (response).idToken;
 
-            if (!idToken) throw new Error('No ID token found');
+            if (!idToken) {
+                return { success: false, cancelled: true, message: 'Google Sign-In did not return an ID token.' };
+            }
 
             const googleCredential = GoogleAuthProvider.credential(idToken);
             const userCredential = await signInWithCredential(auth, googleCredential);
             return { success: true, user: userCredential.user };
         } catch (error) {
-            console.error("Google Sign-In Error", error);
-            // Handle cancel
-            if (error.code === '12501') return { success: false, cancelled: true };
-            throw error;
+            const code = String(error?.code || '');
+            const message = String(error?.message || '');
+            const isCancelled =
+                code === '12501' ||
+                code === 'SIGN_IN_CANCELLED' ||
+                message.toLowerCase().includes('cancel');
+            if (isCancelled) {
+                return { success: false, cancelled: true };
+            }
+            console.warn('[AuthService] Google Sign-In failed:', message || code || error);
+            return { success: false, error: message || 'Google Sign-In failed.' };
         }
     },
 

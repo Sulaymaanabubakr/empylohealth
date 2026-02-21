@@ -42,11 +42,6 @@ if (admin.apps.length === 0) {
 }
 const db = admin.firestore();
 const regionalFunctions = functions.region('europe-west1');
-// Super Admins allowed to create employees
-const SUPER_ADMINS = [
-    'sulaymaanabubakr@gmail.com',
-    'gcmusariri@gmail.com'
-];
 const ALLOWED_EMPLOYEE_ROLES = ['admin', 'editor', 'viewer', 'moderator', 'support', 'finance'];
 /**
  * Create Employee Account
@@ -57,9 +52,8 @@ exports.createEmployee = regionalFunctions.https.onCall(async (data, context) =>
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
-    // 2. Super Admin Check: Only specific emails or a super-admin claim can do this
-    const requestorEmail = context.auth.token.email || '';
-    const isSuperAdmin = SUPER_ADMINS.includes(requestorEmail) || context.auth.token.superAdmin === true;
+    // 2. Super Admin Check: claims-based only (no hardcoded email bypass).
+    const isSuperAdmin = context.auth.token.superAdmin === true;
     if (!isSuperAdmin) {
         throw new functions.https.HttpsError('permission-denied', 'Only Super Admins can add employees.');
     }

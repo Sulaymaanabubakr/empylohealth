@@ -447,7 +447,7 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
-    const { name, description, category, type = 'public', image = null, visibility = 'visible' } = data;
+    const { name, description, category, type = 'public', image = null, visibility = 'visible', location = '', tags = [] } = data;
     const uid = context.auth.uid;
     // 2. Validation
     if (!name) {
@@ -468,11 +468,20 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
         const batch = db.batch();
         // 3. Create Circle Doc
         const circleRef = db.collection('circles').doc();
+        const normalizedLocation = String(location || '').trim();
+        const normalizedTags = Array.isArray(tags)
+            ? tags
+                .map((tag) => String(tag || '').trim())
+                .filter(Boolean)
+                .slice(0, 12)
+            : [];
         const circleData = {
             id: circleRef.id,
             name,
             description: description || '',
             category: category || 'General',
+            location: normalizedLocation,
+            tags: normalizedTags,
             image: image || null,
             status: 'active',
             type: type || 'public', // 'public' | 'private'
@@ -537,7 +546,7 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
 exports.updateCircle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
-    const { circleId, name, description, type, settings, image, category, visibility } = data;
+    const { circleId, name, description, type, settings, image, category, visibility, location, tags } = data;
     const uid = context.auth.uid;
     if (!circleId)
         throw new functions.https.HttpsError('invalid-argument', 'Circle ID required.');
@@ -566,6 +575,13 @@ exports.updateCircle = regionalFunctions.https.onCall(async (data, context) => {
             updates.category = category;
         if (visibility !== undefined)
             updates.visibility = visibility;
+        if (location !== undefined)
+            updates.location = String(location || '').trim();
+        if (tags !== undefined) {
+            updates.tags = Array.isArray(tags)
+                ? tags.map((tag) => String(tag || '').trim()).filter(Boolean).slice(0, 12)
+                : [];
+        }
         if (type) {
             updates.type = type; // 'public' | 'private'
             updates['joinSettings.requiresApproval'] = (type === 'private');
@@ -1747,6 +1763,63 @@ exports.getUserStats = regionalFunctions.https.onCall(async (data, context) => {
         return { score: 0, label: 'Error' };
     }
 });
+const LIKERT_SCORE_MAP = {
+    'not at all': 1,
+    rarely: 2,
+    sometimes: 3,
+    'most times': 4,
+    always: 5
+};
+const getWeakThemesForUser = async (uid, threshold = 3) => {
+    const userDoc = await db.collection('users').doc(uid).get();
+    const statsThemes = userDoc.data()?.stats?.themes || {};
+    const weakFromStats = Object.entries(statsThemes)
+        .filter(([_, score]) => Number(score) > 0 && Number(score) <= threshold)
+        .map(([theme]) => theme);
+    if (weakFromStats.length > 0)
+        return weakFromStats.slice(0, 10);
+    const latestAssessments = await db.collection('assessments')
+        .where('uid', '==', uid)
+        .orderBy('createdAt', 'desc')
+        .limit(20)
+        .get();
+    const questionnaireDoc = latestAssessments.docs.find((docSnap) => {
+        return String(docSnap.data()?.type || '').toLowerCase() === 'questionnaire';
+    });
+    if (!questionnaireDoc)
+        return [];
+    const answers = questionnaireDoc.data()?.answers || {};
+    const questionsSnap = await db.collection('assessment_questions').where('isActive', '==', true).get();
+    const questions = questionsSnap.docs.map((docSnap) => docSnap.data() || {});
+    const aggregate = {};
+    Object.entries(answers).forEach(([questionText, answerValue]) => {
+        const matched = questions.find((q) => String(q?.text || '').trim() === String(questionText || '').trim());
+        if (!matched)
+            return;
+        const tags = Array.isArray(matched?.tags) ? matched.tags : [];
+        if (!tags.length)
+            return;
+        let numeric = 3;
+        if (typeof answerValue === 'number' && Number.isFinite(answerValue)) {
+            numeric = answerValue;
+        }
+        else {
+            numeric = LIKERT_SCORE_MAP[String(answerValue || '').trim().toLowerCase()] || 3;
+        }
+        tags.forEach((tag) => {
+            if (!aggregate[tag])
+                aggregate[tag] = { total: 0, count: 0 };
+            aggregate[tag].total += numeric;
+            aggregate[tag].count += 1;
+        });
+    });
+    const weak = Object.entries(aggregate)
+        .map(([theme, agg]) => ({ theme, avg: agg.count > 0 ? agg.total / agg.count : 5 }))
+        .filter((row) => row.avg <= threshold)
+        .sort((a, b) => a.avg - b.avg)
+        .map((row) => row.theme);
+    return weak.slice(0, 10);
+};
 /**
  * Get Key Challenges
  * Callable Function: 'getKeyChallenges'
@@ -1757,12 +1830,7 @@ exports.getKeyChallenges = regionalFunctions.https.onCall(async (data, context) 
     const uid = context.auth.uid;
     try {
         // 1. Get User's weakest themes
-        const userDoc = await db.collection('users').doc(uid).get();
-        const themes = userDoc.data()?.stats?.themes || {};
-        // Find themes with score <= 2 (1 or 2 means "Not at all" or "Rarely" positive)
-        const weakThemes = Object.entries(themes)
-            .filter(([_, score]) => score <= 2)
-            .map(([theme]) => theme);
+        const weakThemes = await getWeakThemesForUser(uid, 3);
         // 2. Fetch Challenges matching these themes
         // Treat 'active' as published/visible; keep compatibility with any legacy 'published'
         let query = db.collection('challenges').where('status', 'in', ['active', 'published']);
@@ -1830,37 +1898,73 @@ exports.getRecommendedContent = regionalFunctions.https.onCall(async (data, cont
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const uid = context.auth.uid;
     try {
-        // 1. Get User's weakest themes
-        const userDoc = await db.collection('users').doc(uid).get();
-        const themes = userDoc.data()?.stats?.themes || {};
-        const weakThemes = Object.entries(themes)
-            .filter(([_, score]) => score <= 3) // <= 3 includes "Sometimes"
-            .map(([theme]) => theme);
+        // 1. Get user's weakest themes
+        const weakThemes = await getWeakThemesForUser(uid, 3);
+        const weakThemeSet = new Set(weakThemes.map((t) => String(t || '').trim().toLowerCase()));
+        const todayKey = new Date().toISOString().slice(0, 10);
+        // 2. Pull a larger pool, then rank + diversify per user/day.
+        // This prevents everyone seeing the same 10 items in the same order.
+        const resourcesSnap = await db.collection('resources')
+            .where('status', 'in', ['active', 'published'])
+            .limit(120)
+            .get();
+        const pool = resourcesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        const jitterFor = (resourceId) => {
+            const seed = `${uid}:${todayKey}:${resourceId}`;
+            return (hashText(seed) % 1000) / 1000; // 0..0.999
+        };
+        const scored = pool.map((item) => {
+            const tags = (Array.isArray(item?.tags) ? item.tags : []).map((t) => String(t || '').trim().toLowerCase());
+            const category = String(item?.category || '').trim().toLowerCase();
+            const matchedThemes = tags.filter((tag) => weakThemeSet.has(tag));
+            const categoryMatch = weakThemeSet.has(category) ? 1 : 0;
+            const freshnessMs = typeof item?.publishedAt?.toMillis === 'function' ? item.publishedAt.toMillis() : 0;
+            const recencyBoost = freshnessMs > 0 ? Math.min(1.5, (Date.now() - freshnessMs < 21 * 24 * 60 * 60 * 1000 ? 1.5 : 0.5)) : 0.3;
+            const baseScore = (matchedThemes.length * 5) + (categoryMatch * 3) + recencyBoost;
+            const jitter = jitterFor(String(item?.id || ''));
+            return {
+                ...item,
+                _matchedThemes: matchedThemes,
+                _score: baseScore + jitter
+            };
+        });
         let items = [];
+        const usedIds = new Set();
+        // 3. Diversity pass: guarantee representation across weak themes where possible.
         if (weakThemes.length > 0) {
-            const snapshot = await db.collection('resources')
-                .where('status', 'in', ['active', 'published'])
-                .where('tags', 'array-contains-any', weakThemes) // Ensure resources have 'tags' array
-                .limit(10)
-                .get();
-            items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        }
-        // Fill with generic if empty
-        if (items.length < 5) {
-            const snapshot = await db.collection('resources')
-                .where('status', 'in', ['active', 'published'])
-                .orderBy('publishedAt', 'desc')
-                .limit(10 - items.length)
-                .get();
-            const genericItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            // Deduplicate
-            const existingIds = new Set(items.map(i => i.id));
-            genericItems.forEach(i => {
-                if (!existingIds.has(i.id))
-                    items.push(i);
+            weakThemes.forEach((theme) => {
+                const themeKey = String(theme || '').trim().toLowerCase();
+                const best = scored
+                    .filter((item) => !usedIds.has(String(item.id)) && item._matchedThemes.includes(themeKey))
+                    .sort((a, b) => b._score - a._score)[0];
+                if (best && items.length < 10) {
+                    items.push(best);
+                    usedIds.add(String(best.id));
+                }
             });
         }
-        return { items: items.map(mapRecommendedItem) };
+        // 4. Fill remaining slots with top scored items (still user/day-rotated via jitter).
+        if (items.length < 10) {
+            const ranked = scored
+                .filter((item) => !usedIds.has(String(item.id)))
+                .sort((a, b) => b._score - a._score);
+            for (const item of ranked) {
+                items.push(item);
+                usedIds.add(String(item.id));
+                if (items.length >= 10)
+                    break;
+            }
+        }
+        const mapped = items.slice(0, 10).map((item) => {
+            const reason = item._matchedThemes?.[0]
+                ? `Based on your ${String(item._matchedThemes[0])} assessment`
+                : 'Recommended for your wellbeing goals';
+            const cleanItem = { ...item, reason };
+            delete cleanItem._matchedThemes;
+            delete cleanItem._score;
+            return mapRecommendedItem(cleanItem);
+        });
+        return { items: mapped };
     }
     catch (error) {
         console.error("Error fetching recommended content:", error);
@@ -2923,9 +3027,10 @@ exports.updateHuddleState = regionalFunctions.https.onCall(async (data, context)
     }
 });
 /**
- * Scheduled cleanup: auto-end huddles stuck in ringing/accepted too long.
+ * Scheduled cleanup: auto-end huddles stuck in ringing/accepted/ongoing too long.
  * - ringing: keep long enough for host-side timeout UX (2m prompt + 5m grace + countdown)
  * - accepted (but not ongoing): still guard against stale sessions
+ * - ongoing with no active users: cleanup ghost sessions from abrupt app exits/network loss
  */
 exports.cleanupStaleHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 minutes', region: 'europe-west1' }, async () => {
     const now = Date.now();
@@ -2933,21 +3038,36 @@ exports.cleanupStaleHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 m
     // Keep backend cleanup just above that so app-side flow can complete first.
     const RINGING_MAX_MS = 8 * 60 * 1000; // 8 minutes
     const ACCEPTED_MAX_MS = 3 * 60 * 1000; // 3 minutes
+    const ONGOING_EMPTY_ACTIVE_MAX_MS = 2 * 60 * 1000; // 2 minutes
+    const tsToMs = (value) => (typeof value?.toMillis === 'function' ? value.toMillis() : 0);
     try {
         const snap = await db.collection('huddles')
             .where('isActive', '==', true)
-            .where('status', 'in', ['ringing', 'accepted'])
+            .where('status', 'in', ['ringing', 'accepted', 'ongoing'])
             .limit(200)
             .get();
         let ended = 0;
         for (const docSnap of snap.docs) {
             const h = docSnap.data() || {};
             const status = (h.status || 'ringing');
-            const ringAtMs = h.ringStartedAt?.toMillis?.() || h.createdAt?.toMillis?.() || 0;
-            const acceptedAtMs = h.acceptedAt?.toMillis?.() || 0;
+            const ringAtMs = tsToMs(h.ringStartedAt) || tsToMs(h.createdAt);
+            const acceptedAtMs = tsToMs(h.acceptedAt);
+            const ongoingAtMs = tsToMs(h.ongoingAt);
+            const activeUserIds = Array.isArray(h.activeUserIds) ? h.activeUserIds : [];
+            const participantStates = (h.participantStates && typeof h.participantStates === 'object')
+                ? Object.values(h.participantStates)
+                : [];
+            const participantActivityMs = participantStates.reduce((max, row) => {
+                return Math.max(max, tsToMs(row?.updatedAt), tsToMs(row?.joinedAt), tsToMs(row?.leftAt));
+            }, 0);
+            const lastActivityMs = Math.max(participantActivityMs, ongoingAtMs, acceptedAtMs, ringAtMs, tsToMs(h.updatedAt), tsToMs(h.createdAt));
             const shouldTimeout = status === 'ringing' && ringAtMs > 0 && (now - ringAtMs) > RINGING_MAX_MS;
             const shouldFailConnect = status === 'accepted' && acceptedAtMs > 0 && (now - acceptedAtMs) > ACCEPTED_MAX_MS;
-            if (!shouldTimeout && !shouldFailConnect)
+            const shouldEndGhostOngoing = status === 'ongoing' &&
+                activeUserIds.length === 0 &&
+                lastActivityMs > 0 &&
+                (now - lastActivityMs) > ONGOING_EMPTY_ACTIVE_MAX_MS;
+            if (!shouldTimeout && !shouldFailConnect && !shouldEndGhostOngoing)
                 continue;
             const endedReason = shouldTimeout ? 'timeout' : 'failed_to_connect';
             await docSnap.ref.update({
@@ -3211,9 +3331,27 @@ exports.deleteScheduledHuddle = regionalFunctions.https.onCall(async (data, cont
 exports.processScheduledHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 minutes', region: 'europe-west1' }, async () => {
     const now = Date.now();
     const dueUpperBound = new Date(now + 30 * 1000);
+    const expiryUpperBound = new Date(now - 60 * 1000);
     const reminderUpperBound = new Date(now + 5 * 60 * 1000);
     const reminderLowerBound = new Date(now + 4 * 60 * 1000);
     try {
+        // Mark stale scheduled huddles as expired so they disappear from UI lists.
+        const expiredSnap = await db.collectionGroup('scheduledHuddles')
+            .where('status', '==', 'scheduled')
+            .where('scheduledAt', '<=', expiryUpperBound)
+            .limit(200)
+            .get();
+        if (!expiredSnap.empty) {
+            const batch = db.batch();
+            expiredSnap.docs.forEach((docSnap) => {
+                batch.update(docSnap.ref, {
+                    status: 'expired',
+                    expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            await batch.commit();
+        }
         const dueSnap = await db.collectionGroup('scheduledHuddles')
             .where('status', '==', 'scheduled')
             .where('scheduledAt', '<=', dueUpperBound)
@@ -3294,7 +3432,7 @@ exports.processScheduledHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every
             });
             reminded += targets.length;
         }
-        console.log('[processScheduledHuddles] started:', started, 'reminders:', reminded);
+        console.log('[processScheduledHuddles] expired:', expiredSnap.size, 'started:', started, 'reminders:', reminded);
         return;
     }
     catch (error) {
@@ -3757,7 +3895,30 @@ const allowSeedOrigin = (req, res) => {
         res.set('Access-Control-Allow-Origin', origin);
     }
     res.set('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, x-seed-token');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-seed-token');
+};
+const requireSeedAdminHttp = async (req, res) => {
+    const authorization = String(req.headers.authorization || '');
+    const bearer = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    const headerSeedToken = String(req.headers['x-seed-token'] || '').trim();
+    const querySeedToken = String(req.query.token || '').trim();
+    const expectedSeedToken = String(process.env.SEED_ADMIN_TOKEN || '').trim();
+    let hasAdminClaim = false;
+    if (bearer) {
+        try {
+            const decoded = await admin.auth().verifyIdToken(bearer);
+            hasAdminClaim = decoded?.admin === true || decoded?.superAdmin === true;
+        }
+        catch {
+            hasAdminClaim = false;
+        }
+    }
+    const suppliedSeedToken = headerSeedToken || querySeedToken;
+    const hasSeedToken = Boolean(expectedSeedToken) && suppliedSeedToken === expectedSeedToken;
+    if (hasAdminClaim || hasSeedToken)
+        return true;
+    res.status(403).json({ error: 'Admin authorization required.' });
+    return false;
 };
 const clearCollection = async (collectionName) => {
     const batchSize = 400;
@@ -3836,6 +3997,8 @@ exports.backfillAffirmationImages = regionalFunctions.https.onRequest(async (req
         res.status(204).send('');
         return;
     }
+    if (!(await requireSeedAdminHttp(req, res)))
+        return;
     const force = req.query.force === '1';
     try {
         if (force) {
@@ -3863,6 +4026,8 @@ exports.seedAll = regionalFunctions.https.onRequest(async (req, res) => {
         res.status(204).send('');
         return;
     }
+    if (!(await requireSeedAdminHttp(req, res)))
+        return;
     const force = req.query.force === '1';
     const results = {};
     const seedCollection = async (collectionName, items, mapItem) => {
@@ -3912,6 +4077,8 @@ exports.getSeedStatus = regionalFunctions.https.onRequest(async (req, res) => {
         res.status(204).send('');
         return;
     }
+    if (!(await requireSeedAdminHttp(req, res)))
+        return;
     const collections = ['resources', 'challenges', 'affirmations', 'daily_affirmations'];
     const counts = {};
     try {

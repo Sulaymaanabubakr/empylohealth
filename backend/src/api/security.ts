@@ -56,7 +56,13 @@ const nowTs = () => admin.firestore.Timestamp.now();
 const tsFromMillis = (ms: number) => admin.firestore.Timestamp.fromMillis(ms);
 const secondsBetween = (futureMs: number, nowMs: number) => Math.max(0, Math.ceil((futureMs - nowMs) / 1000));
 
-const getPepper = () => process.env.OTP_PEPPER || 'circles-default-pepper';
+const getPepper = () => {
+  const pepper = String(process.env.OTP_PEPPER || '').trim();
+  if (!pepper) {
+    throw new functions.https.HttpsError('failed-precondition', 'OTP security is not configured.');
+  }
+  return pepper;
+};
 const otpHash = (code: string, salt: string) => hashString(`${code}:${salt}:${getPepper()}`);
 
 const maskEmail = (email: string) => {

@@ -79,6 +79,16 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
             const isGroup = chatData.type === 'group' || participants.length > 2;
             const senderName = String(senderData?.name || senderData?.displayName || 'Someone');
             const senderImage = String(senderData?.photoURL || '');
+            const senderExpoTokens = new Set(
+                (Array.isArray(senderData?.expoPushTokens) ? senderData.expoPushTokens : [])
+                    .map((token: any) => String(token || '').trim())
+                    .filter(Boolean)
+            );
+            const senderFcmTokens = new Set(
+                (Array.isArray(senderData?.fcmTokens) ? senderData.fcmTokens : [])
+                    .map((token: any) => String(token || '').trim())
+                    .filter(Boolean)
+            );
 
             let circleImage = '';
             let circleName = String(chatData?.name || 'Circle');
@@ -117,8 +127,14 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                         showNotifications: showNotifications && !chatMuted,
                         showPreview,
                         playSound,
-                        expoTokens: Array.isArray(userData.expoPushTokens) ? userData.expoPushTokens : [],
-                        fcmTokens: Array.isArray(userData.fcmTokens) ? userData.fcmTokens : []
+                        // Defensive filter: exclude sender-owned tokens in case tokens
+                        // were left attached to multiple user accounts on the same device.
+                        expoTokens: (Array.isArray(userData.expoPushTokens) ? userData.expoPushTokens : [])
+                            .map((token: any) => String(token || '').trim())
+                            .filter((token: string) => token && !senderExpoTokens.has(token)),
+                        fcmTokens: (Array.isArray(userData.fcmTokens) ? userData.fcmTokens : [])
+                            .map((token: any) => String(token || '').trim())
+                            .filter((token: string) => token && !senderFcmTokens.has(token))
                     };
                 })
             )).filter((row) => row.showNotifications);
@@ -153,6 +169,9 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
             const fcmMessages: admin.messaging.Message[] = [];
             const expoMessages: any[] = [];
 
+            const seenFcmTokens = new Set<string>();
+            const seenExpoTokens = new Set<string>();
+
             recipientPrefs.forEach((recipient) => {
                 const body = recipient.showPreview
                     ? (isGroup ? `${senderName}: ${messageText || 'New message'}` : (messageText || 'New message'))
@@ -173,6 +192,8 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                 };
 
                 recipient.fcmTokens.forEach((token) => {
+                    if (seenFcmTokens.has(token)) return;
+                    seenFcmTokens.add(token);
                     fcmMessages.push({
                         token,
                         notification: {
@@ -204,6 +225,8 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                 });
 
                 recipient.expoTokens.forEach((token) => {
+                    if (seenExpoTokens.has(token)) return;
+                    seenExpoTokens.add(token);
                     expoMessages.push({
                         to: token,
                         title: isGroup ? circleName : senderName,

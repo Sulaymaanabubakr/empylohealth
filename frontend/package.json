@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@daily-co/config-plugin-rn-daily-js": "0.0.11",
@@ -22,6 +23,7 @@
     "@react-navigation/native-stack": "^7.9.0",
     "expo": "~54.0.33",
     "expo-apple-authentication": "~8.0.8",
+    "expo-asset": "~12.0.12",
     "expo-audio": "~1.1.1",
     "expo-av": "~16.0.8",
     "expo-clipboard": "~8.0.8",
@@ -68,7 +70,9 @@
         "exclude": [
           "react-native-background-timer",
           "@daily-co/react-native-daily-js",
-          "@daily-co/react-native-webrtc"
+          "@daily-co/react-native-webrtc",
+          "react-native-callkeep",
+          "react-native-voip-push-notification"
         ]
       }
     }
@@ -76,6 +80,7 @@
   "devDependencies": {
     "babel-preset-expo": "^54.0.9",
     "expo-doctor": "^1.17.14",
+    "patch-package": "^8.0.1",
     "react-native-svg-transformer": "^1.5.2",
     "react-refresh": "^0.14.2"
   }

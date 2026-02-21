@@ -1,5 +1,5 @@
 import { db, auth } from '../firebaseConfig';
-import { collection, query, where, orderBy, limit, getDocs, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, getDocs, getDoc, doc, onSnapshot } from 'firebase/firestore';
 import { assessmentRepository } from '../repositories/AssessmentRepository';
 import { contentRepository } from '../repositories/ContentRepository';
 import { callableClient } from './callableClient';
@@ -43,6 +43,12 @@ export const assessmentService = {
     },
 
     getKeyChallenges: async () => {
+        try {
+            const response = await callableClient.invokeWithAuth('getKeyChallenges', {});
+            if (Array.isArray(response) && response.length > 0) return response;
+        } catch (error) {
+            console.warn('getKeyChallenges callable failed, using fallback:', error?.message || error);
+        }
         return contentRepository.getKeyChallenges(5);
     },
 
@@ -58,18 +64,22 @@ export const assessmentService = {
             console.warn('getRecommendedContent callable failed, using fallback:', error?.message || error);
         }
 
-        // Fallback path avoids external image URLs if callable is unavailable.
-        const userSnap = await getDocs(query(collection(db, 'assessments'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1)));
-        const latest = userSnap.docs[0]?.data();
-        const challengeTags = Object.keys(latest?.answers || {}).filter((key) => latest.answers[key]);
+        // Fallback path uses user theme scores (not question text keys) for better personalization.
+        const userData = (await getDoc(doc(db, 'users', user.uid))).data() || {};
+        const themeEntries = Object.entries(userData?.stats?.themes || {});
+        const weakThemes = themeEntries
+            .filter(([_, score]) => Number(score) > 0 && Number(score) <= 3)
+            .sort((a, b) => Number(a[1]) - Number(b[1]))
+            .map(([theme]) => String(theme || '').trim().toLowerCase());
 
         const allContent = await contentRepository.getExploreContent(40);
-        if (!challengeTags.length) return allContent.slice(0, 10).map((item) => ({ ...item, image: null }));
+        if (!weakThemes.length) return allContent.slice(0, 10).map((item) => ({ ...item, image: null }));
 
         const matched = allContent
             .filter((item) => {
-                const tags = item.tags || item.themes || [];
-                return tags.some((tag) => challengeTags.includes(tag));
+                const tags = (item.tags || item.themes || []).map((tag) => String(tag || '').trim().toLowerCase());
+                const category = String(item?.category || '').trim().toLowerCase();
+                return tags.some((tag) => weakThemes.includes(tag)) || weakThemes.includes(category);
             })
             .slice(0, 10);
 

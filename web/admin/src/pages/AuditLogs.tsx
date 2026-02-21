@@ -12,7 +12,7 @@ interface AuditLogItem {
     actorRole: string;
     targetCollection?: string | null;
     targetId?: string | null;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
     createdAt?: string;
 }
 

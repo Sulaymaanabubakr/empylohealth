@@ -99,7 +99,8 @@
           "captureType": "base"
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ],
     "extra": {
       "eas": {

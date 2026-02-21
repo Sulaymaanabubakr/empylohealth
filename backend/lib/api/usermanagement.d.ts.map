@@ -1,1 +1,1 @@
-{"version":3,"file":"usermanagement.d.ts","sourceRoot":"","sources":["../../src/api/usermanagement.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,SAAS,MAAM,uBAAuB,CAAC;AAkBnD;;;GAGG;AACH,eAAO,MAAM,cAAc,mDAgEzB,CAAC"}
+{"version":3,"file":"usermanagement.d.ts","sourceRoot":"","sources":["../../src/api/usermanagement.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,SAAS,MAAM,uBAAuB,CAAC;AAYnD;;;GAGG;AACH,eAAO,MAAM,cAAc,mDA+DzB,CAAC"}

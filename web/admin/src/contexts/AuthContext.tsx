@@ -19,12 +19,6 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
 
-// Hardcoded super admins to bypass claim check if script fails
-const SUPER_ADMINS = [
-    'sulaymaanabubakr@gmail.com',
-    'gcmusariri@gmail.com'
-];
-
 const ROLE_PERMISSIONS: Record<string, string[]> = {
     admin: [
         'dashboard.view',
@@ -60,21 +54,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const unsubscribe = onAuthStateChanged(auth, async (currUser) => {
             setUser(currUser);
             if (currUser) {
-                const normalizedEmail = (currUser.email || '').toLowerCase();
-                if (SUPER_ADMINS.includes(normalizedEmail)) {
-                    setIsAdmin(true);
-                    setRole('super_admin');
-                    setPermissions(['*']);
-                } else {
-                    const token = await currUser.getIdTokenResult(true);
-                    const tokenRole = String(token.claims.role || 'viewer').toLowerCase();
-                    const tokenPermissions = Array.isArray(token.claims.permissions)
-                        ? token.claims.permissions.map((p) => String(p))
-                        : [];
-                    setRole(tokenRole);
-                    setPermissions(Array.from(new Set([...(ROLE_PERMISSIONS[tokenRole] || []), ...tokenPermissions])));
-                    setIsAdmin(!!token.claims.admin);
-                }
+                const token = await currUser.getIdTokenResult(true);
+                const tokenRole = String(token.claims.role || 'viewer').toLowerCase();
+                const tokenPermissions = Array.isArray(token.claims.permissions)
+                    ? token.claims.permissions.map((p) => String(p))
+                    : [];
+                const isSuperAdmin = token.claims.superAdmin === true;
+                setRole(isSuperAdmin ? 'super_admin' : tokenRole);
+                setPermissions(
+                    isSuperAdmin
+                        ? ['*']
+                        : Array.from(new Set([...(ROLE_PERMISSIONS[tokenRole] || []), ...tokenPermissions]))
+                );
+                setIsAdmin(isSuperAdmin || !!token.claims.admin);
             } else {
                 setIsAdmin(false);
                 setRole('viewer');

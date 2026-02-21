@@ -72,7 +72,7 @@ export const Login = () => {
                         transition={{ delay: 0.4 }}
                         className="text-4xl font-bold text-white mb-4"
                     >
-                        Empylo Circles
+                        Circles Health Admin
                     </motion.h1>
                     <motion.p
                         initial={{ opacity: 0, y: 20 }}
@@ -118,7 +118,7 @@ export const Login = () => {
                                 type="email"
                                 required
                                 className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-gray-900"
-                                placeholder="admin@empylo.com"
+                                placeholder="admin@circles.app"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                             />
@@ -161,7 +161,7 @@ export const Login = () => {
                     </form>
 
                     <div className="pt-6 border-t border-gray-100 text-center">
-                        <p className="text-xs text-gray-400">Protected by Empylo Secure Admin</p>
+                        <p className="text-xs text-gray-400">Protected by Circles Health secure admin</p>
                     </div>
                 </motion.div>
             </div>

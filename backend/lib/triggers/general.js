@@ -101,6 +101,12 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
         const isGroup = chatData.type === 'group' || participants.length > 2;
         const senderName = String(senderData?.name || senderData?.displayName || 'Someone');
         const senderImage = String(senderData?.photoURL || '');
+        const senderExpoTokens = new Set((Array.isArray(senderData?.expoPushTokens) ? senderData.expoPushTokens : [])
+            .map((token) => String(token || '').trim())
+            .filter(Boolean));
+        const senderFcmTokens = new Set((Array.isArray(senderData?.fcmTokens) ? senderData.fcmTokens : [])
+            .map((token) => String(token || '').trim())
+            .filter(Boolean));
         let circleImage = '';
         let circleName = String(chatData?.name || 'Circle');
         if (isGroup && chatData?.circleId) {
@@ -134,8 +140,14 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                 showNotifications: showNotifications && !chatMuted,
                 showPreview,
                 playSound,
-                expoTokens: Array.isArray(userData.expoPushTokens) ? userData.expoPushTokens : [],
-                fcmTokens: Array.isArray(userData.fcmTokens) ? userData.fcmTokens : []
+                // Defensive filter: exclude sender-owned tokens in case tokens
+                // were left attached to multiple user accounts on the same device.
+                expoTokens: (Array.isArray(userData.expoPushTokens) ? userData.expoPushTokens : [])
+                    .map((token) => String(token || '').trim())
+                    .filter((token) => token && !senderExpoTokens.has(token)),
+                fcmTokens: (Array.isArray(userData.fcmTokens) ? userData.fcmTokens : [])
+                    .map((token) => String(token || '').trim())
+                    .filter((token) => token && !senderFcmTokens.has(token))
             };
         }))).filter((row) => row.showNotifications);
         if (recipientPrefs.length === 0)
@@ -166,6 +178,8 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
         // 4. Send recipient-specific push payloads (filters + preview masking + sound settings)
         const fcmMessages = [];
         const expoMessages = [];
+        const seenFcmTokens = new Set();
+        const seenExpoTokens = new Set();
         recipientPrefs.forEach((recipient) => {
             const body = recipient.showPreview
                 ? (isGroup ? `${senderName}: ${messageText || 'New message'}` : (messageText || 'New message'))
@@ -184,6 +198,9 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                 categoryId: 'chat-message-actions'
             };
             recipient.fcmTokens.forEach((token) => {
+                if (seenFcmTokens.has(token))
+                    return;
+                seenFcmTokens.add(token);
                 fcmMessages.push({
                     token,
                     notification: {
@@ -214,6 +231,9 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                 });
             });
             recipient.expoTokens.forEach((token) => {
+                if (seenExpoTokens.has(token))
+                    return;
+                seenExpoTokens.add(token);
                 expoMessages.push({
                     to: token,
                     title: isGroup ? circleName : senderName,

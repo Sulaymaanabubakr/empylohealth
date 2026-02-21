@@ -1,0 +1,19 @@
+diff --git a/node_modules/react-native-capture-protection/android/build.gradle b/node_modules/react-native-capture-protection/android/build.gradle
+index 252c530..b475cf6 100644
+--- a/node_modules/react-native-capture-protection/android/build.gradle
++++ b/node_modules/react-native-capture-protection/android/build.gradle
+@@ -81,14 +81,9 @@ android {
+   
+   flavorDimensions "react-native-capture-protection"
+   productFlavors {
+-    callbackTiramisu {
+-		  dimension "react-native-capture-protection"
+-    }
+-
+     base {
+ 		  dimension "react-native-capture-protection"
+     }
+-
+   }
+ 
+   lintOptions {

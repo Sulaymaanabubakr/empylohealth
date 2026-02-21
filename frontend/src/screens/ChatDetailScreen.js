@@ -27,6 +27,12 @@ const isPotentiallyActiveHuddle = (huddle) => {
     return ACTIVE_HUDDLE_STATUSES.has(status);
 };
 
+const isJoinableHuddleDoc = (huddleData) => {
+    if (!huddleData) return false;
+    const status = String(huddleData?.status || '').toLowerCase();
+    return huddleData?.isActive !== false && status !== 'ended';
+};
+
 const ChatDetailScreen = ({ navigation, route }) => {
     const chat = route?.params?.chat;
     const { user, userData } = useAuth();
@@ -56,6 +62,18 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const typingDebounceRef = useRef(null);
     const presenceIntervalRef = useRef(null);
     const pendingMessagesRef = useRef(new Map());
+    const isChatFocusedRef = useRef(true);
+    const lastAutoReadIncomingMsRef = useRef(0);
+    const markReadTimerRef = useRef(null);
+
+    const scheduleMarkRead = () => {
+        if (!chat?.id || !user?.uid || !isChatFocusedRef.current) return;
+        if (markReadTimerRef.current) return;
+        markReadTimerRef.current = setTimeout(async () => {
+            markReadTimerRef.current = null;
+            await chatService.markChatNotificationsRead(chat.id, user.uid).catch(() => {});
+        }, 150);
+    };
 
     // Keyboard Visibility management for bottom insets
     useEffect(() => {
@@ -139,10 +157,19 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 const pending = [...pendingMessagesRef.current.values()].filter((p) => p?.pending || p?.failed);
                 const merged = [...formatted, ...pending].sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
                 setMessages(merged);
+
+                const latestIncomingMs = formatted.reduce((max, msg) => {
+                    if (msg?.isMe) return max;
+                    return Math.max(max, Number(msg?.createdAtMs || 0));
+                }, 0);
+                if (latestIncomingMs > lastAutoReadIncomingMsRef.current) {
+                    lastAutoReadIncomingMsRef.current = latestIncomingMs;
+                    scheduleMarkRead();
+                }
             });
             return () => unsubscribe();
         }
-    }, [chat.id, user]);
+    }, [chat.id, user?.uid]);
 
     useEffect(() => {
         if (!chat?.id) return undefined;
@@ -190,6 +217,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         };
 
         const unsubscribeFocus = navigation.addListener('focus', () => {
+            isChatFocusedRef.current = true;
             pushActive();
             chatService.markChatNotificationsRead(chat.id, user.uid).catch(() => {});
             if (presenceIntervalRef.current) clearInterval(presenceIntervalRef.current);
@@ -197,6 +225,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         });
 
         const unsubscribeBlur = navigation.addListener('blur', () => {
+            isChatFocusedRef.current = false;
             if (presenceIntervalRef.current) {
                 clearInterval(presenceIntervalRef.current);
                 presenceIntervalRef.current = null;
@@ -212,9 +241,14 @@ const ChatDetailScreen = ({ navigation, route }) => {
         return () => {
             unsubscribeFocus();
             unsubscribeBlur();
+            isChatFocusedRef.current = false;
             if (presenceIntervalRef.current) {
                 clearInterval(presenceIntervalRef.current);
                 presenceIntervalRef.current = null;
+            }
+            if (markReadTimerRef.current) {
+                clearTimeout(markReadTimerRef.current);
+                markReadTimerRef.current = null;
             }
             chatService.setTyping(chat.id, false).catch(() => {});
             pushIdle();
@@ -228,28 +262,54 @@ const ChatDetailScreen = ({ navigation, route }) => {
             return undefined;
         }
 
-        const unsubCircle = onSnapshot(doc(db, 'circles', chat.circleId), (snap) => {
-            if (!snap.exists()) return;
-            const data = snap.data();
-            setActiveHuddle(data?.activeHuddle || null);
-            setResolvedChatName(data?.name || chat?.name || 'Chat');
-            setResolvedChatAvatar(data?.image || data?.avatar || data?.photoURL || chat?.avatar || chat?.photoURL || chat?.image || '');
-        });
+        const unsubCircle = onSnapshot(
+            doc(db, 'circles', chat.circleId),
+            (snap) => {
+                if (!snap.exists()) return;
+                const data = snap.data();
+                setActiveHuddle(data?.activeHuddle || null);
+                setResolvedChatName(data?.name || chat?.name || 'Chat');
+                setResolvedChatAvatar(data?.image || data?.avatar || data?.photoURL || chat?.avatar || chat?.photoURL || chat?.image || '');
+            },
+            () => {}
+        );
 
-        const unsubMember = onSnapshot(doc(db, 'circles', chat.circleId, 'members', user.uid), (snap) => {
-            if (!snap.exists()) {
+        const unsubMember = onSnapshot(
+            doc(db, 'circles', chat.circleId, 'members', user.uid),
+            (snap) => {
+                if (!snap.exists()) {
+                    setCircleRole(null);
+                    return;
+                }
+                const data = snap.data();
+                setCircleRole(data?.role || null);
+            },
+            () => {
                 setCircleRole(null);
-                return;
             }
-            const data = snap.data();
-            setCircleRole(data?.role || null);
-        });
+        );
 
         return () => {
             unsubCircle();
             unsubMember();
         };
     }, [chat?.avatar, chat?.circleId, chat?.image, chat?.isGroup, chat?.name, chat?.photoURL, user?.uid]);
+
+    useEffect(() => {
+        if (!chat?.isGroup || !isPotentiallyActiveHuddle(activeHuddle)) return undefined;
+        let cancelled = false;
+        const validate = async () => {
+            const snap = await getDoc(doc(db, 'huddles', activeHuddle.huddleId)).catch(() => null);
+            const data = snap?.exists?.() ? (snap.data() || {}) : null;
+            if (!cancelled && !isJoinableHuddleDoc(data)) {
+                setActiveHuddle(null);
+            }
+        };
+        validate();
+        return () => {
+            cancelled = true;
+        };
+    }, [chat?.isGroup, activeHuddle?.huddleId]);
 
     useEffect(() => {
         if (!chat?.isGroup || !chat?.circleId || !['creator', 'admin', 'moderator'].includes(circleRole)) {
@@ -414,9 +474,11 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
         try {
             await chatService.sendMessage(chat.id, textToSend, 'text', null, clientMessageId);
-            // Ack received from backend callable; keep only server-backed copy from snapshot.
+            // Ack received from backend callable.
+            // Remove only local optimistic placeholder; do not remove any server message
+            // that may already have arrived with the same clientMessageId.
             pendingMessagesRef.current.delete(clientMessageId);
-            setMessages((prev) => prev.filter((m) => m.clientMessageId !== clientMessageId));
+            setMessages((prev) => prev.filter((m) => !(m.pending && m.clientMessageId === clientMessageId)));
             // Scroll to bottom
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         } catch (error) {
@@ -488,7 +550,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         .sort((a, b) => toMillis(a?.scheduledAt) - toMillis(b?.scheduledAt))
         .find((event) => {
             const ms = toMillis(event?.scheduledAt);
-            return ms > 0 && String(event?.status || 'scheduled') === 'scheduled';
+            return ms > nowMs && String(event?.status || 'scheduled') === 'scheduled';
         }) || null;
 
     const handleCall = async () => {
@@ -496,12 +558,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
             if (isPotentiallyActiveHuddle(activeHuddle)) {
                 const huddleSnap = await getDoc(doc(db, 'huddles', activeHuddle.huddleId)).catch(() => null);
                 const huddleData = huddleSnap?.exists?.() ? (huddleSnap.data() || {}) : null;
-                const status = String(huddleData?.status || '').toLowerCase();
-                const canJoinCurrent = Boolean(
-                    huddleData &&
-                    huddleData?.isActive !== false &&
-                    status !== 'ended'
-                );
+                const canJoinCurrent = isJoinableHuddleDoc(huddleData);
                 if (canJoinCurrent) {
                     navigation.navigate('Huddle', {
                         chat,
@@ -512,9 +569,19 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     return;
                 }
                 setActiveHuddle(null);
+                showModal({
+                    type: 'info',
+                    title: 'Huddle ended',
+                    message: 'That huddle is no longer active.'
+                });
             }
 
             if (!canStartHuddleInCircle) {
+                showModal({
+                    type: 'info',
+                    title: 'Host permissions required',
+                    message: 'Only circle creator/admin/moderator can start a new huddle.'
+                });
                 return;
             }
         }
@@ -846,7 +913,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     ref={flatListRef}
                     data={messages}
                     renderItem={renderMessage}
-                    keyExtractor={item => item.id}
+                    keyExtractor={item => String(item.id || item._id || item.clientMessageId || `${item.createdAtMs || 0}_${item.text || ''}`)}
                     contentContainerStyle={[styles.listContent, { paddingBottom: 24 }]}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"

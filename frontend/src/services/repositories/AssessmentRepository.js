@@ -25,6 +25,52 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const toValidNumber = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
+const LIKERT_SCORE_MAP = {
+    'Not at all': 1,
+    Rarely: 2,
+    Sometimes: 3,
+    'Most times': 4,
+    Always: 5
+};
+
+const buildThemesFromAnswers = async (answers = {}) => {
+    const aggregates = {};
+    const normalizedAnswers = Object.entries(answers || {});
+    if (!normalizedAnswers.length) return {};
+
+    const questionsSnap = await getDocs(query(
+        collection(db, 'assessment_questions'),
+        where('isActive', '==', true)
+    ));
+    const questions = questionsSnap.docs.map((docSnap) => docSnap.data() || {});
+
+    normalizedAnswers.forEach(([questionText, answerValue]) => {
+        const question = questions.find((q) => String(q?.text || '').trim() === String(questionText || '').trim());
+        if (!question) return;
+        const tags = Array.isArray(question?.tags) ? question.tags : [];
+        if (!tags.length) return;
+
+        let numericValue = 3;
+        if (typeof answerValue === 'number' && Number.isFinite(answerValue)) {
+            numericValue = answerValue;
+        } else {
+            numericValue = LIKERT_SCORE_MAP[String(answerValue || '').trim()] || 3;
+        }
+
+        tags.forEach((tag) => {
+            if (!aggregates[tag]) aggregates[tag] = { total: 0, count: 0 };
+            aggregates[tag].total += numericValue;
+            aggregates[tag].count += 1;
+        });
+    });
+
+    return Object.entries(aggregates).reduce((acc, [theme, aggregate]) => {
+        if (!aggregate?.count) return acc;
+        acc[theme] = Math.round(aggregate.total / aggregate.count);
+        return acc;
+    }, {});
+};
+
 export const assessmentRepository = {
     async submitAssessment({ type, score, answers, mood }) {
         const uid = auth.currentUser?.uid;
@@ -86,6 +132,17 @@ export const assessmentRepository = {
             ? clamp(Math.round(weeklyAnchor + dailyAdjustment), 0, 100)
             : clamp(Math.round(dailyAvg7 ?? score), 0, 100);
 
+        const statsPatch = {
+            overallScore: computedWellbeing,
+            lastAssessmentDate: serverTimestamp()
+        };
+        if (type === 'questionnaire' && answers && Object.keys(answers).length > 0) {
+            const themes = await buildThemesFromAnswers(answers).catch(() => ({}));
+            if (themes && Object.keys(themes).length > 0) {
+                statsPatch.themes = themes;
+            }
+        }
+
         await setDoc(
             userRef,
             {
@@ -101,7 +158,7 @@ export const assessmentRepository = {
                     dailyAdjustment
                 },
                 lastAssessmentAt: serverTimestamp(),
-                'stats.overallScore': computedWellbeing,
+                stats: statsPatch,
                 updatedAt: serverTimestamp()
             },
             { merge: true }

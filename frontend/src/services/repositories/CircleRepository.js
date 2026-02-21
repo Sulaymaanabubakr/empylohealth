@@ -8,7 +8,7 @@ import { callableClient } from '../api/callableClient';
 const canModerate = (role) => ['creator', 'admin', 'moderator'].includes(role);
 
 export const circleRepository = {
-    async createCircle({ name, description, category, type, image, visibility }) {
+    async createCircle({ name, description, category, type, image, visibility, location, tags }) {
         if (!name?.trim()) throw new Error('Circle name is required.');
 
         return callableClient.invokeWithAuth('createCircle', {
@@ -17,7 +17,9 @@ export const circleRepository = {
             category: category || 'General',
             type: type || 'public',
             visibility: visibility || 'visible',
-            image: image || null
+            image: image || null,
+            location: String(location || '').trim(),
+            tags: Array.isArray(tags) ? tags : []
         });
     },
 
@@ -38,7 +40,9 @@ export const circleRepository = {
             type: data.type,
             image: data.image,
             photoURL: data.photoURL,
-            visibility: data.visibility
+            visibility: data.visibility,
+            location: data.location,
+            tags: data.tags
         };
 
         Object.keys(allowedUpdates).forEach((key) => {

@@ -157,9 +157,10 @@ export declare const ringPendingHuddles: import("firebase-functions/v2/scheduler
  */
 export declare const updateHuddleState: functions.HttpsFunction & functions.Runnable<any>;
 /**
- * Scheduled cleanup: auto-end huddles stuck in ringing/accepted too long.
+ * Scheduled cleanup: auto-end huddles stuck in ringing/accepted/ongoing too long.
  * - ringing: keep long enough for host-side timeout UX (2m prompt + 5m grace + countdown)
  * - accepted (but not ongoing): still guard against stale sessions
+ * - ongoing with no active users: cleanup ghost sessions from abrupt app exits/network loss
  */
 export declare const cleanupStaleHuddles: import("firebase-functions/v2/scheduler").ScheduleFunction;
 /**

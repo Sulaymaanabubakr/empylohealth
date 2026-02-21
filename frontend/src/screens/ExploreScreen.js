@@ -6,6 +6,7 @@ import { SvgXml } from 'react-native-svg';
 import { COLORS, SPACING } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
 import { resourceService } from '../services/api/resourceService';
+import { assessmentService } from '../services/api/assessmentService';
 import { useAuth } from '../context/AuthContext';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
 
@@ -57,19 +58,23 @@ const ExploreScreen = ({ navigation }) => {
         try {
             setError(null);
             console.log('ExploreScreen: fetching content...');
-            const [items, circles, affs] = await Promise.all([
+            const [recommendedItems, fallbackItems, circles, affs] = await Promise.all([
+                assessmentService.getRecommendedContent(),
                 resourceService.getExploreContent(),
                 circleService.getAllCircles(),
                 resourceService.getAffirmations()
             ]);
-            console.log('ExploreScreen: fetched', items.length, 'resources,', circles.length, 'circles,', affs.length, 'affirmations');
-            setActivities(items);
+            const activitiesToShow = Array.isArray(recommendedItems) && recommendedItems.length > 0
+                ? recommendedItems
+                : fallbackItems;
+            console.log('ExploreScreen: fetched', activitiesToShow.length, 'recommended resources,', circles.length, 'circles,', affs.length, 'affirmations');
+            setActivities(activitiesToShow);
             const publicCircles = (circles || []).filter((circle) => (circle?.type || 'public') === 'public');
             setSupportGroups(publicCircles);
             setAffirmations(affs);
             if (user?.uid) {
                 screenCacheService.set(`explore:${user.uid}`, {
-                    activities: items || [],
+                    activities: activitiesToShow || [],
                     supportGroups: publicCircles || [],
                     affirmations: affs || [],
                 });

@@ -80,7 +80,13 @@ const OtpVerificationScreen = ({ navigation, route }) => {
           name: nextAction.name,
           verificationToken
         });
-        navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });
+        // Root navigation switches based on auth state; avoid resetting to a route
+        // that may not exist in the current stack.
+        showModal({
+          type: 'success',
+          title: 'Account created',
+          message: 'Signing you in...'
+        });
         return;
       }
 

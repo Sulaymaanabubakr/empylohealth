@@ -77,7 +77,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                         <div className="bg-primary/10 p-2 rounded-lg">
                             <Logo className="w-6 h-6" />
                         </div>
-                        <h1 className="text-xl font-bold text-text tracking-tight">Empylo</h1>
+                        <h1 className="text-xl font-bold text-text tracking-tight">Circles Health</h1>
                     </div>
                 </div>
 

@@ -14,6 +14,17 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
+    function sharedCircleReadAllowed(uidA, uidB) {
+      return (
+        exists(/databases/$(database)/documents/userCircles/$(uidA)) &&
+        exists(/databases/$(database)/documents/userCircles/$(uidB)) &&
+        get(/databases/$(database)/documents/userCircles/$(uidA)).data.circleIds is list &&
+        get(/databases/$(database)/documents/userCircles/$(uidB)).data.circleIds is list &&
+        get(/databases/$(database)/documents/userCircles/$(uidA)).data.circleIds
+          .hasAny(get(/databases/$(database)/documents/userCircles/$(uidB)).data.circleIds)
+      );
+    }
+
     function isCircleMember(circleId, uid) {
       return (
         exists(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)) &&
@@ -51,10 +62,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // Profile data (name, photo, wellbeing) is not sensitive – allow any authenticated read.
-      // The previous sharedCircleReadAllowed() gate required 4 get() calls and broke when
-      // userCircles docs were missing, causing cascading permission-denied errors.
-      allow read: if isAuthenticated();
+      // Restrict cross-user profile reads to trusted relationships.
+      allow read: if isSelf(userId) || isAdmin() || sharedCircleReadAllowed(request.auth.uid, userId);
       allow create: if isSelf(userId) && request.resource.data.uid == request.auth.uid;
       allow update: if isSelf(userId) &&
         request.resource.data.uid == request.auth.uid &&
@@ -177,7 +186,8 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      // Server-only notifications (Functions/triggers); clients can read/mark read.
+      allow create: if false;
       allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
       allow delete: if false;
     }

@@ -9,13 +9,17 @@ import { useModal } from '../context/ModalContext';
 import * as ImagePicker from 'expo-image-picker';
 import ImageCropper from '../components/ImageCropper';
 
+const CIRCLE_CATEGORIES = ['Connect', 'Culture', 'Enablement', 'Green Activities', 'Mental health', 'Physical health'];
+
 const CreateCircleScreen = ({ navigation }) => {
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [category, setCategory] = useState('Support Group');
+    const [category, setCategory] = useState('Connect');
     const [accessType, setAccessType] = useState('Public'); // 'Public' or 'Private'
+    const [location, setLocation] = useState('');
+    const [tagsInput, setTagsInput] = useState('');
     const [image, setImage] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -47,7 +51,24 @@ const CreateCircleScreen = ({ navigation }) => {
             // NOTE: In a production app, upload 'image' to Firebase Storage here and get URL.
             // For now, passing the URI/Base64. If passing large base64 strings to callable functions, be careful of limits.
             // We'll pass the image URI/Data.
-            const result = await circleService.createCircle(name, description, category, accessType.toLowerCase(), image);
+            const tags = Array.from(
+                new Set(
+                    String(tagsInput || '')
+                        .split(',')
+                        .map((tag) => tag.trim())
+                        .filter(Boolean)
+                )
+            ).slice(0, 12);
+            const result = await circleService.createCircle(
+                name,
+                description,
+                category,
+                accessType.toLowerCase(),
+                image,
+                'visible',
+                location,
+                tags
+            );
 
             if (result?.circleId) {
                 const newCircle = await circleService.getCircleById(result.circleId);
@@ -173,6 +194,23 @@ const CreateCircleScreen = ({ navigation }) => {
                     </View>
 
                     <View style={styles.formSection}>
+                        <Text style={styles.label}>Category</Text>
+                        <View style={styles.categoryWrap}>
+                            {CIRCLE_CATEGORIES.map((item) => (
+                                <TouchableOpacity
+                                    key={item}
+                                    style={[styles.categoryChip, category === item && styles.categoryChipActive]}
+                                    onPress={() => setCategory(item)}
+                                >
+                                    <Text style={[styles.categoryChipText, category === item && styles.categoryChipTextActive]}>
+                                        {item}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+
+                    <View style={styles.formSection}>
                         <Text style={styles.label}>Description</Text>
                         <View style={styles.textAreaContainer}>
                             <TextInput
@@ -186,6 +224,33 @@ const CreateCircleScreen = ({ navigation }) => {
                             />
                             <Text style={styles.charCount}>{description.length}/1000</Text>
                         </View>
+                    </View>
+
+                    <View style={styles.formSection}>
+                        <Text style={styles.label}>Location (optional)</Text>
+                        <View style={styles.inputContainer}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. London, UK"
+                                value={location}
+                                onChangeText={setLocation}
+                                placeholderTextColor="#9E9E9E"
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.formSection}>
+                        <Text style={styles.label}>Tags (optional)</Text>
+                        <View style={styles.inputContainer}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. anxiety, stress, growth"
+                                value={tagsInput}
+                                onChangeText={setTagsInput}
+                                placeholderTextColor="#9E9E9E"
+                            />
+                        </View>
+                        <Text style={styles.helperTextSmall}>Separate tags with commas.</Text>
                     </View>
 
                 </ScrollView>
@@ -344,6 +409,31 @@ const styles = StyleSheet.create({
         color: '#9E9E9E',
         marginTop: 8,
         marginLeft: 4,
+    },
+    categoryWrap: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8
+    },
+    categoryChip: {
+        borderWidth: 1,
+        borderColor: '#D0D5DD',
+        borderRadius: 16,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        backgroundColor: '#FFFFFF'
+    },
+    categoryChipActive: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#E6FAF8'
+    },
+    categoryChipText: {
+        color: '#344054',
+        fontWeight: '600',
+        fontSize: 13
+    },
+    categoryChipTextActive: {
+        color: COLORS.primary
     },
     textAreaContainer: {
         backgroundColor: '#FFFFFF',

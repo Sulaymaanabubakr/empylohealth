@@ -50,7 +50,7 @@ const runPreload = async (uid) => {
 
   await Promise.allSettled([
     screenCacheService.set(`explore:${uid}`, {
-      activities: items || [],
+      activities: (recs && recs.length > 0 ? recs : items) || [],
       supportGroups: publicCircles || [],
       affirmations: affs || [],
     }),

@@ -24,8 +24,6 @@ type AdminPermission =
     | 'finance.view'
     | 'audit.view';
 
-const SUPER_ADMINS = ['sulaymaanabubakr@gmail.com', 'gcmusariri@gmail.com'];
-
 const ROLE_PERMISSIONS: Record<string, AdminPermission[]> = {
     admin: [
         'dashboard.view',
@@ -56,12 +54,12 @@ const getActor = (context: functions.https.CallableContext) => {
     }
     const uid = context.auth.uid;
     const email = String(context.auth.token.email || '').toLowerCase();
-    const role = String(context.auth.token.role || 'admin').toLowerCase();
+    const role = String(context.auth.token.role || 'viewer').toLowerCase();
     const customPermissions = Array.isArray(context.auth.token.permissions)
         ? context.auth.token.permissions.map((p) => String(p))
         : [];
     const isAdminClaim = context.auth.token.admin === true;
-    const isSuperAdmin = context.auth.token.superAdmin === true || SUPER_ADMINS.includes(email);
+    const isSuperAdmin = context.auth.token.superAdmin === true;
     if (!isAdminClaim && !isSuperAdmin) {
         throw new functions.https.HttpsError('permission-denied', 'Admin privileges required.');
     }
