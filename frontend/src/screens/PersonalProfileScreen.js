@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +18,7 @@ import { mediaService } from '../services/api/mediaService';
 import { useModal } from '../context/ModalContext';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
-import { resolveWellbeingScore } from '../utils/wellbeing';
+import { getWellbeingRingColor } from '../utils/wellbeing';
 
 
 const PersonalProfileScreen = ({ navigation }) => {
@@ -47,10 +47,6 @@ const PersonalProfileScreen = ({ navigation }) => {
         }
     }, [user]);
 
-    const selectedCircle = useMemo(() => {
-        return myCircles[0] || null;
-    }, [myCircles]);
-
     const calculateCircleRating = (circle) => {
         if (!circle) return '0.0';
         if (circle.score) return Number(circle.score).toFixed(1);
@@ -68,23 +64,41 @@ const PersonalProfileScreen = ({ navigation }) => {
 
     const getInitial = (name = '') => String(name).trim().charAt(0).toUpperCase() || '?';
     const getMemberRingColor = (profile) => {
-        const score = resolveWellbeingScore(profile || {});
-        if (score == null) return '#D1D5DB';
-        if (score >= 80) return '#22C55E';
-        if (score >= 60) return '#F59E0B';
-        if (score >= 40) return '#F97316';
-        return '#EF4444';
+        return getWellbeingRingColor({
+            wellbeingScore: profile?.wellbeingScore,
+            wellbeingLabel: profile?.wellbeingLabel,
+            wellbeingStatus: profile?.wellbeingStatus
+        }) || '#D1D5DB';
+    };
+
+    const getProfileForMember = (memberId) => {
+        if (!memberId) return null;
+        if (memberId === user?.uid) {
+            return {
+                ...(memberProfiles[memberId] || {}),
+                name: userData?.name || user?.displayName || memberProfiles[memberId]?.name || 'You',
+                photoURL: userData?.photoURL || user?.photoURL || memberProfiles[memberId]?.photoURL || '',
+                wellbeingScore: userData?.wellbeingScore ?? memberProfiles[memberId]?.wellbeingScore ?? null,
+                wellbeingLabel: userData?.wellbeingLabel || userData?.wellbeingStatus || memberProfiles[memberId]?.wellbeingLabel || memberProfiles[memberId]?.wellbeingStatus || ''
+            };
+        }
+        return memberProfiles[memberId] || null;
     };
 
     useEffect(() => {
         const loadMemberProfiles = async () => {
-            if (!selectedCircle?.members?.length) {
+            const allMemberIds = [...new Set(
+                (myCircles || [])
+                    .flatMap((circle) => (Array.isArray(circle?.members) ? circle.members : []))
+                    .filter(Boolean)
+            )];
+            if (!allMemberIds.length) {
                 setMemberProfiles({});
                 return;
             }
             const docs = {};
             await Promise.all(
-                selectedCircle.members.slice(0, 8).map(async (memberId) => {
+                allMemberIds.slice(0, 80).map(async (memberId) => {
                     try {
                         const snap = await getDoc(doc(db, 'users', memberId));
                         if (snap.exists()) docs[memberId] = snap.data() || {};
@@ -96,7 +110,7 @@ const PersonalProfileScreen = ({ navigation }) => {
             setMemberProfiles(docs);
         };
         loadMemberProfiles();
-    }, [selectedCircle?.id]);
+    }, [myCircles, user?.uid, userData?.wellbeingScore, userData?.wellbeingLabel, userData?.wellbeingStatus, userData?.photoURL, userData?.name, user?.photoURL, user?.displayName]);
 
     // For other future confirmations like "Delete Account" or "Reset Notifications"
     // we can reuse the same modal or different states. For now implementing Logout.
@@ -238,7 +252,7 @@ const PersonalProfileScreen = ({ navigation }) => {
                 <Text style={styles.joinButtonText}>Create new Circle</Text>
             </TouchableOpacity>
 
-            {!selectedCircle ? (
+            {myCircles.length === 0 ? (
                 <View style={styles.circleCard}>
                     <Text style={{ textAlign: 'center', color: '#757575', padding: 20 }}>
                         You haven't joined any circles yet.
@@ -246,91 +260,84 @@ const PersonalProfileScreen = ({ navigation }) => {
                     </Text>
                 </View>
             ) : (
-                <TouchableOpacity
-                    key={selectedCircle.id}
-                    style={styles.circleCard}
-                    disabled={true}
-                >
-                    <View style={styles.circleHeader}>
-                        <View>
-                            <Text style={styles.circleTitle}>{selectedCircle.name}</Text>
-                            <Text style={styles.circleMembers}>{selectedCircle.members?.length || 0} Members • High Activity</Text>
+                myCircles.map((circle) => (
+                    <TouchableOpacity
+                        key={circle.id}
+                        style={styles.circleCard}
+                        disabled={true}
+                    >
+                        <View style={styles.circleHeader}>
+                            <View>
+                                <Text style={styles.circleTitle}>{circle.name}</Text>
+                                <Text style={styles.circleMembers}>{circle.members?.length || 0} Members • High Activity</Text>
+                            </View>
+                            <View style={styles.scoreBadge}>
+                                <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
+                                <Text style={styles.scoreBadgeText}>{calculateCircleRating(circle)}</Text>
+                            </View>
                         </View>
-                        <View style={styles.scoreBadge}>
-                            <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
-                            <Text style={styles.scoreBadgeText}>{calculateCircleRating(selectedCircle)}</Text>
-                        </View>
-                    </View>
 
-                    {selectedCircle.members && selectedCircle.members.length > 0 && Object.keys(memberProfiles).length > 0 ? (
-                        <View style={styles.memberStackContainer}>
-                            <View style={styles.avatarStack}>
-                                {selectedCircle.members.slice(0, 5).map((memberId, index) => {
-                                    const profile = memberProfiles[memberId] || (
-                                        memberId === user?.uid
-                                            ? {
-                                                name: userData?.name || user?.displayName || 'You',
-                                                photoURL: userData?.photoURL || user?.photoURL || '',
-                                                wellbeingScore: resolveWellbeingScore(userData || {}),
-                                                wellbeingLabel: userData?.wellbeingLabel || userData?.wellbeingStatus || ''
-                                            }
-                                            : null
-                                    );
-                                    if (!profile) return null;
+                        {circle.members && circle.members.length > 0 && Object.keys(memberProfiles).length > 0 ? (
+                            <View style={styles.memberStackContainer}>
+                                <View style={styles.avatarStack}>
+                                    {circle.members.slice(0, 5).map((memberId, index) => {
+                                        const profile = getProfileForMember(memberId);
+                                        if (!profile) return null;
 
-                                    return (
-                                        <View
-                                            key={memberId}
-                                            style={[
-                                                styles.memberAvatarWithInitial,
-                                                {
-                                                    zIndex: 10 - index,
-                                                    marginLeft: index === 0 ? 0 : -18,
-                                                }
-                                            ]}
-                                        >
+                                        return (
                                             <View
+                                                key={`${circle.id}_${memberId}`}
                                                 style={[
-                                                    styles.memberAvatarContainer,
-                                                    { borderColor: getMemberRingColor(profile) }
+                                                    styles.memberAvatarWithInitial,
+                                                    {
+                                                        zIndex: 10 - index,
+                                                        marginLeft: index === 0 ? 0 : -18,
+                                                    }
                                                 ]}
                                             >
-                                                <Avatar
-                                                    uri={profile.photoURL}
-                                                    name={profile.name}
-                                                    size={40}
-                                                />
+                                                <View
+                                                    style={[
+                                                        styles.memberAvatarContainer,
+                                                        { borderColor: getMemberRingColor(profile) }
+                                                    ]}
+                                                >
+                                                    <Avatar
+                                                        uri={profile.photoURL}
+                                                        name={profile.name}
+                                                        size={40}
+                                                    />
+                                                </View>
+                                                <Text style={styles.memberInitialText}>{getInitial(profile.name)}</Text>
                                             </View>
-                                            <Text style={styles.memberInitialText}>{getInitial(profile.name)}</Text>
+                                        );
+                                    })}
+                                    {circle.members.length > 5 && (
+                                        <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -18 }]}>
+                                            <Text style={styles.moreMembersText}>+{circle.members.length - 5}</Text>
                                         </View>
-                                    );
-                                })}
-                                {selectedCircle.members.length > 5 && (
-                                    <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -18 }]}>
-                                        <Text style={styles.moreMembersText}>+{selectedCircle.members.length - 5}</Text>
-                                    </View>
-                                )}
+                                    )}
+                                </View>
+                                <View style={styles.stackInfoContainer}>
+                                    <Text style={styles.stackInfoText}>
+                                        <Text style={styles.highlightText}>{circle.members.length} members</Text> are active
+                                    </Text>
+                                    <View style={styles.activeIndicator} />
+                                </View>
                             </View>
-                            <View style={styles.stackInfoContainer}>
-                                <Text style={styles.stackInfoText}>
-                                    <Text style={styles.highlightText}>{selectedCircle.members.length} members</Text> are active
-                                </Text>
-                                <View style={styles.activeIndicator} />
-                            </View>
-                        </View>
-                    ) : (
-                        <Text style={styles.timelineEmptyText}>
-                            Join the conversation with your circle members.
-                        </Text>
-                    )}
+                        ) : (
+                            <Text style={styles.timelineEmptyText}>
+                                Join the conversation with your circle members.
+                            </Text>
+                        )}
 
-                    <TouchableOpacity
-                        style={styles.viewCircleButton}
-                        onPress={() => navigation.navigate('CircleAnalysis', { circle: selectedCircle })}
-                    >
-                        <Text style={styles.viewCircleButtonText}>View Circle Analysis</Text>
+                        <TouchableOpacity
+                            style={styles.viewCircleButton}
+                            onPress={() => navigation.navigate('CircleAnalysis', { circle })}
+                        >
+                            <Text style={styles.viewCircleButtonText}>View Circle Analysis</Text>
+                        </TouchableOpacity>
                     </TouchableOpacity>
-                </TouchableOpacity>
+                ))
             )}
 
         </View>

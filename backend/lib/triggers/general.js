@@ -199,16 +199,14 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                     token,
                     notification: {
                         title: isGroup ? circleName : senderName,
-                        body,
-                        ...(notificationAvatar ? { imageUrl: notificationAvatar } : {})
+                        body
                     },
                     data,
                     android: {
                         priority: 'high',
                         notification: {
                             channelId: recipient.playSound ? 'messages-default' : 'messages-silent',
-                            tag: chatId,
-                            ...(notificationAvatar ? { imageUrl: notificationAvatar } : {})
+                            tag: chatId
                         }
                     },
                     apns: {
@@ -220,11 +218,9 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                             aps: {
                                 category: 'chat-message-actions',
                                 'thread-id': chatId,
-                                'mutable-content': 1,
                                 ...(recipient.playSound ? { sound: 'default' } : {})
                             }
-                        },
-                        ...(notificationAvatar ? { fcmOptions: { imageUrl: notificationAvatar } } : {})
+                        }
                     }
                 });
             });
@@ -239,7 +235,6 @@ exports.onMessageCreate = regionalFunctions.firestore.document('chats/{chatId}/m
                     data,
                     categoryId: 'chat-message-actions',
                     channelId: recipient.playSound ? 'messages-default' : 'messages-silent',
-                    ...(notificationAvatar ? { richContent: { image: notificationAvatar }, mutableContent: true } : {}),
                     ...(recipient.playSound ? { sound: 'default' } : {})
                 });
             });
