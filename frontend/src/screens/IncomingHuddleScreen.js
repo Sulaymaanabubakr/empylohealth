@@ -8,6 +8,7 @@ import { COLORS } from '../theme/theme';
 import { huddleService } from '../services/api/huddleService';
 import { callDiagnostics } from '../services/calling/callDiagnostics';
 import { loopingSound } from '../services/audio/loopingSound';
+import Avatar from '../components/Avatar';
 
 // Audio playback is handled via loopingSound (expo-audio preferred, expo-av fallback).
 
@@ -24,6 +25,7 @@ export default function IncomingHuddleScreen({ navigation, route }) {
   const chatId = route?.params?.chatId || null;
   const chatName = route?.params?.chatName || 'Huddle';
   const callerName = route?.params?.callerName || chatName || 'Incoming Huddle';
+  const avatar = route?.params?.avatar || '';
 
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -121,6 +123,12 @@ export default function IncomingHuddleScreen({ navigation, route }) {
         </View>
 
         <View style={styles.body}>
+          <Avatar
+            uri={avatar}
+            name={callerName}
+            size={84}
+            style={styles.avatar}
+          />
           <Text style={styles.caller}>{callerName}</Text>
           <Text style={styles.subtitle}>{chatName}</Text>
           {loading && <ActivityIndicator style={{ marginTop: 18 }} color="#FFFFFF" />}
@@ -166,6 +174,9 @@ const styles = StyleSheet.create({
   body: {
     alignItems: 'center',
     paddingHorizontal: 10
+  },
+  avatar: {
+    marginBottom: 16
   },
   caller: {
     color: '#FFFFFF',

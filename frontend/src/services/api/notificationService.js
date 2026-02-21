@@ -292,11 +292,13 @@ const configureNotificationCategories = async () => {
 const maybeShowNativeIncomingCall = async (payload) => {
     const data = extractNotificationData(payload);
     if (data?.type !== 'HUDDLE_STARTED' || !data?.huddleId) return false;
+    const avatar = data?.avatar || data?.senderAvatar || data?.chatAvatar || '';
     const shown = await nativeCallService.presentIncomingHuddleCall({
         huddleId: data.huddleId,
         chatId: data.chatId,
         chatName: data.chatName || 'Huddle',
-        callerName: data.callerName || data.chatName || 'Incoming Huddle'
+        callerName: data.callerName || data.chatName || 'Incoming Huddle',
+        avatar
     });
     if (shown) return true;
 
@@ -308,7 +310,8 @@ const maybeShowNativeIncomingCall = async (payload) => {
             huddleId: data.huddleId,
             chatId: data.chatId,
             chatName: data.chatName || 'Huddle',
-            callerName: data.callerName || data.chatName || 'Incoming Huddle'
+            callerName: data.callerName || data.chatName || 'Incoming Huddle',
+            avatar
         });
     }
     return true;
@@ -322,6 +325,7 @@ const normalizeVoipNotificationData = (notification) => {
         chatId: direct?.chatId || payload?.chatId || payload?.chat_id,
         chatName: direct?.chatName || payload?.chatName || payload?.chat_name || 'Huddle',
         callerName: direct?.callerName || payload?.callerName || payload?.caller_name || 'Incoming Huddle',
+        avatar: direct?.avatar || payload?.avatar || '',
         type: direct?.type || payload?.type || 'HUDDLE_STARTED'
     };
 };

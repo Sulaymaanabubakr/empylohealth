@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +16,9 @@ import { authService } from '../services/auth/authService';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
 import { useModal } from '../context/ModalContext';
+import { db } from '../services/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
+import { resolveWellbeingScore } from '../utils/wellbeing';
 
 
 const PersonalProfileScreen = ({ navigation }) => {
@@ -28,13 +31,14 @@ const PersonalProfileScreen = ({ navigation }) => {
     const [isLogoutVisible, setIsLogoutVisible] = useState(false);
     const [isEditPhotoVisible, setIsEditPhotoVisible] = useState(false);
     const [myCircles, setMyCircles] = useState([]);
+    const [memberProfiles, setMemberProfiles] = useState({});
     const [uploading, setUploading] = useState(false);
 
     // Cropper State
     const [cropperVisible, setCropperVisible] = useState(false);
     const [tempImage, setTempImage] = useState(null);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (user?.uid) {
             const unsubscribe = circleService.subscribeToMyCircles(user.uid, (circles) => {
                 setMyCircles(circles);
@@ -42,6 +46,57 @@ const PersonalProfileScreen = ({ navigation }) => {
             return () => unsubscribe();
         }
     }, [user]);
+
+    const selectedCircle = useMemo(() => {
+        return myCircles[0] || null;
+    }, [myCircles]);
+
+    const calculateCircleRating = (circle) => {
+        if (!circle) return '0.0';
+        if (circle.score) return Number(circle.score).toFixed(1);
+        let score = 4.2;
+        const memberCount = circle.members?.length || 0;
+        if (memberCount > 50) score += 0.4;
+        else if (memberCount > 20) score += 0.3;
+        const lastUpdate = circle.updatedAt?.toMillis?.() || circle.lastMessageAt?.toMillis?.() || 0;
+        if (lastUpdate > 0) {
+            const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
+            if (hoursSinceUpdate < 24) score += 0.4;
+        }
+        return Math.min(score, 5.0).toFixed(1);
+    };
+
+    const getInitial = (name = '') => String(name).trim().charAt(0).toUpperCase() || '?';
+    const getMemberRingColor = (profile) => {
+        const score = resolveWellbeingScore(profile || {});
+        if (score == null) return '#D1D5DB';
+        if (score >= 80) return '#22C55E';
+        if (score >= 60) return '#F59E0B';
+        if (score >= 40) return '#F97316';
+        return '#EF4444';
+    };
+
+    useEffect(() => {
+        const loadMemberProfiles = async () => {
+            if (!selectedCircle?.members?.length) {
+                setMemberProfiles({});
+                return;
+            }
+            const docs = {};
+            await Promise.all(
+                selectedCircle.members.slice(0, 8).map(async (memberId) => {
+                    try {
+                        const snap = await getDoc(doc(db, 'users', memberId));
+                        if (snap.exists()) docs[memberId] = snap.data() || {};
+                    } catch {
+                        // ignore partial profile failures
+                    }
+                })
+            );
+            setMemberProfiles(docs);
+        };
+        loadMemberProfiles();
+    }, [selectedCircle?.id]);
 
     // For other future confirmations like "Delete Account" or "Reset Notifications"
     // we can reuse the same modal or different states. For now implementing Logout.
@@ -183,48 +238,101 @@ const PersonalProfileScreen = ({ navigation }) => {
                 <Text style={styles.joinButtonText}>Create new Circle</Text>
             </TouchableOpacity>
 
-            {myCircles.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#757575', marginTop: 20 }}>
-                    You haven't joined any circles yet.
-                </Text>
-            ) : (
-                <View style={styles.gridContainer}>
-                    {myCircles.map((circle) => (
-                        <TouchableOpacity
-                            key={circle.id}
-                            style={styles.gridCard}
-                            onPress={() => navigation.navigate('CircleDetail', { circle })}
-                        >
-                            {/* Circle Image or Gradient Placeholder */}
-                            <View style={styles.cardImageContainer}>
-                                {circle.image ? (
-                                    <Avatar uri={circle.image} size={null} style={styles.cardImage} />
-                                ) : (
-                                    <LinearGradient
-                                        colors={[COLORS.primary, '#00C9B1']} // Example gradient
-                                        style={styles.cardPlaceholder}
-                                    />
-                                )}
-                                <View style={styles.cardTypeBadge}>
-                                    <Text style={styles.cardTypeText}>
-                                        {circle.type === 'private' ? 'Private' : 'Public'}
-                                    </Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.cardContent}>
-                                <Text style={styles.gridTitle} numberOfLines={1}>{circle.name}</Text>
-                                <Text style={styles.gridSubtitle} numberOfLines={1}>{circle.category || 'General'}</Text>
-
-                                <View style={styles.gridFooter}>
-                                    <Ionicons name="people" size={12} color="#757575" />
-                                    <Text style={styles.gridMembers}>{circle.members?.length || 0} Members</Text>
-                                </View>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
+            {!selectedCircle ? (
+                <View style={styles.circleCard}>
+                    <Text style={{ textAlign: 'center', color: '#757575', padding: 20 }}>
+                        You haven't joined any circles yet.
+                        {'\n'}Go to Explore to find one!
+                    </Text>
                 </View>
+            ) : (
+                <TouchableOpacity
+                    key={selectedCircle.id}
+                    style={styles.circleCard}
+                    disabled={true}
+                >
+                    <View style={styles.circleHeader}>
+                        <View>
+                            <Text style={styles.circleTitle}>{selectedCircle.name}</Text>
+                            <Text style={styles.circleMembers}>{selectedCircle.members?.length || 0} Members • High Activity</Text>
+                        </View>
+                        <View style={styles.scoreBadge}>
+                            <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
+                            <Text style={styles.scoreBadgeText}>{calculateCircleRating(selectedCircle)}</Text>
+                        </View>
+                    </View>
+
+                    {selectedCircle.members && selectedCircle.members.length > 0 && Object.keys(memberProfiles).length > 0 ? (
+                        <View style={styles.memberStackContainer}>
+                            <View style={styles.avatarStack}>
+                                {selectedCircle.members.slice(0, 5).map((memberId, index) => {
+                                    const profile = memberProfiles[memberId] || (
+                                        memberId === user?.uid
+                                            ? {
+                                                name: userData?.name || user?.displayName || 'You',
+                                                photoURL: userData?.photoURL || user?.photoURL || '',
+                                                wellbeingScore: resolveWellbeingScore(userData || {}),
+                                                wellbeingLabel: userData?.wellbeingLabel || userData?.wellbeingStatus || ''
+                                            }
+                                            : null
+                                    );
+                                    if (!profile) return null;
+
+                                    return (
+                                        <View
+                                            key={memberId}
+                                            style={[
+                                                styles.memberAvatarWithInitial,
+                                                {
+                                                    zIndex: 10 - index,
+                                                    marginLeft: index === 0 ? 0 : -18,
+                                                }
+                                            ]}
+                                        >
+                                            <View
+                                                style={[
+                                                    styles.memberAvatarContainer,
+                                                    { borderColor: getMemberRingColor(profile) }
+                                                ]}
+                                            >
+                                                <Avatar
+                                                    uri={profile.photoURL}
+                                                    name={profile.name}
+                                                    size={40}
+                                                />
+                                            </View>
+                                            <Text style={styles.memberInitialText}>{getInitial(profile.name)}</Text>
+                                        </View>
+                                    );
+                                })}
+                                {selectedCircle.members.length > 5 && (
+                                    <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -18 }]}>
+                                        <Text style={styles.moreMembersText}>+{selectedCircle.members.length - 5}</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <View style={styles.stackInfoContainer}>
+                                <Text style={styles.stackInfoText}>
+                                    <Text style={styles.highlightText}>{selectedCircle.members.length} members</Text> are active
+                                </Text>
+                                <View style={styles.activeIndicator} />
+                            </View>
+                        </View>
+                    ) : (
+                        <Text style={styles.timelineEmptyText}>
+                            Join the conversation with your circle members.
+                        </Text>
+                    )}
+
+                    <TouchableOpacity
+                        style={styles.viewCircleButton}
+                        onPress={() => navigation.navigate('CircleAnalysis', { circle: selectedCircle })}
+                    >
+                        <Text style={styles.viewCircleButtonText}>View Circle Analysis</Text>
+                    </TouchableOpacity>
+                </TouchableOpacity>
             )}
+
         </View>
     );
 
@@ -468,31 +576,146 @@ const styles = StyleSheet.create({
     },
     circleCard: {
         backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 20,
+        borderRadius: 28,
+        padding: 24,
         marginBottom: 20,
-        elevation: 2,
+        elevation: 6,
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 14,
+        borderWidth: 1,
+        borderColor: '#FAFAFA',
     },
     circleHeader: {
-        marginBottom: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
     },
     circleTitle: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 22,
+        fontWeight: '800',
         marginBottom: 4,
-    },
-    circleSubtitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 2,
+        color: '#212121',
     },
     circleMembers: {
-        fontSize: 12,
+        fontSize: 14,
         color: '#757575',
+        fontWeight: '500',
+    },
+    scoreBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#E8F5E9',
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#C8E6C9',
+    },
+    scoreBadgeText: {
+        color: '#2E7D32',
+        fontWeight: '800',
+        fontSize: 14,
+    },
+    memberStackContainer: {
+        marginBottom: 20,
+        marginTop: 12,
+        alignItems: 'center',
+        width: '100%',
+    },
+    avatarStack: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+    memberAvatarWithInitial: {
+        width: 48,
+        alignItems: 'center',
+    },
+    memberAvatarContainer: {
+        width: 48,
+        height: 48,
+        borderWidth: 3,
+        borderRadius: 24,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 6,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+    },
+    memberInitialText: {
+        marginTop: 4,
+        fontSize: 10,
+        color: '#616161',
+        fontWeight: '700',
+    },
+    moreMembersBadge: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: '#F5F5F5',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: '#FFF',
+    },
+    moreMembersText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#757575',
+    },
+    stackInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    stackInfoText: {
+        fontSize: 14,
+        color: '#757575',
+        fontWeight: '500',
+        marginRight: 6,
+    },
+    highlightText: {
+        color: '#212121',
+        fontWeight: '700',
+    },
+    activeIndicator: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#00E676',
+    },
+    timelineEmptyText: {
+        fontSize: 13,
+        color: '#9E9E9E',
+        fontWeight: '500',
+        marginBottom: 16,
+        fontStyle: 'italic',
+    },
+    viewCircleButton: {
+        backgroundColor: COLORS.primary,
+        alignSelf: 'center',
+        width: '100%',
+        borderRadius: 20,
+        paddingVertical: 12,
+        alignItems: 'center',
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
+        marginTop: 4,
+    },
+    viewCircleButtonText: {
+        color: COLORS.white,
+        fontSize: 15,
+        fontWeight: '700',
     },
     timelineContainer: {
         height: 60,

@@ -142,12 +142,12 @@ export const nativeCallService = {
     initialized = false;
   },
 
-  presentIncomingHuddleCall: async ({ huddleId, chatId, chatName, callerName }) => {
+  presentIncomingHuddleCall: async ({ huddleId, chatId, chatName, callerName, avatar }) => {
     if (!RNCallKeep || !huddleId) return false;
     await nativeCallService.initialize();
 
     const uuid = getOrCreateUuid(huddleId);
-    uuidToPayload.set(uuid, { huddleId, chatId, chatName });
+    uuidToPayload.set(uuid, { huddleId, chatId, chatName, avatar: avatar || '' });
 
     try {
       RNCallKeep.displayIncomingCall(

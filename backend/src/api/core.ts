@@ -2306,7 +2306,11 @@ const sendHuddleNotifications = async ({
     if (fcmTokens.length > 0) {
         const messagePayload: admin.messaging.MulticastMessage = {
             tokens: fcmTokens,
-            notification: { title: payload.title, body: payload.body },
+            notification: {
+                title: payload.title,
+                body: payload.body,
+                ...(notificationAvatar ? { imageUrl: notificationAvatar } : {})
+            },
             data: payload.data,
             android: {
                 priority: 'high',
@@ -2314,7 +2318,8 @@ const sendHuddleNotifications = async ({
                     channelId: 'huddle-calls-ringtone',
                     sound: 'default',
                     priority: 'max',
-                    defaultVibrateTimings: false
+                    defaultVibrateTimings: false,
+                    ...(notificationAvatar ? { imageUrl: notificationAvatar } : {})
                 }
             },
             apns: {
@@ -2327,9 +2332,11 @@ const sendHuddleNotifications = async ({
                     aps: {
                         sound: 'default',
                         category: 'huddle-call-actions',
-                        'interruption-level': 'time-sensitive'
+                        'interruption-level': 'time-sensitive',
+                        'mutable-content': 1
                     }
-                }
+                },
+                ...(notificationAvatar ? { fcmOptions: { imageUrl: notificationAvatar } } : {})
             }
         };
         await admin.messaging().sendEachForMulticast(messagePayload);
@@ -2345,7 +2352,8 @@ const sendHuddleNotifications = async ({
             channelId: 'huddle-calls-ringtone',
             categoryId: 'huddle-call-actions',
             interruptionLevel: 'time-sensitive',
-            data: payload.data
+            data: payload.data,
+            ...(notificationAvatar ? { richContent: { image: notificationAvatar }, mutableContent: true } : {})
         }));
         await fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
@@ -2452,7 +2460,11 @@ const sendScheduledReminderNotifications = async ({
     if (fcmTokens.length > 0) {
         await admin.messaging().sendEachForMulticast({
             tokens: fcmTokens,
-            notification: { title, body },
+            notification: {
+                title,
+                body,
+                ...(notificationAvatar ? { imageUrl: notificationAvatar } : {})
+            },
             data: {
                 type: 'SCHEDULED_HUDDLE_REMINDER',
                 circleId,
@@ -2463,7 +2475,8 @@ const sendScheduledReminderNotifications = async ({
             android: {
                 priority: 'high',
                 notification: {
-                    channelId: 'default'
+                    channelId: 'default',
+                    ...(notificationAvatar ? { imageUrl: notificationAvatar } : {})
                 }
             },
             apns: {
@@ -2472,8 +2485,11 @@ const sendScheduledReminderNotifications = async ({
                     'apns-priority': '10'
                 },
                 payload: {
-                    aps: {}
-                }
+                    aps: {
+                        'mutable-content': 1
+                    }
+                },
+                ...(notificationAvatar ? { fcmOptions: { imageUrl: notificationAvatar } } : {})
             }
         });
     }
@@ -2489,7 +2505,8 @@ const sendScheduledReminderNotifications = async ({
                 chatId,
                 scheduledHuddleId,
                 avatar: notificationAvatar || ''
-            }
+            },
+            ...(notificationAvatar ? { richContent: { image: notificationAvatar }, mutableContent: true } : {})
         }));
         await fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',

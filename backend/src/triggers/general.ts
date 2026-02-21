@@ -164,6 +164,7 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                 const body = recipient.showPreview
                     ? (isGroup ? `${senderName}: ${messageText || 'New message'}` : (messageText || 'New message'))
                     : (isGroup ? `${senderName}: New message` : 'New message');
+                const notificationAvatar = isGroup ? circleImage : senderImage;
 
                 const data = {
                     chatId,
@@ -173,8 +174,9 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                     senderName,
                     chatName: isGroup ? circleName : senderName,
                     isGroup: String(isGroup),
-                    senderAvatar: isGroup ? circleImage : senderImage,
-                    chatAvatar: isGroup ? circleImage : senderImage,
+                    senderAvatar: notificationAvatar,
+                    chatAvatar: notificationAvatar,
+                    avatar: notificationAvatar,
                     type: 'CHAT_MESSAGE',
                     categoryId: 'chat-message-actions'
                 };
@@ -186,14 +188,16 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                         token,
                         notification: {
                             title: isGroup ? circleName : senderName,
-                            body
+                            body,
+                            ...(notificationAvatar ? { imageUrl: notificationAvatar } : {})
                         },
                         data,
                         android: {
                             priority: 'high',
                             notification: {
                                 channelId: recipient.playSound ? 'messages-default' : 'messages-silent',
-                                tag: chatId
+                                tag: chatId,
+                                ...(notificationAvatar ? { imageUrl: notificationAvatar } : {})
                             }
                         },
                         apns: {
@@ -205,9 +209,12 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                                 aps: {
                                     category: 'chat-message-actions',
                                     'thread-id': chatId,
+                                    'mutable-content': 1,
                                     ...(recipient.playSound ? { sound: 'default' } : {})
                                 }
                             }
+                            ,
+                            ...(notificationAvatar ? { fcmOptions: { imageUrl: notificationAvatar } } : {})
                         }
                     });
                 });
@@ -222,6 +229,7 @@ export const onMessageCreate = regionalFunctions.firestore.document('chats/{chat
                         data,
                         categoryId: 'chat-message-actions',
                         channelId: recipient.playSound ? 'messages-default' : 'messages-silent',
+                        ...(notificationAvatar ? { richContent: { image: notificationAvatar }, mutableContent: true } : {}),
                         ...(recipient.playSound ? { sound: 'default' } : {})
                     });
                 });
