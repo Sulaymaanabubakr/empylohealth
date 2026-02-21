@@ -22,28 +22,11 @@ const tryLoadExpoAudio = () => {
   return null;
 };
 
-const tryLoadExpoAvAudio = () => {
-  try {
-    // expo-av (deprecated in SDK 54, but still present in older dev clients)
-    // eslint-disable-next-line global-require
-    const { Audio } = require('expo-av');
-    if (Audio?.Sound?.createAsync) return Audio;
-  } catch {
-    // ignore
-  }
-  return null;
-};
-
 const resolveImpl = () => {
   if (cachedImpl) return cachedImpl;
   const expoAudio = tryLoadExpoAudio();
   if (expoAudio) {
     cachedImpl = { kind: 'expo-audio', mod: expoAudio };
-    return cachedImpl;
-  }
-  const expoAv = tryLoadExpoAvAudio();
-  if (expoAv) {
-    cachedImpl = { kind: 'expo-av', mod: expoAv };
     return cachedImpl;
   }
   cachedImpl = { kind: 'none', mod: null };
@@ -61,20 +44,6 @@ export const loopingSound = {
       return { kind: impl.kind, handle: player };
     }
 
-    if (impl.kind === 'expo-av') {
-      await impl.mod.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        staysActiveInBackground: false
-      });
-      const created = await impl.mod.Sound.createAsync(assetModuleId, {
-        isLooping: true,
-        shouldPlay: true,
-        volume
-      });
-      return { kind: impl.kind, handle: created.sound };
-    }
-
     return null;
   },
 
@@ -86,10 +55,6 @@ export const loopingSound = {
       await handle.seekTo?.(0);
       await handle.remove?.();
       return;
-    }
-    if (kind === 'expo-av') {
-      await handle.stopAsync?.();
-      await handle.unloadAsync?.();
     }
   }
 };

@@ -10,7 +10,7 @@ import { callDiagnostics } from '../services/calling/callDiagnostics';
 import { loopingSound } from '../services/audio/loopingSound';
 import Avatar from '../components/Avatar';
 
-// Audio playback is handled via loopingSound (expo-audio preferred, expo-av fallback).
+// Audio playback is handled via loopingSound (expo-audio).
 
 const safeCall = async (fn) => {
   try {

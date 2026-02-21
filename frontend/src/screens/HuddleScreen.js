@@ -24,7 +24,7 @@ const HOST_ALONE_PROMPT_DELAY_MS = 120000; // 2 min
 const HOST_ALONE_FORCE_END_DELAY_MS = 300000; // 5 min after "No"
 const FORCE_END_COUNTDOWN_SECONDS = 5;
 const MAX_CALL_DURATION_MS = 3600000; // 1 hour
-// Audio playback is handled via loopingSound (expo-audio preferred, expo-av fallback).
+// Audio playback is handled via loopingSound (expo-audio).
 
 const HuddleScreen = ({ navigation, route }) => {
     const { user, userData } = useAuth();
@@ -265,7 +265,7 @@ const HuddleScreen = ({ navigation, route }) => {
             return;
         }
 
-        // Fallback for runtimes without expo-audio/expo-av.
+        // Fallback for runtimes without audio module support.
         Vibration.vibrate(350);
         ringbackVibrationIntervalRef.current = setInterval(() => {
             Vibration.vibrate(350);
