@@ -396,44 +396,27 @@ const DashboardScreen = ({ navigation }) => {
 
         try {
             const profiles = {};
-            // Load up to 5 member profiles for timeline visualization
             const memberIds = circle.members.slice(0, 5);
-            console.log('[Dashboard] Loading member profiles for circle:', circle.id, 'memberIds:', memberIds);
 
-            for (const memberId of memberIds) {
-                // Always seed current user from local auth/profile so "my" avatar never disappears.
-                if (memberId === user?.uid) {
-                    const wellbeing = resolveMemberWellbeing(userData || {});
-                    profiles[memberId] = {
-                        name: userData?.name || user?.displayName || 'You',
-                        photoURL: userData?.photoURL || user?.photoURL || '',
-                        wellbeingScore: wellbeing.score,
-                        wellbeingLabel: wellbeing.label,
-                        wellbeingStatus: userData?.wellbeingStatus || ''
-                    };
-                    continue;
-                }
-
+            await Promise.all(memberIds.map(async (memberId) => {
+                if (memberId === user?.uid) return;
                 try {
                     const memberDoc = await getDoc(doc(db, 'users', memberId));
-                    if (memberDoc.exists()) {
-                        const data = memberDoc.data();
-                        const wellbeing = resolveMemberWellbeing(data);
-                        profiles[memberId] = {
-                            name: data.name || data.displayName || 'Member',
-                            photoURL: data.photoURL || '',
-                            wellbeingScore: wellbeing.score,
-                            wellbeingLabel: wellbeing.label,
-                            wellbeingStatus: data.wellbeingStatus || ''
-                        };
-                    } else {
-                        console.log('[Dashboard] Member doc does not exist:', memberId);
-                    }
-                } catch (memberError) {
-                    console.log('[Dashboard] Failed to load member profile:', memberId, memberError?.message || memberError);
+                    if (!memberDoc.exists()) return;
+                    const data = memberDoc.data();
+                    const wellbeing = resolveMemberWellbeing(data);
+                    profiles[memberId] = {
+                        name: data.name || data.displayName || 'Member',
+                        photoURL: data.photoURL || '',
+                        wellbeingScore: wellbeing.score,
+                        wellbeingLabel: wellbeing.label,
+                        wellbeingStatus: data.wellbeingStatus || ''
+                    };
+                } catch {
+                    // Keep dashboard rendering resilient even if one profile fetch fails.
                 }
-            }
-            console.log('[Dashboard] Loaded profiles:', Object.keys(profiles).length, 'of', memberIds.length);
+            }));
+
             setMemberProfiles(profiles);
         } catch (error) {
             console.error('Error loading member profiles:', error);
@@ -449,6 +432,13 @@ const DashboardScreen = ({ navigation }) => {
         ? selfResolvedWellbeing.score
         : (typeof wellbeing?.score === 'number' ? wellbeing.score : null);
     const selfRingFallbackLabel = selfResolvedWellbeing.label || wellbeing?.label || '';
+    const selfProfile = {
+        name: userData?.name || user?.displayName || 'You',
+        photoURL: userData?.photoURL || user?.photoURL || '',
+        wellbeingScore: selfRingFallbackScore,
+        wellbeingLabel: selfRingFallbackLabel,
+        wellbeingStatus: userData?.wellbeingStatus || ''
+    };
     const handleSelectPrimaryCircle = async (circleId) => {
         setSelectedCircleId(circleId);
         if (primaryCircleStorageKey) {
@@ -596,20 +586,16 @@ const DashboardScreen = ({ navigation }) => {
                             </View>
 
                             {/* Premium Member Stack */}
-                            {selectedCircle.members && selectedCircle.members.length > 0 && Object.keys(memberProfiles).length > 0 ? (
+                            {selectedCircle.members && selectedCircle.members.length > 0 ? (
                                 <View style={styles.memberStackContainer}>
                                     <View style={styles.avatarStack}>
-                                        {selectedCircle.members.slice(0, 5).map((memberId, index) => {
-                                            const profile = memberProfiles[memberId] || (
-                                                memberId === user?.uid
-                                                    ? {
-                                                        name: userData?.name || user?.displayName || 'You',
-                                                        photoURL: userData?.photoURL || user?.photoURL || '',
-                                                        wellbeingScore: selfRingFallbackScore,
-                                                        wellbeingLabel: selfRingFallbackLabel
-                                                    }
-                                                    : null
-                                            );
+                                        {[...(selectedCircle.members.includes(user?.uid)
+                                            ? [user?.uid, ...selectedCircle.members.filter((id) => id !== user?.uid)]
+                                            : selectedCircle.members
+                                        )].slice(0, 5).map((memberId, index) => {
+                                            const profile = memberId === user?.uid
+                                                ? selfProfile
+                                                : memberProfiles[memberId];
                                             if (!profile) return null;
 
                                             return (
