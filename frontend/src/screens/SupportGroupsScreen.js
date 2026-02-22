@@ -48,14 +48,12 @@ const calculateCircleRating = (circle) => {
     return Math.min(score, 5.0).toFixed(1);
 };
 
-const getInitial = (name = '') => {
+const getCircleMemberFirstName = (name = '') => {
     const parts = String(name || '')
         .trim()
         .split(/\s+/)
         .filter(Boolean);
-    if (parts.length === 0) return '?';
-    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-    return `${parts[0].charAt(0).toUpperCase()}${parts[parts.length - 1].charAt(0).toUpperCase()}`;
+    return parts.length > 0 ? parts[0] : 'Member';
 };
 
 const SupportGroupsScreen = ({ route }) => {
@@ -173,7 +171,9 @@ const SupportGroupsScreen = ({ route }) => {
         const loadMemberPreviews = async () => {
             const previewEntries = await Promise.all(
                 (groups || []).map(async (group) => {
-                    const ids = Array.isArray(group?.members) ? group.members.slice(0, 3) : [];
+                    const ids = Array.isArray(group?.members)
+                        ? group.members.slice(0, MAX_CIRCLE_MEMBERS)
+                        : [];
                     const members = await Promise.all(ids.map(async (uid) => {
                         try {
                             const snap = await getDoc(doc(db, 'users', uid));
@@ -234,7 +234,7 @@ const SupportGroupsScreen = ({ route }) => {
                                 style={[
                                     styles.memberAvatarWithInitial,
                                     {
-                                        marginLeft: index === 0 ? 0 : -14,
+                                        marginLeft: index === 0 ? 0 : -6,
                                         zIndex: 10 - index
                                     }
                                 ]}
@@ -247,14 +247,16 @@ const SupportGroupsScreen = ({ route }) => {
                                     wellbeingScore={member?.wellbeingScore}
                                     wellbeingLabel={member?.wellbeingLabel}
                                 />
-                                <Text style={styles.memberInitialText}>{getInitial(member.name)}</Text>
+                                <Text
+                                    style={styles.memberInitialText}
+                                    numberOfLines={2}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.72}
+                                >
+                                    {getCircleMemberFirstName(member.name)}
+                                </Text>
                             </View>
                         ))}
-                        {Array.isArray(item.members) && item.members.length > 3 && (
-                            <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -14 }]}>
-                                <Text style={styles.moreMembersText}>+{item.members.length - 3}</Text>
-                            </View>
-                        )}
                     </View>
                     <View style={styles.stackInfoContainer}>
                         <Text style={styles.stackInfoText}>
@@ -624,29 +626,17 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     memberAvatarWithInitial: {
-        width: 40,
+        width: 50,
         alignItems: 'center',
     },
     memberInitialText: {
         marginTop: 4,
-        fontSize: 10,
+        width: 50,
+        fontSize: 9,
+        lineHeight: 11,
         fontWeight: '700',
         color: '#616161',
-    },
-    moreMembersBadge: {
-        width: 34,
-        height: 34,
-        borderRadius: 17,
-        backgroundColor: '#F5F5F5',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#FFF',
-    },
-    moreMembersText: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#757575',
+        textAlign: 'center',
     },
     stackInfoContainer: {
         flexDirection: 'row',

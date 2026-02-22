@@ -62,7 +62,13 @@ const PersonalProfileScreen = ({ navigation }) => {
         return Math.min(score, 5.0).toFixed(1);
     };
 
-    const getInitial = (name = '') => String(name).trim().charAt(0).toUpperCase() || '?';
+    const getCircleMemberFirstName = (name = '') => {
+        const parts = String(name || '')
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+        return parts.length > 0 ? parts[0] : 'Member';
+    };
     const getMemberRingColor = (profile) => {
         return getWellbeingRingColor({
             wellbeingScore: profile?.wellbeingScore,
@@ -291,7 +297,7 @@ const PersonalProfileScreen = ({ navigation }) => {
                                                     styles.memberAvatarWithInitial,
                                                     {
                                                         zIndex: 10 - index,
-                                                        marginLeft: index === 0 ? 0 : -18,
+                                                        marginLeft: index === 0 ? 0 : -8,
                                                     }
                                                 ]}
                                             >
@@ -307,7 +313,14 @@ const PersonalProfileScreen = ({ navigation }) => {
                                                         size={40}
                                                     />
                                                 </View>
-                                                <Text style={styles.memberInitialText}>{getInitial(profile.name)}</Text>
+                                                <Text
+                                                    style={styles.memberInitialText}
+                                                    numberOfLines={2}
+                                                    adjustsFontSizeToFit
+                                                    minimumFontScale={0.72}
+                                                >
+                                                    {getCircleMemberFirstName(profile.name)}
+                                                </Text>
                                             </View>
                                         );
                                     })}
@@ -639,7 +652,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     memberAvatarWithInitial: {
-        width: 48,
+        width: 56,
         alignItems: 'center',
     },
     memberAvatarContainer: {
@@ -658,9 +671,12 @@ const styles = StyleSheet.create({
     },
     memberInitialText: {
         marginTop: 4,
-        fontSize: 10,
+        width: 56,
+        fontSize: 9,
+        lineHeight: 11,
         color: '#616161',
         fontWeight: '700',
+        textAlign: 'center',
     },
     moreMembersBadge: {
         width: 42,
