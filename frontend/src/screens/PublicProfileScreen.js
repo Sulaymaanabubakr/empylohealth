@@ -12,6 +12,7 @@ import { useModal } from '../context/ModalContext';
 import { COLORS, SPACING } from '../theme/theme';
 import { isPresenceOnline } from '../utils/presence';
 import { formatDateUK } from '../utils/dateFormat';
+import { getWellbeingRingColor } from '../utils/wellbeing';
 
 const labelFromScore = (score) => {
     const n = Number(score);
@@ -24,18 +25,11 @@ const labelFromScore = (score) => {
 };
 
 const ringColorFromProfile = (profile = {}) => {
-    const rawScore = profile?.wellbeingScore;
-    const score = typeof rawScore === 'number'
-        ? rawScore
-        : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
-    const label = String(profile?.wellbeingLabel || profile?.wellbeingStatus || '').toLowerCase();
-
-    // Keep ring color deterministic from score whenever score exists.
-    if (Number.isFinite(score)) return score >= 70 ? '#2E7D32' : '#C62828';
-
-    if (label.includes('struggl') || label.includes('attention')) return '#C62828';
-    if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32';
-    return '#BDBDBD';
+    return getWellbeingRingColor({
+        wellbeingScore: profile?.wellbeingScore,
+        wellbeingLabel: profile?.wellbeingLabel,
+        wellbeingStatus: profile?.wellbeingStatus
+    }) || '#BDBDBD';
 };
 
 const fmtDate = (value) => {

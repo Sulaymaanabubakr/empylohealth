@@ -15,11 +15,16 @@ export const resolveWellbeingScore = (source = {}) => {
 
 export const getWellbeingRingColor = ({ wellbeingScore, wellbeingLabel, wellbeingStatus } = {}) => {
   const score = parseWellbeingScore(wellbeingScore);
-  if (score != null) return score >= 70 ? '#2E7D32' : '#C62828';
+  if (score != null) {
+    if (score <= 34) return '#C62828'; // Red: 0-34
+    if (score <= 64) return '#F59E0B'; // Amber: 35-64
+    return '#2E7D32'; // Green: 65-100
+  }
 
   const label = String(wellbeingLabel || wellbeingStatus || '').toLowerCase();
   if (!label) return null;
   if (label.includes('struggl') || label.includes('attention')) return '#C62828';
+  if (label.includes('okay') || label.includes('neutral') || label.includes('fair')) return '#F59E0B';
   if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32';
   return null;
 };
