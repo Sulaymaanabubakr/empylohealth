@@ -23,6 +23,7 @@ export declare const scheduleHuddle: import("firebase-functions/v1").HttpsFuncti
 export declare const deleteScheduledHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const toggleScheduledHuddleReminder: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const processScheduledHuddles: import("firebase-functions/scheduler").ScheduleFunction;
+export declare const triggerDueScheduledHuddles: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const createDirectChat: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const blockUser: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const unblockUser: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

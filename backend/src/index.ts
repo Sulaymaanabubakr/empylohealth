@@ -41,6 +41,7 @@ export const scheduleHuddle = coreApi.scheduleHuddle;
 export const deleteScheduledHuddle = coreApi.deleteScheduledHuddle;
 export const toggleScheduledHuddleReminder = coreApi.toggleScheduledHuddleReminder;
 export const processScheduledHuddles = coreApi.processScheduledHuddles;
+export const triggerDueScheduledHuddles = coreApi.triggerDueScheduledHuddles;
 export const createDirectChat = coreApi.createDirectChat;
 export const blockUser = coreApi.blockUser;
 export const unblockUser = coreApi.unblockUser;

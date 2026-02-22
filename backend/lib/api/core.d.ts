@@ -176,6 +176,11 @@ export declare const toggleScheduledHuddleReminder: functions.HttpsFunction & fu
 export declare const deleteScheduledHuddle: functions.HttpsFunction & functions.Runnable<any>;
 export declare const processScheduledHuddles: import("firebase-functions/v2/scheduler").ScheduleFunction;
 /**
+ * Manual fallback: allows active members to kick due scheduled huddles for a circle.
+ * This protects against scheduler jitter/missed ticks while users are in-app.
+ */
+export declare const triggerDueScheduledHuddles: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Submit a Report (Circle Context)
  */
 export declare const submitReport: functions.HttpsFunction & functions.Runnable<any>;

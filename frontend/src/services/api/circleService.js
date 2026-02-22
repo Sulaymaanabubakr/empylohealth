@@ -3,6 +3,9 @@ import { collection, query, where, getDocs, orderBy, onSnapshot, doc, getDoc } f
 import { circleRepository } from '../repositories/CircleRepository';
 import { callableClient } from './callableClient';
 
+const dueScheduleKickState = new Map();
+const DUE_SCHEDULE_KICK_THROTTLE_MS = 20000;
+
 const isAuthPermissionError = (error) => {
     const code = String(error?.code || '');
     const message = String(error?.message || '').toLowerCase();
@@ -160,6 +163,10 @@ export const circleService = {
         return callableClient.invokeWithAuth('deleteScheduledHuddle', { circleId, eventId });
     },
 
+    triggerDueScheduledHuddles: async (circleId) => {
+        return callableClient.invokeWithAuth('triggerDueScheduledHuddles', { circleId });
+    },
+
     subscribeToScheduledHuddles: (circleId, callback, onError) => {
         const q = query(
             collection(db, 'circles', circleId, 'scheduledHuddles'),
@@ -177,6 +184,22 @@ export const circleService = {
                             || (event?.scheduledAt?.toDate ? event.scheduledAt.toDate().getTime() : new Date(event?.scheduledAt || 0).getTime());
                         return Number.isFinite(ms) && ms > now;
                     });
+
+                const hasDueSoonEvent = snapshot.docs.some((docSnap) => {
+                    const event = docSnap.data() || {};
+                    const ms = event?.scheduledAt?.toMillis?.()
+                        || (event?.scheduledAt?.toDate ? event.scheduledAt.toDate().getTime() : new Date(event?.scheduledAt || 0).getTime());
+                    return Number.isFinite(ms) && ms <= (now + 30000) && ms >= (now - 10 * 60 * 1000);
+                });
+
+                if (hasDueSoonEvent) {
+                    const lastKick = dueScheduleKickState.get(circleId) || 0;
+                    if ((now - lastKick) > DUE_SCHEDULE_KICK_THROTTLE_MS) {
+                        dueScheduleKickState.set(circleId, now);
+                        callableClient.invokeWithAuth('triggerDueScheduledHuddles', { circleId }).catch(() => {});
+                    }
+                }
+
                 callback(events);
             },
             (error) => {

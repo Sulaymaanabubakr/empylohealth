@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -3047,8 +3047,8 @@ exports.updateHuddleState = regionalFunctions.https.onCall(async (data, context)
 exports.cleanupStaleHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 minutes', region: 'europe-west1' }, async () => {
     const now = Date.now();
     // UX target: 2 min prompt + 5 min grace + forced 5-second countdown.
-    // Keep backend cleanup just above that so app-side flow can complete first.
-    const RINGING_MAX_MS = 8 * 60 * 1000; // 8 minutes
+    // Keep backend cleanup slightly above that so app-side flow can complete first.
+    const RINGING_MAX_MS = 7.5 * 60 * 1000; // 7 minutes 30 seconds
     const ACCEPTED_MAX_MS = 3 * 60 * 1000; // 3 minutes
     const ONGOING_EMPTY_ACTIVE_MAX_MS = 2 * 60 * 1000; // 2 minutes
     const tsToMs = (value) => (typeof value?.toMillis === 'function' ? value.toMillis() : 0);
@@ -3343,30 +3343,16 @@ exports.deleteScheduledHuddle = regionalFunctions.https.onCall(async (data, cont
 exports.processScheduledHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 minutes', region: 'europe-west1' }, async () => {
     const now = Date.now();
     const dueUpperBound = new Date(now + 30 * 1000);
-    const expiryUpperBound = new Date(now - 60 * 1000);
+    const dueLowerBound = new Date(now - 10 * 60 * 1000);
+    const expiryUpperBound = new Date(now - 30 * 60 * 1000);
     const reminderUpperBound = new Date(now + 5 * 60 * 1000);
-    const reminderLowerBound = new Date(now + 4 * 60 * 1000);
+    const reminderLowerBound = new Date(now);
     try {
-        // Mark stale scheduled huddles as expired so they disappear from UI lists.
-        const expiredSnap = await db.collectionGroup('scheduledHuddles')
-            .where('status', '==', 'scheduled')
-            .where('scheduledAt', '<=', expiryUpperBound)
-            .limit(200)
-            .get();
-        if (!expiredSnap.empty) {
-            const batch = db.batch();
-            expiredSnap.docs.forEach((docSnap) => {
-                batch.update(docSnap.ref, {
-                    status: 'expired',
-                    expiredAt: admin.firestore.FieldValue.serverTimestamp(),
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                });
-            });
-            await batch.commit();
-        }
         const dueSnap = await db.collectionGroup('scheduledHuddles')
             .where('status', '==', 'scheduled')
+            .where('scheduledAt', '>=', dueLowerBound)
             .where('scheduledAt', '<=', dueUpperBound)
+            .orderBy('scheduledAt', 'asc')
             .limit(100)
             .get();
         let started = 0;
@@ -3410,10 +3396,28 @@ exports.processScheduledHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every
                 console.error('[processScheduledHuddles] auto-start failed', docSnap.ref.path, error);
             }
         }
+        // Mark very stale scheduled huddles as expired so they disappear from UI lists.
+        const expiredSnap = await db.collectionGroup('scheduledHuddles')
+            .where('status', '==', 'scheduled')
+            .where('scheduledAt', '<=', expiryUpperBound)
+            .limit(200)
+            .get();
+        if (!expiredSnap.empty) {
+            const batch = db.batch();
+            expiredSnap.docs.forEach((docSnap) => {
+                batch.update(docSnap.ref, {
+                    status: 'expired',
+                    expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            await batch.commit();
+        }
         const reminderSnap = await db.collectionGroup('scheduledHuddles')
             .where('status', '==', 'scheduled')
             .where('scheduledAt', '>', reminderLowerBound)
             .where('scheduledAt', '<=', reminderUpperBound)
+            .orderBy('scheduledAt', 'asc')
             .limit(200)
             .get();
         let reminded = 0;
@@ -3451,6 +3455,72 @@ exports.processScheduledHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every
         console.error('[processScheduledHuddles] failed', error);
         return;
     }
+});
+/**
+ * Manual fallback: allows active members to kick due scheduled huddles for a circle.
+ * This protects against scheduler jitter/missed ticks while users are in-app.
+ */
+exports.triggerDueScheduledHuddles = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const circleId = String(data?.circleId || '').trim();
+    if (!circleId)
+        throw new functions.https.HttpsError('invalid-argument', 'circleId is required.');
+    const memberDoc = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
+    if (!memberDoc.exists || memberDoc.data()?.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Only active circle members can trigger scheduled sync.');
+    }
+    const now = Date.now();
+    const dueUpperBound = new Date(now + 30 * 1000);
+    const dueLowerBound = new Date(now - 10 * 60 * 1000);
+    const dueSnap = await db.collection('circles').doc(circleId).collection('scheduledHuddles')
+        .where('status', '==', 'scheduled')
+        .where('scheduledAt', '>=', dueLowerBound)
+        .where('scheduledAt', '<=', dueUpperBound)
+        .orderBy('scheduledAt', 'asc')
+        .limit(10)
+        .get();
+    let started = 0;
+    for (const docSnap of dueSnap.docs) {
+        const data = docSnap.data() || {};
+        const scheduledMs = data?.scheduledAt?.toMillis?.() || 0;
+        if (scheduledMs <= 0 || scheduledMs > (Date.now() + 30 * 1000))
+            continue;
+        const locked = await db.runTransaction(async (tx) => {
+            const latest = await tx.get(docSnap.ref);
+            const latestData = latest.data() || {};
+            if (!latest.exists || latestData?.status !== 'scheduled')
+                return false;
+            const latestMs = latestData?.scheduledAt?.toMillis?.() || 0;
+            if (latestMs <= 0 || latestMs > (Date.now() + 30 * 1000))
+                return false;
+            tx.update(docSnap.ref, {
+                status: 'starting',
+                startedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            return true;
+        });
+        if (!locked)
+            continue;
+        try {
+            await startScheduledHuddleInternal({
+                scheduledRef: docSnap.ref,
+                scheduledData: data
+            });
+            started += 1;
+        }
+        catch (error) {
+            await docSnap.ref.set({
+                status: 'scheduled',
+                startError: String(error?.message || 'Unable to auto-start scheduled huddle.'),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            console.error('[triggerDueScheduledHuddles] auto-start failed', docSnap.ref.path, error);
+        }
+    }
+    return { success: true, started };
 });
 /**
  * Submit a Report (Circle Context)
