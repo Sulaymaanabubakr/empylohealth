@@ -112,18 +112,15 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     useEffect(() => {
         if (!isPotentiallyActiveHuddle(circle?.activeHuddle)) return undefined;
-        let cancelled = false;
-        const validate = async () => {
-            const snap = await getDoc(doc(db, 'huddles', circle.activeHuddle.huddleId)).catch(() => null);
-            const data = snap?.exists?.() ? (snap.data() || {}) : null;
-            if (!cancelled && !isJoinableHuddleDoc(data)) {
+        const huddleRef = doc(db, 'huddles', circle.activeHuddle.huddleId);
+        return onSnapshot(huddleRef, (snap) => {
+            const data = snap.exists() ? (snap.data() || {}) : null;
+            if (!isJoinableHuddleDoc(data)) {
                 setCircle((prev) => (prev ? { ...prev, activeHuddle: null } : prev));
             }
-        };
-        validate();
-        return () => {
-            cancelled = true;
-        };
+        }, () => {
+            setCircle((prev) => (prev ? { ...prev, activeHuddle: null } : prev));
+        });
     }, [circle?.activeHuddle?.huddleId]);
 
     useEffect(() => {

@@ -19,11 +19,13 @@ import { useModal } from '../context/ModalContext';
 const MAX_VISIBLE_PARTICIPANTS = 8;
 const JOIN_TIMEOUT_MS = 15000; // 10-15s
 const JOIN_MAX_ATTEMPTS = 1;
-const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 20000;
+const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 60000;
 const HOST_ALONE_PROMPT_DELAY_MS = 120000; // 2 min
 const HOST_ALONE_FORCE_END_DELAY_MS = 300000; // 5 min after "No"
 const FORCE_END_COUNTDOWN_SECONDS = 5;
 const MAX_CALL_DURATION_MS = 3600000; // 1 hour
+const ENABLE_ACCEPTED_ALONE_AUTO_END = false;
+const ENABLE_HOST_ALONE_AUTOMATION = false;
 // Audio playback is handled via loopingSound (expo-audio).
 
 const HuddleScreen = ({ navigation, route }) => {
@@ -37,6 +39,7 @@ const HuddleScreen = ({ navigation, route }) => {
     const ringbackSoundRef = useRef(null);
     const ringbackSessionRef = useRef(0);
     const ringbackVibrationIntervalRef = useRef(null);
+    const lastAudioRouteApplyAtRef = useRef(0);
     const firstRemoteAudioLoggedRef = useRef(false);
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const screenShownAtRef = useRef(Date.now());
@@ -158,6 +161,23 @@ const HuddleScreen = ({ navigation, route }) => {
             return null;
         }
     };
+
+    const applyPreferredAudioRoute = useCallback(async (speakerOn = true, force = false) => {
+        const callObject = callObjectRef.current;
+        if (!callObject) return;
+        const now = Date.now();
+        if (!force && (now - lastAudioRouteApplyAtRef.current) < 1200) return;
+        lastAudioRouteApplyAtRef.current = now;
+
+        await safeCall(() => callObject.setNativeInCallAudioMode(speakerOn ? 'video' : 'voice'));
+        if (!speakerOn) return;
+
+        const devices = await safeCall(() => callObject.getInputDevices());
+        const speakerDeviceId = devices?.speaker?.deviceId;
+        if (speakerDeviceId) {
+            await safeCall(() => callObject.setAudioDevice(speakerDeviceId));
+        }
+    }, []);
 
     const toJoinFailureMessage = useCallback((error, fallback = '') => {
         const raw = String(error?.message || '').toLowerCase();
@@ -533,6 +553,7 @@ const HuddleScreen = ({ navigation, route }) => {
     // 1) after 2 min alone -> ask to end
     // 2) if host chooses "No", wait 5 min still alone -> force 5..1 countdown and end
     useEffect(() => {
+        if (!ENABLE_HOST_ALONE_AUTOMATION) return undefined;
         if (forceEndCountdownIntervalRef.current) return undefined; // countdown is unstoppable once started
         const isEligible =
             isHost &&
@@ -575,6 +596,7 @@ const HuddleScreen = ({ navigation, route }) => {
     }, [clearHostAloneTimers, hasLocalJoinedDaily, isHost, phase, remoteParticipantCount]);
 
     useEffect(() => {
+        if (!ENABLE_HOST_ALONE_AUTOMATION) return undefined;
         const isEligible =
             isHost &&
             hasLocalJoinedDaily &&
@@ -808,9 +830,14 @@ const HuddleScreen = ({ navigation, route }) => {
                 }
 
                 activeCallObject.setLocalVideo(false);
-                activeCallObject.setNativeInCallAudioMode('video');
+                activeCallObject.setLocalAudio(true);
+                setIsMuted(false);
                 nativeCallService.setHuddleCallActive(resolvedHuddleId);
                 setIsSpeakerOn(true);
+                applyPreferredAudioRoute(true, true);
+                setTimeout(() => {
+                    applyPreferredAudioRoute(true, true);
+                }, 1200);
                 refreshParticipants();
                 const startedAtMs = callStartedAtMsRef.current || Date.now();
                 callStartedAtMsRef.current = startedAtMs;
@@ -845,7 +872,7 @@ const HuddleScreen = ({ navigation, route }) => {
         };
 
         start();
-    }, [attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, clearForceEndCountdown, clearHostAloneTimers, huddleId, leaveCall, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, toJoinFailureMessage, user?.displayName, user?.uid, userData?.name]);
+    }, [applyPreferredAudioRoute, attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, clearForceEndCountdown, clearHostAloneTimers, huddleId, leaveCall, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, toJoinFailureMessage, user?.displayName, user?.uid, userData?.name]);
 
     const remoteParticipantCount = useMemo(
         () => participants.filter((p) => !p.local).length,
@@ -893,8 +920,10 @@ const HuddleScreen = ({ navigation, route }) => {
     }, [clearHostAloneTimers, huddleId, phase, remoteParticipantCount]);
 
     useEffect(() => {
+        if (!ENABLE_ACCEPTED_ALONE_AUTO_END) return undefined;
         if (!huddleId) return undefined;
         if (firebaseStatus !== 'accepted') return undefined;
+        if (isHost) return undefined;
         if (aloneAfterAcceptTimeoutRef.current) return undefined;
 
         aloneAfterAcceptTimeoutRef.current = setTimeout(() => {
@@ -903,7 +932,7 @@ const HuddleScreen = ({ navigation, route }) => {
             console.warn('[HUDDLE] accepted-but-alone timeout');
             callDiagnostics.log(huddleId, 'timeout_accepted_alone');
             leaveCall(
-                isHost,
+                false,
                 true,
                 true,
                 'failed_to_connect',
@@ -933,6 +962,16 @@ const HuddleScreen = ({ navigation, route }) => {
     }, [hasLocalJoinedDaily, huddleId, isHost, phase]);
 
     useEffect(() => {
+        if (!huddleId || !hasLocalJoinedDaily || phase === 'ending' || phase === 'ended' || phase === 'error') {
+            return undefined;
+        }
+        const interval = setInterval(() => {
+            huddleService.updateHuddleConnection(huddleId, 'daily_joined').catch(() => {});
+        }, 25000);
+        return () => clearInterval(interval);
+    }, [hasLocalJoinedDaily, huddleId, phase]);
+
+    useEffect(() => {
         const shouldPlayRingback =
             phase === 'ringing' &&
             isHost &&
@@ -945,6 +984,12 @@ const HuddleScreen = ({ navigation, route }) => {
         stopRingbackTone();
         return undefined;
     }, [firebaseStatus, isHost, phase, remoteParticipantCount, startRingbackTone, stopRingbackTone]);
+
+    useEffect(() => {
+        if (!hasLocalJoinedDaily) return;
+        if (phase === 'ending' || phase === 'ended' || phase === 'error') return;
+        applyPreferredAudioRoute(isSpeakerOn);
+    }, [applyPreferredAudioRoute, hasLocalJoinedDaily, isSpeakerOn, phase]);
 
     const toggleMute = async () => {
         const callObject = callObjectRef.current;
@@ -962,7 +1007,7 @@ const HuddleScreen = ({ navigation, route }) => {
         if (!callObject) return;
         const next = !isSpeakerOn;
         setIsSpeakerOn(next);
-        callObject.setNativeInCallAudioMode(next ? 'video' : 'voice');
+        applyPreferredAudioRoute(next, true);
     };
 
     useEffect(() => {

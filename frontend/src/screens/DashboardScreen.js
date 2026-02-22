@@ -14,9 +14,10 @@ import { circleService } from '../services/api/circleService';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
-import { getWellbeingRingColor } from '../utils/wellbeing';
+import CircleMemberLane from '../components/CircleMemberLane';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { formatDateUK, formatTimeUK } from '../utils/dateFormat';
+import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } from '../services/circles/activeMembers';
 
 import { assessmentService } from '../services/api/assessmentService';
 
@@ -73,12 +74,29 @@ const resolveMemberWellbeing = (userData = {}) => {
     };
 };
 
-const getMemberRingColor = (memberWellbeing) => {
-    return getWellbeingRingColor({
-        wellbeingScore: memberWellbeing?.wellbeingScore,
-        wellbeingLabel: memberWellbeing?.wellbeingLabel,
-        wellbeingStatus: memberWellbeing?.wellbeingStatus
-    }) || '#BDBDBD';
+const getWellbeingScoreMessage = (score, label = '') => {
+    if (Number.isFinite(score)) {
+        if (score <= 34) {
+            return "Things feel heavy right now. You're not alone, take one small step today.";
+        }
+        if (score <= 64) {
+            return "You're making progress. Keep going with steady habits and check-ins.";
+        }
+        return "You're doing well. Keep up the strong momentum and consistency.";
+    }
+
+    const normalizedLabel = String(label || '').toLowerCase();
+    if (normalizedLabel.includes('struggl') || normalizedLabel.includes('low') || normalizedLabel.includes('critical')) {
+        return "Things feel heavy right now. You're not alone, take one small step today.";
+    }
+    if (normalizedLabel.includes('moderate') || normalizedLabel.includes('fair') || normalizedLabel.includes('amber')) {
+        return "You're making progress. Keep going with steady habits and check-ins.";
+    }
+    if (normalizedLabel.includes('well') || normalizedLabel.includes('good') || normalizedLabel.includes('stable') || normalizedLabel.includes('high')) {
+        return "You're doing well. Keep up the strong momentum and consistency.";
+    }
+
+    return 'Complete your check-in to get personalized wellbeing guidance.';
 };
 
 const decodeSvgDataUri = (uri = '') => {
@@ -92,14 +110,6 @@ const decodeSvgDataUri = (uri = '') => {
     } catch {
         return encoded;
     }
-};
-
-const getCircleMemberFirstName = (name = '') => {
-    const parts = String(name || '')
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-    return parts.length > 0 ? parts[0] : 'Member';
 };
 
 const CircularProgress = ({ score, label }) => {
@@ -160,12 +170,13 @@ const DashboardScreen = ({ navigation }) => {
     const { userData, user } = useAuth();
     const [allCircles, setAllCircles] = useState([]);
     const [selectedCircleId, setSelectedCircleId] = useState('');
-    const [wellbeing, setWellbeing] = useState({ score: 0, label: 'Loading...' });
+    const [wellbeing, setWellbeing] = useState({ score: null, label: '' });
     const [challenges, setChallenges] = useState([]);
     const [recommendations, setRecommendations] = useState([]);
     const [showAssessment, setShowAssessment] = useState(false);
     const [assessmentType, setAssessmentType] = useState('daily'); // 'daily' or 'weekly'
     const [memberProfiles, setMemberProfiles] = useState({});
+    const [activeMemberIdsMap, setActiveMemberIdsMap] = useState({});
     const [refreshing, setRefreshing] = useState(false);
     const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
     const [lastUpdatedAt, setLastUpdatedAt] = useState(0);
@@ -265,12 +276,27 @@ const DashboardScreen = ({ navigation }) => {
     }, [allCircles, selectedCircleId]);
 
     useEffect(() => {
-        if (selectedCircle?.members?.length) {
+        let cancelled = false;
+        const loadActiveMembers = async () => {
+            const ids = (allCircles || []).map((circle) => circle?.id).filter(Boolean);
+            if (!ids.length) {
+                if (!cancelled) setActiveMemberIdsMap({});
+                return;
+            }
+            const map = await fetchActiveMemberIdsMap(ids);
+            if (!cancelled) setActiveMemberIdsMap(map);
+        };
+        loadActiveMembers();
+        return () => { cancelled = true; };
+    }, [allCircles]);
+
+    useEffect(() => {
+        if (getDisplayMemberIds(selectedCircle?.id, selectedCircle?.members || [], activeMemberIdsMap).length) {
             loadMemberProfiles(selectedCircle);
         } else {
             setMemberProfiles({});
         }
-    }, [selectedCircle?.id]);
+    }, [selectedCircle?.id, activeMemberIdsMap, user?.uid]);
 
     useEffect(() => {
         if (!user?.uid) return undefined;
@@ -390,11 +416,12 @@ const DashboardScreen = ({ navigation }) => {
     };
 
     const loadMemberProfiles = async (circle) => {
-        if (!circle.members || circle.members.length === 0) return;
+        const activeIds = getDisplayMemberIds(circle?.id, circle?.members || [], activeMemberIdsMap);
+        if (!activeIds.length) return;
 
         try {
             const profiles = {};
-            const memberIds = circle.members.slice(0, 5);
+            const memberIds = activeIds.slice(0, 5);
 
             await Promise.all(memberIds.map(async (memberId) => {
                 if (memberId === user?.uid) return;
@@ -430,6 +457,9 @@ const DashboardScreen = ({ navigation }) => {
         ? selfResolvedWellbeing.score
         : (typeof wellbeing?.score === 'number' ? wellbeing.score : null);
     const selfRingFallbackLabel = selfResolvedWellbeing.label || wellbeing?.label || '';
+    const effectiveWellbeingScore = typeof wellbeing?.score === 'number' ? wellbeing.score : selfResolvedWellbeing.score;
+    const effectiveWellbeingLabel = wellbeing?.label || selfResolvedWellbeing.label || '';
+    const wellbeingDescription = getWellbeingScoreMessage(effectiveWellbeingScore, effectiveWellbeingLabel);
     const selfProfile = {
         name: userData?.name || user?.displayName || 'You',
         photoURL: userData?.photoURL || user?.photoURL || '',
@@ -437,6 +467,15 @@ const DashboardScreen = ({ navigation }) => {
         wellbeingLabel: selfRingFallbackLabel,
         wellbeingStatus: userData?.wellbeingStatus || ''
     };
+    const selectedCircleMemberIds = useMemo(
+        () => getDisplayMemberIds(selectedCircle?.id, selectedCircle?.members || [], activeMemberIdsMap),
+        [selectedCircle?.id, selectedCircle?.members, activeMemberIdsMap]
+    );
+    const prioritizedSelectedMemberIds = useMemo(() => {
+        if (!selectedCircleMemberIds.length) return [];
+        if (!user?.uid || !selectedCircleMemberIds.includes(user.uid)) return selectedCircleMemberIds;
+        return [user.uid, ...selectedCircleMemberIds.filter((id) => id !== user.uid)];
+    }, [selectedCircleMemberIds, user?.uid]);
     const handleSelectPrimaryCircle = async (circleId) => {
         setSelectedCircleId(circleId);
         if (primaryCircleStorageKey) {
@@ -491,8 +530,8 @@ const DashboardScreen = ({ navigation }) => {
                             name={userData?.name || user?.displayName || user?.email?.split('@')?.[0] || 'User'}
                             size={60}
                             showWellbeingRing
-                            wellbeingScore={wellbeing?.score ?? userData?.wellbeingScore}
-                            wellbeingLabel={wellbeing?.label || userData?.wellbeingLabel || userData?.wellbeingStatus}
+                            wellbeingScore={effectiveWellbeingScore}
+                            wellbeingLabel={effectiveWellbeingLabel || userData?.wellbeingStatus}
                         />
                         <View style={styles.onlineBadge} />
                     </View>
@@ -507,12 +546,12 @@ const DashboardScreen = ({ navigation }) => {
                     <View style={styles.wellbeingContent}>
                         <Text style={styles.wellbeingTitle}>Wellbeing Score</Text>
                         <Text style={styles.wellbeingDescription}>
-                            Your score is looking great! Keep up the good work.
+                            {wellbeingDescription}
                         </Text>
                         <TouchableOpacity
                             style={styles.checkDetailsButton}
                             onPress={() => {
-                                if (typeof wellbeing.score === 'number' && wellbeing.score > 0) {
+                                if (typeof effectiveWellbeingScore === 'number' && effectiveWellbeingScore > 0) {
                                     navigation.navigate('Stats');
                                 } else {
                                     navigation.navigate('Assessment');
@@ -520,12 +559,12 @@ const DashboardScreen = ({ navigation }) => {
                             }}
                         >
                             <Text style={styles.checkDetailsText}>
-                                {(typeof wellbeing.score === 'number' && wellbeing.score > 0) ? "Check Details" : "Take Assessment"}
+                                {(typeof effectiveWellbeingScore === 'number' && effectiveWellbeingScore > 0) ? "Check Details" : "Take Assessment"}
                             </Text>
                             <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
                         </TouchableOpacity>
                     </View>
-                    <CircularProgress score={wellbeing.score} label={wellbeing.label} />
+                    <CircularProgress score={effectiveWellbeingScore} label={effectiveWellbeingLabel} />
                 </View>
 
                 {/* Circles Section */}
@@ -574,7 +613,7 @@ const DashboardScreen = ({ navigation }) => {
                             <View style={styles.circleHeader}>
                                 <View>
                                     <Text style={styles.circleTitle}>{selectedCircle.name}</Text>
-                                    <Text style={styles.circleMembers}>{selectedCircle.members?.length || 0} Members • High Activity</Text>
+                                    <Text style={styles.circleMembers}>{getActiveMemberCount(selectedCircle.id, selectedCircle.members, activeMemberIdsMap)} Members • High Activity</Text>
                                 </View>
                                 {/* Rating Badge */}
                                 <View style={styles.scoreBadge}>
@@ -584,61 +623,33 @@ const DashboardScreen = ({ navigation }) => {
                             </View>
 
                             {/* Premium Member Stack */}
-                            {selectedCircle.members && selectedCircle.members.length > 0 ? (
+                            {selectedCircleMemberIds.length > 0 ? (
                                 <View style={styles.memberStackContainer}>
-                                    <View style={styles.avatarStack}>
-                                        {[...(selectedCircle.members.includes(user?.uid)
-                                            ? [user?.uid, ...selectedCircle.members.filter((id) => id !== user?.uid)]
-                                            : selectedCircle.members
-                                        )].slice(0, 5).map((memberId, index) => {
-                                            const profile = memberId === user?.uid
-                                                ? selfProfile
-                                                : memberProfiles[memberId];
-                                            if (!profile) return null;
-
-                                            return (
-                                                <View
-                                                    key={memberId}
-                                                    style={[
-                                                        styles.memberAvatarWithInitial,
-                                                        {
-                                                            zIndex: 10 - index,
-                                                            marginLeft: index === 0 ? 0 : -8,
-                                                        }
-                                                    ]}
-                                                >
-                                                    <View
-                                                        style={[
-                                                            styles.memberAvatarContainer,
-                                                            { borderColor: getMemberRingColor(profile) }
-                                                        ]}
-                                                    >
-                                                        <Avatar
-                                                            uri={profile.photoURL}
-                                                            name={profile.name}
-                                                            size={40}
-                                                        />
-                                                    </View>
-                                                    <Text
-                                                        style={styles.memberInitialText}
-                                                        numberOfLines={2}
-                                                        adjustsFontSizeToFit
-                                                        minimumFontScale={0.72}
-                                                    >
-                                                        {getCircleMemberFirstName(profile.name)}
-                                                    </Text>
-                                                </View>
-                                            );
-                                        })}
-                                        {selectedCircle.members.length > 5 && (
-                                            <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -18 }]}>
-                                                <Text style={styles.moreMembersText}>+{selectedCircle.members.length - 5}</Text>
-                                            </View>
-                                        )}
-                                    </View>
+                                    <CircleMemberLane
+                                        members={
+                                            [...prioritizedSelectedMemberIds]
+                                                .slice(0, 6)
+                                                .map((memberId) => {
+                                                    const profile = memberId === user?.uid ? selfProfile : memberProfiles[memberId];
+                                                    if (!profile) return null;
+                                                    return {
+                                                        uid: memberId,
+                                                        name: profile?.name,
+                                                        photoURL: profile?.photoURL,
+                                                        wellbeingScore: profile?.wellbeingScore,
+                                                        wellbeingLabel: profile?.wellbeingLabel,
+                                                        wellbeingStatus: profile?.wellbeingStatus,
+                                                    };
+                                                })
+                                                .filter(Boolean)
+                                        }
+                                        prioritizeUid={user?.uid || null}
+                                        maxVisible={6}
+                                        avatarSize={34}
+                                    />
                                     <View style={styles.stackInfoContainer}>
                                         <Text style={styles.stackInfoText}>
-                                            <Text style={styles.highlightText}>{selectedCircle.members.length} members</Text> are active
+                                            <Text style={styles.highlightText}>{getActiveMemberCount(selectedCircle.id, selectedCircle.members, activeMemberIdsMap)} members</Text> are active
                                         </Text>
                                         <View style={styles.activeIndicator} />
                                     </View>
@@ -1097,45 +1108,18 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     },
     memberStackContainer: {
-        marginBottom: 20,
-        marginTop: 12,
+        marginBottom: 12,
+        marginTop: 8,
         alignItems: 'center', // Center vertically within container (if row) or horizontally (if col)
         width: '100%',     // Ensure full width for centering
     },
     avatarStack: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center', // Center content horizontally
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
         marginBottom: 12,
-        // Removed paddingLeft to ensure true center
-    },
-    memberAvatarContainer: {
-        width: 48,
-        height: 48,
-        borderWidth: 3,
-        borderColor: '#BDBDBD',
-        borderRadius: 24,
-        backgroundColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        elevation: 6,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-    },
-    memberAvatarWithInitial: {
-        width: 56,
-        alignItems: 'center',
-    },
-    memberInitialText: {
-        marginTop: 4,
-        width: 56,
-        fontSize: 9,
-        lineHeight: 11,
-        fontWeight: '700',
-        color: '#616161',
-        textAlign: 'center',
+        position: 'relative',
+        width: '100%',
+        minHeight: 78,
     },
     moreMembersBadge: {
         width: 42,

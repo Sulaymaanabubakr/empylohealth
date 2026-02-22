@@ -1,7 +1,7 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { auth, db } from '../firebaseConfig';
 import { doc, arrayUnion, setDoc, getDoc } from 'firebase/firestore';
 import { navigate } from '../../navigation/navigationRef';
@@ -17,6 +17,7 @@ let voipTokenUserId = null;
 let lastVoipToken = null;
 let pushRegistrationPromise = null;
 let lastInAppIncoming = { huddleId: null, ts: 0 };
+const incomingHuddleDedupe = new Map();
 let lastHandledNotificationResponseKey = null;
 const CHAT_MESSAGE_CATEGORY_ID = 'chat-message-actions';
 const CHAT_MESSAGE_ACTION_REPLY = 'chat-reply';
@@ -292,7 +293,24 @@ const configureNotificationCategories = async () => {
 const maybeShowNativeIncomingCall = async (payload) => {
     const data = extractNotificationData(payload);
     if (data?.type !== 'HUDDLE_STARTED' || !data?.huddleId) return false;
+    const now = Date.now();
+    const lastTs = Number(incomingHuddleDedupe.get(data.huddleId) || 0);
+    if (now - lastTs < 15000) return true;
+    incomingHuddleDedupe.set(data.huddleId, now);
     const avatar = data?.avatar || data?.senderAvatar || data?.chatAvatar || '';
+
+    // Foreground reliability: when app is already active, always use in-app incoming modal.
+    if (AppState.currentState === 'active') {
+        navigate('IncomingHuddle', {
+            huddleId: data.huddleId,
+            chatId: data.chatId,
+            chatName: data.chatName || 'Huddle',
+            callerName: data.callerName || data.chatName || 'Incoming Huddle',
+            avatar
+        });
+        return true;
+    }
+
     const shown = await nativeCallService.presentIncomingHuddleCall({
         huddleId: data.huddleId,
         chatId: data.chatId,
@@ -303,7 +321,6 @@ const maybeShowNativeIncomingCall = async (payload) => {
     if (shown) return true;
 
     // In-app fallback for builds without CallKeep: show accept/decline UI + ringtone.
-    const now = Date.now();
     if (lastInAppIncoming.huddleId !== data.huddleId || (now - lastInAppIncoming.ts) > 15000) {
         lastInAppIncoming = { huddleId: data.huddleId, ts: now };
         navigate('IncomingHuddle', {

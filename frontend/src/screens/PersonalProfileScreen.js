@@ -8,6 +8,7 @@ import { COLORS } from '../theme/theme';
 import ConfirmationModal from '../components/ConfirmationModal';
 import ProfilePhotoModal from '../components/ProfilePhotoModal';
 import Avatar from '../components/Avatar';
+import CircleMemberLane from '../components/CircleMemberLane';
 import ImageCropper from '../components/ImageCropper';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -18,7 +19,7 @@ import { mediaService } from '../services/api/mediaService';
 import { useModal } from '../context/ModalContext';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
-import { getWellbeingRingColor } from '../utils/wellbeing';
+import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } from '../services/circles/activeMembers';
 
 
 const PersonalProfileScreen = ({ navigation }) => {
@@ -32,6 +33,7 @@ const PersonalProfileScreen = ({ navigation }) => {
     const [isEditPhotoVisible, setIsEditPhotoVisible] = useState(false);
     const [myCircles, setMyCircles] = useState([]);
     const [memberProfiles, setMemberProfiles] = useState({});
+    const [activeMemberIdsMap, setActiveMemberIdsMap] = useState({});
     const [uploading, setUploading] = useState(false);
 
     // Cropper State
@@ -47,6 +49,21 @@ const PersonalProfileScreen = ({ navigation }) => {
         }
     }, [user]);
 
+    useEffect(() => {
+        let cancelled = false;
+        const loadActiveMembers = async () => {
+            const ids = (myCircles || []).map((circle) => circle?.id).filter(Boolean);
+            if (!ids.length) {
+                if (!cancelled) setActiveMemberIdsMap({});
+                return;
+            }
+            const map = await fetchActiveMemberIdsMap(ids);
+            if (!cancelled) setActiveMemberIdsMap(map);
+        };
+        loadActiveMembers();
+        return () => { cancelled = true; };
+    }, [myCircles]);
+
     const calculateCircleRating = (circle) => {
         if (!circle) return '0.0';
         if (circle.score) return Number(circle.score).toFixed(1);
@@ -60,21 +77,6 @@ const PersonalProfileScreen = ({ navigation }) => {
             if (hoursSinceUpdate < 24) score += 0.4;
         }
         return Math.min(score, 5.0).toFixed(1);
-    };
-
-    const getCircleMemberFirstName = (name = '') => {
-        const parts = String(name || '')
-            .trim()
-            .split(/\s+/)
-            .filter(Boolean);
-        return parts.length > 0 ? parts[0] : 'Member';
-    };
-    const getMemberRingColor = (profile) => {
-        return getWellbeingRingColor({
-            wellbeingScore: profile?.wellbeingScore,
-            wellbeingLabel: profile?.wellbeingLabel,
-            wellbeingStatus: profile?.wellbeingStatus
-        }) || '#D1D5DB';
     };
 
     const getProfileForMember = (memberId) => {
@@ -95,7 +97,7 @@ const PersonalProfileScreen = ({ navigation }) => {
         const loadMemberProfiles = async () => {
             const allMemberIds = [...new Set(
                 (myCircles || [])
-                    .flatMap((circle) => (Array.isArray(circle?.members) ? circle.members : []))
+                    .flatMap((circle) => getDisplayMemberIds(circle?.id, circle?.members || [], activeMemberIdsMap))
                     .filter(Boolean)
             )];
             if (!allMemberIds.length) {
@@ -116,7 +118,7 @@ const PersonalProfileScreen = ({ navigation }) => {
             setMemberProfiles(docs);
         };
         loadMemberProfiles();
-    }, [myCircles, user?.uid, userData?.wellbeingScore, userData?.wellbeingLabel, userData?.wellbeingStatus, userData?.photoURL, userData?.name, user?.photoURL, user?.displayName]);
+    }, [myCircles, activeMemberIdsMap, user?.uid, userData?.wellbeingScore, userData?.wellbeingLabel, userData?.wellbeingStatus, userData?.photoURL, userData?.name, user?.photoURL, user?.displayName]);
 
     // For other future confirmations like "Delete Account" or "Reset Notifications"
     // we can reuse the same modal or different states. For now implementing Logout.
@@ -275,7 +277,7 @@ const PersonalProfileScreen = ({ navigation }) => {
                         <View style={styles.circleHeader}>
                             <View>
                                 <Text style={styles.circleTitle}>{circle.name}</Text>
-                                <Text style={styles.circleMembers}>{circle.members?.length || 0} Members • High Activity</Text>
+                                <Text style={styles.circleMembers}>{getActiveMemberCount(circle.id, circle.members, activeMemberIdsMap)} Members • High Activity</Text>
                             </View>
                             <View style={styles.scoreBadge}>
                                 <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
@@ -283,56 +285,31 @@ const PersonalProfileScreen = ({ navigation }) => {
                             </View>
                         </View>
 
-                        {circle.members && circle.members.length > 0 && Object.keys(memberProfiles).length > 0 ? (
+                        {getDisplayMemberIds(circle.id, circle.members, activeMemberIdsMap).length > 0 && Object.keys(memberProfiles).length > 0 ? (
                             <View style={styles.memberStackContainer}>
-                                <View style={styles.avatarStack}>
-                                    {circle.members.slice(0, 5).map((memberId, index) => {
-                                        const profile = getProfileForMember(memberId);
-                                        if (!profile) return null;
-
-                                        return (
-                                            <View
-                                                key={`${circle.id}_${memberId}`}
-                                                style={[
-                                                    styles.memberAvatarWithInitial,
-                                                    {
-                                                        zIndex: 10 - index,
-                                                        marginLeft: index === 0 ? 0 : -8,
-                                                    }
-                                                ]}
-                                            >
-                                                <View
-                                                    style={[
-                                                        styles.memberAvatarContainer,
-                                                        { borderColor: getMemberRingColor(profile) }
-                                                    ]}
-                                                >
-                                                    <Avatar
-                                                        uri={profile.photoURL}
-                                                        name={profile.name}
-                                                        size={40}
-                                                    />
-                                                </View>
-                                                <Text
-                                                    style={styles.memberInitialText}
-                                                    numberOfLines={2}
-                                                    adjustsFontSizeToFit
-                                                    minimumFontScale={0.72}
-                                                >
-                                                    {getCircleMemberFirstName(profile.name)}
-                                                </Text>
-                                            </View>
-                                        );
-                                    })}
-                                    {circle.members.length > 5 && (
-                                        <View style={[styles.moreMembersBadge, { zIndex: 0, marginLeft: -18 }]}>
-                                            <Text style={styles.moreMembersText}>+{circle.members.length - 5}</Text>
-                                        </View>
-                                    )}
-                                </View>
+                                <CircleMemberLane
+                                    members={getDisplayMemberIds(circle.id, circle.members, activeMemberIdsMap).slice(0, 6)
+                                        .map((memberId) => {
+                                            const profile = getProfileForMember(memberId);
+                                            if (!profile) return null;
+                                            return {
+                                                uid: memberId,
+                                                name: profile?.name,
+                                                photoURL: profile?.photoURL,
+                                                wellbeingScore: profile?.wellbeingScore,
+                                                wellbeingLabel: profile?.wellbeingLabel,
+                                                wellbeingStatus: profile?.wellbeingStatus,
+                                            };
+                                        })
+                                        .filter(Boolean)
+                                    }
+                                    prioritizeUid={user?.uid || null}
+                                    maxVisible={6}
+                                    avatarSize={34}
+                                />
                                 <View style={styles.stackInfoContainer}>
                                     <Text style={styles.stackInfoText}>
-                                        <Text style={styles.highlightText}>{circle.members.length} members</Text> are active
+                                        <Text style={styles.highlightText}>{getActiveMemberCount(circle.id, circle.members, activeMemberIdsMap)} members</Text> are active
                                     </Text>
                                     <View style={styles.activeIndicator} />
                                 </View>
@@ -640,26 +617,92 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     memberStackContainer: {
-        marginBottom: 20,
-        marginTop: 12,
+        marginBottom: 12,
+        marginTop: 8,
         alignItems: 'center',
         width: '100%',
     },
     avatarStack: {
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+        marginBottom: 12,
+        position: 'relative',
+        width: '100%',
+        minHeight: 78,
+    },
+    avatarLaneRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        width: '100%',
+        paddingHorizontal: 8,
+    },
+    avatarLaneLeft: {
+        flexDirection: 'row',
+        justifyContent: 'space-evenly',
+        alignItems: 'flex-start',
+        columnGap: 2,
+    },
+    avatarLaneMiddle: {
+        flexDirection: 'row',
+        justifyContent: 'space-evenly',
+        alignItems: 'flex-start',
+        columnGap: 2,
+    },
+    avatarLaneRight: {
+        flexDirection: 'row',
+        justifyContent: 'space-evenly',
+        alignItems: 'flex-start',
+        columnGap: 2,
+    },
+    avatarConnectorRail: {
+        position: 'absolute',
+        top: 16,
+        height: 6,
+        width: '94%',
+        left: '3%',
+        borderRadius: 3,
+        zIndex: 0,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 12,
+        overflow: 'visible',
+    },
+    avatarConnectorSegment: {
+        height: '100%',
+    },
+    avatarConnectorSegmentLeft: {
+        backgroundColor: '#E74C3C',
+    },
+    avatarConnectorSegmentMiddle: {
+        backgroundColor: '#F4C542',
+    },
+    avatarConnectorSegmentRight: {
+        backgroundColor: '#78D64B',
+    },
+    avatarConnectorDot: {
+        position: 'absolute',
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        top: -4,
+    },
+    avatarConnectorDotLeft: {
+        left: -8,
+        backgroundColor: '#E74C3C',
+    },
+    avatarConnectorDotRight: {
+        right: -8,
+        backgroundColor: '#78D64B',
     },
     memberAvatarWithInitial: {
-        width: 56,
+        width: 40,
         alignItems: 'center',
     },
     memberAvatarContainer: {
-        width: 48,
-        height: 48,
+        width: 40,
+        height: 40,
         borderWidth: 3,
-        borderRadius: 24,
+        borderRadius: 20,
         backgroundColor: '#FFFFFF',
         alignItems: 'center',
         justifyContent: 'center',
@@ -670,10 +713,10 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
     memberInitialText: {
-        marginTop: 4,
-        width: 56,
-        fontSize: 9,
-        lineHeight: 11,
+        marginTop: 3,
+        width: 40,
+        fontSize: 8,
+        lineHeight: 9,
         color: '#616161',
         fontWeight: '700',
         textAlign: 'center',

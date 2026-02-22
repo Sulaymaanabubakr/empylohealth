@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { COLORS, SPACING } from '../theme/theme';
-import Avatar from '../components/Avatar';
+import CircleMemberLane from '../components/CircleMemberLane';
 import { circleService } from '../services/api/circleService';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { useModal } from '../context/ModalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } from '../services/circles/activeMembers';
 
 const normalizeText = (value = '') => String(value || '').trim().toLowerCase();
 const getCircleFilterValues = (group = {}) => {
@@ -48,14 +49,6 @@ const calculateCircleRating = (circle) => {
     return Math.min(score, 5.0).toFixed(1);
 };
 
-const getCircleMemberFirstName = (name = '') => {
-    const parts = String(name || '')
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-    return parts.length > 0 ? parts[0] : 'Member';
-};
-
 const SupportGroupsScreen = ({ route }) => {
     const navigation = useNavigation();
     const { user } = useAuth();
@@ -66,6 +59,7 @@ const SupportGroupsScreen = ({ route }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [groups, setGroups] = useState([]);
     const [memberPreviewMap, setMemberPreviewMap] = useState({});
+    const [activeMemberIdsMap, setActiveMemberIdsMap] = useState({});
     const [deleteInProgress, setDeleteInProgress] = useState(false);
     const [deletingCircleId, setDeletingCircleId] = useState(null);
     const filterStateStorageKey = `support_groups_filter:${scope}:${user?.uid || 'guest'}`;
@@ -123,6 +117,21 @@ const SupportGroupsScreen = ({ route }) => {
         AsyncStorage.setItem(filterStateStorageKey, JSON.stringify({ activeFilter, searchQuery })).catch(() => {});
     }, [filterStateStorageKey, activeFilter, searchQuery]);
 
+    useEffect(() => {
+        let cancelled = false;
+        const loadActiveMembers = async () => {
+            const ids = (groups || []).map((group) => group?.id).filter(Boolean);
+            if (!ids.length) {
+                if (!cancelled) setActiveMemberIdsMap({});
+                return;
+            }
+            const map = await fetchActiveMemberIdsMap(ids);
+            if (!cancelled) setActiveMemberIdsMap(map);
+        };
+        loadActiveMembers();
+        return () => { cancelled = true; };
+    }, [groups]);
+
     const filteredGroups = useMemo(() => {
         const normalizedFilter = normalizeText(activeFilter);
         const normalizedSearch = normalizeText(searchQuery);
@@ -171,9 +180,7 @@ const SupportGroupsScreen = ({ route }) => {
         const loadMemberPreviews = async () => {
             const previewEntries = await Promise.all(
                 (groups || []).map(async (group) => {
-                    const ids = Array.isArray(group?.members)
-                        ? group.members.slice(0, MAX_CIRCLE_MEMBERS)
-                        : [];
+                    const ids = getDisplayMemberIds(group?.id, group?.members || [], activeMemberIdsMap).slice(0, MAX_CIRCLE_MEMBERS);
                     const members = await Promise.all(ids.map(async (uid) => {
                         try {
                             const snap = await getDoc(doc(db, 'users', uid));
@@ -197,7 +204,7 @@ const SupportGroupsScreen = ({ route }) => {
         };
         loadMemberPreviews();
         return () => { cancelled = true; };
-    }, [groups]);
+    }, [groups, activeMemberIdsMap]);
 
     useEffect(() => {
         if (!deleteInProgress || !deletingCircleId) return;
@@ -217,7 +224,7 @@ const SupportGroupsScreen = ({ route }) => {
             <View style={styles.circleHeader}>
                 <View>
                     <Text style={styles.circleTitle}>{item.name}</Text>
-                    <Text style={styles.circleMembers}>{Array.isArray(item.members) ? item.members.length : 0} Members • High Activity</Text>
+                    <Text style={styles.circleMembers}>{getActiveMemberCount(item.id, item.members, activeMemberIdsMap)} Members • High Activity</Text>
                 </View>
                 <View style={styles.scoreBadge}>
                     <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
@@ -225,42 +232,24 @@ const SupportGroupsScreen = ({ route }) => {
                 </View>
             </View>
 
-            {(Array.isArray(item.members) && item.members.length > 0) ? (
+            {getDisplayMemberIds(item.id, item.members, activeMemberIdsMap).length > 0 ? (
                 <View style={styles.memberStackContainer}>
-                    <View style={styles.avatarStack}>
-                        {(memberPreviewMap[item.id] || []).map((member, index) => (
-                            <View
-                                key={`${item.id}_${member.uid}`}
-                                style={[
-                                    styles.memberAvatarWithInitial,
-                                    {
-                                        marginLeft: index === 0 ? 0 : -6,
-                                        zIndex: 10 - index
-                                    }
-                                ]}
-                            >
-                                <Avatar
-                                    uri={member.photoURL}
-                                    name={member.name}
-                                    size={40}
-                                    showWellbeingRing
-                                    wellbeingScore={member?.wellbeingScore}
-                                    wellbeingLabel={member?.wellbeingLabel}
-                                />
-                                <Text
-                                    style={styles.memberInitialText}
-                                    numberOfLines={2}
-                                    adjustsFontSizeToFit
-                                    minimumFontScale={0.72}
-                                >
-                                    {getCircleMemberFirstName(member.name)}
-                                </Text>
-                            </View>
-                        ))}
-                    </View>
+                    <CircleMemberLane
+                        members={(memberPreviewMap[item.id] || []).map((member) => ({
+                            uid: member?.uid,
+                            name: member?.name,
+                            photoURL: member?.photoURL,
+                            wellbeingScore: member?.wellbeingScore,
+                            wellbeingLabel: member?.wellbeingLabel,
+                            wellbeingStatus: member?.wellbeingStatus,
+                        }))}
+                        prioritizeUid={user?.uid || null}
+                        maxVisible={MAX_CIRCLE_MEMBERS}
+                        avatarSize={34}
+                    />
                     <View style={styles.stackInfoContainer}>
                         <Text style={styles.stackInfoText}>
-                            <Text style={styles.highlightText}>{Array.isArray(item.members) ? item.members.length : 0} members</Text> are active
+                            <Text style={styles.highlightText}>{getActiveMemberCount(item.id, item.members, activeMemberIdsMap)} members</Text> are active
                         </Text>
                         <View style={styles.activeIndicator} />
                     </View>
@@ -614,16 +603,82 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     },
     memberStackContainer: {
-        marginBottom: 20,
-        marginTop: 12,
+        marginBottom: 12,
+        marginTop: 8,
         alignItems: 'center',
         width: '100%',
     },
     avatarStack: {
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+        marginBottom: 12,
+        position: 'relative',
+        width: '100%',
+        minHeight: 78,
+    },
+    avatarLaneRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        width: '100%',
+        paddingHorizontal: 8,
+    },
+    avatarLaneLeft: {
+        flexDirection: 'row',
+        justifyContent: 'space-evenly',
+        alignItems: 'flex-start',
+        columnGap: 4,
+    },
+    avatarLaneMiddle: {
+        flexDirection: 'row',
+        justifyContent: 'space-evenly',
+        alignItems: 'flex-start',
+        columnGap: 4,
+    },
+    avatarLaneRight: {
+        flexDirection: 'row',
+        justifyContent: 'space-evenly',
+        alignItems: 'flex-start',
+        columnGap: 4,
+    },
+    avatarConnectorRail: {
+        position: 'absolute',
+        top: 21,
+        height: 6,
+        width: '94%',
+        left: '3%',
+        borderRadius: 3,
+        zIndex: 0,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 12,
+        overflow: 'visible',
+    },
+    avatarConnectorSegment: {
+        height: '100%',
+    },
+    avatarConnectorSegmentLeft: {
+        backgroundColor: '#E74C3C',
+    },
+    avatarConnectorSegmentMiddle: {
+        backgroundColor: '#F4C542',
+    },
+    avatarConnectorSegmentRight: {
+        backgroundColor: '#78D64B',
+    },
+    avatarConnectorDot: {
+        position: 'absolute',
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        top: -4,
+    },
+    avatarConnectorDotLeft: {
+        left: -8,
+        backgroundColor: '#E74C3C',
+    },
+    avatarConnectorDotRight: {
+        right: -8,
+        backgroundColor: '#78D64B',
     },
     memberAvatarWithInitial: {
         width: 50,

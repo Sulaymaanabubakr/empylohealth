@@ -3048,8 +3048,13 @@ export const endHuddle = regionalFunctions.https.onCall(async (data, context) =>
         if (!huddleDoc.exists) throw new functions.https.HttpsError('not-found', 'Huddle not found.');
         const huddle = huddleDoc.data() || {};
 
-        // Idempotency: already ended → return success
+        // Idempotency + self-heal: already ended → still clear stale circle pointer if present.
         if (huddle.status === 'ended' || huddle.isActive === false) {
+            if (huddle.circleId) {
+                await db.collection('circles').doc(huddle.circleId).update({
+                    activeHuddle: admin.firestore.FieldValue.delete()
+                }).catch(() => {});
+            }
             return { success: true, alreadyEnded: true };
         }
 
@@ -3359,7 +3364,7 @@ export const cleanupStaleHuddles = onSchedule(
     // Keep backend cleanup slightly above that so app-side flow can complete first.
     const RINGING_MAX_MS = 7.5 * 60 * 1000; // 7 minutes 30 seconds
     const ACCEPTED_MAX_MS = 3 * 60 * 1000; // 3 minutes
-    const ONGOING_EMPTY_ACTIVE_MAX_MS = 2 * 60 * 1000; // 2 minutes
+    const ONGOING_EMPTY_ACTIVE_MAX_MS = 6 * 60 * 1000; // 6 minutes
     const tsToMs = (value: any): number => (typeof value?.toMillis === 'function' ? value.toMillis() : 0);
     try {
         const snap = await db.collection('huddles')
@@ -3376,6 +3381,7 @@ export const cleanupStaleHuddles = onSchedule(
             const acceptedAtMs = tsToMs(h.acceptedAt);
             const ongoingAtMs = tsToMs(h.ongoingAt);
             const activeUserIds = Array.isArray(h.activeUserIds) ? h.activeUserIds : [];
+            const acceptedUserIds = Array.isArray(h.acceptedUserIds) ? h.acceptedUserIds : [];
             const participantStates: any[] = (h.participantStates && typeof h.participantStates === 'object')
                 ? (Object.values(h.participantStates) as any[])
                 : [];
@@ -3401,6 +3407,7 @@ export const cleanupStaleHuddles = onSchedule(
             const shouldEndGhostOngoing =
                 status === 'ongoing' &&
                 activeUserIds.length === 0 &&
+                acceptedUserIds.length <= 1 &&
                 lastActivityMs > 0 &&
                 (now - lastActivityMs) > ONGOING_EMPTY_ACTIVE_MAX_MS;
             if (!shouldTimeout && !shouldFailConnect && !shouldEndGhostOngoing) continue;

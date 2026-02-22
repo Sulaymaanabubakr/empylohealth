@@ -297,18 +297,15 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
     useEffect(() => {
         if (!chat?.isGroup || !isPotentiallyActiveHuddle(activeHuddle)) return undefined;
-        let cancelled = false;
-        const validate = async () => {
-            const snap = await getDoc(doc(db, 'huddles', activeHuddle.huddleId)).catch(() => null);
-            const data = snap?.exists?.() ? (snap.data() || {}) : null;
-            if (!cancelled && !isJoinableHuddleDoc(data)) {
+        const huddleRef = doc(db, 'huddles', activeHuddle.huddleId);
+        return onSnapshot(huddleRef, (snap) => {
+            const data = snap.exists() ? (snap.data() || {}) : null;
+            if (!isJoinableHuddleDoc(data)) {
                 setActiveHuddle(null);
             }
-        };
-        validate();
-        return () => {
-            cancelled = true;
-        };
+        }, () => {
+            setActiveHuddle(null);
+        });
     }, [chat?.isGroup, activeHuddle?.huddleId]);
 
     useEffect(() => {

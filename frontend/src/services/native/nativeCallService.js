@@ -13,6 +13,8 @@ const NAMESPACE = 'c0a80125b4e84b6fa0d9f8e4e8b3a4aa';
 
 const huddleIdToUuid = new Map();
 const uuidToPayload = new Map();
+const huddleIdToLastPresentedAt = new Map();
+const answeredCallUuids = new Set();
 let initialized = false;
 let subscriptions = [];
 
@@ -67,6 +69,9 @@ const getSetupOptions = () => ({
 
 const handleAnswerCall = (event) => {
   const callUUID = event?.callUUID;
+  if (callUUID) {
+    answeredCallUuids.add(callUUID);
+  }
   const payload = uuidToPayload.get(callUUID);
   if (!payload?.huddleId) return;
 
@@ -86,19 +91,11 @@ const handleEndCall = (event) => {
   const callUUID = event?.callUUID;
   if (!callUUID) return;
   const payload = uuidToPayload.get(callUUID);
+  answeredCallUuids.delete(callUUID);
   uuidToPayload.delete(callUUID);
   if (payload?.huddleId) {
     huddleIdToUuid.delete(payload.huddleId);
-
-    // Best-effort: if user declined from native UI before opening the in-app screen,
-    // reflect it in Firebase so the caller doesn't ring forever.
-    try {
-      // eslint-disable-next-line global-require
-      const { huddleService } = require('../api/huddleService');
-      huddleService.declineHuddle(payload.huddleId).catch(() => {});
-    } catch {
-      // ignore if services aren't available yet
-    }
+    huddleIdToLastPresentedAt.delete(payload.huddleId);
   }
 };
 
@@ -146,10 +143,16 @@ export const nativeCallService = {
     if (!RNCallKeep || !huddleId) return false;
     await nativeCallService.initialize();
 
+    const lastPresentedAt = Number(huddleIdToLastPresentedAt.get(huddleId) || 0);
+    if (Date.now() - lastPresentedAt < 20000) {
+      return true;
+    }
+
     const uuid = getOrCreateUuid(huddleId);
     uuidToPayload.set(uuid, { huddleId, chatId, chatName, avatar: avatar || '' });
 
     try {
+      huddleIdToLastPresentedAt.set(huddleId, Date.now());
       RNCallKeep.displayIncomingCall(
         uuid,
         'huddle',
@@ -198,6 +201,7 @@ export const nativeCallService = {
     } finally {
       uuidToPayload.delete(uuid);
       huddleIdToUuid.delete(huddleId);
+      huddleIdToLastPresentedAt.delete(huddleId);
     }
   },
 
@@ -210,6 +214,8 @@ export const nativeCallService = {
     } finally {
       uuidToPayload.clear();
       huddleIdToUuid.clear();
+      huddleIdToLastPresentedAt.clear();
+      answeredCallUuids.clear();
     }
   }
 };
