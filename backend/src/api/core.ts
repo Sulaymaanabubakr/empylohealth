@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import apn from 'apn';
+import { randomUUID } from 'crypto';
 import { v2 as cloudinary } from 'cloudinary';
 import { seedChallengeData, seedResourceData, seedAffirmationData, seedAffirmationImages } from '../seedData';
 import { sendAccountDeletedEmail, sendCircleDeletedEmails } from './security';
@@ -2288,12 +2289,14 @@ const sendHuddleNotifications = async ({
     });
     await notificationBatch.commit();
 
+    const callUuid = randomUUID();
     const payload = {
         title,
         body,
         data: {
             chatId,
             huddleId,
+            uuid: callUuid,
             roomUrl,
             type: 'HUDDLE_STARTED',
             chatName,
@@ -2364,6 +2367,7 @@ const sendHuddleNotifications = async ({
         voipNotification.expiry = Math.floor(Date.now() / 1000) + 60;
         voipNotification.contentAvailable = true;
         voipNotification.payload = {
+            uuid: callUuid,
             type: 'HUDDLE_STARTED',
             chatId,
             huddleId,

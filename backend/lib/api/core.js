@@ -41,6 +41,7 @@ const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const apn_1 = __importDefault(require("apn"));
+const crypto_1 = require("crypto");
 const cloudinary_1 = require("cloudinary");
 const seedData_1 = require("../seedData");
 const security_1 = require("./security");
@@ -2084,12 +2085,14 @@ const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUr
         }, { merge: dedupePerRecipient });
     });
     await notificationBatch.commit();
+    const callUuid = (0, crypto_1.randomUUID)();
     const payload = {
         title,
         body,
         data: {
             chatId,
             huddleId,
+            uuid: callUuid,
             roomUrl,
             type: 'HUDDLE_STARTED',
             chatName,
@@ -2157,6 +2160,7 @@ const sendHuddleNotifications = async ({ recipientUids, chatId, huddleId, roomUr
         voipNotification.expiry = Math.floor(Date.now() / 1000) + 60;
         voipNotification.contentAvailable = true;
         voipNotification.payload = {
+            uuid: callUuid,
             type: 'HUDDLE_STARTED',
             chatId,
             huddleId,

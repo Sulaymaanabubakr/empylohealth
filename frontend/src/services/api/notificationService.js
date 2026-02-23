@@ -304,6 +304,7 @@ const maybeShowNativeIncomingCall = async (payload) => {
 
     const shown = await nativeCallService.presentIncomingHuddleCall({
         huddleId: data.huddleId,
+        uuid: data?.uuid || null,
         chatId: data.chatId,
         chatName: data.chatName || 'Huddle',
         callerName: data.callerName || data.chatName || 'Incoming Huddle',
@@ -311,7 +312,8 @@ const maybeShowNativeIncomingCall = async (payload) => {
     });
     if (shown) return true;
 
-    if (REQUIRE_NATIVE_INCOMING_CALL_UI) {
+    const nativeSupported = nativeCallService.isSupported();
+    if (REQUIRE_NATIVE_INCOMING_CALL_UI && nativeSupported) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
             console.log('[IncomingHuddle] Native UI unavailable; suppressed in-app ringing fallback', {
                 huddleId: data.huddleId,
@@ -339,6 +341,7 @@ const normalizeVoipNotificationData = (notification) => {
     const direct = notification?.data || notification;
     const payload = direct?.payload || {};
     return {
+        uuid: direct?.uuid || payload?.uuid || null,
         huddleId: direct?.huddleId || payload?.huddleId || payload?.huddle_id,
         chatId: direct?.chatId || payload?.chatId || payload?.chat_id,
         chatName: direct?.chatName || payload?.chatName || payload?.chat_name || 'Huddle',

@@ -44,6 +44,8 @@ const getOrCreateUuid = (huddleId) => {
   return huddleIdToUuid.get(huddleId);
 };
 
+const isUuid = (value = '') => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value));
+
 const getSetupOptions = () => ({
   ios: {
     appName: 'Circles App',
@@ -154,7 +156,7 @@ export const nativeCallService = {
     initialized = false;
   },
 
-  presentIncomingHuddleCall: async ({ huddleId, chatId, chatName, callerName, avatar }) => {
+  presentIncomingHuddleCall: async ({ huddleId, uuid: externalUuid = null, chatId, chatName, callerName, avatar }) => {
     if (!RNCallKeep || !huddleId) return false;
     await nativeCallService.initialize();
 
@@ -163,7 +165,8 @@ export const nativeCallService = {
       return true;
     }
 
-    const uuid = getOrCreateUuid(huddleId);
+    const uuid = isUuid(externalUuid) ? String(externalUuid) : getOrCreateUuid(huddleId);
+    huddleIdToUuid.set(huddleId, uuid);
     uuidToPayload.set(uuid, { huddleId, chatId, chatName, avatar: avatar || '' });
 
     try {
