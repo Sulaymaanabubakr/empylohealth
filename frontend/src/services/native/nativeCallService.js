@@ -71,9 +71,24 @@ const handleAnswerCall = (event) => {
   const callUUID = event?.callUUID;
   if (callUUID) {
     answeredCallUuids.add(callUUID);
+    try {
+      RNCallKeep?.setCurrentCallActive?.(callUUID);
+    } catch {
+      // ignore
+    }
   }
   const payload = uuidToPayload.get(callUUID);
   if (!payload?.huddleId) return;
+
+  // Reduce ringing/connecting drift by marking participant join intent immediately.
+  try {
+    // Lazy import avoids static dependency coupling.
+    // eslint-disable-next-line global-require
+    const { huddleService } = require('../api/huddleService');
+    huddleService?.updateHuddleState?.(payload.huddleId, 'join').catch(() => {});
+  } catch {
+    // ignore
+  }
 
   if (Platform.OS === 'android') {
     RNCallKeep?.backToForeground?.();

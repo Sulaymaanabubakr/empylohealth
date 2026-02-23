@@ -2851,6 +2851,13 @@ exports.ringHuddleParticipants = regionalFunctions.https.onCall(async (data, con
         if (huddle.isActive === false || status === 'ended') {
             return { success: true, skipped: true, reason: 'not-ringable' };
         }
+        if (status !== 'ringing') {
+            return { success: true, skipped: true, reason: 'status-not-ringing' };
+        }
+        const activeUserIds = Array.isArray(huddle.activeUserIds) ? huddle.activeUserIds : [];
+        if (activeUserIds.length >= 2) {
+            return { success: true, skipped: true, reason: 'already-connected' };
+        }
         const lastRingAt = huddle.lastRingSentAt?.toMillis?.() || 0;
         if (Date.now() - lastRingAt < 8000) {
             return { success: true, skipped: true, reason: 'rate-limited' };
@@ -2897,7 +2904,11 @@ exports.ringPendingHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 mi
         for (const huddleDoc of snapshot.docs) {
             const huddle = huddleDoc.data() || {};
             const status = String(huddle.status || 'ringing');
-            if (status === 'ended') {
+            if (status !== 'ringing') {
+                continue;
+            }
+            const activeUserIds = Array.isArray(huddle.activeUserIds) ? huddle.activeUserIds : [];
+            if (activeUserIds.length >= 2) {
                 continue;
             }
             const lastRingAt = huddle.lastRingSentAt?.toMillis?.() || 0;
@@ -3051,11 +3062,9 @@ exports.updateHuddleState = regionalFunctions.https.onCall(async (data, context)
  */
 exports.cleanupStaleHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 minutes', region: 'europe-west1' }, async () => {
     const now = Date.now();
-    // UX target: 2 min prompt + 5 min grace + forced 5-second countdown.
-    // Keep backend cleanup slightly above that so app-side flow can complete first.
-    const RINGING_MAX_MS = 7.5 * 60 * 1000; // 7 minutes 30 seconds
-    const ACCEPTED_MAX_MS = 3 * 60 * 1000; // 3 minutes
-    const ONGOING_EMPTY_ACTIVE_MAX_MS = 6 * 60 * 1000; // 6 minutes
+    const RINGING_MAX_MS = 2 * 60 * 1000; // hard backend guard; client invite timeout fires earlier (45s)
+    const ACCEPTED_MAX_MS = 2 * 60 * 1000; // accepted but not connected should never linger
+    const ONGOING_EMPTY_ACTIVE_MAX_MS = 90 * 60 * 1000; // effectively disabled; client max duration governs active calls
     const tsToMs = (value) => (typeof value?.toMillis === 'function' ? value.toMillis() : 0);
     try {
         const snap = await db.collection('huddles')

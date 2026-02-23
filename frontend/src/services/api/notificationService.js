@@ -1,7 +1,7 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { AppState, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { auth, db } from '../firebaseConfig';
 import { doc, arrayUnion, setDoc, getDoc } from 'firebase/firestore';
 import { navigate } from '../../navigation/navigationRef';
@@ -26,6 +26,7 @@ const HUDDLE_CALL_CATEGORY_ID = 'huddle-call-actions';
 const HUDDLE_CALL_ACTION_ACCEPT = 'huddle-accept';
 const HUDDLE_CALL_ACTION_REJECT = 'huddle-reject';
 const HUDDLE_CALLS_CHANNEL_ID = 'huddle-calls-ringtone';
+const REQUIRE_NATIVE_INCOMING_CALL_UI = true;
 
 let VoipPushNotification = null;
 try {
@@ -115,6 +116,7 @@ const navigateFromNotificationData = async (payload) => {
         const chatId = data?.chatId;
 
         if (type === 'HUDDLE_STARTED' && huddleId) {
+            await huddleService.updateHuddleState(huddleId, 'join').catch(() => {});
             navigate('Huddle', {
                 chat: { id: chatId || 'chat', name: 'Huddle', isGroup: true },
                 huddleId,
@@ -225,6 +227,7 @@ const handleNotificationAction = async (response) => {
             await Notifications.dismissNotificationAsync(notificationId).catch(() => {});
         }
         if (data?.huddleId) {
+            await huddleService.updateHuddleState(data.huddleId, 'join').catch(() => {});
             navigate('Huddle', {
                 chat: { id: data?.chatId || 'chat', name: data?.chatName || 'Huddle', isGroup: true },
                 huddleId: data.huddleId,
@@ -299,18 +302,6 @@ const maybeShowNativeIncomingCall = async (payload) => {
     incomingHuddleDedupe.set(data.huddleId, now);
     const avatar = data?.avatar || data?.senderAvatar || data?.chatAvatar || '';
 
-    // Foreground reliability: when app is already active, always use in-app incoming modal.
-    if (AppState.currentState === 'active') {
-        navigate('IncomingHuddle', {
-            huddleId: data.huddleId,
-            chatId: data.chatId,
-            chatName: data.chatName || 'Huddle',
-            callerName: data.callerName || data.chatName || 'Incoming Huddle',
-            avatar
-        });
-        return true;
-    }
-
     const shown = await nativeCallService.presentIncomingHuddleCall({
         huddleId: data.huddleId,
         chatId: data.chatId,
@@ -319,6 +310,16 @@ const maybeShowNativeIncomingCall = async (payload) => {
         avatar
     });
     if (shown) return true;
+
+    if (REQUIRE_NATIVE_INCOMING_CALL_UI) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.log('[IncomingHuddle] Native UI unavailable; suppressed in-app ringing fallback', {
+                huddleId: data.huddleId,
+                platform: Platform.OS
+            });
+        }
+        return false;
+    }
 
     // In-app fallback for builds without CallKeep: show accept/decline UI + ringtone.
     if (lastInAppIncoming.huddleId !== data.huddleId || (now - lastInAppIncoming.ts) > 15000) {
@@ -404,7 +405,7 @@ export const notificationService = {
                 return {
                     shouldShowBanner: !shownAsNativeCall,
                     shouldShowList: !shownAsNativeCall,
-                    shouldPlaySound: true,
+                    shouldPlaySound: !shownAsNativeCall,
                     shouldSetBadge: false
                 };
             }

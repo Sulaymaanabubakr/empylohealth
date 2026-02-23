@@ -19,12 +19,14 @@ import { useModal } from '../context/ModalContext';
 const MAX_VISIBLE_PARTICIPANTS = 8;
 const JOIN_TIMEOUT_MS = 15000; // 10-15s
 const JOIN_MAX_ATTEMPTS = 1;
-const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 60000;
-const HOST_ALONE_PROMPT_DELAY_MS = 120000; // 2 min
-const HOST_ALONE_FORCE_END_DELAY_MS = 300000; // 5 min after "No"
+const INVITE_TIMEOUT_MS = 45000; // 30-45s caller-side invite timeout
+const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 20000; // joined but alone >20s
+const HOST_ALONE_PROMPT_DELAY_MS = 120000; // retained for optional UX
+const HOST_ALONE_FORCE_END_DELAY_MS = 300000; // retained for optional UX
 const FORCE_END_COUNTDOWN_SECONDS = 5;
 const MAX_CALL_DURATION_MS = 3600000; // 1 hour
-const ENABLE_ACCEPTED_ALONE_AUTO_END = false;
+const MAX_CALL_DURATION_WARNING_MS = 300000; // final 5 minutes
+const ENABLE_ACCEPTED_ALONE_AUTO_END = true;
 const ENABLE_HOST_ALONE_AUTOMATION = false;
 // Audio playback is handled via loopingSound (expo-audio).
 
@@ -65,6 +67,7 @@ const HuddleScreen = ({ navigation, route }) => {
     const hostAloneForceEndTimeoutRef = useRef(null);
     const forceEndCountdownIntervalRef = useRef(null);
     const maxCallDurationTimeoutRef = useRef(null);
+    const maxDurationWarningIntervalRef = useRef(null);
     const joinStartedSessionRef = useRef(0);
     const lastFirebaseStatusRef = useRef(null);
     const everHadRemoteParticipantRef = useRef(false);
@@ -87,6 +90,7 @@ const HuddleScreen = ({ navigation, route }) => {
     const [seconds, setSeconds] = useState(0);
     const [showHostAlonePrompt, setShowHostAlonePrompt] = useState(false);
     const [forceEndCountdown, setForceEndCountdown] = useState(null);
+    const [maxDurationWarningSeconds, setMaxDurationWarningSeconds] = useState(null);
     const [layoutSize, setLayoutSize] = useState({
         width: Dimensions.get('window').width,
         height: Math.max(Dimensions.get('window').height - 260, 320)
@@ -95,6 +99,39 @@ const HuddleScreen = ({ navigation, route }) => {
     const logMetric = useCallback((label, value) => {
         console.log(`[HUDDLE_METRIC] ${label}: ${value}ms`);
     }, []);
+
+    const logAudioDiag = useCallback(async (tag) => {
+        if (typeof __DEV__ !== 'undefined' && !__DEV__) return;
+        const callObject = callObjectRef.current;
+        if (!callObject) return;
+        try {
+            const devices = await safeCall(() => callObject.getInputDevices());
+            const participantsMap = callObject.participants?.() || {};
+            const rows = Object.values(participantsMap).map((p) => ({
+                local: !!p?.local,
+                session_id: p?.session_id,
+                user_name: p?.user_name,
+                audio: p?.audio,
+                audioSubscribed: p?.tracks?.audio?.subscribed,
+                audioState: p?.tracks?.audio?.state,
+                hasAudioTrack: !!p?.tracks?.audio?.persistentTrack
+            }));
+            console.log('[HUDDLE_AUDIO_DIAG]', {
+                tag,
+                huddleId: huddleIdRef.current,
+                phase,
+                firebaseStatus,
+                isMuted,
+                isSpeakerOn,
+                inCallMode: callObject.nativeInCallAudioMode?.(),
+                speakerDeviceId: devices?.speaker?.deviceId || null,
+                micDeviceId: devices?.mic?.deviceId || null,
+                participantRows: rows
+            });
+        } catch (error) {
+            console.log('[HUDDLE_AUDIO_DIAG]', { tag, error: String(error?.message || error) });
+        }
+    }, [firebaseStatus, isMuted, isSpeakerOn, phase]);
 
     const refreshParticipants = useCallback(() => {
         const callObject = callObjectRef.current;
@@ -231,6 +268,11 @@ const HuddleScreen = ({ navigation, route }) => {
             clearTimeout(maxCallDurationTimeoutRef.current);
             maxCallDurationTimeoutRef.current = null;
         }
+        if (maxDurationWarningIntervalRef.current) {
+            clearInterval(maxDurationWarningIntervalRef.current);
+            maxDurationWarningIntervalRef.current = null;
+        }
+        setMaxDurationWarningSeconds(null);
         clearHostAloneTimers();
         clearForceEndCountdown();
     }, [clearForceEndCountdown, clearHostAloneTimers]);
@@ -339,11 +381,21 @@ const HuddleScreen = ({ navigation, route }) => {
                     huddleService.updateHuddleConnection(activeHuddleId, 'daily_joined').catch(() => { });
                 }
                 refreshParticipants();
+                logAudioDiag('joined_meeting');
 	                callObject.startRemoteParticipantsAudioLevelObserver(250).catch(() => { });
 	            }),
-            'participant-joined': guarded(() => refreshParticipants()),
-            'participant-updated': guarded(() => refreshParticipants()),
-            'participant-left': guarded(() => refreshParticipants()),
+            'participant-joined': guarded(() => {
+                refreshParticipants();
+                logAudioDiag('participant_joined');
+            }),
+            'participant-updated': guarded(() => {
+                refreshParticipants();
+                logAudioDiag('participant_updated');
+            }),
+            'participant-left': guarded(() => {
+                refreshParticipants();
+                logAudioDiag('participant_left');
+            }),
             'active-speaker-change': guarded((ev) => {
                 setActiveSpeakerSessionId(ev?.activeSpeaker?.peerId || null);
             }),
@@ -354,6 +406,9 @@ const HuddleScreen = ({ navigation, route }) => {
                     if (metricsRef.current.joinedEventAt) {
                         logMetric('joined_event_to_first_remote_audio', Date.now() - metricsRef.current.joinedEventAt);
                     }
+                }
+                if (ev?.type === 'audio') {
+                    logAudioDiag('track_started_audio');
                 }
             }),
 	            error: guarded((ev) => {
@@ -374,7 +429,7 @@ const HuddleScreen = ({ navigation, route }) => {
             callObject.on(eventName, handler);
         });
         eventHandlersRef.current = handlers;
-	    }, [clearAllTimeouts, detachCallHandlers, isHost, leaveCall, logMetric, refreshParticipants, stopRingbackTone, toJoinFailureMessage]);
+	    }, [clearAllTimeouts, detachCallHandlers, isHost, leaveCall, logAudioDiag, logMetric, refreshParticipants, stopRingbackTone, toJoinFailureMessage]);
 
     const leaveCall = useCallback(async (
         endForEveryone = false,
@@ -659,6 +714,41 @@ const HuddleScreen = ({ navigation, route }) => {
     }, [hasLocalJoinedDaily, isHost, phase]);
 
     useEffect(() => {
+        if (!isHost || !hasLocalJoinedDaily || phase !== 'ongoing') {
+            if (maxDurationWarningIntervalRef.current) {
+                clearInterval(maxDurationWarningIntervalRef.current);
+                maxDurationWarningIntervalRef.current = null;
+            }
+            setMaxDurationWarningSeconds(null);
+            return undefined;
+        }
+
+        const syncWarningCountdown = () => {
+            const startedAtMs = Number(callStartedAtMsRef.current || 0);
+            if (!startedAtMs) {
+                setMaxDurationWarningSeconds(null);
+                return;
+            }
+            const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+            const remainingMs = Math.max(0, MAX_CALL_DURATION_MS - elapsedMs);
+            if (remainingMs <= MAX_CALL_DURATION_WARNING_MS) {
+                setMaxDurationWarningSeconds(Math.ceil(remainingMs / 1000));
+            } else {
+                setMaxDurationWarningSeconds(null);
+            }
+        };
+
+        syncWarningCountdown();
+        maxDurationWarningIntervalRef.current = setInterval(syncWarningCountdown, 1000);
+        return () => {
+            if (maxDurationWarningIntervalRef.current) {
+                clearInterval(maxDurationWarningIntervalRef.current);
+                maxDurationWarningIntervalRef.current = null;
+            }
+        };
+    }, [hasLocalJoinedDaily, isHost, phase]);
+
+    useEffect(() => {
         if (hasStartedJoinRef.current) return;
         hasStartedJoinRef.current = true;
         joinFlowCancelledRef.current = false;
@@ -839,6 +929,7 @@ const HuddleScreen = ({ navigation, route }) => {
                     applyPreferredAudioRoute(true, true);
                 }, 1200);
                 refreshParticipants();
+                logAudioDiag('post_join_audio_route');
                 const startedAtMs = callStartedAtMsRef.current || Date.now();
                 callStartedAtMsRef.current = startedAtMs;
                 setSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
@@ -872,7 +963,7 @@ const HuddleScreen = ({ navigation, route }) => {
         };
 
         start();
-    }, [applyPreferredAudioRoute, attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, clearForceEndCountdown, clearHostAloneTimers, huddleId, leaveCall, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, toJoinFailureMessage, user?.displayName, user?.uid, userData?.name]);
+    }, [applyPreferredAudioRoute, attachCallHandlers, chat.id, chat.isGroup, clearAllTimeouts, clearForceEndCountdown, clearHostAloneTimers, huddleId, leaveCall, logAudioDiag, logMetric, mode, refreshParticipants, requestMicPermission, route?.params?.huddleId, toJoinFailureMessage, user?.displayName, user?.uid, userData?.name]);
 
     const remoteParticipantCount = useMemo(
         () => participants.filter((p) => !p.local).length,
@@ -949,17 +1040,52 @@ const HuddleScreen = ({ navigation, route }) => {
     }, [firebaseStatus, huddleId, isHost, leaveCall, remoteParticipantCount]);
 
     useEffect(() => {
+        // Caller invite timeout: don't let ringing state hang indefinitely.
+        if (!isHost || !huddleId || !hasLocalJoinedDaily) return undefined;
+        if (phase === 'ending' || phase === 'ended' || phase === 'error') return undefined;
+        if (remoteParticipantCount > 0) return undefined;
+        if (firebaseStatus !== 'ringing' && firebaseStatus != null) return undefined;
+
+        if (inviteTimeoutRef.current) {
+            clearTimeout(inviteTimeoutRef.current);
+            inviteTimeoutRef.current = null;
+        }
+
+        inviteTimeoutRef.current = setTimeout(() => {
+            if (isLeavingRef.current) return;
+            if (remoteParticipantCount > 0) return;
+            callDiagnostics.log(huddleIdRef.current, 'timeout_invite');
+            leaveCallRef.current?.(
+                true,
+                true,
+                true,
+                'timeout',
+                'No one answered this huddle in time. Please try again.'
+            );
+        }, INVITE_TIMEOUT_MS);
+
+        return () => {
+            if (inviteTimeoutRef.current) {
+                clearTimeout(inviteTimeoutRef.current);
+                inviteTimeoutRef.current = null;
+            }
+        };
+    }, [firebaseStatus, hasLocalJoinedDaily, huddleId, isHost, leaveCall, phase, remoteParticipantCount]);
+
+    useEffect(() => {
         // Keep ringing members who haven't joined while huddle is still active.
         if (!isHost || !huddleId || !hasLocalJoinedDaily || phase === 'ending' || phase === 'ended' || phase === 'error') {
             return undefined;
         }
+        if (firebaseStatus !== 'ringing' && firebaseStatus != null) return undefined;
+        if (remoteParticipantCount > 0) return undefined;
 
         const interval = setInterval(() => {
             huddleService.ringHuddleParticipants(huddleId).catch(() => { });
         }, 12000);
 
         return () => clearInterval(interval);
-    }, [hasLocalJoinedDaily, huddleId, isHost, phase]);
+    }, [firebaseStatus, hasLocalJoinedDaily, huddleId, isHost, phase, remoteParticipantCount]);
 
     useEffect(() => {
         if (!huddleId || !hasLocalJoinedDaily || phase === 'ending' || phase === 'ended' || phase === 'error') {
@@ -997,6 +1123,7 @@ const HuddleScreen = ({ navigation, route }) => {
         const next = !isMuted;
         callObject.setLocalAudio(!next);
         setIsMuted(next);
+        logAudioDiag(next ? 'mute_on' : 'mute_off');
         if (huddleId) {
             huddleService.updateHuddleState(huddleId, next ? 'mute' : 'unmute').catch(() => { });
         }
@@ -1008,6 +1135,7 @@ const HuddleScreen = ({ navigation, route }) => {
         const next = !isSpeakerOn;
         setIsSpeakerOn(next);
         applyPreferredAudioRoute(next, true);
+        logAudioDiag(next ? 'speaker_on' : 'speaker_off');
     };
 
     useEffect(() => {
@@ -1145,6 +1273,8 @@ const HuddleScreen = ({ navigation, route }) => {
 
 	    const statusText = isForceEnding
             ? `Call ends in ${forceEndCountdown}s`
+            : maxDurationWarningSeconds != null
+                ? `Call ends in ${formatTime(Math.max(0, maxDurationWarningSeconds))}`
             : phase === 'ending'
 	        ? 'Ending call...'
 	        : phase === 'ringing'

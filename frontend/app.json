@@ -46,7 +46,9 @@
       "permissions": [
         "RECORD_AUDIO",
         "POST_NOTIFICATIONS",
-        "VIBRATE"
+        "VIBRATE",
+        "READ_PHONE_STATE",
+        "CALL_PHONE"
       ],
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
