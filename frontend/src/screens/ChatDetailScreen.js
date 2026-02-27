@@ -17,6 +17,7 @@ import { isPresenceOnline } from '../utils/presence';
 import { circleService } from '../services/api/circleService';
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 import { userService } from '../services/api/userService';
+import { formatTimeUK } from '../utils/dateFormat';
 
 const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
 
@@ -127,7 +128,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     text: m.text,
                     createdAt: m.createdAt,
                     createdAtMs: m.createdAtMs || new Date(m.createdAt).getTime(),
-                    time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    time: formatTimeUK(m.createdAt),
                     isMe: m.user._id === user?.uid,
                     pending: false,
                     failed: false,
@@ -460,7 +461,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
             text: textToSend,
             createdAt: now,
             createdAtMs: now.getTime(),
-            time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: formatTimeUK(now),
             isMe: true,
             pending: true,
             failed: false,

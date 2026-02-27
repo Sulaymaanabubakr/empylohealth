@@ -7,8 +7,15 @@ import { LineChart } from 'react-native-chart-kit';
 import Avatar from '../components/Avatar';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, collection, query, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { callableClient } from '../services/api/callableClient';
 
 const { width } = Dimensions.get('window');
+
+const isPermissionDeniedError = (error) => {
+    const code = String(error?.code || '');
+    const message = String(error?.message || '').toLowerCase();
+    return code.includes('permission-denied') || message.includes('permission');
+};
 
 const CircleAnalysisScreen = ({ route, navigation }) => {
     const insets = useSafeAreaInsets();
@@ -154,24 +161,45 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
             const stats = [];
             if (currentCircle.members) {
                 for (const memberId of currentCircle.members) {
-                    const docRef = doc(db, 'users', memberId);
-                    const snap = await getDoc(docRef);
-                    if (snap.exists()) {
-                        const data = snap.data();
-                        const msgCount = memberMessageCounts[memberId] || 0;
-                        const points = 100 + (msgCount * 15);
-                        const level = Math.floor(points / 60);
-
-                        stats.push({
-                            id: memberId,
-                            name: data.name || data.displayName || 'Member',
-                            photoURL: data.photoURL,
-                            wellbeingScore: data?.wellbeingScore ?? data?.stats?.overallScore ?? null,
-                            wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || '',
-                            level: level,
-                            contributionPoints: points,
-                        });
+                    let memberData = null;
+                    try {
+                        const docRef = doc(db, 'users', memberId);
+                        const snap = await getDoc(docRef);
+                        if (snap.exists()) {
+                            memberData = snap.data();
+                        }
+                    } catch (error) {
+                        if (isPermissionDeniedError(error)) {
+                            try {
+                                const publicProfile = await callableClient.invokeWithAuth('getPublicProfile', { uid: memberId });
+                                memberData = {
+                                    name: publicProfile?.name || 'Member',
+                                    displayName: publicProfile?.name || 'Member',
+                                    photoURL: publicProfile?.photoURL || '',
+                                    wellbeingScore: publicProfile?.wellbeingScore ?? null,
+                                    wellbeingLabel: publicProfile?.wellbeingLabel || ''
+                                };
+                            } catch {
+                                memberData = null;
+                            }
+                        }
                     }
+
+                    if (!memberData) continue;
+
+                    const msgCount = memberMessageCounts[memberId] || 0;
+                    const points = 100 + (msgCount * 15);
+                    const level = Math.floor(points / 60);
+
+                    stats.push({
+                        id: memberId,
+                        name: memberData.name || memberData.displayName || 'Member',
+                        photoURL: memberData.photoURL,
+                        wellbeingScore: memberData?.wellbeingScore ?? memberData?.stats?.overallScore ?? null,
+                        wellbeingLabel: memberData?.wellbeingLabel || memberData?.wellbeingStatus || '',
+                        level: level,
+                        contributionPoints: points,
+                    });
                 }
             }
 
@@ -187,7 +215,10 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
 
     const calculateCircleRating = (circleObj) => {
         if (!circleObj) return "0.0";
-        if (circleObj.score) return circleObj.score.toFixed(1);
+        if (circleObj.score != null) {
+            const parsed = Number(circleObj.score);
+            if (Number.isFinite(parsed)) return parsed.toFixed(1);
+        }
         let score = 4.2;
         const memberCount = circleObj.members?.length || 0;
         if (memberCount > 50) score += 0.4;

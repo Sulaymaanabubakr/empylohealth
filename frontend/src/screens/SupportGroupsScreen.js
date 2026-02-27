@@ -15,6 +15,7 @@ import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { useModal } from '../context/ModalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } from '../services/circles/activeMembers';
+import { callableClient } from '../services/api/callableClient';
 
 const normalizeText = (value = '') => String(value || '').trim().toLowerCase();
 const getCircleFilterValues = (group = {}) => {
@@ -25,6 +26,12 @@ const getCircleFilterValues = (group = {}) => {
 };
 const buildCircleFilterTerms = (group = {}) => {
     return new Set(getCircleFilterValues(group).map(normalizeText).filter(Boolean));
+};
+
+const isPermissionDeniedError = (error) => {
+    const code = String(error?.code || '');
+    const message = String(error?.message || '').toLowerCase();
+    return code.includes('permission-denied') || message.includes('permission');
 };
 
 const calculateCircleRating = (circle) => {
@@ -192,7 +199,21 @@ const SupportGroupsScreen = ({ route }) => {
                                 wellbeingScore: data?.wellbeingScore ?? data?.stats?.overallScore ?? null,
                                 wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || ''
                             };
-                        } catch {
+                        } catch (error) {
+                            if (isPermissionDeniedError(error)) {
+                                try {
+                                    const publicProfile = await callableClient.invokeWithAuth('getPublicProfile', { uid });
+                                    return {
+                                        uid,
+                                        name: publicProfile?.name || 'Member',
+                                        photoURL: publicProfile?.photoURL || '',
+                                        wellbeingScore: publicProfile?.wellbeingScore ?? null,
+                                        wellbeingLabel: publicProfile?.wellbeingLabel || ''
+                                    };
+                                } catch {
+                                    // Continue to generic fallback below.
+                                }
+                            }
                             return { uid, name: 'Member', photoURL: '' };
                         }
                     }));

@@ -5,6 +5,7 @@ import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { presenceRepository } from '../repositories/PresenceRepository';
 import { resolveWellbeingScore } from '../../utils/wellbeing';
 import { isPresenceOnline } from '../../utils/presence';
+import { formatTimeUK } from '../../utils/dateFormat';
 
 export const chatService = {
     createDirectChat: async (recipientId) => {
@@ -125,7 +126,7 @@ export const chatService = {
                 }
 
                 const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
-                const time = updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                const time = updatedAt ? formatTimeUK(updatedAt) : '';
 
                 return {
                     id: docSnap.id,
@@ -256,7 +257,7 @@ export const chatService = {
             }
 
             const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
-            const time = updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const time = updatedAt ? formatTimeUK(updatedAt) : '';
             return {
                 id: docSnap.id,
                 ...data,

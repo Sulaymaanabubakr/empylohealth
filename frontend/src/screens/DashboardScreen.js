@@ -625,7 +625,7 @@ const DashboardScreen = ({ navigation }) => {
                         <TouchableOpacity
                             key={selectedCircle.id}
                             style={styles.circleCard}
-                            disabled={true} // Disable card click, using buttons instead
+                            onPress={() => navigation.navigate('CircleDetail', { circle: selectedCircle })}
                         >
                             <View style={styles.circleHeader}>
                                 <View style={styles.circleHeaderMain}>
