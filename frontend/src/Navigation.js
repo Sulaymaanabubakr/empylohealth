@@ -49,6 +49,7 @@ import CommunityGuidelinesScreen from './screens/CommunityGuidelinesScreen';
 import CommunityEducationScreen from './screens/CommunityEducationScreen';
 import CommunityEducationTopicScreen from './screens/CommunityEducationTopicScreen';
 import AboutCirclesScreen from './screens/AboutCirclesScreen';
+import WellbeingCategoriesInfoScreen from './screens/WellbeingCategoriesInfoScreen';
 import AppLockScreen from './screens/AppLockScreen';
 import { navigationRef, flushPendingNavigation, navigate } from './navigation/navigationRef';
 import { huddleService } from './services/api/huddleService';
@@ -444,6 +445,7 @@ export default function Navigation() {
                         <Stack.Screen name="Security" component={SecurityScreen} />
                         <Stack.Screen name="TellAFriend" component={TellAFriendScreen} />
                         <Stack.Screen name="FAQ" component={FAQScreen} />
+                        <Stack.Screen name="WellbeingCategoriesInfo" component={WellbeingCategoriesInfoScreen} />
                         <Stack.Screen name="AboutCircles" component={AboutCirclesScreen} />
                         <Stack.Screen name="CommunityEducation" component={CommunityEducationScreen} />
                         <Stack.Screen name="CommunityEducationTopic" component={CommunityEducationTopicScreen} />

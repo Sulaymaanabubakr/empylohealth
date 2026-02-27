@@ -116,7 +116,7 @@ const upsertReviewerAccount = async (email, password, name) => {
         location: 'United Kingdom',
         timezone: 'Europe/London',
         wellbeingScore: 78,
-        wellbeingLabel: 'Doing Well',
+        wellbeingLabel: 'Steady',
         streak: 7,
         settings: buildDefaultSettings(),
         createdAt: now,

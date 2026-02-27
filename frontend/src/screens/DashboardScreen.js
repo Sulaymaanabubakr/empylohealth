@@ -18,6 +18,7 @@ import CircleMemberLane from '../components/CircleMemberLane';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { formatDateUK, formatTimeUK } from '../utils/dateFormat';
 import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } from '../services/circles/activeMembers';
+import { labelFromWellbeingScore, normalizeWellbeingLabel } from '../utils/wellbeing';
 
 import { assessmentService } from '../services/api/assessmentService';
 
@@ -61,12 +62,8 @@ const resolveMemberWellbeing = (userData = {}) => {
             ? rawScore
             : (typeof rawScore === 'string' ? Number(String(rawScore).replace('%', '').trim()) : NaN);
 
-    const directLabel = userData?.wellbeingLabel || userData?.wellbeingStatus;
-    let label = directLabel || '';
-    if (!label && Number.isFinite(parsedScore)) {
-        if (parsedScore >= 70) label = 'Doing Well';
-        else label = 'Struggling';
-    }
+    const directLabel = userData?.wellbeingLabel || userData?.wellbeingStatus || '';
+    const label = normalizeWellbeingLabel(directLabel, parsedScore);
 
     return {
         score: Number.isFinite(parsedScore) ? parsedScore : null,
@@ -75,25 +72,38 @@ const resolveMemberWellbeing = (userData = {}) => {
 };
 
 const getWellbeingScoreMessage = (score, label = '') => {
-    if (Number.isFinite(score)) {
-        if (score <= 34) {
-            return "Things feel heavy right now. You're not alone, take one small step today.";
-        }
-        if (score <= 64) {
-            return "You're making progress. Keep going with steady habits and check-ins.";
-        }
-        return "You're doing well. Keep up the strong momentum and consistency.";
+    const normalizedLabel = String(label || '').toLowerCase();
+
+    if (normalizedLabel.includes('thriv')) {
+        return 'You likely feel balanced, engaged, and able to handle challenges.';
+    }
+    if (normalizedLabel.includes('steady') || normalizedLabel.includes('doing well') || normalizedLabel.includes('stable')) {
+        return 'Things feel mostly stable, with natural ups and downs.';
+    }
+    if (normalizedLabel.includes('manag') || normalizedLabel.includes('moderate') || normalizedLabel.includes('fair')) {
+        return "You're coping, but things might feel effortful right now.";
+    }
+    if (normalizedLabel.includes('low')) {
+        return 'You may feel drained or disconnected. Gentle connection could help.';
+    }
+    if (normalizedLabel.includes('support') || normalizedLabel.includes('struggl') || normalizedLabel.includes('critical')) {
+        return 'If you feel overwhelmed, reaching out could make a difference.';
     }
 
-    const normalizedLabel = String(label || '').toLowerCase();
-    if (normalizedLabel.includes('struggl') || normalizedLabel.includes('low') || normalizedLabel.includes('critical')) {
-        return "Things feel heavy right now. You're not alone, take one small step today.";
-    }
-    if (normalizedLabel.includes('moderate') || normalizedLabel.includes('fair') || normalizedLabel.includes('amber')) {
-        return "You're making progress. Keep going with steady habits and check-ins.";
-    }
-    if (normalizedLabel.includes('well') || normalizedLabel.includes('good') || normalizedLabel.includes('stable') || normalizedLabel.includes('high')) {
-        return "You're doing well. Keep up the strong momentum and consistency.";
+    if (Number.isFinite(score)) {
+        if (score >= 80) {
+            return 'You likely feel balanced, engaged, and able to handle challenges.';
+        }
+        if (score >= 60) {
+            return 'Things feel mostly stable, with natural ups and downs.';
+        }
+        if (score >= 40) {
+            return "You're coping, but things might feel effortful right now.";
+        }
+        if (score >= 20) {
+            return 'You may feel drained or disconnected. Gentle connection could help.';
+        }
+        return 'If you feel overwhelmed, reaching out could make a difference.';
     }
 
     return 'Complete your check-in to get personalized wellbeing guidance.';
@@ -450,7 +460,11 @@ const DashboardScreen = ({ navigation }) => {
 
 
 
-    const currentDate = formatDateUK(new Date());
+    const currentDate = formatDateUK(new Date(), {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+    }).replace(',', '');
     const lastSyncLabel = lastUpdatedAt ? formatTimeUK(new Date(lastUpdatedAt)) : 'now';
     const selfResolvedWellbeing = resolveMemberWellbeing(userData || {});
     const selfRingFallbackScore = typeof selfResolvedWellbeing.score === 'number'
@@ -458,7 +472,10 @@ const DashboardScreen = ({ navigation }) => {
         : (typeof wellbeing?.score === 'number' ? wellbeing.score : null);
     const selfRingFallbackLabel = selfResolvedWellbeing.label || wellbeing?.label || '';
     const effectiveWellbeingScore = typeof wellbeing?.score === 'number' ? wellbeing.score : selfResolvedWellbeing.score;
-    const effectiveWellbeingLabel = wellbeing?.label || selfResolvedWellbeing.label || '';
+    const effectiveWellbeingLabel = normalizeWellbeingLabel(
+        wellbeing?.label || selfResolvedWellbeing.label || '',
+        effectiveWellbeingScore
+    ) || labelFromWellbeingScore(effectiveWellbeingScore);
     const wellbeingDescription = getWellbeingScoreMessage(effectiveWellbeingScore, effectiveWellbeingLabel);
     const selfProfile = {
         name: userData?.name || user?.displayName || 'You',
@@ -537,7 +554,7 @@ const DashboardScreen = ({ navigation }) => {
                     </View>
                     <View style={styles.greetingText}>
                         <Text style={styles.greeting}>Hi, {(userData?.name || user?.displayName || 'Friend').split(' ')[0]}!</Text>
-                        <Text style={styles.subGreeting}>How're you feeling today?</Text>
+                        <Text style={styles.subGreeting}>How are you today?</Text>
                     </View>
                 </View>
 
@@ -611,8 +628,8 @@ const DashboardScreen = ({ navigation }) => {
                             disabled={true} // Disable card click, using buttons instead
                         >
                             <View style={styles.circleHeader}>
-                                <View>
-                                    <Text style={styles.circleTitle}>{selectedCircle.name}</Text>
+                                <View style={styles.circleHeaderMain}>
+                                    <Text style={styles.circleTitle} numberOfLines={1} ellipsizeMode="tail">{selectedCircle.name}</Text>
                                     <Text style={styles.circleMembers}>{getActiveMemberCount(selectedCircle.id, selectedCircle.members, activeMemberIdsMap)} Members • High Activity</Text>
                                 </View>
                                 {/* Rating Badge */}
@@ -1080,6 +1097,11 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: 16,
+    },
+    circleHeaderMain: {
+        flex: 1,
+        marginRight: 12,
+        minWidth: 0,
     },
     circleTitle: {
         fontSize: 22,

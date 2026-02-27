@@ -19,7 +19,10 @@ export const fetchActiveMemberIdsMap = async (circleIds = []) => {
                 const snapshot = await getDocs(membersQuery);
                 return [circleId, snapshot.docs.map((docSnap) => docSnap.id)];
             } catch (error) {
-                if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                const code = String(error?.code || '').toLowerCase();
+                const message = String(error?.message || '').toLowerCase();
+                const isPermissionDenied = code.includes('permission-denied') || message.includes('permission') || message.includes('insufficient permissions');
+                if (typeof __DEV__ !== 'undefined' && __DEV__ && !isPermissionDenied) {
                     console.warn('[ActiveMembers] fallback to circle.members for', circleId, error?.code || error?.message || error);
                 }
                 return [circleId, null];

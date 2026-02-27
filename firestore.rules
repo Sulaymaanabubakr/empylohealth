@@ -36,6 +36,13 @@ service cloud.firestore {
       );
     }
 
+    function isCirclePublic(circleId) {
+      return (
+        exists(/databases/$(database)/documents/circles/$(circleId)) &&
+        get(/databases/$(database)/documents/circles/$(circleId)).data.type == 'public'
+      );
+    }
+
     function isCircleModerator(circleId, uid) {
       return isCircleMember(circleId, uid) &&
         get(/databases/$(database)/documents/circles/$(circleId)/members/$(uid)).data.role in ['creator', 'admin', 'moderator'];
@@ -100,7 +107,8 @@ service cloud.firestore {
       allow delete: if isCircleModerator(circleId, request.auth.uid);
 
       match /members/{memberId} {
-        allow read: if isCircleMember(circleId, request.auth.uid);
+        allow read: if isCircleMember(circleId, request.auth.uid) ||
+          (isAuthenticated() && isCirclePublic(circleId));
         allow create: if isSelf(memberId) || isCircleModerator(circleId, request.auth.uid);
         allow update: if isSelf(memberId) || isCircleModerator(circleId, request.auth.uid);
         allow delete: if isCircleModerator(circleId, request.auth.uid);

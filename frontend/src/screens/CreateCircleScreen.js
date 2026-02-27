@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import ImageCropper from '../components/ImageCropper';
 
 const CIRCLE_CATEGORIES = ['Connect', 'Culture', 'Enablement', 'Green Activities', 'Mental health', 'Physical health'];
+const CIRCLE_NAME_MAX_LENGTH = 40;
 
 const CreateCircleScreen = ({ navigation }) => {
     const { showModal } = useModal();
@@ -41,8 +42,13 @@ const CreateCircleScreen = ({ navigation }) => {
     };
 
     const handleCreate = async () => {
-        if (!name || !description) {
+        const trimmedName = String(name || '').trim();
+        if (!trimmedName || !description) {
             showModal({ type: 'error', title: 'Error', message: 'Please fill in all fields' });
+            return;
+        }
+        if (trimmedName.length > CIRCLE_NAME_MAX_LENGTH) {
+            showModal({ type: 'error', title: 'Error', message: `Circle name must be ${CIRCLE_NAME_MAX_LENGTH} characters or fewer.` });
             return;
         }
 
@@ -60,7 +66,7 @@ const CreateCircleScreen = ({ navigation }) => {
                 )
             ).slice(0, 12);
             const result = await circleService.createCircle(
-                name,
+                trimmedName,
                 description,
                 category,
                 accessType.toLowerCase(),
@@ -164,6 +170,7 @@ const CreateCircleScreen = ({ navigation }) => {
                                 value={name}
                                 onChangeText={setName}
                                 placeholderTextColor="#9E9E9E"
+                                maxLength={CIRCLE_NAME_MAX_LENGTH}
                             />
                         </View>
                     </View>

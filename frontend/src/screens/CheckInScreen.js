@@ -66,7 +66,6 @@ export function CheckInScreen() {
   const { showModal } = useModal();
   const [selectedMood, setSelectedMood] = useState('');
   const [focusLevel, setFocusLevel] = useState(5);
-  const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
@@ -79,7 +78,7 @@ export function CheckInScreen() {
     setIsSubmitting(true);
     try {
       const score = Math.round((focusLevel / 10) * 100);
-      await assessmentService.submitAssessment('daily', score, { focusLevel, notes }, selectedMood);
+      await assessmentService.submitAssessment('daily', score, { focusLevel }, selectedMood);
       setIsSaved(true);
       navigation.navigate('MainTabs', { screen: 'Dashboard' });
     } catch (error) {
@@ -154,12 +153,12 @@ export function CheckInScreen() {
         <Text style={styles.sectionTitle}>Quick notes</Text>
         <Card>
           <TextInput
-            placeholder="Anything on your mind?..."
+            placeholder="Quick notes coming soon..."
             placeholderTextColor={theme.colors.placeholder}
             style={styles.textArea}
             multiline
-            value={notes}
-            onChangeText={setNotes}
+            editable={false}
+            value=""
           />
         </Card>
       </FadeInView>

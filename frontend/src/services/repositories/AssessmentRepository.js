@@ -12,14 +12,7 @@ import {
     setDoc,
     where
 } from 'firebase/firestore';
-
-const labelFromScore = (score = 0) => {
-    if (score >= 80) return 'Thriving';
-    if (score >= 60) return 'Doing Well';
-    if (score >= 40) return 'Okay';
-    if (score >= 20) return 'Struggling';
-    return 'Needs Attention';
-};
+import { labelFromWellbeingScore, normalizeWellbeingLabel } from '../../utils/wellbeing';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -147,7 +140,7 @@ export const assessmentRepository = {
             userRef,
             {
                 wellbeingScore: computedWellbeing,
-                wellbeingLabel: labelFromScore(computedWellbeing),
+                wellbeingLabel: labelFromWellbeingScore(computedWellbeing),
                 weeklyScore: weeklyAnchor,
                 dailyTrendScore: dailyAvg7,
                 wellbeingModelVersion: 'v2_weekly_anchor_daily_trend',
@@ -179,7 +172,7 @@ export const assessmentRepository = {
         const userData = userSnap.data();
         return {
             score: userData.wellbeingScore ?? null,
-            label: userData.wellbeingLabel || labelFromScore(userData.wellbeingScore || 0),
+            label: normalizeWellbeingLabel(userData.wellbeingLabel, userData.wellbeingScore || 0),
             streak: userData.streak || 0
         };
     },

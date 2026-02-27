@@ -3,6 +3,7 @@ import { collection, query, where, orderBy, limit, getDocs, getDoc, doc, onSnaps
 import { assessmentRepository } from '../repositories/AssessmentRepository';
 import { contentRepository } from '../repositories/ContentRepository';
 import { callableClient } from './callableClient';
+import { labelFromWellbeingScore, normalizeWellbeingLabel } from '../../utils/wellbeing';
 
 export const assessmentService = {
     submitAssessment: async (type, score, answers = {}, mood = '') => {
@@ -22,16 +23,11 @@ export const assessmentService = {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const score = data.wellbeingScore || 0;
-                let label = 'Neutral';
-                if (score >= 80) label = 'Thriving';
-                else if (score >= 60) label = 'Doing Well';
-                else if (score >= 40) label = 'Okay';
-                else if (score >= 20) label = 'Struggling';
-                else label = 'Needs Attention';
+                const label = labelFromWellbeingScore(score);
 
                 callback({
                     score,
-                    label: data.wellbeingLabel || label,
+                    label: normalizeWellbeingLabel(data.wellbeingLabel || data.wellbeingStatus, score) || label,
                     streak: data.streak || 0
                 });
             } else {

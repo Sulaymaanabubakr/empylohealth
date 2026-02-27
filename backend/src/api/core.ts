@@ -12,6 +12,7 @@ if (admin.apps.length === 0) {
 }
 const db = admin.firestore();
 const regionalFunctions = functions.region('europe-west1');
+const CIRCLE_NAME_MAX_LENGTH = 40;
 
 // Configure Cloudinary
 cloudinary.config({
@@ -463,7 +464,7 @@ export const createCircle = regionalFunctions.https.onCall(async (data, context)
     }
 
     const {
-        name,
+        name: rawName,
         description,
         category,
         type = 'public',
@@ -475,8 +476,12 @@ export const createCircle = regionalFunctions.https.onCall(async (data, context)
     const uid = context.auth.uid;
 
     // 2. Validation
+    const name = String(rawName || '').trim();
     if (!name) {
         throw new functions.https.HttpsError('invalid-argument', 'Circle name is required.');
+    }
+    if (name.length > CIRCLE_NAME_MAX_LENGTH) {
+        throw new functions.https.HttpsError('invalid-argument', `Circle name must be ${CIRCLE_NAME_MAX_LENGTH} characters or fewer.`);
     }
 
     try {
@@ -608,7 +613,16 @@ export const updateCircle = regionalFunctions.https.onCall(async (data, context)
         const updates: any = {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
-        if (name) updates.name = name;
+        if (name !== undefined) {
+            const normalizedName = String(name || '').trim();
+            if (!normalizedName) {
+                throw new functions.https.HttpsError('invalid-argument', 'Circle name cannot be empty.');
+            }
+            if (normalizedName.length > CIRCLE_NAME_MAX_LENGTH) {
+                throw new functions.https.HttpsError('invalid-argument', `Circle name must be ${CIRCLE_NAME_MAX_LENGTH} characters or fewer.`);
+            }
+            updates.name = normalizedName;
+        }
         if (description !== undefined) updates.description = description;
         if (image !== undefined) updates.image = image;
         if (category !== undefined) updates.category = category;
@@ -1404,10 +1418,10 @@ export const getPublicProfile = regionalFunctions.https.onCall(async (data, cont
             const s = typeof wellbeingScore === 'number' ? wellbeingScore : NaN;
             if (Number.isFinite(s)) {
                 if (s >= 80) wellbeingLabel = 'Thriving';
-                else if (s >= 60) wellbeingLabel = 'Doing Well';
-                else if (s >= 40) wellbeingLabel = 'Okay';
-                else if (s >= 20) wellbeingLabel = 'Struggling';
-                else wellbeingLabel = 'Needs Attention';
+                else if (s >= 60) wellbeingLabel = 'Steady';
+                else if (s >= 40) wellbeingLabel = 'Managing';
+                else if (s >= 20) wellbeingLabel = 'Low';
+                else wellbeingLabel = 'Need Support';
             }
         }
 
@@ -1892,9 +1906,10 @@ export const getUserStats = regionalFunctions.https.onCall(async (data, context)
             const score = stats.overallScore || 0;
             let label = 'Neutral';
             if (score >= 80) label = 'Thriving';
-            else if (score >= 60) label = 'Doing Well';
-            else if (score >= 40) label = 'Okay';
-            else label = 'Struggling';
+            else if (score >= 60) label = 'Steady';
+            else if (score >= 40) label = 'Managing';
+            else if (score >= 20) label = 'Low';
+            else label = 'Need Support';
             return { score, label };
         }
 
@@ -1913,9 +1928,10 @@ export const getUserStats = regionalFunctions.https.onCall(async (data, context)
         const score = latest?.score || 0;
         let label = 'Neutral';
         if (score >= 80) label = 'Thriving';
-        else if (score >= 60) label = 'Doing Well';
-        else if (score >= 40) label = 'Okay';
-        else label = 'Struggling';
+        else if (score >= 60) label = 'Steady';
+        else if (score >= 40) label = 'Managing';
+        else if (score >= 20) label = 'Low';
+        else label = 'Need Support';
 
         return { score, label };
     } catch (error) {

@@ -12,17 +12,7 @@ import { useModal } from '../context/ModalContext';
 import { COLORS, SPACING } from '../theme/theme';
 import { isPresenceOnline } from '../utils/presence';
 import { formatDateUK } from '../utils/dateFormat';
-import { getWellbeingRingColor } from '../utils/wellbeing';
-
-const labelFromScore = (score) => {
-    const n = Number(score);
-    if (Number.isNaN(n)) return 'No data';
-    if (n >= 80) return 'Thriving';
-    if (n >= 60) return 'Doing Well';
-    if (n >= 40) return 'Okay';
-    if (n >= 20) return 'Struggling';
-    return 'Needs Attention';
-};
+import { getWellbeingRingColor, labelFromWellbeingScore, normalizeWellbeingLabel } from '../utils/wellbeing';
 
 const ringColorFromProfile = (profile = {}) => {
     return getWellbeingRingColor({
@@ -66,7 +56,10 @@ const PublicProfileScreen = ({ navigation, route }) => {
                     photoURL: data?.photoURL || '',
                     bio: data?.bio || data?.about || data?.aboutMe || 'No bio available yet.',
                     wellbeingScore: data?.wellbeingScore ?? null,
-                    wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || labelFromScore(data?.wellbeingScore),
+                    wellbeingLabel: normalizeWellbeingLabel(
+                        data?.wellbeingLabel || data?.wellbeingStatus,
+                        data?.wellbeingScore
+                    ) || labelFromWellbeingScore(data?.wellbeingScore),
                     streak: Number(data?.streak || 0),
                     role: data?.role || 'personal',
                     location: data?.location || data?.city || data?.country || '',

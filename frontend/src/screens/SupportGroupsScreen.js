@@ -222,8 +222,8 @@ const SupportGroupsScreen = ({ route }) => {
             onPress={() => navigation.navigate('CircleDetail', { circle: item })}
         >
             <View style={styles.circleHeader}>
-                <View>
-                    <Text style={styles.circleTitle}>{item.name}</Text>
+                <View style={styles.circleHeaderMain}>
+                    <Text style={styles.circleTitle} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
                     <Text style={styles.circleMembers}>{getActiveMemberCount(item.id, item.members, activeMemberIdsMap)} Members • High Activity</Text>
                 </View>
                 <View style={styles.scoreBadge}>
@@ -583,6 +583,11 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: 16,
+    },
+    circleHeaderMain: {
+        flex: 1,
+        marginRight: 12,
+        minWidth: 0,
     },
     circleTitle: {
         fontSize: 22,

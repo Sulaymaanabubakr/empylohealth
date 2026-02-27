@@ -48,6 +48,16 @@ const StatsScreen = ({ navigation }) => {
         return 'Needs Care';
     };
 
+    const getTrendDescriptor = (currentScore, previousScore) => {
+        const current = Number(currentScore || 0);
+        const previous = Number(previousScore || 0);
+        if (!Number.isFinite(current) || !Number.isFinite(previous)) return 'Steady';
+        const delta = current - previous;
+        if (delta > 2) return 'Improving';
+        if (delta < -2) return 'Under Pressure';
+        return 'Steady';
+    };
+
     const formatDate = (dateObj) => {
         if (!dateObj) return '';
         let d = dateObj.toDate ? dateObj.toDate() : new Date(dateObj);
@@ -123,7 +133,7 @@ const StatsScreen = ({ navigation }) => {
                                         </Text>
                                     </View>
                                     <Text style={styles.historyMood}>
-                                        {item.mood ? `Feeling ${item.mood}` : getScoreLabel(item.score)}
+                                        {getTrendDescriptor(item.score, history[index + 1]?.score)}
                                     </Text>
                                 </View>
                             </View>

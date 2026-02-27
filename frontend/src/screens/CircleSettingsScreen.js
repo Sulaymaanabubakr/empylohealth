@@ -18,6 +18,8 @@ import { mediaService } from '../services/api/mediaService';
 import * as ImagePicker from 'expo-image-picker';
 import { formatDateTimeUK } from '../utils/dateFormat';
 
+const CIRCLE_NAME_MAX_LENGTH = 40;
+
 // Components for different tabs
 const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto, busy }) => (
     <View style={styles.tabContent}>
@@ -265,6 +267,10 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const handleUpdateCircle = async () => {
         if (!editName.trim()) {
             showModal({ type: 'error', title: 'Error', message: 'Name cannot be empty' });
+            return;
+        }
+        if (editName.trim().length > CIRCLE_NAME_MAX_LENGTH) {
+            showModal({ type: 'error', title: 'Error', message: `Circle name must be ${CIRCLE_NAME_MAX_LENGTH} characters or fewer.` });
             return;
         }
         setActionLoading(true);
@@ -877,6 +883,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                             value={editName}
                             onChangeText={setEditName}
                             placeholder="Circle Name"
+                            maxLength={CIRCLE_NAME_MAX_LENGTH}
                         />
 
                         <Text style={styles.label}>Description</Text>

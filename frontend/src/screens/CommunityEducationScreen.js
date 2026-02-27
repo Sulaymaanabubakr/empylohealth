@@ -66,7 +66,7 @@ export default function CommunityEducationScreen({ navigation }) {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Community Education</Text>
+                <Text style={styles.headerTitle}>Getting Started Tutorial</Text>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -90,6 +90,15 @@ export default function CommunityEducationScreen({ navigation }) {
                     </View>
                 </LinearGradient>
 
+                <View style={styles.noticeCard}>
+                    <Text style={styles.noticeBody}>
+                        This space is designed to support wellbeing in a safe, respectful, and non-judgemental way. Everyone’s experiences and feelings are valid, and no one should feel judged, labelled, or persecuted for how they show up here. Scores and check-ins reflect moments in time - they are not definitions of who you are. Please interact with others kindly, respect privacy, and offer support with empathy and understanding.
+                    </Text>
+                    <Text style={styles.noticeBody}>
+                        Every user has a responsibility for their own health and safety. If you ever feel unsafe or concerned about your wellbeing, consider contacting your local health care services.
+                    </Text>
+                </View>
+
                 <Text style={styles.sectionHeader}>Learning Tracks</Text>
                 {COMMUNITY_EDUCATION_TOPICS.map((track, index) => {
                     const completed = completedIds.includes(track.id);
@@ -103,8 +112,8 @@ export default function CommunityEducationScreen({ navigation }) {
                                     <Ionicons name={track.icon} size={18} color="#0D8A80" />
                                 </View>
                                 <View style={styles.trackTextWrap}>
-                                    <View style={styles.trackTitleRow}>
-                                        <Text style={styles.trackTitle}>{track.title}</Text>
+                                    <Text style={styles.trackTitle}>{track.title}</Text>
+                                    <View style={styles.trackMetaRow}>
                                         <View style={completed ? styles.trackDoneTag : styles.trackTag}>
                                             <Text style={completed ? styles.trackDoneText : styles.trackTagText}>{completed ? 'Done' : track.tag}</Text>
                                         </View>
@@ -202,6 +211,20 @@ const styles = StyleSheet.create({
         marginBottom: 10,
         marginLeft: 2
     },
+    noticeCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E5EDF4',
+        padding: 12,
+        marginBottom: 14
+    },
+    noticeBody: {
+        fontSize: 12,
+        color: '#4B5563',
+        lineHeight: 18,
+        marginBottom: 8
+    },
     trackCard: {
         backgroundColor: '#FFFFFF',
         borderRadius: 14,
@@ -241,16 +264,16 @@ const styles = StyleSheet.create({
     trackTextWrap: {
         flex: 1
     },
-    trackTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 4
-    },
     trackTitle: {
         fontSize: 14,
         fontWeight: '800',
-        color: '#1F2937'
+        color: '#1F2937',
+        flexShrink: 1
+    },
+    trackMetaRow: {
+        marginTop: 6,
+        marginBottom: 6,
+        alignItems: 'flex-start'
     },
     trackTag: {
         backgroundColor: '#F3F4F6',

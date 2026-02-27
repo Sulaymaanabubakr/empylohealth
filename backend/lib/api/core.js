@@ -50,6 +50,7 @@ if (admin.apps.length === 0) {
 }
 const db = admin.firestore();
 const regionalFunctions = functions.region('europe-west1');
+const CIRCLE_NAME_MAX_LENGTH = 40;
 // Configure Cloudinary
 cloudinary_1.v2.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME || '',
@@ -460,11 +461,15 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     }
-    const { name, description, category, type = 'public', image = null, visibility = 'visible', location = '', tags = [] } = data;
+    const { name: rawName, description, category, type = 'public', image = null, visibility = 'visible', location = '', tags = [] } = data;
     const uid = context.auth.uid;
     // 2. Validation
+    const name = String(rawName || '').trim();
     if (!name) {
         throw new functions.https.HttpsError('invalid-argument', 'Circle name is required.');
+    }
+    if (name.length > CIRCLE_NAME_MAX_LENGTH) {
+        throw new functions.https.HttpsError('invalid-argument', `Circle name must be ${CIRCLE_NAME_MAX_LENGTH} characters or fewer.`);
     }
     try {
         if (type === 'private') {
@@ -578,8 +583,16 @@ exports.updateCircle = regionalFunctions.https.onCall(async (data, context) => {
         const updates = {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
-        if (name)
-            updates.name = name;
+        if (name !== undefined) {
+            const normalizedName = String(name || '').trim();
+            if (!normalizedName) {
+                throw new functions.https.HttpsError('invalid-argument', 'Circle name cannot be empty.');
+            }
+            if (normalizedName.length > CIRCLE_NAME_MAX_LENGTH) {
+                throw new functions.https.HttpsError('invalid-argument', `Circle name must be ${CIRCLE_NAME_MAX_LENGTH} characters or fewer.`);
+            }
+            updates.name = normalizedName;
+        }
         if (description !== undefined)
             updates.description = description;
         if (image !== undefined)
@@ -1299,13 +1312,13 @@ exports.getPublicProfile = regionalFunctions.https.onCall(async (data, context) 
                 if (s >= 80)
                     wellbeingLabel = 'Thriving';
                 else if (s >= 60)
-                    wellbeingLabel = 'Doing Well';
+                    wellbeingLabel = 'Steady';
                 else if (s >= 40)
-                    wellbeingLabel = 'Okay';
+                    wellbeingLabel = 'Managing';
                 else if (s >= 20)
-                    wellbeingLabel = 'Struggling';
+                    wellbeingLabel = 'Low';
                 else
-                    wellbeingLabel = 'Needs Attention';
+                    wellbeingLabel = 'Need Support';
             }
         }
         if (!createdAt) {
@@ -1742,11 +1755,13 @@ exports.getUserStats = regionalFunctions.https.onCall(async (data, context) => {
             if (score >= 80)
                 label = 'Thriving';
             else if (score >= 60)
-                label = 'Doing Well';
+                label = 'Steady';
             else if (score >= 40)
-                label = 'Okay';
+                label = 'Managing';
+            else if (score >= 20)
+                label = 'Low';
             else
-                label = 'Struggling';
+                label = 'Need Support';
             return { score, label };
         }
         // Fallback to latest assessment query if no aggregated stats
@@ -1764,11 +1779,13 @@ exports.getUserStats = regionalFunctions.https.onCall(async (data, context) => {
         if (score >= 80)
             label = 'Thriving';
         else if (score >= 60)
-            label = 'Doing Well';
+            label = 'Steady';
         else if (score >= 40)
-            label = 'Okay';
+            label = 'Managing';
+        else if (score >= 20)
+            label = 'Low';
         else
-            label = 'Struggling';
+            label = 'Need Support';
         return { score, label };
     }
     catch (error) {
