@@ -272,7 +272,8 @@ const PersonalProfileScreen = ({ navigation }) => {
                     <TouchableOpacity
                         key={circle.id}
                         style={styles.circleCard}
-                        disabled={true}
+                        onPress={() => navigation.navigate('CircleDetail', { circle })}
+                        activeOpacity={0.92}
                     >
                         <View style={styles.circleHeader}>
                             <View>

@@ -43,10 +43,39 @@ export const getWellbeingRingColor = ({ wellbeingScore, wellbeingLabel, wellbein
     return '#2E7D32'; // Green: 65-100
   }
 
-  const label = String(wellbeingLabel || wellbeingStatus || '').toLowerCase();
+  const canonical = normalizeWellbeingLabel(wellbeingLabel || wellbeingStatus, score);
+  const label = String(canonical || wellbeingLabel || wellbeingStatus || '').toLowerCase();
   if (!label) return null;
-  if (label.includes('struggl') || label.includes('attention')) return '#C62828';
-  if (label.includes('okay') || label.includes('neutral') || label.includes('fair')) return '#F59E0B';
-  if (label.includes('good') || label.includes('well') || label.includes('thriv')) return '#2E7D32';
+
+  // Red band
+  if (
+    label.includes('need support') ||
+    label.includes('support') ||
+    label.includes('low') ||
+    label.includes('struggl') ||
+    label.includes('critical') ||
+    label.includes('attention')
+  ) return '#C62828';
+
+  // Amber band
+  if (
+    label.includes('manag') ||
+    label.includes('steady') ||
+    label.includes('moderate') ||
+    label.includes('fair') ||
+    label.includes('okay') ||
+    label.includes('neutral') ||
+    label.includes('under pressure')
+  ) return '#F59E0B';
+
+  // Green band
+  if (
+    label.includes('thriv') ||
+    label.includes('improv') ||
+    label.includes('good') ||
+    label.includes('well') ||
+    label.includes('stable')
+  ) return '#2E7D32';
+
   return null;
 };

@@ -5,23 +5,29 @@ import { COLORS } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-const AssessmentModal = ({ visible, onClose, onTakeNow, type = 'daily' }) => {
+const AssessmentModal = ({ visible, onClose, onTakeNow, type = 'daily', mandatory = false }) => {
     const isWeekly = type === 'weekly';
-    const title = isWeekly ? "It's time for your Weekly Reflection" : "Ready for your Daily Check-in?";
-    const subtitle = isWeekly ? "Takes about 2 minutes" : "Takes just 30 seconds";
+    const title = mandatory
+        ? 'Complete your first assessment to continue'
+        : (isWeekly ? "It's time for your Weekly Reflection" : "Ready for your Daily Check-in?");
+    const subtitle = mandatory
+        ? 'This only takes a moment and unlocks your full experience.'
+        : (isWeekly ? "Takes about 2 minutes" : "Takes just 30 seconds");
 
     return (
         <Modal
             animationType="fade"
             transparent={true}
             visible={visible}
-            onRequestClose={onClose}
+            onRequestClose={mandatory ? undefined : onClose}
         >
             <View style={styles.centeredView}>
                 <View style={styles.modalView}>
-                    <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                        <Ionicons name="close" size={24} color="#1A1A1A" />
-                    </TouchableOpacity>
+                    {!mandatory && (
+                        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                            <Ionicons name="close" size={24} color="#1A1A1A" />
+                        </TouchableOpacity>
+                    )}
 
                     <Text style={styles.title}>{title}</Text>
                     <Text style={styles.subtitle}>{subtitle}</Text>
@@ -38,9 +44,11 @@ const AssessmentModal = ({ visible, onClose, onTakeNow, type = 'daily' }) => {
                         <Text style={styles.primaryButtonText}>Take now</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={onClose} style={styles.secondaryButton}>
-                        <Text style={styles.secondaryButtonText}>Later</Text>
-                    </TouchableOpacity>
+                    {!mandatory && (
+                        <TouchableOpacity onPress={onClose} style={styles.secondaryButton}>
+                            <Text style={styles.secondaryButtonText}>Later</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         </Modal>

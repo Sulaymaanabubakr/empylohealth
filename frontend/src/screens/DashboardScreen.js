@@ -12,13 +12,14 @@ import { weeklyAssessment } from '../services/assessments/weeklyAssessment';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, getDocs, limit, collection, query, where, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import CircleMemberLane from '../components/CircleMemberLane';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { formatDateUK, formatTimeUK } from '../utils/dateFormat';
 import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } from '../services/circles/activeMembers';
 import { labelFromWellbeingScore, normalizeWellbeingLabel } from '../utils/wellbeing';
+import { MAX_CIRCLE_MEMBERS } from '../services/circles/circleLimits';
 
 import { assessmentService } from '../services/api/assessmentService';
 
@@ -185,6 +186,7 @@ const DashboardScreen = ({ navigation }) => {
     const [recommendations, setRecommendations] = useState([]);
     const [showAssessment, setShowAssessment] = useState(false);
     const [assessmentType, setAssessmentType] = useState('daily'); // 'daily' or 'weekly'
+    const [assessmentMandatory, setAssessmentMandatory] = useState(false);
     const [memberProfiles, setMemberProfiles] = useState({});
     const [activeMemberIdsMap, setActiveMemberIdsMap] = useState({});
     const [refreshing, setRefreshing] = useState(false);
@@ -350,6 +352,33 @@ const DashboardScreen = ({ navigation }) => {
     const checkAssessments = useCallback(async () => {
         try {
             const today = new Date();
+            const completionKey = user?.uid ? `assessment_completed:${user.uid}` : '';
+            if (user?.uid && completionKey) {
+                const cachedCompleted = await AsyncStorage.getItem(completionKey);
+                let hasCompletedAssessment = cachedCompleted === 'true';
+                if (!hasCompletedAssessment) {
+                    const firstAssessmentSnap = await getDocs(
+                        query(
+                            collection(db, 'assessments'),
+                            where('uid', '==', user.uid),
+                            limit(1)
+                        )
+                    );
+                    hasCompletedAssessment = !firstAssessmentSnap.empty;
+                    if (hasCompletedAssessment) {
+                        await AsyncStorage.setItem(completionKey, 'true');
+                    }
+                }
+
+                if (!hasCompletedAssessment) {
+                    setAssessmentMandatory(true);
+                    setAssessmentType('weekly');
+                    setTimeout(() => setShowAssessment(true), 400);
+                    return;
+                }
+            }
+
+            setAssessmentMandatory(false);
             const pendingWeekly = await AsyncStorage.getItem('pendingWeeklyAssessment');
             const lastWeekly = await AsyncStorage.getItem('lastWeeklyAssessmentDate');
             const lastWeeklyKey = await AsyncStorage.getItem('lastWeeklyAssessmentWeekKey');
@@ -389,7 +418,7 @@ const DashboardScreen = ({ navigation }) => {
         } catch (error) {
             console.error('Error checking assessment dates:', error);
         }
-    }, []);
+    }, [user?.uid]);
 
     const onRefresh = React.useCallback(() => {
         setRefreshing(true);
@@ -409,7 +438,7 @@ const DashboardScreen = ({ navigation }) => {
             const todayStr = today.toDateString();
             setShowAssessment(false);
 
-            if (assessmentType === 'weekly') {
+            if (assessmentMandatory || assessmentType === 'weekly') {
                 await AsyncStorage.setItem('pendingWeeklyAssessment', 'true');
                 navigation.navigate('Assessment'); // Navigate to Weekly Flow (AssessmentScreen -> NineIndex)
             } else {
@@ -422,6 +451,7 @@ const DashboardScreen = ({ navigation }) => {
     };
 
     const handleLater = () => {
+        if (assessmentMandatory) return;
         setShowAssessment(false);
     };
 
@@ -431,7 +461,7 @@ const DashboardScreen = ({ navigation }) => {
 
         try {
             const profiles = {};
-            const memberIds = activeIds.slice(0, 5);
+            const memberIds = activeIds.slice(0, MAX_CIRCLE_MEMBERS);
 
             await Promise.all(memberIds.map(async (memberId) => {
                 if (memberId === user?.uid) return;
@@ -645,7 +675,7 @@ const DashboardScreen = ({ navigation }) => {
                                     <CircleMemberLane
                                         members={
                                             [...prioritizedSelectedMemberIds]
-                                                .slice(0, 6)
+                                                .slice(0, MAX_CIRCLE_MEMBERS)
                                                 .map((memberId) => {
                                                     const profile = memberId === user?.uid ? selfProfile : memberProfiles[memberId];
                                                     if (!profile) return null;
@@ -661,7 +691,7 @@ const DashboardScreen = ({ navigation }) => {
                                                 .filter(Boolean)
                                         }
                                         prioritizeUid={user?.uid || null}
-                                        maxVisible={6}
+                                        maxVisible={MAX_CIRCLE_MEMBERS}
                                         avatarSize={34}
                                     />
                                     <View style={styles.stackInfoContainer}>
@@ -794,6 +824,7 @@ const DashboardScreen = ({ navigation }) => {
                 type={assessmentType}
                 onClose={handleLater}
                 onTakeNow={handleTakeAssessment}
+                mandatory={assessmentMandatory}
             />
 
 
