@@ -182,7 +182,6 @@ const DashboardScreen = ({ navigation }) => {
     const [allCircles, setAllCircles] = useState([]);
     const [selectedCircleId, setSelectedCircleId] = useState('');
     const [wellbeing, setWellbeing] = useState({ score: null, label: '' });
-    const [challenges, setChallenges] = useState([]);
     const [recommendations, setRecommendations] = useState([]);
     const [showAssessment, setShowAssessment] = useState(false);
     const [assessmentType, setAssessmentType] = useState('daily'); // 'daily' or 'weekly'
@@ -248,7 +247,6 @@ const DashboardScreen = ({ navigation }) => {
                     });
                 }
             }
-            if (Array.isArray(cached?.challenges)) setChallenges(cached.challenges);
             if (Array.isArray(cached?.recommendations)) setRecommendations(cached.recommendations);
         };
         hydrate();
@@ -324,19 +322,16 @@ const DashboardScreen = ({ navigation }) => {
 
     const fetchDashboardData = async () => {
         try {
-            const [stats, challs, recs] = await Promise.all([
+            const [stats, recs] = await Promise.all([
                 assessmentService.getWellbeingStats(),
-                assessmentService.getKeyChallenges(),
                 assessmentService.getRecommendedContent()
             ]);
             const hasScore = typeof stats?.score === 'number';
             setWellbeing(hasScore ? stats : localWellbeingFallback());
-            setChallenges(challs);
             setRecommendations(recs);
             if (user?.uid) {
                 screenCacheService.set(`dashboard:${user.uid}`, {
                     wellbeing: hasScore ? stats : localWellbeingFallback(),
-                    challenges: challs || [],
                     recommendations: recs || []
                 });
             }
@@ -731,40 +726,6 @@ const DashboardScreen = ({ navigation }) => {
                                         <Text style={styles.analysisQuickButtonText} numberOfLines={1}>{item.name}</Text>
                                     </TouchableOpacity>
                                 ))}
-                        </View>
-                    </View>
-                )}
-
-                {/* Key Challenges */}
-                <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Key Challenges</Text>
-                <Text style={styles.keyChallengesHint}>Insights only</Text>
-
-                <View style={styles.challengeRow}>
-                    {challenges.length > 0 ? challenges.slice(0, 2).map((challenge, index) => {
-                        const iconName = challenge.icon || 'alert-circle-outline';
-                        const safeIconName = MaterialCommunityIcons?.glyphMap?.[iconName] ? iconName : 'alert-circle-outline';
-                        return (
-                            <View key={index} style={[styles.challengeCard, { marginRight: index === 0 ? 10 : 0, marginLeft: index === 1 ? 10 : 0, flex: 1 }]}>
-                                <View style={[styles.challengeIcon, { backgroundColor: challenge.bg || '#FFF3E0' }]}>
-                                    <MaterialCommunityIcons name={safeIconName} size={28} color={challenge.color || '#FF9800'} />
-                                </View>
-                                <Text style={styles.challengeTitle}>{challenge.title}</Text>
-                                <Text style={styles.challengeLevel}>Level: {challenge.level}</Text>
-                            </View>
-                        );
-                    }) : (
-                        <Text style={{ color: '#999', fontStyle: 'italic', padding: 10 }}>No specific challenges flagged.</Text>
-                    )}
-                </View>
-
-                {challenges.length > 2 && (
-                    <View style={[styles.challengeCard, { marginBottom: 30, flexDirection: 'row', alignItems: 'center', paddingVertical: 15, justifyContent: 'center' }]}>
-                        <View style={[styles.challengeIcon, { backgroundColor: '#F3E5F5', marginRight: 15, marginBottom: 0 }]}>
-                            <MaterialCommunityIcons name="head-outline" size={28} color="#8E24AA" />
-                        </View>
-                        <View>
-                            <Text style={[styles.challengeTitle, { textAlign: 'left', marginBottom: 0 }]}>Stress Level</Text>
-                            <Text style={[styles.challengeLevel, { textAlign: 'left' }]}>Currently Low</Text>
                         </View>
                     </View>
                 )}
