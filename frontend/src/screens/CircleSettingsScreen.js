@@ -87,7 +87,7 @@ const RequestItem = ({ request, onAccept, onReject, processingId }) => {
     );
 };
 
-const MemberItem = ({ member, currentUserUid, onManage, currentMemberRole, disabled }) => {
+const MemberItem = ({ member, currentUserUid, onManage, disabled }) => {
     // Helper to get badge color
     const getRoleBadge = (role) => {
         switch (role) {
@@ -122,7 +122,9 @@ const MemberItem = ({ member, currentUserUid, onManage, currentMemberRole, disab
                         </View>
                     )}
                 </View>
-                <Text style={styles.itemSubtitle}>{member.email || 'Member'}</Text>
+                <Text style={styles.itemSubtitle}>
+                    {member.uid === currentUserUid ? (member.email || 'Member') : 'Member'}
+                </Text>
             </View>
             {showOptions && (
                 <TouchableOpacity onPress={() => onManage(member)} style={styles.moreBtn} disabled={disabled}>
@@ -234,6 +236,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [showEditModal, setShowEditModal] = useState(false);
     const [editName, setEditName] = useState('');
     const [editDesc, setEditDesc] = useState('');
+    const [editType, setEditType] = useState('public');
 
     const selectedTime24 = `${String(eventDate.getHours()).padStart(2, '0')}:${String(eventDate.getMinutes()).padStart(2, '0')}`;
 
@@ -263,6 +266,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const openEditModal = () => {
         setEditName(circle.name);
         setEditDesc(circle.description || '');
+        setEditType(circle.type === 'private' ? 'private' : 'public');
         setShowEditModal(true);
     };
 
@@ -279,9 +283,10 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         try {
             await circleService.updateCircle(circleId, {
                 name: editName.trim(),
-                description: editDesc.trim()
+                description: editDesc.trim(),
+                type: editType
             });
-            setCircle({ ...circle, name: editName.trim(), description: editDesc.trim() });
+            setCircle({ ...circle, name: editName.trim(), description: editDesc.trim(), type: editType });
             setShowEditModal(false);
             showModal({ type: 'success', title: 'Success', message: 'Circle updated successfully.' });
         } catch (error) {
@@ -382,7 +387,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                                 ...m,
                                 name: userDoc?.name || userDoc?.displayName || 'Unknown Member',
                                 image: userDoc?.photoURL || null,
-                                email: userDoc?.email || '',
+                                email: m.uid === user?.uid ? (userDoc?.email || '') : '',
                                 wellbeingScore: userDoc?.wellbeingScore ?? userDoc?.stats?.overallScore ?? null,
                                 wellbeingLabel: userDoc?.wellbeingLabel || userDoc?.wellbeingStatus || ''
                             };
@@ -447,7 +452,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         reporterName: reporterDoc?.name || reporterDoc?.displayName || reporterUid || 'Unknown',
                         targetName: targetDoc?.name || targetDoc?.displayName || targetUid || rep?.targetId || 'Unknown',
                         targetAvatar: targetDoc?.photoURL || '',
-                        targetEmail: targetDoc?.email || ''
+                        targetEmail: ''
                     };
                 }));
                 setEnrichedReports(next);
@@ -519,8 +524,8 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 options.push({ text: 'Demote to Member', onPress: () => performMemberAction(member, 'demote') });
             }
             // Kick/Ban
-            options.push({ text: 'Kick User', onPress: () => performMemberAction(member, 'kick'), style: 'destructive' });
-            options.push({ text: 'Ban User', onPress: () => performMemberAction(member, 'ban'), style: 'destructive' });
+            options.push({ text: 'Remove User', onPress: () => performMemberAction(member, 'kick'), style: 'destructive' });
+            options.push({ text: 'Block User', onPress: () => performMemberAction(member, 'ban'), style: 'destructive' });
         } else {
             // REGULAR MEMBER ACTIONS (Report)
             options.push({
@@ -636,7 +641,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             <View style={styles.tabContent}>
                 <Text style={styles.sectionTitle}>Members ({members.length})</Text>
                 {enrichedMembers.map(mem => (
-                    <MemberItem key={mem.uid} member={mem} currentUserUid={user.uid} onManage={handleManageMember} currentMemberRole={myRole} disabled={actionLoading} />
+                    <MemberItem key={mem.uid} member={mem} currentUserUid={user.uid} onManage={handleManageMember} disabled={actionLoading} />
                 ))}
             </View>
         );
@@ -897,6 +902,27 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                             multiline
                         />
 
+                        <Text style={styles.label}>Accessibility</Text>
+                        <View style={styles.accessTypeWrap}>
+                            <TouchableOpacity
+                                style={[styles.accessTypeButton, editType === 'public' && styles.accessTypeButtonActive]}
+                                onPress={() => setEditType('public')}
+                                disabled={actionLoading}
+                            >
+                                <Text style={[styles.accessTypeText, editType === 'public' && styles.accessTypeTextActive]}>Public</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.accessTypeButton, editType === 'private' && styles.accessTypeButtonActive]}
+                                onPress={() => setEditType('private')}
+                                disabled={actionLoading}
+                            >
+                                <Text style={[styles.accessTypeText, editType === 'private' && styles.accessTypeTextActive]}>Private (Join request)</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.helperText}>
+                            Private circles require join approval from admins or moderators.
+                        </Text>
+
                         <View style={styles.modalActions}>
                             <TouchableOpacity onPress={() => setShowEditModal(false)} style={styles.modalCancel} disabled={actionLoading}>
                                 <Text style={styles.modalCancelText}>Cancel</Text>
@@ -1139,7 +1165,31 @@ const styles = StyleSheet.create({
     modalContent: { backgroundColor: '#FFF', borderRadius: 20, padding: 24 },
     modalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 20, textAlign: 'center' },
     label: { fontSize: 14, color: '#757575', marginBottom: 8, fontWeight: '600' },
+    helperText: { fontSize: 12, color: '#777', marginBottom: 12, marginTop: 6 },
     input: { borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 12, padding: 12, fontSize: 16, marginBottom: 20, color: '#333' },
+    accessTypeWrap: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+    accessTypeButton: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: '#DADADA',
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 8,
+        backgroundColor: '#FAFAFA',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    accessTypeButtonActive: {
+        borderColor: COLORS.primary,
+        backgroundColor: '#E8F5F3'
+    },
+    accessTypeText: {
+        color: '#444',
+        fontSize: 13,
+        fontWeight: '600',
+        textAlign: 'center'
+    },
+    accessTypeTextActive: { color: COLORS.primary },
     modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
     modalCancel: { flex: 1, padding: 14, alignItems: 'center', marginRight: 8, backgroundColor: '#F5F5F5', borderRadius: 12 },
     modalConfirm: { flex: 1, padding: 14, alignItems: 'center', marginLeft: 8, backgroundColor: COLORS.primary, borderRadius: 12 },
