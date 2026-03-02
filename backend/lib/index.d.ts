@@ -11,6 +11,7 @@ export declare const leaveCircle: import("firebase-functions/v1").HttpsFunction 
 export declare const deleteCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const revokeCircleInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const listCircleInvites: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const listUserInvitations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const resolveInviteToken: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const resolveAppInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const consumeAppInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

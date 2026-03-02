@@ -41,7 +41,7 @@ const AppInviteLandingScreen = ({ navigation, route }) => {
       navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
       return;
     }
-    navigation.navigate('Onboarding');
+    navigation.navigate('Onboarding', { appInviteToken: token });
   };
 
   return (

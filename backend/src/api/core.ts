@@ -335,6 +335,32 @@ const buildInviteToken = () => randomBytes(INVITE_TOKEN_BYTES).toString('base64u
 const nowTimestamp = () => admin.firestore.Timestamp.now();
 const inviteDocRefByToken = (token: string) => db.collection('inviteTokens').doc(sha256(token));
 const appInviteDocRefByToken = (token: string) => db.collection('appInviteTokens').doc(sha256(token));
+const createdInviteLinksRef = (uid: string) => db.collection('users').doc(uid).collection('createdInviteLinks');
+
+const recordCreatedInviteLink = async (params: {
+    uid: string;
+    type: 'circle' | 'app';
+    token: string;
+    inviteUrl: string;
+    expiresAt: admin.firestore.Timestamp;
+    maxUses: number;
+    circleId?: string;
+}) => {
+    const tokenHash = sha256(params.token);
+    await createdInviteLinksRef(params.uid).doc(randomUUID()).set({
+        type: params.type,
+        tokenHash,
+        token: params.token,
+        inviteUrl: params.inviteUrl,
+        circleId: params.circleId || '',
+        maxUses: Number(params.maxUses || 0),
+        usedCount: 0,
+        status: 'active',
+        expiresAt: params.expiresAt,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+};
 
 const validateInviteRateLimit = async (params: { tokenHash: string; ip: string; action: string }) => {
     const now = Date.now();
@@ -443,7 +469,7 @@ const makeResolverHtml = (params: {
       <a class="btn primary" href="javascript:window.__openAppNow()">${statusText}</a>
       <a class="btn ghost" href="${iosStoreUrl}" target="_blank" rel="noopener noreferrer">Download on iOS</a>
       <a class="btn ghost" href="${androidStoreUrl}" target="_blank" rel="noopener noreferrer">Get it on Android</a>
-      <div class="small">If the app is installed, it should open directly.</div>
+      <div class="small">If the app is installed, it should open directly. If you install first, open the app and go to Invitations.</div>
     </div>
   </div>
 </body>
@@ -829,6 +855,8 @@ export const createCircleInvite = regionalFunctions.https.onCall(async (data, co
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + (expiresInHours * 60 * 60 * 1000));
     const circleData = circleSnap.data() || {};
 
+    const inviteUrl = `${canonicalWebBase}/invite/${token}`;
+
     await db.collection('inviteTokens').doc(tokenHash).set({
         tokenHash,
         circleId,
@@ -846,12 +874,24 @@ export const createCircleInvite = regionalFunctions.https.onCall(async (data, co
         lastUsedAt: null
     });
 
+    await recordCreatedInviteLink({
+        uid,
+        type: 'circle',
+        token,
+        inviteUrl,
+        expiresAt,
+        maxUses,
+        circleId
+    }).catch((error) => {
+        console.warn('Failed to record created circle invite link', error);
+    });
+
     return {
         success: true,
         token,
         expiresAt,
         maxUses,
-        inviteUrl: `${canonicalWebBase}/invite/${token}`,
+        inviteUrl,
         circleId
     };
 });
@@ -869,6 +909,8 @@ export const createAppInvite = regionalFunctions.https.onCall(async (data, conte
     const tokenHash = sha256(token);
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + (expiresInHours * 60 * 60 * 1000));
 
+    const inviteUrl = `${canonicalWebBase}/ref/${token}`;
+
     await db.collection('appInviteTokens').doc(tokenHash).set({
         tokenHash,
         inviterId: uid,
@@ -881,12 +923,68 @@ export const createAppInvite = regionalFunctions.https.onCall(async (data, conte
         lastUsedAt: null
     });
 
+    await recordCreatedInviteLink({
+        uid,
+        type: 'app',
+        token,
+        inviteUrl,
+        expiresAt,
+        maxUses
+    }).catch((error) => {
+        console.warn('Failed to record created app invite link', error);
+    });
+
     return {
         success: true,
         token,
         expiresAt,
         maxUses,
-        inviteUrl: `${canonicalWebBase}/ref/${token}`
+        inviteUrl
+    };
+});
+
+export const listUserInvitations = regionalFunctions.https.onCall(async (_data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const nowMs = Date.now();
+
+    const snap = await createdInviteLinksRef(uid)
+        .orderBy('createdAt', 'desc')
+        .limit(80)
+        .get();
+
+    const invites = snap.docs
+        .map((d) => {
+            const item = d.data() || {};
+            const expiresAt = item?.expiresAt || null;
+            const expiresMs = expiresAt?.toMillis?.() || 0;
+            const maxUses = Number(item?.maxUses || 0);
+            const usedCount = Number(item?.usedCount || 0);
+            const status = item?.status || 'active';
+            const expired = expiresMs > 0 && expiresMs <= nowMs;
+            const exhausted = maxUses > 0 && usedCount >= maxUses;
+            const computedStatus = status === 'revoked' ? 'revoked' : (expired ? 'expired' : (exhausted ? 'exhausted' : 'active'));
+            return {
+                id: d.id,
+                type: item?.type || 'app',
+                inviteUrl: String(item?.inviteUrl || ''),
+                token: String(item?.token || ''),
+                tokenHash: String(item?.tokenHash || ''),
+                circleId: String(item?.circleId || ''),
+                maxUses,
+                usedCount,
+                expiresAt,
+                createdAt: item?.createdAt || null,
+                status: computedStatus
+            };
+        })
+        .filter((item) => item.inviteUrl);
+
+    const pendingInvites = invites.filter((item) => item.status === 'active');
+    return {
+        success: true,
+        pendingInvites,
+        recentInvites: invites
     };
 });
 

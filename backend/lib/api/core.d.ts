@@ -20,6 +20,7 @@ export declare const createCircle: functions.HttpsFunction & functions.Runnable<
 export declare const updateCircle: functions.HttpsFunction & functions.Runnable<any>;
 export declare const createCircleInvite: functions.HttpsFunction & functions.Runnable<any>;
 export declare const createAppInvite: functions.HttpsFunction & functions.Runnable<any>;
+export declare const listUserInvitations: functions.HttpsFunction & functions.Runnable<any>;
 export declare const revokeCircleInvite: functions.HttpsFunction & functions.Runnable<any>;
 export declare const listCircleInvites: functions.HttpsFunction & functions.Runnable<any>;
 export declare const resolveAppInvite: functions.HttpsFunction & functions.Runnable<any>;

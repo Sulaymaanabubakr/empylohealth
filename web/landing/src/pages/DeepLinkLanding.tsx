@@ -14,7 +14,8 @@ const DeepLinkLanding = () => {
   const deepLinkUrl = `${CANONICAL_BASE.replace(/\/+$/, '')}${canonicalPath}`;
 
   const meta = useMemo(() => {
-    if (route === 'invite') return { title: 'Circle Invite', description: 'Open this invite in Circles Health.' };
+    if (route === 'invite') return { title: 'Circle Invite', description: 'Open this invite in Circles Health. If you install first, open the app and go to Invitations.' };
+    if (route === 'ref') return { title: 'App Invite', description: 'Open this app invite in Circles Health. If you install first, open the app and go to Invitations.' };
     if (route === 'circle') return { title: 'Circle Link', description: 'Open this circle in Circles Health.' };
     if (route === 'a') return { title: 'Affirmation Link', description: 'Open this affirmation in Circles Health.' };
     if (route === 'r') return { title: 'Resource Link', description: 'Open this resource in Circles Health.' };
@@ -44,6 +45,9 @@ const DeepLinkLanding = () => {
         <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginTop: 10, textAlign: 'center', background: '#E2E8F0', color: '#0f172a', borderRadius: 12, padding: '13px 16px', textDecoration: 'none', fontWeight: 700 }}>
           Get it on Android
         </a>
+        <p style={{ marginTop: 14, marginBottom: 0, color: '#64748b', fontSize: 13 }}>
+          No automatic post-install redirect is enabled. After install, open the app and go to <strong>Invitations</strong>.
+        </p>
       </div>
     </div>
   );

@@ -29,6 +29,7 @@ export const leaveCircle = coreApi.leaveCircle;
 export const deleteCircle = coreApi.deleteCircle;
 export const revokeCircleInvite = coreApi.revokeCircleInvite;
 export const listCircleInvites = coreApi.listCircleInvites;
+export const listUserInvitations = coreApi.listUserInvitations;
 export const resolveInviteToken = coreApi.resolveInviteToken;
 export const resolveAppInvite = coreApi.resolveAppInvite;
 export const consumeAppInvite = coreApi.consumeAppInvite;

@@ -49,6 +49,7 @@ import CommunityGuidelinesScreen from './screens/CommunityGuidelinesScreen';
 import CommunityEducationScreen from './screens/CommunityEducationScreen';
 import CommunityEducationTopicScreen from './screens/CommunityEducationTopicScreen';
 import AboutCirclesScreen from './screens/AboutCirclesScreen';
+import InvitationsScreen from './screens/InvitationsScreen';
 import WellbeingCategoriesInfoScreen from './screens/WellbeingCategoriesInfoScreen';
 import AppLockScreen from './screens/AppLockScreen';
 import InviteLandingScreen from './screens/InviteLandingScreen';
@@ -405,6 +406,7 @@ export default function Navigation() {
                         <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />
                         <Stack.Screen name="Security" component={SecurityScreen} />
                         <Stack.Screen name="TellAFriend" component={TellAFriendScreen} />
+                        <Stack.Screen name="Invitations" component={InvitationsScreen} />
                         <Stack.Screen name="FAQ" component={FAQScreen} />
                         <Stack.Screen name="WellbeingCategoriesInfo" component={WellbeingCategoriesInfoScreen} />
                         <Stack.Screen name="AboutCircles" component={AboutCirclesScreen} />

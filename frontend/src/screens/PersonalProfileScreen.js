@@ -345,6 +345,7 @@ const PersonalProfileScreen = ({ navigation }) => {
             { icon: 'school-outline', label: 'Community Education', type: 'ionic' },
             { icon: 'shield-checkmark-outline', label: 'Community Guidelines', type: 'ionic' },
             { icon: 'help-circle-outline', label: 'My Circles FAQ', type: 'ionic' },
+            { icon: 'mail-open-outline', label: 'Invitations', type: 'ionic' },
             { icon: 'heart-outline', label: 'Tell a friend', type: 'ionic' },
         ];
 
@@ -380,6 +381,8 @@ const PersonalProfileScreen = ({ navigation }) => {
                                     navigation.navigate('TellAFriend');
                                 } else if (item.label === 'My Circles FAQ') {
                                     navigation.navigate('FAQ');
+                                } else if (item.label === 'Invitations') {
+                                    navigation.navigate('Invitations');
                                 }
                             }}
                         >

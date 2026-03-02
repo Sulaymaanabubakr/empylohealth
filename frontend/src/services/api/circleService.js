@@ -61,6 +61,9 @@ export const circleService = {
             maxUses: options?.maxUses
         });
     },
+    listUserInvitations: async () => {
+        return callableClient.invokeWithAuth('listUserInvitations', {});
+    },
 
     resolveInviteToken: async (token) => {
         return callableClient.invokePublic('resolveInviteToken', { token });

@@ -1,8 +1,7 @@
 import { Linking } from 'react-native';
-import branch from 'react-native-branch';
 import { navigate } from '../../navigation/navigationRef';
 import { pendingDeepLink } from './pendingDeepLink';
-import { parseBranchParams, parseDeepLink } from '../../utils/deepLinks';
+import { parseDeepLink } from '../../utils/deepLinks';
 
 const dedupeSeen = new Map();
 const DEDUPE_TTL_MS = 12_000;
@@ -70,12 +69,6 @@ const handleUrl = async ({ url, source, routeTarget, onBanner }) => {
   return handleParsedCandidate({ parsed, url, source, routeTarget, onBanner });
 };
 
-const handleBranch = async ({ params, routeTarget, onBanner }) => {
-  const parsed = parseBranchParams(params || {});
-  const url = String(params?.$canonical_url || params?.$fallback_url || params?.['~referring_link'] || '');
-  return handleParsedCandidate({ parsed, url, source: 'branch', routeTarget, onBanner });
-};
-
 export const DeepLinkRouter = {
   start: ({ routeTarget, onBanner }) => {
     let cancelled = false;
@@ -92,18 +85,9 @@ export const DeepLinkRouter = {
       handleUrl({ url, source: 'runtime_url', routeTarget, onBanner }).catch(() => {});
     });
 
-    const branchSub = branch.subscribe({
-      onOpenStart: () => {},
-      onOpenComplete: ({ params }) => {
-        if (cancelled || !params) return;
-        handleBranch({ params, routeTarget, onBanner }).catch(() => {});
-      }
-    });
-
     return () => {
       cancelled = true;
       linkSub?.remove?.();
-      branchSub?.();
     };
   },
 

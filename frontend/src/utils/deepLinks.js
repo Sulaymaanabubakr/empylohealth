@@ -111,15 +111,4 @@ export const parseDeepLink = (url) => {
     return null;
 };
 
-export const parseBranchParams = (params = {}) => {
-    const clicked = Boolean(params?.['+clicked_branch_link'] || params?.['+is_first_session']);
-    const deepPath = String(params?.$deeplink_path || params?.deeplinkPath || '').trim();
-    const canonicalUrl = String(params?.$canonical_url || params?.$fallback_url || '').trim();
-    if (!clicked && !deepPath && !canonicalUrl) return null;
-
-    if (deepPath) return parseDeepLink(deepPath);
-    if (canonicalUrl) return parseDeepLink(canonicalUrl);
-    return null;
-};
-
 export const DEEPLINK_CANONICAL_WEB_URL = CANONICAL_WEB_URL;

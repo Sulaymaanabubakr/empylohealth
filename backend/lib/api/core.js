@@ -36,8 +36,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.joinCircleWithInvite = exports.resolveInviteToken = exports.consumeAppInvite = exports.resolveAppInvite = exports.listCircleInvites = exports.revokeCircleInvite = exports.createAppInvite = exports.createCircleInvite = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
-exports.deleteUserAccount = exports.submitContactForm = exports.serveAppleAssociation = exports.serveAssetLinks = exports.resolveDeepLink = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = void 0;
+exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.joinCircleWithInvite = exports.resolveInviteToken = exports.consumeAppInvite = exports.resolveAppInvite = exports.listCircleInvites = exports.revokeCircleInvite = exports.listUserInvitations = exports.createAppInvite = exports.createCircleInvite = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.serveAppleAssociation = exports.serveAssetLinks = exports.resolveDeepLink = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -341,6 +341,23 @@ const buildInviteToken = () => (0, crypto_1.randomBytes)(INVITE_TOKEN_BYTES).toS
 const nowTimestamp = () => admin.firestore.Timestamp.now();
 const inviteDocRefByToken = (token) => db.collection('inviteTokens').doc(sha256(token));
 const appInviteDocRefByToken = (token) => db.collection('appInviteTokens').doc(sha256(token));
+const createdInviteLinksRef = (uid) => db.collection('users').doc(uid).collection('createdInviteLinks');
+const recordCreatedInviteLink = async (params) => {
+    const tokenHash = sha256(params.token);
+    await createdInviteLinksRef(params.uid).doc((0, crypto_1.randomUUID)()).set({
+        type: params.type,
+        tokenHash,
+        token: params.token,
+        inviteUrl: params.inviteUrl,
+        circleId: params.circleId || '',
+        maxUses: Number(params.maxUses || 0),
+        usedCount: 0,
+        status: 'active',
+        expiresAt: params.expiresAt,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+};
 const validateInviteRateLimit = async (params) => {
     const now = Date.now();
     const bucket = Math.floor(now / (INVITE_RATE_WINDOW_SECONDS * 1000));
@@ -440,7 +457,7 @@ const makeResolverHtml = (params) => {
       <a class="btn primary" href="javascript:window.__openAppNow()">${statusText}</a>
       <a class="btn ghost" href="${iosStoreUrl}" target="_blank" rel="noopener noreferrer">Download on iOS</a>
       <a class="btn ghost" href="${androidStoreUrl}" target="_blank" rel="noopener noreferrer">Get it on Android</a>
-      <div class="small">If the app is installed, it should open directly.</div>
+      <div class="small">If the app is installed, it should open directly. If you install first, open the app and go to Invitations.</div>
     </div>
   </div>
 </body>
@@ -786,6 +803,7 @@ exports.createCircleInvite = regionalFunctions.https.onCall(async (data, context
     const tokenHash = sha256(token);
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + (expiresInHours * 60 * 60 * 1000));
     const circleData = circleSnap.data() || {};
+    const inviteUrl = `${canonicalWebBase}/invite/${token}`;
     await db.collection('inviteTokens').doc(tokenHash).set({
         tokenHash,
         circleId,
@@ -802,12 +820,23 @@ exports.createCircleInvite = regionalFunctions.https.onCall(async (data, context
         revokedAt: null,
         lastUsedAt: null
     });
+    await recordCreatedInviteLink({
+        uid,
+        type: 'circle',
+        token,
+        inviteUrl,
+        expiresAt,
+        maxUses,
+        circleId
+    }).catch((error) => {
+        console.warn('Failed to record created circle invite link', error);
+    });
     return {
         success: true,
         token,
         expiresAt,
         maxUses,
-        inviteUrl: `${canonicalWebBase}/invite/${token}`,
+        inviteUrl,
         circleId
     };
 });
@@ -822,6 +851,7 @@ exports.createAppInvite = regionalFunctions.https.onCall(async (data, context) =
     const token = buildInviteToken();
     const tokenHash = sha256(token);
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + (expiresInHours * 60 * 60 * 1000));
+    const inviteUrl = `${canonicalWebBase}/ref/${token}`;
     await db.collection('appInviteTokens').doc(tokenHash).set({
         tokenHash,
         inviterId: uid,
@@ -833,12 +863,64 @@ exports.createAppInvite = regionalFunctions.https.onCall(async (data, context) =
         revokedAt: null,
         lastUsedAt: null
     });
+    await recordCreatedInviteLink({
+        uid,
+        type: 'app',
+        token,
+        inviteUrl,
+        expiresAt,
+        maxUses
+    }).catch((error) => {
+        console.warn('Failed to record created app invite link', error);
+    });
     return {
         success: true,
         token,
         expiresAt,
         maxUses,
-        inviteUrl: `${canonicalWebBase}/ref/${token}`
+        inviteUrl
+    };
+});
+exports.listUserInvitations = regionalFunctions.https.onCall(async (_data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const nowMs = Date.now();
+    const snap = await createdInviteLinksRef(uid)
+        .orderBy('createdAt', 'desc')
+        .limit(80)
+        .get();
+    const invites = snap.docs
+        .map((d) => {
+        const item = d.data() || {};
+        const expiresAt = item?.expiresAt || null;
+        const expiresMs = expiresAt?.toMillis?.() || 0;
+        const maxUses = Number(item?.maxUses || 0);
+        const usedCount = Number(item?.usedCount || 0);
+        const status = item?.status || 'active';
+        const expired = expiresMs > 0 && expiresMs <= nowMs;
+        const exhausted = maxUses > 0 && usedCount >= maxUses;
+        const computedStatus = status === 'revoked' ? 'revoked' : (expired ? 'expired' : (exhausted ? 'exhausted' : 'active'));
+        return {
+            id: d.id,
+            type: item?.type || 'app',
+            inviteUrl: String(item?.inviteUrl || ''),
+            token: String(item?.token || ''),
+            tokenHash: String(item?.tokenHash || ''),
+            circleId: String(item?.circleId || ''),
+            maxUses,
+            usedCount,
+            expiresAt,
+            createdAt: item?.createdAt || null,
+            status: computedStatus
+        };
+    })
+        .filter((item) => item.inviteUrl);
+    const pendingInvites = invites.filter((item) => item.status === 'active');
+    return {
+        success: true,
+        pendingInvites,
+        recentInvites: invites
     };
 });
 exports.revokeCircleInvite = regionalFunctions.https.onCall(async (data, context) => {

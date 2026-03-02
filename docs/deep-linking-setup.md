@@ -15,22 +15,24 @@
 - `EXPO_PUBLIC_CANONICAL_WEB_URL=https://empylo.com`
 - `EXPO_PUBLIC_IOS_STORE_URL=<app store url>`
 - `EXPO_PUBLIC_ANDROID_STORE_URL=<play store url>`
-- Branch keys via EAS secrets:
-  - `BRANCH_TEST_KEY`
-  - `BRANCH_LIVE_KEY`
 
 ### Web Landing
 - `VITE_CANONICAL_WEB_URL=https://empylo.com`
 - `VITE_APP_STORE_URL=<app store url>`
 - `VITE_PLAY_STORE_URL=<play store url>`
 
-## Branch Integration
-1. Create Branch test and live environments.
-2. Configure Branch link domain(s), iOS bundle ID, Android package ID.
-3. Add associated domains for Branch in `frontend/app.json`.
-4. Ensure Branch keys are provided at build time.
-5. `react-native-branch` does not provide an Expo config plugin in this repo setup, so complete native Branch setup via prebuild/native projects (iOS plist settings, Android manifest metadata, and Branch init checks).
-6. Build and test with test key first, then live key.
+## Native Link Integration
+1. Configure iOS Associated Domains with:
+   - `applinks:empylo.com`
+   - `applinks:www.empylo.com`
+2. Configure Android intent filters for:
+   - `/invite/*`
+   - `/ref/*`
+   - `/circle/*`
+   - `/a/*`
+   - `/r/*`
+3. Ensure `autoVerify` is enabled for Android app links.
+4. Ensure app route parsing is handled by `DeepLinkRouter` with `Linking.getInitialURL()` and runtime `url` events.
 
 ## Apple / Android Association Files
 - Android: `/.well-known/assetlinks.json` served by `serveAssetLinks`.
