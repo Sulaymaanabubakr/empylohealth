@@ -144,7 +144,8 @@ const PersonalProfileScreen = ({ navigation }) => {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ['images'],
                 allowsEditing: false, // Use custom cropper
-                quality: 1,
+                quality: 0.7,
+                exif: false,
             });
 
             if (!result.canceled && result.assets[0]?.uri) {
@@ -168,7 +169,8 @@ const PersonalProfileScreen = ({ navigation }) => {
 
             const result = await ImagePicker.launchCameraAsync({
                 allowsEditing: false,
-                quality: 1,
+                quality: 0.7,
+                exif: false,
             });
 
             if (!result.canceled && result.assets[0]?.uri) {
@@ -420,7 +422,8 @@ const PersonalProfileScreen = ({ navigation }) => {
                 onClose={() => setCropperVisible(false)}
                 onCrop={async (uri, cropData) => {
                     setCropperVisible(false);
-                    setUploading(true);
+                    // Let modal close first so the UI doesn't appear frozen.
+                    setTimeout(() => setUploading(true), 0);
                     try {
                         // Upload
                         const uploadedUrl = await mediaService.uploadAsset(uri, 'avatars');

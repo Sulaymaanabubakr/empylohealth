@@ -47,6 +47,37 @@ export const circleService = {
         return circleRepository.updateCircle(circleId, data);
     },
 
+    createCircleInvite: async (circleId, options = {}) => {
+        return callableClient.invokeWithAuth('createCircleInvite', {
+            circleId,
+            expiresInHours: options?.expiresInHours,
+            maxUses: options?.maxUses
+        });
+    },
+
+    createAppInvite: async (options = {}) => {
+        return callableClient.invokeWithAuth('createAppInvite', {
+            expiresInHours: options?.expiresInHours,
+            maxUses: options?.maxUses
+        });
+    },
+
+    resolveInviteToken: async (token) => {
+        return callableClient.invokePublic('resolveInviteToken', { token });
+    },
+
+    joinCircleWithInvite: async (token) => {
+        return callableClient.invokeWithAuth('joinCircleWithInvite', { token });
+    },
+
+    resolveAppInvite: async (token) => {
+        return callableClient.invokePublic('resolveAppInvite', { token });
+    },
+
+    consumeAppInvite: async (token) => {
+        return callableClient.invokeWithAuth('consumeAppInvite', { token });
+    },
+
     joinCircle: async (circleId) => {
         return circleRepository.joinCircle(circleId);
     },

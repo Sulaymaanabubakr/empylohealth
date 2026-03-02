@@ -402,8 +402,16 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     const handleInvite = async () => {
         try {
+            const invite = await circleService.createCircleInvite(circle?.id, {
+                expiresInHours: 24 * 7,
+                maxUses: 50
+            });
             await Share.share({
-                message: buildCircleShareText({ circleName: circle?.name, circleId: circle?.id }),
+                message: buildCircleShareText({
+                    circleName: circle?.name,
+                    circleId: circle?.id,
+                    inviteUrl: invite?.inviteUrl || ''
+                }),
             });
         } catch (error) {
             console.error('Error sharing', error);

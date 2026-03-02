@@ -36,7 +36,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.submitContactForm = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.joinCircleWithInvite = exports.resolveInviteToken = exports.consumeAppInvite = exports.resolveAppInvite = exports.listCircleInvites = exports.revokeCircleInvite = exports.createAppInvite = exports.createCircleInvite = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.serveAppleAssociation = exports.serveAssetLinks = exports.resolveDeepLink = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -307,6 +308,144 @@ exports.generateUploadSignature = regionalFunctions.https.onCall((data, context)
 // ==========================================
 const MAX_PRIVATE_CIRCLES_PER_CREATOR = 4;
 const MAX_CIRCLE_MEMBERS = 6;
+const INVITE_DEFAULT_EXPIRY_HOURS = 168; // 7 days
+const INVITE_MIN_EXPIRY_HOURS = 1;
+const INVITE_MAX_EXPIRY_HOURS = 24 * 30;
+const INVITE_DEFAULT_MAX_USES = 20;
+const INVITE_MAX_USES = 500;
+const APP_INVITE_DEFAULT_EXPIRY_HOURS = 24 * 14;
+const APP_INVITE_DEFAULT_MAX_USES = 200;
+const INVITE_TOKEN_BYTES = 24;
+const INVITE_RATE_WINDOW_SECONDS = 60;
+const INVITE_RATE_LIMIT_PER_WINDOW = 45;
+const canonicalWebBase = (process.env.CANONICAL_WEB_URL || 'https://empylo.com').replace(/\/+$/, '');
+const iosStoreUrl = process.env.IOS_STORE_URL || 'https://apps.apple.com';
+const androidStoreUrl = process.env.ANDROID_STORE_URL || 'https://play.google.com/store/apps/details?id=com.empylo.circlesapp';
+const appScheme = process.env.DEEPLINK_APP_SCHEME || 'circlesapp://';
+const iosAppId = process.env.IOS_APP_ID || '';
+const androidPackageName = process.env.ANDROID_PACKAGE_NAME || 'com.empylo.circlesapp';
+const sha256 = (value) => (0, crypto_1.createHash)('sha256').update(String(value || '')).digest('hex');
+const escapeHtml = (value) => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+const getClientIpFromCallable = (context) => String(context.rawRequest?.headers?.['x-forwarded-for'] || context.rawRequest?.ip || '')
+    .split(',')[0] || ''
+    .trim() || 'unknown';
+const getClientIpFromRequest = (req) => String(req.headers?.['x-forwarded-for'] || req.ip || '')
+    .split(',')[0] || ''
+    .trim() || 'unknown';
+const buildInviteToken = () => (0, crypto_1.randomBytes)(INVITE_TOKEN_BYTES).toString('base64url');
+const nowTimestamp = () => admin.firestore.Timestamp.now();
+const inviteDocRefByToken = (token) => db.collection('inviteTokens').doc(sha256(token));
+const appInviteDocRefByToken = (token) => db.collection('appInviteTokens').doc(sha256(token));
+const validateInviteRateLimit = async (params) => {
+    const now = Date.now();
+    const bucket = Math.floor(now / (INVITE_RATE_WINDOW_SECONDS * 1000));
+    const ipHash = sha256(String(params.ip || 'unknown'));
+    const bucketId = `${params.action}:${params.tokenHash}:${ipHash}:${bucket}`;
+    const ref = db.collection('deepLinkRateLimits').doc(bucketId);
+    const snap = await ref.get();
+    const count = Number(snap.data()?.count || 0);
+    if (count >= INVITE_RATE_LIMIT_PER_WINDOW) {
+        throw new functions.https.HttpsError('resource-exhausted', 'Too many attempts. Please try again shortly.');
+    }
+    await ref.set({
+        count: admin.firestore.FieldValue.increment(1),
+        tokenHash: params.tokenHash,
+        ipHash,
+        action: params.action,
+        windowBucket: bucket,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+};
+const evaluateInviteStatus = (invite) => {
+    if (!invite)
+        return { status: 'invalid', errorCode: 'not_found' };
+    if (invite.status === 'revoked' || invite.revokedAt)
+        return { status: 'revoked', errorCode: 'revoked' };
+    const expiresAtMs = invite?.expiresAt?.toMillis?.() || 0;
+    if (expiresAtMs > 0 && expiresAtMs <= Date.now())
+        return { status: 'expired', errorCode: 'expired' };
+    const maxUses = Number(invite?.maxUses || 0);
+    const usedCount = Number(invite?.usedCount || 0);
+    if (maxUses > 0 && usedCount >= maxUses)
+        return { status: 'exhausted', errorCode: 'max_uses_reached' };
+    return { status: 'valid', errorCode: '' };
+};
+const makeResolverHtml = (params) => {
+    const title = escapeHtml(params.title);
+    const description = escapeHtml(params.description);
+    const image = escapeHtml(params.image || `${canonicalWebBase}/og-logo.png`);
+    const canonicalUrl = `${canonicalWebBase}${params.canonicalPath}`;
+    const appUrl = `${canonicalWebBase}${params.appPath}`;
+    const customSchemeUrl = `${appScheme}${params.appPath.replace(/^\/+/, '')}`;
+    const statusText = params.status === 'error' ? 'We could not open this link.' : 'Open in Circles Health';
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <meta name="description" content="${description}" />
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${image}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="${canonicalUrl}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${title}" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${image}" />
+  <style>
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f6f8fb;color:#0f172a}
+    .wrap{max-width:640px;margin:0 auto;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{background:#fff;border-radius:18px;box-shadow:0 10px 30px rgba(2,6,23,.08);padding:28px;width:100%}
+    h1{margin:0 0 10px;font-size:26px}
+    p{margin:0 0 18px;color:#475569;line-height:1.5}
+    .btn{display:block;text-align:center;text-decoration:none;padding:13px 16px;border-radius:12px;font-weight:700;margin-top:10px}
+    .primary{background:#0f766e;color:#fff}
+    .ghost{background:#e2e8f0;color:#0f172a}
+    .small{font-size:12px;color:#64748b;margin-top:14px}
+    .err{background:#fff1f2;color:#be123c;border:1px solid #fecdd3;padding:8px 10px;border-radius:10px;font-size:13px;margin-bottom:14px}
+  </style>
+  <script>
+    (function () {
+      var appUrl = ${JSON.stringify(appUrl)};
+      var iosStore = ${JSON.stringify(iosStoreUrl)};
+      var androidStore = ${JSON.stringify(androidStoreUrl)};
+      var ua = navigator.userAgent || '';
+      var isiOS = /iPad|iPhone|iPod/i.test(ua);
+      var store = isiOS ? iosStore : androidStore;
+      function openApp() { window.location.href = appUrl; }
+      window.__openAppNow = function () {
+        openApp();
+        setTimeout(function(){ window.location.href = ${JSON.stringify(customSchemeUrl)}; }, 500);
+        setTimeout(function(){ window.location.href = store; }, 1800);
+      };
+      if (${JSON.stringify(params.status || 'ok')} !== 'error') {
+        setTimeout(window.__openAppNow, 150);
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      ${params.status === 'error' ? '<div class="err">This link is invalid, expired, revoked, or unavailable.</div>' : ''}
+      <h1>${title}</h1>
+      <p>${description}</p>
+      <a class="btn primary" href="javascript:window.__openAppNow()">${statusText}</a>
+      <a class="btn ghost" href="${iosStoreUrl}" target="_blank" rel="noopener noreferrer">Download on iOS</a>
+      <a class="btn ghost" href="${androidStoreUrl}" target="_blank" rel="noopener noreferrer">Get it on Android</a>
+      <div class="small">If the app is installed, it should open directly.</div>
+    </div>
+  </div>
+</body>
+</html>`;
+};
 const getCircleMemberCount = (circleData) => {
     const byCount = Number(circleData?.memberCount ?? circleData?.membersCount ?? NaN);
     if (Number.isFinite(byCount))
@@ -624,6 +763,342 @@ exports.updateCircle = regionalFunctions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('internal', 'Unable to update circle.');
     }
 });
+exports.createCircleInvite = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const circleId = String(data?.circleId || '').trim();
+    if (!circleId)
+        throw new functions.https.HttpsError('invalid-argument', 'circleId is required.');
+    const expiresInHoursRaw = Number(data?.expiresInHours ?? INVITE_DEFAULT_EXPIRY_HOURS);
+    const expiresInHours = Math.min(INVITE_MAX_EXPIRY_HOURS, Math.max(INVITE_MIN_EXPIRY_HOURS, Math.floor(expiresInHoursRaw)));
+    const maxUsesRaw = Number(data?.maxUses ?? INVITE_DEFAULT_MAX_USES);
+    const maxUses = Math.min(INVITE_MAX_USES, Math.max(1, Math.floor(maxUsesRaw)));
+    const circleRef = db.collection('circles').doc(circleId);
+    const memberRef = circleRef.collection('members').doc(uid);
+    const [circleSnap, memberSnap] = await Promise.all([circleRef.get(), memberRef.get()]);
+    if (!circleSnap.exists)
+        throw new functions.https.HttpsError('not-found', 'Circle not found.');
+    if (!memberSnap.exists || memberSnap.data()?.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Only active circle members can create invites.');
+    }
+    const token = buildInviteToken();
+    const tokenHash = sha256(token);
+    const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + (expiresInHours * 60 * 60 * 1000));
+    const circleData = circleSnap.data() || {};
+    await db.collection('inviteTokens').doc(tokenHash).set({
+        tokenHash,
+        circleId,
+        inviterId: uid,
+        status: 'active',
+        maxUses,
+        usedCount: 0,
+        permissions: {
+            joinPrivate: circleData?.type === 'private',
+            circleType: circleData?.type || 'public'
+        },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt,
+        revokedAt: null,
+        lastUsedAt: null
+    });
+    return {
+        success: true,
+        token,
+        expiresAt,
+        maxUses,
+        inviteUrl: `${canonicalWebBase}/invite/${token}`,
+        circleId
+    };
+});
+exports.createAppInvite = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const expiresInHoursRaw = Number(data?.expiresInHours ?? APP_INVITE_DEFAULT_EXPIRY_HOURS);
+    const expiresInHours = Math.min(INVITE_MAX_EXPIRY_HOURS, Math.max(INVITE_MIN_EXPIRY_HOURS, Math.floor(expiresInHoursRaw)));
+    const maxUsesRaw = Number(data?.maxUses ?? APP_INVITE_DEFAULT_MAX_USES);
+    const maxUses = Math.min(INVITE_MAX_USES, Math.max(1, Math.floor(maxUsesRaw)));
+    const token = buildInviteToken();
+    const tokenHash = sha256(token);
+    const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + (expiresInHours * 60 * 60 * 1000));
+    await db.collection('appInviteTokens').doc(tokenHash).set({
+        tokenHash,
+        inviterId: uid,
+        status: 'active',
+        maxUses,
+        usedCount: 0,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt,
+        revokedAt: null,
+        lastUsedAt: null
+    });
+    return {
+        success: true,
+        token,
+        expiresAt,
+        maxUses,
+        inviteUrl: `${canonicalWebBase}/ref/${token}`
+    };
+});
+exports.revokeCircleInvite = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const token = String(data?.token || '').trim();
+    if (!token)
+        throw new functions.https.HttpsError('invalid-argument', 'token is required.');
+    const tokenHash = sha256(token);
+    const ref = db.collection('inviteTokens').doc(tokenHash);
+    const snap = await ref.get();
+    if (!snap.exists)
+        throw new functions.https.HttpsError('not-found', 'Invite token not found.');
+    const invite = snap.data() || {};
+    const circleId = String(invite?.circleId || '');
+    if (!circleId)
+        throw new functions.https.HttpsError('failed-precondition', 'Invite is malformed.');
+    const memberSnap = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
+    const role = String(memberSnap.data()?.role || '');
+    if (!memberSnap.exists || !['creator', 'admin', 'moderator'].includes(role)) {
+        throw new functions.https.HttpsError('permission-denied', 'Insufficient privileges to revoke invite.');
+    }
+    await ref.set({
+        status: 'revoked',
+        revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { success: true };
+});
+exports.listCircleInvites = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const circleId = String(data?.circleId || '').trim();
+    if (!circleId)
+        throw new functions.https.HttpsError('invalid-argument', 'circleId is required.');
+    const memberSnap = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
+    const role = String(memberSnap.data()?.role || '');
+    if (!memberSnap.exists || !['creator', 'admin', 'moderator'].includes(role)) {
+        throw new functions.https.HttpsError('permission-denied', 'Insufficient privileges to view invites.');
+    }
+    const snap = await db.collection('inviteTokens')
+        .where('circleId', '==', circleId)
+        .orderBy('createdAt', 'desc')
+        .limit(200)
+        .get();
+    const invites = snap.docs.map((d) => {
+        const it = d.data() || {};
+        return {
+            tokenHash: it.tokenHash,
+            circleId: it.circleId,
+            inviterId: it.inviterId,
+            status: it.status || 'active',
+            maxUses: Number(it.maxUses || 0),
+            usedCount: Number(it.usedCount || 0),
+            createdAt: it.createdAt || null,
+            expiresAt: it.expiresAt || null,
+            revokedAt: it.revokedAt || null,
+            lastUsedAt: it.lastUsedAt || null
+        };
+    });
+    return { success: true, invites };
+});
+exports.resolveAppInvite = regionalFunctions.https.onCall(async (data, context) => {
+    const token = String(data?.token || '').trim();
+    if (!token)
+        throw new functions.https.HttpsError('invalid-argument', 'token is required.');
+    const tokenHash = sha256(token);
+    const ip = getClientIpFromCallable(context);
+    await validateInviteRateLimit({ tokenHash, ip, action: 'resolve_app_invite' });
+    const snap = await appInviteDocRefByToken(token).get();
+    if (!snap.exists) {
+        return { status: 'invalid', errorCode: 'not_found', requiresAuth: false };
+    }
+    const invite = snap.data() || {};
+    const evaluated = evaluateInviteStatus(invite);
+    if (evaluated.status !== 'valid') {
+        return { status: evaluated.status, errorCode: evaluated.errorCode, requiresAuth: false };
+    }
+    return {
+        status: 'valid',
+        errorCode: '',
+        inviterId: invite?.inviterId || '',
+        expiresAt: invite?.expiresAt || null,
+        remainingUses: Math.max(0, Number(invite?.maxUses || 0) - Number(invite?.usedCount || 0)),
+        requiresAuth: false
+    };
+});
+exports.consumeAppInvite = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const token = String(data?.token || '').trim();
+    if (!token)
+        throw new functions.https.HttpsError('invalid-argument', 'token is required.');
+    const uid = context.auth.uid;
+    const tokenHash = sha256(token);
+    const ip = getClientIpFromCallable(context);
+    const userAgent = String(context.rawRequest?.headers['user-agent'] || '');
+    await validateInviteRateLimit({ tokenHash, ip, action: 'consume_app_invite' });
+    const ref = appInviteDocRefByToken(token);
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists)
+            throw new functions.https.HttpsError('not-found', 'App invite not found.');
+        const invite = snap.data() || {};
+        const evaluated = evaluateInviteStatus(invite);
+        if (evaluated.status !== 'valid') {
+            throw new functions.https.HttpsError('failed-precondition', `App invite is ${evaluated.status}.`);
+        }
+        tx.set(ref, {
+            usedCount: admin.firestore.FieldValue.increment(1),
+            lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    });
+    await db.collection('inviteTokenUses').add({
+        tokenHash,
+        uid,
+        ipHash: sha256(ip),
+        userAgent,
+        result: 'app_invite_consumed',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return { success: true };
+});
+exports.resolveInviteToken = regionalFunctions.https.onCall(async (data, context) => {
+    const token = String(data?.token || '').trim();
+    if (!token)
+        throw new functions.https.HttpsError('invalid-argument', 'token is required.');
+    const tokenHash = sha256(token);
+    const ip = getClientIpFromCallable(context);
+    await validateInviteRateLimit({ tokenHash, ip, action: 'resolve' });
+    const inviteSnap = await inviteDocRefByToken(token).get();
+    if (!inviteSnap.exists) {
+        return { status: 'invalid', errorCode: 'not_found', requiresAuth: true };
+    }
+    const invite = inviteSnap.data() || {};
+    const status = evaluateInviteStatus(invite);
+    if (status.status !== 'valid') {
+        return { status: status.status, errorCode: status.errorCode, requiresAuth: true };
+    }
+    const circleSnap = await db.collection('circles').doc(String(invite.circleId || '')).get();
+    if (!circleSnap.exists) {
+        return { status: 'invalid', errorCode: 'circle_not_found', requiresAuth: true };
+    }
+    const circleData = circleSnap.data() || {};
+    const maxUses = Number(invite?.maxUses || 0);
+    const usedCount = Number(invite?.usedCount || 0);
+    const remainingUses = maxUses > 0 ? Math.max(0, maxUses - usedCount) : null;
+    return {
+        status: 'valid',
+        errorCode: '',
+        circlePreview: {
+            id: circleSnap.id,
+            name: circleData?.name || 'Circle',
+            description: circleData?.description || '',
+            image: circleData?.image || '',
+            type: circleData?.type || 'public'
+        },
+        expiresAt: invite.expiresAt || null,
+        remainingUses,
+        requiresAuth: true
+    };
+});
+exports.joinCircleWithInvite = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const token = String(data?.token || '').trim();
+    if (!token)
+        throw new functions.https.HttpsError('invalid-argument', 'token is required.');
+    const uid = context.auth.uid;
+    const tokenHash = sha256(token);
+    const ip = getClientIpFromCallable(context);
+    const userAgent = String(context.rawRequest?.headers['user-agent'] || '');
+    await validateInviteRateLimit({ tokenHash, ip, action: 'join' });
+    const inviteRef = inviteDocRefByToken(token);
+    const inviteSnap = await inviteRef.get();
+    if (!inviteSnap.exists)
+        throw new functions.https.HttpsError('not-found', 'Invite not found.');
+    const invite = inviteSnap.data() || {};
+    const inviteStatus = evaluateInviteStatus(invite);
+    if (inviteStatus.status !== 'valid') {
+        throw new functions.https.HttpsError('failed-precondition', `Invite is ${inviteStatus.status}.`);
+    }
+    const circleId = String(invite?.circleId || '').trim();
+    const circleRef = db.collection('circles').doc(circleId);
+    const circleSnap = await circleRef.get();
+    if (!circleSnap.exists)
+        throw new functions.https.HttpsError('not-found', 'Circle not found.');
+    const circleData = circleSnap.data() || {};
+    await db.runTransaction(async (tx) => {
+        const latestInviteSnap = await tx.get(inviteRef);
+        const latestCircleSnap = await tx.get(circleRef);
+        if (!latestInviteSnap.exists)
+            throw new functions.https.HttpsError('not-found', 'Invite not found.');
+        if (!latestCircleSnap.exists)
+            throw new functions.https.HttpsError('not-found', 'Circle not found.');
+        const latestInvite = latestInviteSnap.data() || {};
+        const latestInviteStatus = evaluateInviteStatus(latestInvite);
+        if (latestInviteStatus.status !== 'valid') {
+            throw new functions.https.HttpsError('failed-precondition', `Invite is ${latestInviteStatus.status}.`);
+        }
+        const c = latestCircleSnap.data() || {};
+        const members = Array.isArray(c.members) ? c.members : [];
+        const count = getCircleMemberCount(c);
+        if (!members.includes(uid) && count >= MAX_CIRCLE_MEMBERS) {
+            throw new functions.https.HttpsError('failed-precondition', `This circle is full (max ${MAX_CIRCLE_MEMBERS} members).`);
+        }
+        const memberRef = circleRef.collection('members').doc(uid);
+        tx.set(memberRef, {
+            uid,
+            role: 'member',
+            status: 'active',
+            joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+            joinedViaInvite: true,
+            inviteTokenHash: tokenHash,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        if (!members.includes(uid)) {
+            tx.update(circleRef, {
+                members: admin.firestore.FieldValue.arrayUnion(uid),
+                memberCount: admin.firestore.FieldValue.increment(1),
+                membersCount: admin.firestore.FieldValue.increment(1),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        const userCirclesRef = db.collection('userCircles').doc(uid);
+        tx.set(userCirclesRef, {
+            circleIds: admin.firestore.FieldValue.arrayUnion(circleId),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        tx.set(userCirclesRef.collection('circles').doc(circleId), {
+            circleId,
+            role: 'member',
+            status: 'member',
+            joinedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        if (c.chatId) {
+            tx.update(db.collection('chats').doc(c.chatId), {
+                participants: admin.firestore.FieldValue.arrayUnion(uid),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        tx.set(inviteRef, {
+            usedCount: admin.firestore.FieldValue.increment(members.includes(uid) ? 0 : 1),
+            lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    });
+    await db.collection('inviteTokenUses').add({
+        tokenHash,
+        uid,
+        ipHash: sha256(ip),
+        userAgent,
+        result: 'success',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return { success: true, status: 'joined', circleId };
+});
 /**
  * Join an existing Circle
  * Callable Function: 'joinCircle'
@@ -662,7 +1137,11 @@ exports.joinCircle = regionalFunctions.https.onCall(async (data, context) => {
             if (memberDoc.exists)
                 return { success: true, message: 'Already a member' };
         }
-        // Check if already requested
+        // Private circles must be joined through validated invite tokens.
+        if (isPrivate) {
+            throw new functions.https.HttpsError('permission-denied', 'Private circles require a valid invite link. Use joinCircleWithInvite.');
+        }
+        // Public circles with approval setting can still use request flow.
         if (requiresApproval) {
             const requestRef = circleRef.collection('requests').doc(uid);
             const requestDoc = await requestRef.get();
@@ -4221,6 +4700,197 @@ exports.sendAffirmationsAfternoon = (0, scheduler_1.onSchedule)({ schedule: '*/1
 });
 exports.sendAffirmationsEvening = (0, scheduler_1.onSchedule)({ schedule: '*/10 * * * *', timeZone: AFFIRMATION_SCHEDULER_TIMEZONE, region: 'europe-west1' }, async () => {
     await sendDailyAffirmationsNotification(2, 'Evening Affirmation');
+});
+const getResolverMetaForPath = async (path) => {
+    const cleaned = String(String(path || '/').split('?')[0] || '').replace(/^\/+/, '');
+    const parts = cleaned.split('/').filter(Boolean);
+    const route = String(parts[0] || '').toLowerCase();
+    const id = decodeURIComponent(String(parts[1] || ''));
+    if (route === 'invite' && id) {
+        const inviteSnap = await inviteDocRefByToken(id).get();
+        if (!inviteSnap.exists) {
+            return {
+                status: 'error',
+                title: 'Invite not found',
+                description: 'This invite link is invalid or no longer available.',
+                canonicalPath: `/invite/${encodeURIComponent(id)}`,
+                appPath: `/invite/${encodeURIComponent(id)}`
+            };
+        }
+        const invite = inviteSnap.data() || {};
+        const inviteStatus = evaluateInviteStatus(invite);
+        const circleId = String(invite?.circleId || '').trim();
+        const circleSnap = circleId ? await db.collection('circles').doc(circleId).get() : null;
+        const circleData = circleSnap?.data?.() || {};
+        if (inviteStatus.status !== 'valid') {
+            return {
+                status: 'error',
+                title: 'Invite unavailable',
+                description: 'This invite has expired, been revoked, or reached its usage limit.',
+                image: circleData?.image || '',
+                canonicalPath: `/invite/${encodeURIComponent(id)}`,
+                appPath: `/invite/${encodeURIComponent(id)}`
+            };
+        }
+        return {
+            status: 'ok',
+            title: `Join ${circleData?.name || 'this circle'} on Circles Health`,
+            description: circleData?.description || 'You were invited to join a support circle.',
+            image: circleData?.image || '',
+            canonicalPath: `/invite/${encodeURIComponent(id)}`,
+            appPath: `/invite/${encodeURIComponent(id)}`
+        };
+    }
+    if (route === 'circle' && id) {
+        const circleSnap = await db.collection('circles').doc(id).get();
+        const circle = circleSnap.data() || {};
+        return {
+            status: 'ok',
+            title: circle?.name ? `${circle.name} • Circles Health` : 'Open Circle on Circles Health',
+            description: circle?.description || 'Open this circle in the Circles Health app.',
+            image: circle?.image || '',
+            canonicalPath: `/circle/${encodeURIComponent(id)}`,
+            appPath: `/circle/${encodeURIComponent(id)}`
+        };
+    }
+    if (route === 'a' && id) {
+        const doc = await db.collection('affirmations').doc(id).get();
+        const item = doc.data() || {};
+        const text = String(item?.text || item?.title || item?.content || '').trim();
+        return {
+            status: 'ok',
+            title: text ? `${text.slice(0, 80)}${text.length > 80 ? '…' : ''}` : 'Affirmation • Circles Health',
+            description: 'Open this affirmation in Circles Health.',
+            image: item?.image || '',
+            canonicalPath: `/a/${encodeURIComponent(id)}`,
+            appPath: `/a/${encodeURIComponent(id)}`
+        };
+    }
+    if (route === 'r' && id) {
+        const doc = await db.collection('resources').doc(id).get();
+        const item = doc.data() || {};
+        return {
+            status: 'ok',
+            title: item?.title ? `${item.title} • Circles Health` : 'Resource • Circles Health',
+            description: item?.description || 'Open this resource in Circles Health.',
+            image: item?.image || '',
+            canonicalPath: `/r/${encodeURIComponent(id)}`,
+            appPath: `/r/${encodeURIComponent(id)}`
+        };
+    }
+    if (route === 'ref' && id) {
+        const appInviteSnap = await appInviteDocRefByToken(id).get();
+        if (!appInviteSnap.exists) {
+            return {
+                status: 'error',
+                title: 'Invite unavailable',
+                description: 'This app invite link is invalid or no longer available.',
+                canonicalPath: `/ref/${encodeURIComponent(id)}`,
+                appPath: `/ref/${encodeURIComponent(id)}`
+            };
+        }
+        const invite = appInviteSnap.data() || {};
+        const inviteStatus = evaluateInviteStatus(invite);
+        if (inviteStatus.status !== 'valid') {
+            return {
+                status: 'error',
+                title: 'Invite unavailable',
+                description: 'This app invite has expired, been revoked, or reached its usage limit.',
+                canonicalPath: `/ref/${encodeURIComponent(id)}`,
+                appPath: `/ref/${encodeURIComponent(id)}`
+            };
+        }
+        return {
+            status: 'ok',
+            title: 'Join Circles Health',
+            description: 'You were invited to Circles Health. Open the app to continue.',
+            canonicalPath: `/ref/${encodeURIComponent(id)}`,
+            appPath: `/ref/${encodeURIComponent(id)}`
+        };
+    }
+    return {
+        status: 'error',
+        title: 'Open Circles Health',
+        description: 'Install or open the app to continue.',
+        canonicalPath: '/download',
+        appPath: '/download'
+    };
+};
+exports.resolveDeepLink = regionalFunctions.https.onRequest(async (req, res) => {
+    const ip = getClientIpFromRequest(req);
+    const path = String(req.path || req.url || '/');
+    try {
+        const routeMeta = await getResolverMetaForPath(path);
+        if (path.startsWith('/invite/')) {
+            const token = decodeURIComponent(path.split('/')[2] || '');
+            if (token) {
+                await validateInviteRateLimit({ tokenHash: sha256(token), ip, action: 'resolve_http' });
+            }
+        }
+        if (path.startsWith('/ref/')) {
+            const token = decodeURIComponent(path.split('/')[2] || '');
+            if (token) {
+                await validateInviteRateLimit({ tokenHash: sha256(token), ip, action: 'resolve_http_ref' });
+            }
+        }
+        const html = makeResolverHtml({
+            title: routeMeta.title,
+            description: routeMeta.description,
+            image: routeMeta.image,
+            canonicalPath: routeMeta.canonicalPath,
+            appPath: routeMeta.appPath,
+            status: routeMeta.status
+        });
+        res.set('Cache-Control', 'no-store');
+        res.set('Content-Type', 'text/html; charset=utf-8');
+        res.status(200).send(html);
+    }
+    catch (error) {
+        console.error('[resolveDeepLink] failed', { path, error });
+        const html = makeResolverHtml({
+            title: 'Open Circles Health',
+            description: 'This link is unavailable right now. Try again shortly.',
+            canonicalPath: '/download',
+            appPath: '/download',
+            status: 'error'
+        });
+        res.status(200).send(html);
+    }
+});
+exports.serveAssetLinks = regionalFunctions.https.onRequest(async (_req, res) => {
+    const fingerprints = String(process.env.ANDROID_SHA256_CERT_FINGERPRINTS || '')
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean);
+    const payload = [
+        {
+            relation: ['delegate_permission/common.handle_all_urls'],
+            target: {
+                namespace: 'android_app',
+                package_name: androidPackageName,
+                sha256_cert_fingerprints: fingerprints
+            }
+        }
+    ];
+    res.set('Content-Type', 'application/json');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.status(200).send(JSON.stringify(payload));
+});
+exports.serveAppleAssociation = regionalFunctions.https.onRequest(async (_req, res) => {
+    const payload = {
+        applinks: {
+            apps: [],
+            details: [
+                {
+                    appID: iosAppId,
+                    paths: ['/invite/*', '/ref/*', '/circle/*', '/a/*', '/r/*']
+                }
+            ]
+        }
+    };
+    res.set('Content-Type', 'application/json');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.status(200).send(JSON.stringify(payload));
 });
 // ==========================================
 // CONTACT (WEB) FUNCTIONS

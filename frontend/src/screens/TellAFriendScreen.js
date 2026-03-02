@@ -6,19 +6,41 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Avatar from '../components/Avatar';
 import QRCode from 'react-native-qrcode-svg';
-import { buildInviteLink, buildInviteShareText } from '../utils/deepLinks';
+import { buildAppInviteLink, buildAppInviteShareText } from '../utils/deepLinks';
 import * as Clipboard from 'expo-clipboard';
+import { circleService } from '../services/api/circleService';
 
 const TellAFriendScreen = ({ navigation }) => {
     const { user, userData } = useAuth();
     const { showToast } = useToast();
     const avatarUri = userData?.photoURL || user?.photoURL || '';
-    const inviteLink = buildInviteLink(user?.uid || '');
+    const [inviteLink, setInviteLink] = React.useState(buildAppInviteLink(''));
+
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const result = await circleService.createAppInvite({
+                    expiresInHours: 24 * 14,
+                    maxUses: 500
+                });
+                if (!cancelled && result?.inviteUrl) {
+                    setInviteLink(result.inviteUrl);
+                }
+            } catch {
+                // Keep fallback link if invite generation fails.
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
 
     const handleShare = async () => {
         try {
             await Share.share({
-                message: buildInviteShareText(user?.uid || ''),
+                message: buildAppInviteShareText({
+                    token: String(inviteLink.split('/').pop() || '').trim()
+                }),
             });
         } catch (error) {
             console.log(error);

@@ -18,6 +18,14 @@ export declare const createCircle: functions.HttpsFunction & functions.Runnable<
  * Callable Function: 'updateCircle'
  */
 export declare const updateCircle: functions.HttpsFunction & functions.Runnable<any>;
+export declare const createCircleInvite: functions.HttpsFunction & functions.Runnable<any>;
+export declare const createAppInvite: functions.HttpsFunction & functions.Runnable<any>;
+export declare const revokeCircleInvite: functions.HttpsFunction & functions.Runnable<any>;
+export declare const listCircleInvites: functions.HttpsFunction & functions.Runnable<any>;
+export declare const resolveAppInvite: functions.HttpsFunction & functions.Runnable<any>;
+export declare const consumeAppInvite: functions.HttpsFunction & functions.Runnable<any>;
+export declare const resolveInviteToken: functions.HttpsFunction & functions.Runnable<any>;
+export declare const joinCircleWithInvite: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Join an existing Circle
  * Callable Function: 'joinCircle'
@@ -207,6 +215,9 @@ export declare const getSeedStatus: functions.HttpsFunction;
 export declare const sendAffirmationsMorning: import("firebase-functions/v2/scheduler").ScheduleFunction;
 export declare const sendAffirmationsAfternoon: import("firebase-functions/v2/scheduler").ScheduleFunction;
 export declare const sendAffirmationsEvening: import("firebase-functions/v2/scheduler").ScheduleFunction;
+export declare const resolveDeepLink: functions.HttpsFunction;
+export declare const serveAssetLinks: functions.HttpsFunction;
+export declare const serveAppleAssociation: functions.HttpsFunction;
 export declare const submitContactForm: functions.HttpsFunction;
 export declare const deleteUserAccount: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=core.d.ts.map

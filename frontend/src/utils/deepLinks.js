@@ -1,71 +1,125 @@
-const APP_SCHEMES = ['circlesapp://', 'exp+circles-app://', 'circles-app://', 'circles://'];
+const CANONICAL_WEB_URL = (process.env.EXPO_PUBLIC_CANONICAL_WEB_URL || 'https://empylo.com').replace(/\/+$/, '');
 const APP_BASE_SCHEME = 'circlesapp://';
-const IOS_STORE_URL = 'https://apps.apple.com';
-const ANDROID_STORE_URL = 'https://play.google.com/store/apps/details?id=com.empylo.circlesapp';
+const IOS_STORE_URL = process.env.EXPO_PUBLIC_IOS_STORE_URL || 'https://apps.apple.com';
+const ANDROID_STORE_URL = process.env.EXPO_PUBLIC_ANDROID_STORE_URL || 'https://play.google.com/store/apps/details?id=com.empylo.circlesapp';
 
-const buildAppLink = (type, id = '') => {
-    const safeType = encodeURIComponent(String(type || '').trim());
-    const safeId = encodeURIComponent(String(id || '').trim());
-    const path = safeId ? `${safeType}/${safeId}` : safeType;
-    return `${APP_BASE_SCHEME}${path}`;
+const safeSegment = (value = '') => encodeURIComponent(String(value || '').trim());
+
+const pathToUrl = (path) => `${CANONICAL_WEB_URL}${path.startsWith('/') ? path : `/${path}`}`;
+
+const buildAppFallbackLink = (type, id = '') => {
+    const safeType = safeSegment(type);
+    const safeId = safeSegment(id);
+    return `${APP_BASE_SCHEME}${safeType}${safeId ? `/${safeId}` : ''}`;
 };
 
-export const buildInviteLink = (uid) => buildAppLink('invite', uid);
-export const buildCircleLink = (circleId) => buildAppLink('circle', circleId);
-export const buildAffirmationLink = (affirmationId) => buildAppLink('affirmation', affirmationId);
+export const buildInviteLink = (token) => {
+    const safeToken = String(token || '').trim();
+    if (!safeToken) return pathToUrl('/download');
+    return pathToUrl(`/invite/${safeSegment(safeToken)}`);
+};
+export const buildAppInviteLink = (token) => {
+    const safeToken = String(token || '').trim();
+    if (!safeToken) return pathToUrl('/download');
+    return pathToUrl(`/ref/${safeSegment(safeToken)}`);
+};
+
+export const buildCircleLink = (circleId) => pathToUrl(`/circle/${safeSegment(circleId)}`);
+export const buildAffirmationLink = (affirmationId) => pathToUrl(`/a/${safeSegment(affirmationId)}`);
+export const buildResourceLink = (resourceId) => pathToUrl(`/r/${safeSegment(resourceId)}`);
 
 export const buildStoreFallbackText = () => (
-    `If the app does not open, install Circles Health App:\n` +
+    `If the app does not open, install Circles Health:\n` +
     `iOS: ${IOS_STORE_URL}\n` +
     `Android: ${ANDROID_STORE_URL}`
 );
 
-export const buildInviteShareText = (uid) => {
-    const appLink = buildInviteLink(uid);
-    return `Join me on Circles Health App by Empylo.\n\nOpen in app:\n${appLink}\n\n${buildStoreFallbackText()}`;
+export const buildInviteShareText = ({ token, circleName } = {}) => {
+    const link = buildInviteLink(token);
+    const fallback = token ? buildAppFallbackLink('invite', token) : APP_BASE_SCHEME;
+    return `Join my circle '${circleName || 'Circle'}' on Circles Health: ${link}\n\nFallback link: ${fallback}\n${buildStoreFallbackText()}`;
 };
 
-export const buildCircleShareText = ({ circleName, circleId }) => {
-    const appLink = buildCircleLink(circleId);
-    return `Join my circle "${circleName || 'Circle'}" on Circles Health App.\n\nOpen in app:\n${appLink}\n\n${buildStoreFallbackText()}`;
+export const buildAppInviteShareText = ({ token } = {}) => {
+    const link = buildAppInviteLink(token);
+    const fallback = token ? buildAppFallbackLink('ref', token) : APP_BASE_SCHEME;
+    return `Join me on Circles Health: ${link}\n\nFallback link: ${fallback}\n${buildStoreFallbackText()}`;
+};
+
+export const buildCircleShareText = ({ circleName, circleId, inviteUrl = '' }) => {
+    const link = String(inviteUrl || '').trim() || buildCircleLink(circleId);
+    const fallback = buildAppFallbackLink('circle', circleId);
+    return `Join my circle '${circleName || 'Circle'}' on Circles Health: ${link}\n\nFallback link: ${fallback}\n${buildStoreFallbackText()}`;
 };
 
 export const buildAffirmationShareText = ({ text, affirmationId }) => {
-    const appLink = buildAffirmationLink(affirmationId);
+    const link = buildAffirmationLink(affirmationId);
     const safeText = String(text || '').trim();
-    return `${safeText}\n\nView this affirmation in Circles:\n${appLink}\n\n${buildStoreFallbackText()}`;
+    const fallback = buildAppFallbackLink('affirmation', affirmationId);
+    return `Here's an affirmation from Circles Health: ${link}\n\n${safeText}\n\nFallback link: ${fallback}\n${buildStoreFallbackText()}`;
+};
+
+export const buildResourceShareText = ({ title, resourceId }) => {
+    const link = buildResourceLink(resourceId);
+    const fallback = buildAppFallbackLink('resource', resourceId);
+    return `Check this out on Circles Health: ${link}\n\n${String(title || '').trim()}\n\nFallback link: ${fallback}\n${buildStoreFallbackText()}`;
 };
 
 export const parseDeepLink = (url) => {
     if (!url || typeof url !== 'string') return null;
-    let normalized = String(url).trim();
+    const raw = String(url).trim();
+    if (!raw) return null;
 
-    // Handle custom schemes.
-    APP_SCHEMES.forEach((scheme) => {
-        if (normalized.startsWith(scheme)) {
-            normalized = normalized.slice(scheme.length);
+    const normalizeToPath = (input) => {
+        if (/^[a-z]+:\/\//i.test(input)) {
+            if (input.startsWith(APP_BASE_SCHEME)) {
+                return input.slice(APP_BASE_SCHEME.length);
+            }
+            try {
+                const u = new URL(input);
+                return `${u.pathname || ''}${u.search || ''}`;
+            } catch {
+                return input;
+            }
         }
-    });
+        return input;
+    };
 
-    // Handle https links (e.g. https://www.empylo.com/open/circle/abc)
-    normalized = normalized.replace(/^https?:\/\/[^/]+\//i, '');
-    const clean = normalized.split('?')[0]?.replace(/^\/+/, '') || '';
-    const parts = clean.split('/').filter(Boolean);
+    const normalized = normalizeToPath(raw).replace(/^\/+/, '');
+    const pathOnly = normalized.split('?')[0];
+    const parts = pathOnly.split('/').filter(Boolean).map((p) => decodeURIComponent(p));
     if (!parts.length) return null;
 
-    if (parts[0]?.toLowerCase() === 'open') {
+    if (parts[0] === 'open') {
         const type = String(parts[1] || '').toLowerCase();
-        const id = decodeURIComponent(parts[2] || '');
-        if (type === 'invite' && id) return { type: 'invite', id };
+        const id = String(parts[2] || '');
+        if (type === 'invite' && id) return { type: 'invite', token: id };
         if (type === 'circle' && id) return { type: 'circle', id };
-        if (type === 'affirmation' && id) return { type: 'affirmation', id };
-        return null;
+        if ((type === 'affirmation' || type === 'a') && id) return { type: 'affirmation', id };
+        if ((type === 'resource' || type === 'r') && id) return { type: 'resource', id };
     }
 
     const key = String(parts[0] || '').toLowerCase();
-    const id = decodeURIComponent(parts[1] || '');
+    const id = String(parts[1] || '');
+    if ((key === 'invite' || key === 'i') && id) return { type: 'invite', token: id };
+    if ((key === 'ref' || key === 'app-invite') && id) return { type: 'app_invite', token: id };
     if (key === 'circle' && id) return { type: 'circle', id };
+    if (key === 'a' && id) return { type: 'affirmation', id };
+    if (key === 'r' && id) return { type: 'resource', id };
     if (key === 'affirmation' && id) return { type: 'affirmation', id };
-    if (key === 'invite' && id) return { type: 'invite', id };
+    if (key === 'resource' && id) return { type: 'resource', id };
     return null;
 };
+
+export const parseBranchParams = (params = {}) => {
+    const clicked = Boolean(params?.['+clicked_branch_link'] || params?.['+is_first_session']);
+    const deepPath = String(params?.$deeplink_path || params?.deeplinkPath || '').trim();
+    const canonicalUrl = String(params?.$canonical_url || params?.$fallback_url || '').trim();
+    if (!clicked && !deepPath && !canonicalUrl) return null;
+
+    if (deepPath) return parseDeepLink(deepPath);
+    if (canonicalUrl) return parseDeepLink(canonicalUrl);
+    return null;
+};
+
+export const DEEPLINK_CANONICAL_WEB_URL = CANONICAL_WEB_URL;

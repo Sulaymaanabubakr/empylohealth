@@ -2,10 +2,18 @@ export declare const onUserCreate: import("firebase-functions/v1").CloudFunction
 export declare const onMessageCreate: import("firebase-functions/v1").CloudFunction<import("firebase-functions/v1/firestore").QueryDocumentSnapshot>;
 export declare const generateUploadSignature: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const createCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const createCircleInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const createAppInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const joinCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const joinCircleWithInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const leaveCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const deleteCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const revokeCircleInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const listCircleInvites: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const resolveInviteToken: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const resolveAppInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const consumeAppInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const manageMember: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const handleJoinRequest: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const resolveCircleReport: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
@@ -46,6 +54,9 @@ export declare const getExploreContent: import("firebase-functions/v1").HttpsFun
 export declare const getRecommendedContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const submitContactForm: import("firebase-functions/v1").HttpsFunction;
+export declare const resolveDeepLink: import("firebase-functions/v1").HttpsFunction;
+export declare const serveAssetLinks: import("firebase-functions/v1").HttpsFunction;
+export declare const serveAppleAssociation: import("firebase-functions/v1").HttpsFunction;
 export declare const sendAffirmationsMorning: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const sendAffirmationsAfternoon: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const sendAffirmationsEvening: import("firebase-functions/scheduler").ScheduleFunction;

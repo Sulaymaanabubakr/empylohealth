@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.submitContactForm = exports.getAffirmations = exports.getRecommendedContent = exports.getExploreContent = exports.updateSubscription = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.seedResources = exports.seedChallenges = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.deleteChat = exports.sendMessage = exports.getPublicProfile = exports.unblockUser = exports.blockUser = exports.createDirectChat = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.toggleScheduledHuddleReminder = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleConnection = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.submitReport = exports.resolveCircleReport = exports.handleJoinRequest = exports.manageMember = exports.deleteCircle = exports.leaveCircle = exports.updateCircle = exports.joinCircle = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
-exports.createEmployee = exports.getAdminAuditLogs = exports.bulkUpdateContent = exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.recordLoginDevice = exports.changeEmailWithOtp = exports.completeEmailVerificationWithOtp = exports.changePasswordWithOtp = exports.resetPasswordWithOtp = exports.registerWithOtp = exports.verifyOtp = exports.requestOtp = exports.deleteUserAccount = exports.sendAffirmationsEvening = void 0;
+exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.seedResources = exports.seedChallenges = exports.getKeyChallenges = exports.getUserStats = exports.submitAssessment = exports.deleteChat = exports.sendMessage = exports.getPublicProfile = exports.unblockUser = exports.blockUser = exports.createDirectChat = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.toggleScheduledHuddleReminder = exports.deleteScheduledHuddle = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleConnection = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.submitReport = exports.resolveCircleReport = exports.handleJoinRequest = exports.manageMember = exports.consumeAppInvite = exports.resolveAppInvite = exports.resolveInviteToken = exports.listCircleInvites = exports.revokeCircleInvite = exports.deleteCircle = exports.leaveCircle = exports.updateCircle = exports.joinCircleWithInvite = exports.joinCircle = exports.createAppInvite = exports.createCircleInvite = exports.createCircle = exports.generateUploadSignature = exports.onMessageCreate = exports.onUserCreate = void 0;
+exports.createEmployee = exports.getAdminAuditLogs = exports.bulkUpdateContent = exports.backfillUserCircles = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = exports.recordLoginDevice = exports.changeEmailWithOtp = exports.completeEmailVerificationWithOtp = exports.changePasswordWithOtp = exports.resetPasswordWithOtp = exports.registerWithOtp = exports.verifyOtp = exports.requestOtp = exports.deleteUserAccount = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.serveAppleAssociation = exports.serveAssetLinks = exports.resolveDeepLink = exports.submitContactForm = exports.getAffirmations = exports.getRecommendedContent = exports.getExploreContent = exports.updateSubscription = exports.getSeedStatus = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Admin SDK once at entry point
 if (admin.apps.length === 0) {
@@ -53,10 +53,18 @@ exports.onMessageCreate = generalTriggers.onMessageCreate;
 // Core API (Media, Circles, Chat, Assessments, Subscription)
 exports.generateUploadSignature = coreApi.generateUploadSignature;
 exports.createCircle = coreApi.createCircle;
+exports.createCircleInvite = coreApi.createCircleInvite;
+exports.createAppInvite = coreApi.createAppInvite;
 exports.joinCircle = coreApi.joinCircle;
+exports.joinCircleWithInvite = coreApi.joinCircleWithInvite;
 exports.updateCircle = coreApi.updateCircle;
 exports.leaveCircle = coreApi.leaveCircle;
 exports.deleteCircle = coreApi.deleteCircle;
+exports.revokeCircleInvite = coreApi.revokeCircleInvite;
+exports.listCircleInvites = coreApi.listCircleInvites;
+exports.resolveInviteToken = coreApi.resolveInviteToken;
+exports.resolveAppInvite = coreApi.resolveAppInvite;
+exports.consumeAppInvite = coreApi.consumeAppInvite;
 exports.manageMember = coreApi.manageMember;
 exports.handleJoinRequest = coreApi.handleJoinRequest;
 exports.resolveCircleReport = coreApi.resolveCircleReport;
@@ -97,6 +105,9 @@ exports.getExploreContent = coreApi.getExploreContent;
 exports.getRecommendedContent = coreApi.getRecommendedContent;
 exports.getAffirmations = coreApi.getAffirmations;
 exports.submitContactForm = coreApi.submitContactForm;
+exports.resolveDeepLink = coreApi.resolveDeepLink;
+exports.serveAssetLinks = coreApi.serveAssetLinks;
+exports.serveAppleAssociation = coreApi.serveAppleAssociation;
 exports.sendAffirmationsMorning = coreApi.sendAffirmationsMorning;
 exports.sendAffirmationsAfternoon = coreApi.sendAffirmationsAfternoon;
 exports.sendAffirmationsEvening = coreApi.sendAffirmationsEvening;

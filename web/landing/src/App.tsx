@@ -9,6 +9,7 @@ import DeleteAccount from './pages/legal/DeleteAccount';
 import CommunityGuidelines from './pages/legal/CommunityGuidelines';
 import Download from './pages/Download';
 import OpenInApp from './pages/OpenInApp';
+import DeepLinkLanding from './pages/DeepLinkLanding';
 
 function App() {
   return (
@@ -22,6 +23,11 @@ function App() {
 
           <Route path="/download" element={<Download />} />
           <Route path="/open/:type/:id" element={<OpenInApp />} />
+          <Route path="/invite/:id" element={<DeepLinkLanding />} />
+          <Route path="/ref/:id" element={<DeepLinkLanding />} />
+          <Route path="/circle/:id" element={<DeepLinkLanding />} />
+          <Route path="/a/:id" element={<DeepLinkLanding />} />
+          <Route path="/r/:id" element={<DeepLinkLanding />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/delete-account" element={<DeleteAccount />} />

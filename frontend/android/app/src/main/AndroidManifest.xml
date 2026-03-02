@@ -28,6 +28,21 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="exp+circles-app"/>
       </intent-filter>
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="empylo.com" android:pathPrefix="/invite"/>
+        <data android:scheme="https" android:host="www.empylo.com" android:pathPrefix="/invite"/>
+        <data android:scheme="https" android:host="empylo.com" android:pathPrefix="/ref"/>
+        <data android:scheme="https" android:host="www.empylo.com" android:pathPrefix="/ref"/>
+        <data android:scheme="https" android:host="empylo.com" android:pathPrefix="/circle"/>
+        <data android:scheme="https" android:host="www.empylo.com" android:pathPrefix="/circle"/>
+        <data android:scheme="https" android:host="empylo.com" android:pathPrefix="/a"/>
+        <data android:scheme="https" android:host="www.empylo.com" android:pathPrefix="/a"/>
+        <data android:scheme="https" android:host="empylo.com" android:pathPrefix="/r"/>
+        <data android:scheme="https" android:host="www.empylo.com" android:pathPrefix="/r"/>
+      </intent-filter>
     </activity>
   </application>
 </manifest>

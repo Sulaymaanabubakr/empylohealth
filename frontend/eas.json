@@ -43,7 +43,6 @@
             },
             "ios": {
                 "appleId": "fredr7457@gmail.com",
-                "ascAppId": "126937675",
                 "bundleIdentifier": "com.empylo.circlesapp"
             }
         }

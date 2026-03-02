@@ -1,9 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import {
     View,
     Text,
     StyleSheet,
-    Image,
     Dimensions,
     TouchableOpacity,
     PanResponder,
@@ -16,13 +15,11 @@ import { COLORS } from '../theme/theme';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const ImageCropper = ({ visible, imageUri, onClose, onCrop }) => {
-    const [layout, setLayout] = useState(null);
     const scale = useRef(new Animated.Value(1)).current;
     const pan = useRef(new Animated.ValueXY()).current;
 
     // Fixed Crop Box Size
     const CROP_SIZE = SCREEN_WIDTH - 40;
-    const CROP_AREA = CROP_SIZE;
 
     // Gestures state
     const _lastScale = useRef(1);
@@ -52,42 +49,10 @@ const ImageCropper = ({ visible, imageUri, onClose, onCrop }) => {
 
     const handleSave = () => {
         if (!imageUri) return;
-
-        Image.getSize(imageUri, (origW, origH) => {
-            // Basic implementation of crop calculation
-            // pan.x / pan.y are the offsets of the image center from the view center? 
-            // No, standard PanResponder pan.x is cumulative offset.
-
-            // Current transform: translateX(pan.x), translateY(pan.y), scale(scale)
-            // The Image is rendered with dimensions CROP_SIZE x CROP_SIZE (but resizeMode cover/contain?)
-            // Default Image style has resizeMode 'cover'.
-
-            // Let's assume the image is rendered to fill the CROP_SIZE initially.
-            // If origW > origH: Image height = CROP_SIZE, Width = CROP_SIZE * (origW / origH).
-            // If origH > origW: Vice versa.
-            // Wait, resizeMode='cover' fills the box.
-
-            // Simplification for this task:
-            // We will return the pan/zoom values to be compatible with a potential future "Smart Crop" 
-            // but mostly rely on the fact that the user selected an image.
-            // TO SUPPORT CLOUDINARY ALIGNMENT:
-            // We can't easily map screen pixels to Cloudinary "x,y,w,h" without precise aspect ratio math.
-
-            // Strategy: Upload full image, letting Cloudinary handle optimization, 
-            // but if we had to cropping, we'd need to cut it.
-
-            // For the user request "custom editing... without native tool", 
-            // sticking to "Center User Focus" might be misleading if we don't apply it.
-
-            // Let's return the raw values.
-            onCrop(imageUri, {
-                scale: _lastScale.current,
-                x: _lastOffset.current.x,
-                y: _lastOffset.current.y
-            });
-        }, (err) => {
-            console.error("Failed to get image size", err);
-            onCrop(imageUri, {});
+        onCrop(imageUri, {
+            scale: _lastScale.current,
+            x: _lastOffset.current.x,
+            y: _lastOffset.current.y
         });
     };
 

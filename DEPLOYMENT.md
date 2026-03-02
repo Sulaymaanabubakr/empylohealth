@@ -122,6 +122,42 @@ firebase deploy --only firestore:rules
 firebase deploy --only firestore:indexes
 ```
 
+## Deep Linking & Landing Deployment
+
+### Backend deep-link functions
+
+These functions must be deployed for enterprise deep linking:
+- `resolveDeepLink`
+- `serveAssetLinks`
+- `serveAppleAssociation`
+- `createCircleInvite`
+- `resolveInviteToken`
+- `joinCircleWithInvite`
+- `listCircleInvites`
+- `revokeCircleInvite`
+
+Deploy:
+
+```bash
+cd /Users/sulaymaanabubakr/Desktop/Empylo
+firebase deploy --only functions:resolveDeepLink,functions:serveAssetLinks,functions:serveAppleAssociation,functions:createCircleInvite,functions:resolveInviteToken,functions:joinCircleWithInvite,functions:listCircleInvites,functions:revokeCircleInvite
+```
+
+### Landing web
+
+```bash
+cd web/landing
+npm run build
+cd /Users/sulaymaanabubakr/Desktop/Empylo
+firebase deploy --only hosting:landing
+```
+
+### Association endpoints
+
+After deploy, verify:
+- `https://empylo.com/.well-known/assetlinks.json`
+- `https://empylo.com/apple-app-site-association`
+
 ## Common Issues & Solutions
 
 ### Issue: "not-found" error when calling functions

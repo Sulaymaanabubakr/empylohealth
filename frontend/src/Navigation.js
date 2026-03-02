@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 console.log('[PERF] Navigation.js: Module evaluating');
-import { View, Pressable, Text, StyleSheet, TouchableOpacity, Linking as RnLinking, Animated, PanResponder, Dimensions } from 'react-native';
+import { View, Pressable, Text, StyleSheet, TouchableOpacity, Animated, PanResponder, Dimensions } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -51,10 +51,11 @@ import CommunityEducationTopicScreen from './screens/CommunityEducationTopicScre
 import AboutCirclesScreen from './screens/AboutCirclesScreen';
 import WellbeingCategoriesInfoScreen from './screens/WellbeingCategoriesInfoScreen';
 import AppLockScreen from './screens/AppLockScreen';
+import InviteLandingScreen from './screens/InviteLandingScreen';
+import AppInviteLandingScreen from './screens/AppInviteLandingScreen';
 import { navigationRef, flushPendingNavigation, navigate } from './navigation/navigationRef';
 import { huddleService } from './services/api/huddleService';
-import { parseDeepLink } from './utils/deepLinks';
-import { pendingDeepLink } from './services/deepLink/pendingDeepLink';
+import { DeepLinkRouter } from './services/deepLink/DeepLinkRouter';
 import { biometricPrefs } from './services/security/biometricPrefs';
 import { useAppLockController } from './services/security/useAppLockController';
 import { isProtectedRoute } from './security/protectedRoutes';
@@ -321,62 +322,20 @@ export default function Navigation() {
         }, 2600);
     };
 
-    const routeFromDeepLink = async (url, options = {}) => {
-        const { persistIfUnauthed = true } = options;
-        const parsed = parseDeepLink(url);
-        if (!parsed) return false;
-
-        if (routeTarget === 'UNAUTH') {
-            if (persistIfUnauthed) {
-                await pendingDeepLink.save(url).catch(() => {});
-            }
-            navigate('Onboarding');
-            return true;
-        }
-
-        if (parsed.type === 'circle' && parsed.id) {
-            const didNavigate = navigate('CircleDetail', { circle: { id: parsed.id } });
-            if (didNavigate) showDeepLinkBanner('Opened from shared circle link');
-            return didNavigate;
-        }
-        if (parsed.type === 'affirmation' && parsed.id) {
-            const didNavigate = navigate('Affirmations', { affirmationId: parsed.id });
-            if (didNavigate) showDeepLinkBanner('Opened from shared affirmation link');
-            return didNavigate;
-        }
-        if (parsed.type === 'invite') {
-            const didNavigate = routeTarget === 'UNAUTH' ? navigate('Onboarding') : navigate('MainTabs');
-            if (didNavigate) showDeepLinkBanner();
-            return didNavigate;
-        }
-        return false;
-    };
-
     useEffect(() => {
-        RnLinking.getInitialURL()
-            .then((url) => {
-                if (url) routeFromDeepLink(url);
-            })
-            .catch(() => {});
-
-        const sub = RnLinking.addEventListener('url', ({ url }) => {
-            if (url) routeFromDeepLink(url);
+        const stop = DeepLinkRouter.start({
+            routeTarget,
+            onBanner: (message) => showDeepLinkBanner(message || 'Opened from shared link')
         });
-        return () => sub.remove();
+        return stop;
     }, [routeTarget]);
 
     useEffect(() => {
         if (routeTarget === 'UNAUTH') return;
-        let cancelled = false;
-        const resolvePending = async () => {
-            const pendingUrl = await pendingDeepLink.consume().catch(() => '');
-            if (!pendingUrl || cancelled) return;
-            await routeFromDeepLink(pendingUrl, { persistIfUnauthed: false });
-        };
-        resolvePending().catch(() => {});
-        return () => {
-            cancelled = true;
-        };
+        DeepLinkRouter.resumePending({
+            routeTarget,
+            onBanner: (message) => showDeepLinkBanner(message || 'Continued from shared link')
+        }).catch(() => {});
     }, [routeTarget]);
 
     useEffect(() => {
@@ -436,6 +395,8 @@ export default function Navigation() {
                         <Stack.Screen name="LearningSession" component={LearningSessionScreen} />
 
                         <Stack.Screen name="CreateCircle" component={CreateCircleScreen} />
+                        <Stack.Screen name="InviteLanding" component={InviteLandingScreen} />
+                        <Stack.Screen name="AppInviteLanding" component={AppInviteLandingScreen} />
                         <Stack.Screen name="CircleDetail" component={CircleDetailScreen} />
                         <Stack.Screen name="CircleAnalysis" component={CircleAnalysisScreen} />
                         <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />

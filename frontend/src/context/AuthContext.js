@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo } from 'react';
+import { InteractionManager } from 'react-native';
 import { authService } from '../services/auth/authService';
 import { notificationService } from '../services/api/notificationService';
 import { profileRepository } from '../services/repositories/ProfileRepository';
@@ -48,6 +49,13 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const timezoneSyncedRef = useRef('');
 
     const loading = bootPhase !== BOOT_PHASES.READY;
+    const runAfterUiSettles = (task) => {
+        InteractionManager.runAfterInteractions(() => {
+            Promise.resolve()
+                .then(task)
+                .catch(() => {});
+        });
+    };
 
     useEffect(() => {
         logNetworkRegionDebug();
@@ -98,19 +106,18 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
             if (loginDeviceReportedRef.current !== currentUser.uid) {
                 loginDeviceReportedRef.current = currentUser.uid;
-                getDeviceIdentity()
-                    .then((deviceIdentity) => authService.recordLoginDevice(deviceIdentity))
-                    .catch((error) => {
-                        console.warn('[AuthContext] recordLoginDevice failed', error?.message || error);
-                    });
+                runAfterUiSettles(async () => {
+                    const deviceIdentity = await getDeviceIdentity();
+                    await authService.recordLoginDevice(deviceIdentity);
+                });
             }
 
             const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
             const timezoneSyncKey = `${currentUser.uid}:${currentTz}`;
             if (timezoneSyncedRef.current !== timezoneSyncKey) {
                 timezoneSyncedRef.current = timezoneSyncKey;
-                profileRepository.updateProfile(currentUser.uid, { timezone: currentTz }).catch((error) => {
-                    console.warn('[AuthContext] timezone sync failed', error?.message || error);
+                runAfterUiSettles(async () => {
+                    await profileRepository.updateProfile(currentUser.uid, { timezone: currentTz });
                 });
             }
 
@@ -176,14 +183,14 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
             presenceCleanupRef.current = presenceRepository.startPresence(currentUser.uid);
 
-            notificationService.registerForPushNotificationsAsync(currentUser.uid).catch((e) => {
-                console.warn('[AuthContext] Push registration failed', e?.message || e);
+            runAfterUiSettles(async () => {
+                await notificationService.registerForPushNotificationsAsync(currentUser.uid);
             });
 
             if (preloadedUidRef.current !== currentUser.uid) {
                 preloadedUidRef.current = currentUser.uid;
-                appPreloadService.preloadForUser(currentUser.uid).catch((e) => {
-                    console.warn('[BOOT] App preload failed', e?.message || e);
+                runAfterUiSettles(async () => {
+                    await appPreloadService.preloadForUser(currentUser.uid);
                 });
             }
         });

@@ -18,7 +18,9 @@
       "bundleIdentifier": "com.empylo.circlesapp",
       "associatedDomains": [
         "applinks:empylo.com",
-        "applinks:www.empylo.com"
+        "applinks:www.empylo.com",
+        "applinks:empylo.app.link",
+        "applinks:empylo-alternate.app.link"
       ],
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -60,12 +62,52 @@
             {
               "scheme": "https",
               "host": "empylo.com",
-              "pathPrefix": "/open"
+              "pathPrefix": "/invite"
             },
             {
               "scheme": "https",
               "host": "www.empylo.com",
-              "pathPrefix": "/open"
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "empylo.com",
+              "pathPrefix": "/ref"
+            },
+            {
+              "scheme": "https",
+              "host": "www.empylo.com",
+              "pathPrefix": "/ref"
+            },
+            {
+              "scheme": "https",
+              "host": "empylo.com",
+              "pathPrefix": "/circle"
+            },
+            {
+              "scheme": "https",
+              "host": "www.empylo.com",
+              "pathPrefix": "/circle"
+            },
+            {
+              "scheme": "https",
+              "host": "empylo.com",
+              "pathPrefix": "/a"
+            },
+            {
+              "scheme": "https",
+              "host": "www.empylo.com",
+              "pathPrefix": "/a"
+            },
+            {
+              "scheme": "https",
+              "host": "empylo.com",
+              "pathPrefix": "/r"
+            },
+            {
+              "scheme": "https",
+              "host": "www.empylo.com",
+              "pathPrefix": "/r"
             }
           ],
           "category": [
@@ -105,6 +147,10 @@
       "expo-asset"
     ],
     "extra": {
+      "branch": {
+        "testKey": "${BRANCH_TEST_KEY}",
+        "liveKey": "${BRANCH_LIVE_KEY}"
+      },
       "eas": {
         "projectId": "d5a69837-af96-49c2-ba42-1c11982c8dfb"
       }

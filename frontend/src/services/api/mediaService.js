@@ -1,6 +1,21 @@
 // TypeScript conversion in progress
 import { callableClient } from './callableClient';
 
+const UPLOAD_TIMEOUT_MS = 45000;
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = UPLOAD_TIMEOUT_MS) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
 export const mediaService = {
     /**
      * Uploads an image/video to Cloudinary
@@ -28,10 +43,14 @@ export const mediaService = {
             formData.append('folder', folder);
 
             // 3. Upload to Cloudinary
-            const response = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/auto/upload`, {
+            const response = await fetchWithTimeout(`https://api.cloudinary.com/v1_1/${cloud_name}/auto/upload`, {
                 method: 'POST',
                 body: formData
             });
+
+            if (!response.ok) {
+                throw new Error(`Upload request failed (${response.status})`);
+            }
 
             const result = await response.json();
 
@@ -42,6 +61,9 @@ export const mediaService = {
             }
         } catch (error) {
             console.error('Media Upload Error:', error);
+            if (String(error?.name || '').toLowerCase() === 'aborterror') {
+                throw new Error('Upload timed out. Please try a smaller image or retry.');
+            }
             throw error;
         }
     }
