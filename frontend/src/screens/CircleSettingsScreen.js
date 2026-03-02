@@ -238,10 +238,12 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const selectedTime24 = `${String(eventDate.getHours()).padStart(2, '0')}:${String(eventDate.getMinutes()).padStart(2, '0')}`;
 
     const setDatePart = (formattedDate) => {
-        const [mm, dd, yyyy] = String(formattedDate || '').split('.');
-        const month = Number(mm);
-        const day = Number(dd);
-        const year = Number(yyyy);
+        const raw = String(formattedDate || '').trim();
+        if (!raw) return;
+        const [first, second, third] = raw.split(/[./-]/);
+        const day = Number(first);
+        const month = Number(second);
+        const year = Number(third);
         if (!Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(year)) return;
         const next = new Date(eventDate);
         next.setFullYear(year, month - 1, day);
