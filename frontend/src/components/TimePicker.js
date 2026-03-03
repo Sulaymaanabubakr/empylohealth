@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 
@@ -68,8 +68,9 @@ const TimePicker = ({ label, value, time24Value, onSelect, icon, placeholder = '
             </TouchableOpacity>
 
             <Modal visible={isOpen} transparent animationType="fade" onRequestClose={() => setIsOpen(false)}>
-                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsOpen(false)}>
-                    <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                <View style={styles.modalOverlay}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsOpen(false)} />
+                    <Pressable style={styles.modalContent} onPress={(event) => event.stopPropagation()}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>{label || 'Select Time'}</Text>
                             <TouchableOpacity onPress={() => setIsOpen(false)}>
@@ -102,8 +103,8 @@ const TimePicker = ({ label, value, time24Value, onSelect, icon, placeholder = '
                                 <Text style={styles.confirmText}>Set Time</Text>
                             </TouchableOpacity>
                         </View>
-                    </View>
-                </TouchableOpacity>
+                    </Pressable>
+                </View>
             </Modal>
 
             <Modal visible={showHourPicker} transparent animationType="slide">
