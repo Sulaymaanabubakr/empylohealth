@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -237,6 +237,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [editName, setEditName] = useState('');
     const [editDesc, setEditDesc] = useState('');
     const [editType, setEditType] = useState('public');
+    const profileCacheRef = useRef(new Map());
 
     const selectedTime24 = `${String(eventDate.getHours()).padStart(2, '0')}:${String(eventDate.getMinutes()).padStart(2, '0')}`;
 
@@ -376,13 +377,26 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [enrichedRequests, setEnrichedRequests] = useState([]);
 
     useEffect(() => {
+        const loadProfile = async (uid) => {
+            if (!uid) return null;
+            if (profileCacheRef.current.has(uid)) {
+                return profileCacheRef.current.get(uid);
+            }
+            const profile = await userService.getUserDocument(uid);
+            profileCacheRef.current.set(uid, profile || null);
+            return profile || null;
+        };
+
         const fetchProfiles = async () => {
+            const shouldEnrichMembers = activeTab === 'Members' || activeTab === 'Requests';
+            if (!shouldEnrichMembers) return;
+
             // Enrich Members
             if (members.length > 0) {
                 try {
                     const enrichedM = await Promise.all(members.map(async (m) => {
                         if (m.uid) {
-                            const userDoc = await userService.getUserDocument(m.uid);
+                            const userDoc = await loadProfile(m.uid);
                             return {
                                 ...m,
                                 name: userDoc?.name || userDoc?.displayName || 'Unknown Member',
@@ -408,7 +422,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 try {
                     const enrichedR = await Promise.all(requests.map(async (r) => {
                         if (r.uid) {
-                            const userDoc = await userService.getUserDocument(r.uid);
+                            const userDoc = await loadProfile(r.uid);
                             return {
                                 ...r,
                                 displayName: userDoc?.name || userDoc?.displayName || r.displayName || 'Unknown',
@@ -428,10 +442,21 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             }
         };
         fetchProfiles();
-    }, [members, requests]);
+    }, [members, requests, activeTab, user?.uid]);
 
     useEffect(() => {
+        const loadProfile = async (uid) => {
+            if (!uid) return null;
+            if (profileCacheRef.current.has(uid)) {
+                return profileCacheRef.current.get(uid);
+            }
+            const profile = await userService.getUserDocument(uid);
+            profileCacheRef.current.set(uid, profile || null);
+            return profile || null;
+        };
+
         const enrichReports = async () => {
+            if (activeTab !== 'Reports') return;
             if (!reports.length) {
                 setEnrichedReports([]);
                 return;
@@ -443,8 +468,8 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                     const targetUid = rep?.targetType === 'member' ? rep?.targetId : '';
 
                     const [reporterDoc, targetDoc] = await Promise.all([
-                        reporterUid ? userService.getUserDocument(reporterUid).catch(() => null) : Promise.resolve(null),
-                        targetUid ? userService.getUserDocument(targetUid).catch(() => null) : Promise.resolve(null)
+                        reporterUid ? loadProfile(reporterUid).catch(() => null) : Promise.resolve(null),
+                        targetUid ? loadProfile(targetUid).catch(() => null) : Promise.resolve(null)
                     ]);
 
                     return {
@@ -462,7 +487,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         };
 
         enrichReports();
-    }, [reports]);
+    }, [reports, activeTab]);
 
 
     const handleAcceptRequest = async (req) => {

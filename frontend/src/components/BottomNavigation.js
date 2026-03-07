@@ -10,7 +10,7 @@ const BottomNavigation = ({ state, descriptors, navigation }) => {
     const insets = useSafeAreaInsets();
 
     return (
-        <View style={[styles.bottomNavContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+        <View pointerEvents="box-none" style={[styles.bottomNavContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
             <View style={styles.bottomNav}>
                 {state.routes.map((route, index) => {
                     const { options } = descriptors[route.key];

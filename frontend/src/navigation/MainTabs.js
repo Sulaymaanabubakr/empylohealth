@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DashboardScreen from '../screens/DashboardScreen';
 import ExploreScreen from '../screens/ExploreScreen';
 import ChatListScreen from '../screens/ChatListScreen';
@@ -11,8 +12,10 @@ import { useAuth } from '../context/AuthContext';
 const Tab = createBottomTabNavigator();
 
 const MainTabs = () => {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [unreadTotal, setUnreadTotal] = useState(0);
+  const tabOverlayInset = Math.max(insets.bottom, 20) + 96;
 
   useEffect(() => {
     if (!user?.uid) {
@@ -30,7 +33,7 @@ const MainTabs = () => {
       lazy={false}
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: '#F8F9FA' },
+        sceneStyle: { backgroundColor: '#F8F9FA', paddingBottom: tabOverlayInset },
       }}
       initialRouteName="Dashboard"
     >

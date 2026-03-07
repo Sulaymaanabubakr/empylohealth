@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +15,7 @@ import { useModal } from '../context/ModalContext';
 const chatListCacheKey = (uid) => `chat_list_cache_v1:${uid}`;
 
 const ChatListScreen = ({ navigation }) => {
+    const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const { showModal } = useModal();
     const [searchQuery, setSearchQuery] = useState('');
@@ -135,6 +136,7 @@ const ChatListScreen = ({ navigation }) => {
     const filteredChats = chatsWithUnread.filter((chat) =>
         (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase())
     );
+    const listBottomInset = Math.max(insets.bottom, 20) + 20;
     const showInitialLoading = !hasFirstSnapshot && !hydratedCache && chatsWithUnread.length === 0;
 
     const renderItem = ({ item }) => {
@@ -412,6 +414,7 @@ const ChatListScreen = ({ navigation }) => {
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={[
                         styles.listContent,
+                        { paddingBottom: listBottomInset },
                         filteredChats.length === 0 && styles.listContentEmpty
                     ]}
                     showsVerticalScrollIndicator={false}
@@ -527,7 +530,7 @@ const styles = StyleSheet.create({
     },
     listContent: {
         paddingHorizontal: SPACING.lg,
-        paddingBottom: 20,
+        paddingBottom: 8,
         gap: 10
     },
     listContentEmpty: {

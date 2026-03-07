@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Pressable, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -29,17 +30,22 @@ const to24Hour = (hour12, period) => {
 const formatDisplay = (hour12, minute, period) =>
     `${String(hour12).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${period}`;
 
+const toDateFromTime24 = (value) => {
+    const parsed = parseTime24(value);
+    const date = new Date();
+    date.setHours(parsed.hour24, parsed.minute, 0, 0);
+    return date;
+};
+
 const TimePicker = ({ label, value, time24Value, onSelect, icon, placeholder = 'Select time' }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [showHourPicker, setShowHourPicker] = useState(false);
-    const [showMinutePicker, setShowMinutePicker] = useState(false);
-    const [showPeriodPicker, setShowPeriodPicker] = useState(false);
 
     const initial = parseTime24(time24Value);
     const initial12 = to12Hour(initial.hour24);
     const [selectedHour, setSelectedHour] = useState(initial12.hour);
     const [selectedMinute, setSelectedMinute] = useState(initial.minute);
     const [selectedPeriod, setSelectedPeriod] = useState(initial12.period);
+    const [selectedIosDate, setSelectedIosDate] = useState(() => toDateFromTime24(time24Value));
 
     const open = () => {
         const now = parseTime24(time24Value);
@@ -47,10 +53,17 @@ const TimePicker = ({ label, value, time24Value, onSelect, icon, placeholder = '
         setSelectedHour(now12.hour);
         setSelectedMinute(now.minute);
         setSelectedPeriod(now12.period);
+        setSelectedIosDate(toDateFromTime24(time24Value));
         setIsOpen(true);
     };
 
     const confirm = () => {
+        if (Platform.OS === 'ios') {
+            const time24 = `${String(selectedIosDate.getHours()).padStart(2, '0')}:${String(selectedIosDate.getMinutes()).padStart(2, '0')}`;
+            onSelect?.(time24);
+            setIsOpen(false);
+            return;
+        }
         const hour24 = to24Hour(selectedHour, selectedPeriod);
         const time24 = `${String(hour24).padStart(2, '0')}:${String(selectedMinute).padStart(2, '0')}`;
         onSelect?.(time24);
@@ -69,8 +82,8 @@ const TimePicker = ({ label, value, time24Value, onSelect, icon, placeholder = '
 
             <Modal visible={isOpen} transparent animationType="fade" onRequestClose={() => setIsOpen(false)}>
                 <View style={styles.modalOverlay}>
-                    <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsOpen(false)} />
-                    <Pressable style={styles.modalContent} onPress={(event) => event.stopPropagation()}>
+                    <Pressable style={styles.modalBackdrop} onPress={() => setIsOpen(false)} />
+                    <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>{label || 'Select Time'}</Text>
                             <TouchableOpacity onPress={() => setIsOpen(false)}>
@@ -78,22 +91,79 @@ const TimePicker = ({ label, value, time24Value, onSelect, icon, placeholder = '
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.pickerRow}>
-                            <TouchableOpacity style={styles.pickerButton} onPress={() => setShowHourPicker(true)}>
-                                <Text style={styles.pickerButtonText}>{String(selectedHour).padStart(2, '0')}</Text>
-                                <Feather name="chevron-down" size={16} color={COLORS.primary} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.pickerButton} onPress={() => setShowMinutePicker(true)}>
-                                <Text style={styles.pickerButtonText}>{String(selectedMinute).padStart(2, '0')}</Text>
-                                <Feather name="chevron-down" size={16} color={COLORS.primary} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPeriodPicker(true)}>
-                                <Text style={styles.pickerButtonText}>{selectedPeriod}</Text>
-                                <Feather name="chevron-down" size={16} color={COLORS.primary} />
-                            </TouchableOpacity>
-                        </View>
+                        {Platform.OS === 'ios' ? (
+                            <View style={styles.iosPickerWrap}>
+                                <DateTimePicker
+                                    value={selectedIosDate}
+                                    mode="time"
+                                    display="spinner"
+                                    onChange={(_, nextDate) => {
+                                        if (nextDate) setSelectedIosDate(nextDate);
+                                    }}
+                                    textColor={COLORS.text}
+                                />
+                                <Text style={styles.previewText}>
+                                    {selectedIosDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </Text>
+                            </View>
+                        ) : (
+                            <>
+                                <View style={styles.pickerRow}>
+                                    <View style={styles.inlinePickerColumn}>
+                                        <Text style={styles.inlinePickerLabel}>Hour</Text>
+                                        <ScrollView style={styles.inlinePickerList} nestedScrollEnabled>
+                                            {HOURS_12.map((hour) => (
+                                                <TouchableOpacity
+                                                    key={hour}
+                                                    style={[styles.pickerItem, hour === selectedHour && styles.pickerItemSelected]}
+                                                    onPress={() => setSelectedHour(hour)}
+                                                >
+                                                    <Text style={[styles.pickerItemText, hour === selectedHour && styles.pickerItemTextSelected]}>
+                                                        {String(hour).padStart(2, '0')}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
 
-                        <Text style={styles.previewText}>{formatDisplay(selectedHour, selectedMinute, selectedPeriod)}</Text>
+                                    <View style={styles.inlinePickerColumn}>
+                                        <Text style={styles.inlinePickerLabel}>Minute</Text>
+                                        <ScrollView style={styles.inlinePickerList} nestedScrollEnabled>
+                                            {MINUTES.map((minute) => (
+                                                <TouchableOpacity
+                                                    key={minute}
+                                                    style={[styles.pickerItem, minute === selectedMinute && styles.pickerItemSelected]}
+                                                    onPress={() => setSelectedMinute(minute)}
+                                                >
+                                                    <Text style={[styles.pickerItemText, minute === selectedMinute && styles.pickerItemTextSelected]}>
+                                                        {String(minute).padStart(2, '0')}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+
+                                    <View style={styles.inlinePickerColumn}>
+                                        <Text style={styles.inlinePickerLabel}>Period</Text>
+                                        <View style={styles.periodList}>
+                                            {PERIODS.map((period) => (
+                                                <TouchableOpacity
+                                                    key={period}
+                                                    style={[styles.pickerItem, period === selectedPeriod && styles.pickerItemSelected]}
+                                                    onPress={() => setSelectedPeriod(period)}
+                                                >
+                                                    <Text style={[styles.pickerItemText, period === selectedPeriod && styles.pickerItemTextSelected]}>
+                                                        {period}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    </View>
+                                </View>
+
+                                <Text style={styles.previewText}>{formatDisplay(selectedHour, selectedMinute, selectedPeriod)}</Text>
+                            </>
+                        )}
 
                         <View style={styles.actions}>
                             <TouchableOpacity style={[styles.actionBtn, styles.cancelBtn]} onPress={() => setIsOpen(false)}>
@@ -103,93 +173,6 @@ const TimePicker = ({ label, value, time24Value, onSelect, icon, placeholder = '
                                 <Text style={styles.confirmText}>Set Time</Text>
                             </TouchableOpacity>
                         </View>
-                    </Pressable>
-                </View>
-            </Modal>
-
-            <Modal visible={showHourPicker} transparent animationType="slide">
-                <View style={styles.pickerModal}>
-                    <View style={styles.pickerContent}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>Select Hour</Text>
-                            <TouchableOpacity onPress={() => setShowHourPicker(false)}>
-                                <Feather name="x" size={24} color={COLORS.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView>
-                            {HOURS_12.map((hour) => (
-                                <TouchableOpacity
-                                    key={hour}
-                                    style={[styles.pickerItem, hour === selectedHour && styles.pickerItemSelected]}
-                                    onPress={() => {
-                                        setSelectedHour(hour);
-                                        setShowHourPicker(false);
-                                    }}
-                                >
-                                    <Text style={[styles.pickerItemText, hour === selectedHour && styles.pickerItemTextSelected]}>
-                                        {String(hour).padStart(2, '0')}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
-
-            <Modal visible={showMinutePicker} transparent animationType="slide">
-                <View style={styles.pickerModal}>
-                    <View style={styles.pickerContent}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>Select Minute</Text>
-                            <TouchableOpacity onPress={() => setShowMinutePicker(false)}>
-                                <Feather name="x" size={24} color={COLORS.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView>
-                            {MINUTES.map((minute) => (
-                                <TouchableOpacity
-                                    key={minute}
-                                    style={[styles.pickerItem, minute === selectedMinute && styles.pickerItemSelected]}
-                                    onPress={() => {
-                                        setSelectedMinute(minute);
-                                        setShowMinutePicker(false);
-                                    }}
-                                >
-                                    <Text style={[styles.pickerItemText, minute === selectedMinute && styles.pickerItemTextSelected]}>
-                                        {String(minute).padStart(2, '0')}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
-
-            <Modal visible={showPeriodPicker} transparent animationType="slide">
-                <View style={styles.pickerModal}>
-                    <View style={styles.pickerContent}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>AM / PM</Text>
-                            <TouchableOpacity onPress={() => setShowPeriodPicker(false)}>
-                                <Feather name="x" size={24} color={COLORS.text} />
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView>
-                            {PERIODS.map((period) => (
-                                <TouchableOpacity
-                                    key={period}
-                                    style={[styles.pickerItem, period === selectedPeriod && styles.pickerItemSelected]}
-                                    onPress={() => {
-                                        setSelectedPeriod(period);
-                                        setShowPeriodPicker(false);
-                                    }}
-                                >
-                                    <Text style={[styles.pickerItemText, period === selectedPeriod && styles.pickerItemTextSelected]}>
-                                        {period}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
                     </View>
                 </View>
             </Modal>
@@ -214,32 +197,32 @@ const styles = StyleSheet.create({
     inputText: { flex: 1, color: '#999', fontSize: 16 },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center'
+    },
+    modalBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)'
     },
     modalContent: {
         width: '90%',
         backgroundColor: COLORS.white,
         borderRadius: RADIUS.lg,
         padding: SPACING.lg,
-        maxHeight: '80%'
+        maxHeight: '80%',
+        zIndex: 1
     },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
     modalTitle: { fontSize: 18, fontWeight: '600', color: COLORS.text },
-    pickerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.md },
-    pickerButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.lightGray,
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
-        borderRadius: RADIUS.md,
-        flex: 1,
-        marginHorizontal: 4,
-        justifyContent: 'center'
+    pickerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.md, gap: 8 },
+    iosPickerWrap: {
+        marginBottom: SPACING.md,
+        alignItems: 'center'
     },
-    pickerButtonText: { fontSize: 16, color: COLORS.text, marginRight: 6, fontWeight: '500' },
+    inlinePickerColumn: { flex: 1 },
+    inlinePickerLabel: { fontSize: 12, color: '#7A8699', fontWeight: '600', marginBottom: 6, textAlign: 'center' },
+    inlinePickerList: { maxHeight: 170, backgroundColor: COLORS.lightGray, borderRadius: RADIUS.md, padding: 4 },
+    periodList: { backgroundColor: COLORS.lightGray, borderRadius: RADIUS.md, padding: 4 },
     previewText: { textAlign: 'center', fontSize: 24, fontWeight: '700', color: COLORS.primary, marginBottom: SPACING.lg },
     actions: { flexDirection: 'row' },
     actionBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, paddingVertical: SPACING.md },
@@ -247,10 +230,6 @@ const styles = StyleSheet.create({
     confirmBtn: { backgroundColor: COLORS.primary, marginLeft: 8 },
     cancelText: { color: COLORS.text, fontWeight: '600' },
     confirmText: { color: '#FFF', fontWeight: '700' },
-    pickerModal: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
-    pickerContent: { backgroundColor: COLORS.white, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, maxHeight: '70%', padding: SPACING.lg },
-    pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
-    pickerTitle: { fontSize: 18, fontWeight: '600', color: COLORS.text },
     pickerItem: { paddingVertical: SPACING.md, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.xs },
     pickerItemSelected: { backgroundColor: `${COLORS.primary}20` },
     pickerItemText: { fontSize: 16, color: COLORS.text, textAlign: 'center' },

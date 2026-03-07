@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SvgXml } from 'react-native-svg';
 import { COLORS, SPACING } from '../theme/theme';
@@ -27,7 +27,6 @@ const decodeSvgDataUri = (uri = '') => {
 };
 
 const ExploreScreen = ({ navigation }) => {
-    const insets = useSafeAreaInsets(); // Add hook
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('Self-development');
     const [activeFilter, setActiveFilter] = useState('All');
@@ -360,8 +359,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: SPACING.lg,
-        paddingTop: 0,
-        marginTop: -24, // Matched to Dashboard spacing
+        paddingTop: SPACING.xs,
+        marginTop: 0,
         paddingBottom: SPACING.xs,
     },
     backButton: {
@@ -390,7 +389,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         paddingHorizontal: 16,
         height: 50,
-        marginTop: 40, // Much more space from header
+        marginTop: 12,
         marginBottom: SPACING.lg,
         borderWidth: 1,
         borderColor: '#F5F5F5',

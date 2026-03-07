@@ -38,8 +38,10 @@ SplashScreen.preventAutoHideAsync();
 // Keep typography consistent across OEM/device accessibility defaults.
 if (Text.defaultProps == null) Text.defaultProps = {};
 if (TextInput.defaultProps == null) TextInput.defaultProps = {};
-Text.defaultProps.maxFontSizeMultiplier = 1.1;
-TextInput.defaultProps.maxFontSizeMultiplier = 1.1;
+Text.defaultProps.allowFontScaling = false;
+TextInput.defaultProps.allowFontScaling = false;
+Text.defaultProps.maxFontSizeMultiplier = 1;
+TextInput.defaultProps.maxFontSizeMultiplier = 1;
 
 export default function App() {
   console.log('[PERF] App: Starting...');
