@@ -29,27 +29,26 @@ export const buildAffirmationLink = (affirmationId) => pathToUrl(`/a/${safeSegme
 export const buildResourceLink = (resourceId) => pathToUrl(`/r/${safeSegment(resourceId)}`);
 
 export const buildStoreFallbackText = () => (
-    `If the app does not open, install Circles Health:\n` +
+    `If the app is not installed yet, this link will guide you to download it.\n` +
     `iOS: ${IOS_STORE_URL}\n` +
     `Android: ${ANDROID_STORE_URL}`
 );
 
 export const buildInviteShareText = ({ token, circleName } = {}) => {
     const link = buildInviteLink(token);
-    const fallback = token ? buildAppFallbackLink('invite', token) : APP_BASE_SCHEME;
-    return `Join my circle '${circleName || 'Circle'}' on Circles Health: ${link}\n\nFallback link: ${fallback}\n${buildStoreFallbackText()}`;
+    const safeCircleName = String(circleName || 'my circle').trim();
+    return `Hey, I'd love to have you in ${safeCircleName} on Circles Health.\n\nJoin here: ${link}\n\n${buildStoreFallbackText()}`;
 };
 
 export const buildAppInviteShareText = ({ token } = {}) => {
     const link = buildAppInviteLink(token);
-    const fallback = token ? buildAppFallbackLink('ref', token) : APP_BASE_SCHEME;
-    return `Join me on Circles Health: ${link}\n\nFallback link: ${fallback}\n${buildStoreFallbackText()}`;
+    return `Hey, join me on Circles Health.\n\nOpen invite: ${link}\n\n${buildStoreFallbackText()}`;
 };
 
 export const buildCircleShareText = ({ circleName, circleId, inviteUrl = '' }) => {
     const link = String(inviteUrl || '').trim() || buildCircleLink(circleId);
-    const fallback = buildAppFallbackLink('circle', circleId);
-    return `Join my circle '${circleName || 'Circle'}' on Circles Health: ${link}\n\nFallback link: ${fallback}\n${buildStoreFallbackText()}`;
+    const safeCircleName = String(circleName || 'my circle').trim();
+    return `You're invited to join ${safeCircleName} on Circles Health.\n\nTap to join: ${link}\n\n${buildStoreFallbackText()}`;
 };
 
 export const buildAffirmationShareText = ({ text, affirmationId }) => {
