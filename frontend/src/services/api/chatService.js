@@ -6,6 +6,7 @@ import { presenceRepository } from '../repositories/PresenceRepository';
 import { resolveWellbeingScore } from '../../utils/wellbeing';
 import { isPresenceOnline } from '../../utils/presence';
 import { formatTimeUK } from '../../utils/dateFormat';
+import { findUnsafeUrlsInMessage, sanitizeChatMessageText } from '../../utils/chatMessageSafety';
 
 export const chatService = {
     createDirectChat: async (recipientId) => {
@@ -13,7 +14,14 @@ export const chatService = {
     },
 
     sendMessage: async (chatId, text, type = 'text', mediaUrl = null, clientMessageId = null) => {
-        await chatRepository.sendMessage(chatId, text, type, mediaUrl, clientMessageId);
+        const normalizedText = type === 'text' ? sanitizeChatMessageText(text || '') : (text || '');
+        if (type === 'text') {
+            const unsafeLinks = findUnsafeUrlsInMessage(normalizedText);
+            if (unsafeLinks.length > 0) {
+                throw new Error('Suspicious links are not allowed in chat messages.');
+            }
+        }
+        await chatRepository.sendMessage(chatId, normalizedText, type, mediaUrl, clientMessageId);
         return { success: true };
     },
 

@@ -1,23 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, StatusBar, KeyboardAvoidingView, Platform, Keyboard, Modal } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, StatusBar, KeyboardAvoidingView, Platform, Keyboard, Modal, Linking } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
+import { useToast } from '../context/ToastContext';
 import { chatService } from '../services/api/chatService';
 import { liveStateRepository } from '../services/repositories/LiveStateRepository';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { db } from '../services/firebaseConfig';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
+import ChatMessageText from '../components/chat/ChatMessageText';
+import { useMessageActions } from '../hooks/useMessageActions';
 import { resolveWellbeingScore } from '../utils/wellbeing';
 import { isPresenceOnline } from '../utils/presence';
 import { circleService } from '../services/api/circleService';
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 import { userService } from '../services/api/userService';
 import { formatTimeUK } from '../utils/dateFormat';
+import { findUnsafeUrlsInMessage, sanitizeChatMessageText } from '../utils/chatMessageSafety';
 
 const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
 
@@ -38,6 +42,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const chat = route?.params?.chat;
     const { user, userData } = useAuth();
     const { showModal } = useModal();
+    const { showToast } = useToast();
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const flatListRef = useRef(null);
@@ -441,10 +446,53 @@ const ChatDetailScreen = ({ navigation, route }) => {
         });
     }, [messages]);
 
-    const handleSend = async () => {
-        if (!inputText.trim()) return;
+    const handleReportMessage = (message) => {
+        if (!chat?.circleId) return;
 
-        const textToSend = inputText;
+        showModal({
+            type: 'confirmation',
+            title: 'Report Message',
+            message: 'Does this message violate community guidelines?',
+            confirmText: 'Report',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    await circleService.submitReport(
+                        chat.circleId,
+                        message.id,
+                        'message',
+                        'Inappropriate Content',
+                        message.text
+                    );
+                    setTimeout(() => {
+                        showModal({ type: 'success', title: 'Report Sent', message: "Exellence. Start packing, we've initiated a review." });
+                    }, 500);
+                } catch (error) {
+                    setTimeout(() => {
+                        showModal({ type: 'error', title: 'Error', message: 'Could not submit report.' });
+                    }, 500);
+                }
+            }
+        });
+    };
+
+    const { openMessageActions } = useMessageActions({ onReportMessage: handleReportMessage });
+
+    const handleSend = async () => {
+        const sanitizedInput = sanitizeChatMessageText(inputText);
+        if (!sanitizedInput.trim()) return;
+
+        const unsafeLinks = findUnsafeUrlsInMessage(sanitizedInput);
+        if (unsafeLinks.length > 0) {
+            showModal({
+                type: 'error',
+                title: 'Suspicious link blocked',
+                message: 'This message contains a link that looks unsafe. Remove it before sending.'
+            });
+            return;
+        }
+
+        const textToSend = sanitizedInput;
         const now = new Date();
         const clientMessageId = `${user?.uid || 'me'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         setInputText(''); // Clear UI immediately
@@ -591,32 +639,32 @@ const ChatDetailScreen = ({ navigation, route }) => {
         });
     };
 
-    const handleMessageLongPress = (message) => {
-        if (!chat.circleId) return; // Only allow reporting in circles context for now
+    const handleLinkPress = (segment) => {
+        if (!segment?.safe || !segment?.url) {
+            showToast('This link looks unsafe', 'warning');
+            return;
+        }
 
+        const openLink = async () => {
+            const canOpen = await Linking.canOpenURL(segment.url);
+            if (!canOpen) throw new Error('unsupported');
+            await Linking.openURL(segment.url);
+        };
+
+        const isHttp = String(segment.url || '').toLowerCase().startsWith('http://');
         showModal({
             type: 'confirmation',
-            title: 'Report Message',
-            message: 'Does this message violate community guidelines?',
-            confirmText: 'Report',
+            title: 'Open link',
+            message: isHttp
+                ? 'This link is not encrypted (http). Continue in browser?'
+                : 'Open this link in your browser?',
+            confirmText: 'Open',
             cancelText: 'Cancel',
             onConfirm: async () => {
                 try {
-                    const { circleService } = require('../services/api/circleService');
-                    await circleService.submitReport(
-                        chat.circleId,
-                        message.id,
-                        'message',
-                        'Inappropriate Content',
-                        message.text
-                    );
-                    setTimeout(() => {
-                        showModal({ type: 'success', title: 'Report Sent', message: "Exellence. Start packing, we've initiated a review." });
-                    }, 500);
-                } catch (error) {
-                    setTimeout(() => {
-                        showModal({ type: 'error', title: 'Error', message: 'Could not submit report.' });
-                    }, 500);
+                    await openLink();
+                } catch {
+                    showToast('Unable to open link', 'error');
                 }
             }
         });
@@ -765,16 +813,21 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     </TouchableOpacity>
                 ) : null}
                 <TouchableOpacity
-                    onLongPress={() => !isMe && handleMessageLongPress(item)}
+                    onLongPress={() => openMessageActions(item, { canReport: !isMe && Boolean(chat?.circleId) })}
+                    delayLongPress={180}
                     activeOpacity={0.9} // Slight feedback but keep bubble look
                     style={[styles.messageBubble, isMe ? styles.bubbleMe : styles.bubbleOther]}
                 >
                     {!isMe && chat?.isGroup && (
                         <Text style={styles.senderNameText}>{senderName}</Text>
                     )}
-                    <Text style={[styles.messageText, isMe ? styles.textMe : styles.textOther]}>
-                        {item.text}
-                    </Text>
+                    <ChatMessageText
+                        text={item.text}
+                        style={[styles.messageText, isMe ? styles.textMe : styles.textOther]}
+                        linkStyle={isMe ? styles.messageLinkMe : styles.messageLinkOther}
+                        blockedLinkStyle={styles.messageLinkBlocked}
+                        onPressLink={handleLinkPress}
+                    />
                     <View style={styles.messageFooter}>
                         {isMe && (
                             <Ionicons
@@ -1268,6 +1321,19 @@ const styles = StyleSheet.create({
     messageText: {
         fontSize: 15,
         lineHeight: 21,
+        flexShrink: 1
+    },
+    messageLinkMe: {
+        color: '#0C6A5F',
+        fontWeight: '700'
+    },
+    messageLinkOther: {
+        color: '#D9FFFB',
+        fontWeight: '700'
+    },
+    messageLinkBlocked: {
+        textDecorationLine: 'none',
+        opacity: 0.85
     },
     senderNameText: {
         fontSize: 12,

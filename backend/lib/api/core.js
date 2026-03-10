@@ -46,6 +46,7 @@ const crypto_1 = require("crypto");
 const cloudinary_1 = require("cloudinary");
 const seedData_1 = require("../seedData");
 const security_1 = require("./security");
+const chatLinkSafety_1 = require("../utils/chatLinkSafety");
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
@@ -1940,10 +1941,11 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
     }
     const { chatId, text, type = 'text', mediaUrl = null, clientMessageId = null } = data;
     const uid = context.auth.uid;
-    if (!chatId || (!text && !mediaUrl)) {
+    const normalizedText = (0, chatLinkSafety_1.sanitizeChatMessageText)(text);
+    if (!chatId || (!normalizedText && !mediaUrl)) {
         throw new functions.https.HttpsError('invalid-argument', 'Chat ID and message content are required.');
     }
-    if (type === 'text' && !text) {
+    if (type === 'text' && !normalizedText) {
         throw new functions.https.HttpsError('invalid-argument', 'Text messages require text.');
     }
     const allowedTypes = ['text', 'image', 'video', 'system'];
@@ -1952,6 +1954,12 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
     }
     if (type === 'system') {
         throw new functions.https.HttpsError('permission-denied', 'System messages are not allowed from clients.');
+    }
+    if (type === 'text') {
+        const unsafeUrls = (0, chatLinkSafety_1.findUnsafeUrlsInMessage)(normalizedText);
+        if (unsafeUrls.length > 0) {
+            throw new functions.https.HttpsError('invalid-argument', 'Suspicious links are not allowed.');
+        }
     }
     try {
         const chatRef = db.collection('chats').doc(chatId);
@@ -1975,7 +1983,7 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
         }
         const messageData = {
             senderId: uid,
-            text,
+            text: normalizedText,
             type, // 'text' | 'image' | 'video'
             mediaUrl,
             ...(clientMessageId ? { clientMessageId: String(clientMessageId) } : {}),
@@ -1986,7 +1994,7 @@ exports.sendMessage = regionalFunctions.https.onCall(async (data, context) => {
         const messageRef = await chatRef.collection('messages').add(messageData);
         // Update parent
         await chatRef.update({
-            lastMessage: type === 'text' ? text : '📷 Media',
+            lastMessage: type === 'text' ? normalizedText : '📷 Media',
             lastMessageType: type,
             lastMessageSenderId: uid,
             lastMessageReadBy: [uid],

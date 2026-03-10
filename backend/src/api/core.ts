@@ -6,6 +6,7 @@ import { createHash, randomBytes, randomUUID } from 'crypto';
 import { v2 as cloudinary } from 'cloudinary';
 import { seedChallengeData, seedResourceData, seedAffirmationData, seedAffirmationImages } from '../seedData';
 import { sendAccountDeletedEmail, sendCircleDeletedEmails } from './security';
+import { findUnsafeUrlsInMessage, sanitizeChatMessageText } from '../utils/chatLinkSafety';
 
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -2105,12 +2106,13 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
 
     const { chatId, text, type = 'text', mediaUrl = null, clientMessageId = null } = data;
     const uid = context.auth.uid;
+    const normalizedText = sanitizeChatMessageText(text);
 
-    if (!chatId || (!text && !mediaUrl)) {
+    if (!chatId || (!normalizedText && !mediaUrl)) {
         throw new functions.https.HttpsError('invalid-argument', 'Chat ID and message content are required.');
     }
 
-    if (type === 'text' && !text) {
+    if (type === 'text' && !normalizedText) {
         throw new functions.https.HttpsError('invalid-argument', 'Text messages require text.');
     }
 
@@ -2121,6 +2123,13 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
 
     if (type === 'system') {
         throw new functions.https.HttpsError('permission-denied', 'System messages are not allowed from clients.');
+    }
+
+    if (type === 'text') {
+        const unsafeUrls = findUnsafeUrlsInMessage(normalizedText);
+        if (unsafeUrls.length > 0) {
+            throw new functions.https.HttpsError('invalid-argument', 'Suspicious links are not allowed.');
+        }
     }
 
     try {
@@ -2147,7 +2156,7 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
 
         const messageData = {
             senderId: uid,
-            text,
+            text: normalizedText,
             type, // 'text' | 'image' | 'video'
             mediaUrl,
             ...(clientMessageId ? { clientMessageId: String(clientMessageId) } : {}),
@@ -2160,7 +2169,7 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
 
         // Update parent
         await chatRef.update({
-            lastMessage: type === 'text' ? text : '📷 Media',
+            lastMessage: type === 'text' ? normalizedText : '📷 Media',
             lastMessageType: type,
             lastMessageSenderId: uid,
             lastMessageReadBy: [uid],
