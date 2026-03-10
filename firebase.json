@@ -22,10 +22,6 @@
       ],
       "rewrites": [
         {
-          "source": "/.well-known/assetlinks.json",
-          "function": "serveAssetLinks"
-        },
-        {
           "source": "/apple-app-site-association",
           "function": "serveAppleAssociation"
         },

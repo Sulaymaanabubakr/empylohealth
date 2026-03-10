@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.empylo.circlesapp",
+      "sha256_cert_fingerprints": [
+        "C1:84:A0:F0:6F:92:37:62:F3:4E:6F:1B:E2:DD:DE:8F:EC:4E:AE:24:F0:D4:C0:C4:CD:41:64:F7:E9:20:E9:BB"
+      ]
+    }
+  }
+]
