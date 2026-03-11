@@ -48,7 +48,6 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const flatListRef = useRef(null);
     const insets = useSafeAreaInsets();
     const [keyboardVisible, setKeyboardVisible] = useState(false);
-    const [headerHeight, setHeaderHeight] = useState(0);
     const [profileModalVisible, setProfileModalVisible] = useState(false);
     const [selectedProfile, setSelectedProfile] = useState(null);
     const [profileCache, setProfileCache] = useState({});
@@ -863,10 +862,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
             {/* Header */}
-            <View
-                style={styles.header}
-                onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
-            >
+            <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
@@ -958,7 +954,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+                keyboardVerticalOffset={0}
             >
                 <FlatList
                     ref={flatListRef}

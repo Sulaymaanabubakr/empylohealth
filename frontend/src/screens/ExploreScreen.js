@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Image, TextInput, Dimensions, ActivityIndicator, RefreshControl, KeyboardAvoidingView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SvgXml } from 'react-native-svg';
 import { COLORS, SPACING } from '../theme/theme';
@@ -27,6 +27,7 @@ const decodeSvgDataUri = (uri = '') => {
 };
 
 const ExploreScreen = ({ navigation }) => {
+    const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('Self-development');
     const [activeFilter, setActiveFilter] = useState('All');
@@ -141,7 +142,7 @@ const ExploreScreen = ({ navigation }) => {
                 <ScrollView
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 84 }]}
                     refreshControl={
                         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
                     }

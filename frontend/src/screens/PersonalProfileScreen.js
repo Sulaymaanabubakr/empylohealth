@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../theme/theme';
@@ -23,6 +23,7 @@ import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } fr
 
 
 const PersonalProfileScreen = ({ navigation }) => {
+    const insets = useSafeAreaInsets();
     // Modal States
     // Modal States
     const { user, userData } = useAuth();
@@ -409,7 +410,7 @@ const PersonalProfileScreen = ({ navigation }) => {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="dark-content" />
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 84 }]}>
                 {renderHeader()}
                 {renderTabs()}
                 {activeTab === 'My circles' && renderMyCircles()}

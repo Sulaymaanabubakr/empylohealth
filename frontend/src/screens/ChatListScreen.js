@@ -136,7 +136,8 @@ const ChatListScreen = ({ navigation }) => {
     const filteredChats = chatsWithUnread.filter((chat) =>
         (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase())
     );
-    const listBottomInset = Math.max(insets.bottom, 20) + 20;
+    // Keep final row clear of the floating tab bar while avoiding global screen padding.
+    const listBottomInset = Math.max(insets.bottom, 20) + 84;
     const showInitialLoading = !hasFirstSnapshot && !hydratedCache && chatsWithUnread.length === 0;
 
     const renderItem = ({ item }) => {

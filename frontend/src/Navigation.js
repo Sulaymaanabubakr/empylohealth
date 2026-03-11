@@ -328,7 +328,7 @@ export default function Navigation() {
 
     return (
         <View style={styles.root}>
-            {!appLock.initializing && !(lockEnabled && (isLocked || appLock.privacyCoverVisible || unlocking)) && (
+            {!appLock.initializing && (
                 <NavigationContainer
                     ref={navigationRef}
                     onReady={() => {
@@ -484,18 +484,20 @@ export default function Navigation() {
             )}
 
             {(lockEnabled && (isLocked || unlocking)) && (
-                <AppLockScreen
-                    user={user}
-                    unlocking={unlocking}
-                    passwordUnlocking={passwordUnlocking}
-                    unlockPassword={unlockPassword}
-                    setUnlockPassword={setUnlockPassword}
-                    unlockError={appLock.unlockError}
-                    canUsePasswordFallback={canUsePasswordFallback}
-                    onUnlockBiometric={appLock.tryBiometricUnlock}
-                    onUnlockPassword={unlockWithPassword}
-                    promptEpoch={appLock.promptEpoch}
-                />
+                <View style={StyleSheet.absoluteFillObject}>
+                    <AppLockScreen
+                        user={user}
+                        unlocking={unlocking}
+                        passwordUnlocking={passwordUnlocking}
+                        unlockPassword={unlockPassword}
+                        setUnlockPassword={setUnlockPassword}
+                        unlockError={appLock.unlockError}
+                        canUsePasswordFallback={canUsePasswordFallback}
+                        onUnlockBiometric={appLock.tryBiometricUnlock}
+                        onUnlockPassword={unlockWithPassword}
+                        promptEpoch={appLock.promptEpoch}
+                    />
+                </View>
             )}
 
             {appLock.privacyCoverVisible && !isLocked && (
