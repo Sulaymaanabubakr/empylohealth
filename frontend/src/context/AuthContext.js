@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { InteractionManager } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../services/auth/authService';
 import { notificationService } from '../services/api/notificationService';
 import { profileRepository } from '../services/repositories/ProfileRepository';
@@ -24,6 +25,7 @@ const ROUTE_TARGETS = {
     PROFILE_SETUP: 'PROFILE_SETUP',
     APP: 'APP'
 };
+const ACCOUNT_DELETION_FLAG_PREFIX = 'accountDeletionPending:';
 
 const decideInitialRoute = (user, profile) => {
     if (!user) return ROUTE_TARGETS.UNAUTH;
@@ -137,6 +139,16 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                     let normalizedProfile = profile;
 
                     if (!profile) {
+                        const deletionFlag = await AsyncStorage.getItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${currentUser.uid}`);
+                        if (deletionFlag === '1') {
+                            await profileCache.clear(currentUser.uid).catch(() => {});
+                            setUserData(null);
+                            setRouteTarget(ROUTE_TARGETS.UNAUTH);
+                            setBootPhase(BOOT_PHASES.READY);
+                            await authService.logout().catch(() => {});
+                            return;
+                        }
+
                         normalizedProfile = {
                             uid: currentUser.uid,
                             email: currentUser.email || '',
@@ -280,8 +292,21 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const deleteAccount = async () => {
         // Still Functions-backed (privileged + cascade deletes).
         // Implemented in backend as deleteUserAccount callable.
-        await callableClient.invokeWithAuth('deleteUserAccount', {});
-        await logout();
+        const uid = user?.uid;
+        if (!uid) {
+            throw new Error('No authenticated user.');
+        }
+
+        await AsyncStorage.setItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${uid}`, '1');
+        try {
+            await callableClient.invokeWithAuth('deleteUserAccount', {});
+            await logout().catch(() => {});
+            await profileCache.clear(uid).catch(() => {});
+            await AsyncStorage.removeItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${uid}`).catch(() => {});
+        } catch (error) {
+            await AsyncStorage.removeItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${uid}`).catch(() => {});
+            throw error;
+        }
         return { success: true };
     };
 

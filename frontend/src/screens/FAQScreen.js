@@ -81,7 +81,7 @@ const FAQScreen = ({ navigation }) => {
         {
             id: 15,
             question: "How do I delete my account?",
-            answer: "Go to Profile > Account > Security > Delete Account. This is permanent. Some records may be retained or anonymized for safety/legal obligations."
+            answer: "Go to Profile > Account > Delete Account. This is permanent. Some records may be retained or anonymized for safety or legal obligations."
         },
         {
             id: 16,

@@ -342,6 +342,7 @@ const PersonalProfileScreen = ({ navigation }) => {
             { icon: 'notifications-outline', label: 'Notifications', type: 'ionic' },
             { icon: 'person-outline', label: 'Personal Information', type: 'ionic' },
             { icon: 'lock-closed-outline', label: 'Security', type: 'ionic' },
+            { icon: 'trash-outline', label: 'Delete Account', type: 'ionic', destructive: true },
             { icon: 'information-circle-outline', label: 'About Circles Health App', type: 'ionic' },
             { icon: 'school-outline', label: 'Community Education', type: 'ionic' },
             { icon: 'shield-checkmark-outline', label: 'Community Guidelines', type: 'ionic' },
@@ -372,6 +373,8 @@ const PersonalProfileScreen = ({ navigation }) => {
                                     navigation.navigate('PersonalInformation');
                                 } else if (item.label === 'Security') {
                                     navigation.navigate('Security');
+                                } else if (item.label === 'Delete Account') {
+                                    navigation.navigate('Security');
                                 } else if (item.label === 'About Circles Health App') {
                                     navigation.navigate('AboutCircles');
                                 } else if (item.label === 'Community Education') {
@@ -388,8 +391,8 @@ const PersonalProfileScreen = ({ navigation }) => {
                             }}
                         >
                             <View style={styles.settingLeft}>
-                                <Ionicons name={item.icon} size={22} color="#FFA000" />
-                                <Text style={styles.settingLabel}>{item.label}</Text>
+                                <Ionicons name={item.icon} size={22} color={item.destructive ? '#D32F2F' : '#FFA000'} />
+                                <Text style={[styles.settingLabel, item.destructive && styles.settingLabelDestructive]}>{item.label}</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color="#757575" />
                         </TouchableOpacity>
@@ -979,6 +982,10 @@ const styles = StyleSheet.create({
     settingLabel: {
         fontSize: 14,
         color: '#424242',
+    },
+    settingLabelDestructive: {
+        color: '#D32F2F',
+        fontWeight: '600',
     },
     logoutButton: {
         flexDirection: 'row',
