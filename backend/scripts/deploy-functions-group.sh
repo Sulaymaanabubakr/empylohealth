@@ -13,7 +13,7 @@ fi
 
 case "$GROUP" in
   huddle)
-    FUNCTIONS_FILTER="startHuddle,joinHuddle,endHuddle,ringHuddleParticipants,ringPendingHuddles,updateHuddleState,scheduleHuddle,deleteScheduledHuddle,toggleScheduledHuddleReminder,processScheduledHuddles"
+    FUNCTIONS_FILTER="startHuddle,joinHuddle,endHuddle,ringHuddleParticipants,ringPendingHuddles,updateHuddleState,scheduleHuddle,deleteScheduledHuddle,toggleScheduledHuddleReminder,processScheduledHuddles,warnUpcomingSubscriptionHuddleExpiry,expireSubscriptionLimitedHuddles"
     ;;
   chat)
     FUNCTIONS_FILTER="onMessageCreate,createDirectChat,sendMessage,blockUser,unblockUser"
@@ -31,7 +31,7 @@ case "$GROUP" in
     FUNCTIONS_FILTER="submitAssessment,getUserStats,getKeyChallenges,seedChallenges,seedResources,seedAssessmentQuestions,fixAssessmentQuestionsText,seedAffirmations,backfillAffirmationImages,seedAll,getSeedStatus"
     ;;
   user)
-    FUNCTIONS_FILTER="onUserCreate,createEmployee,deleteUserAccount,updateSubscription"
+    FUNCTIONS_FILTER="onUserCreate,createEmployee,deleteUserAccount,updateSubscription,getSubscriptionCatalog,getSubscriptionStatus,validateAppleSubscriptionReceipt,validateGoogleSubscriptionPurchase,restoreSubscriptions,handleAppleSubscriptionNotifications,handleGoogleSubscriptionNotifications"
     ;;
   triggers)
     FUNCTIONS_FILTER="onUserCreate,onMessageCreate"

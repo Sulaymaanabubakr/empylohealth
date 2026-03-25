@@ -11,6 +11,7 @@ import { presenceRepository } from '../services/repositories/PresenceRepository'
 import { callableClient } from '../services/api/callableClient';
 import { appPreloadService } from '../services/bootstrap/appPreloadService';
 import { getDeviceIdentity } from '../services/auth/deviceIdentity';
+import { useToast } from './ToastContext';
 
 export const AuthContext = createContext(undefined);
 
@@ -35,6 +36,7 @@ const decideInitialRoute = (user, profile) => {
 };
 
 export const AuthProvider = ({ children, onAuthReady }) => {
+    const { showToast } = useToast();
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [bootPhase, setBootPhase] = useState(BOOT_PHASES.AUTH_RESOLVING);
@@ -74,10 +76,15 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
     useEffect(() => {
         notificationService.initializeNotificationRouting();
+        notificationService.setForegroundWarningHandler((data) => {
+            const message = String(data?.message || '').trim() || 'This huddle will end automatically in 2 minutes.';
+            showToast(message, 'warning');
+        });
         return () => {
+            notificationService.setForegroundWarningHandler(null);
             notificationService.cleanupNotificationRouting();
         };
-    }, []);
+    }, [showToast]);
 
     useEffect(() => {
         authService.init('433309283212-04ikkhvl2deu6k7qu5kj9cl80q2rcfgu.apps.googleusercontent.com');

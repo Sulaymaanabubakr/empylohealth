@@ -8,6 +8,8 @@ if (admin.apps.length === 0) {
 const db = admin.firestore();
 const regionalFunctions = functions.region('europe-west1');
 const auth = admin.auth();
+type ResourceAccessKind = 'self_development' | 'group_activity';
+type ResourcePlanId = 'free' | 'premium';
 type AdminPermission =
     | 'dashboard.view'
     | 'users.view'
@@ -84,6 +86,46 @@ const requireAdmin = (context: functions.https.CallableContext, permission?: Adm
         throw new functions.https.HttpsError('permission-denied', `Missing permission: ${permission}`);
     }
     return actor;
+};
+
+const normalizeResourceAccessKind = (value: any, category?: any): ResourceAccessKind => {
+    const explicit = String(value || '').trim().toLowerCase();
+    if (explicit === 'group_activity') return 'group_activity';
+    if (explicit === 'self_development') return 'self_development';
+    const normalizedCategory = String(category || '').trim().toLowerCase();
+    return normalizedCategory.includes('group') ? 'group_activity' : 'self_development';
+};
+
+const normalizeResourcePlans = (value: any, kind: ResourceAccessKind): ResourcePlanId[] => {
+    const input = Array.isArray(value) ? value : [];
+    const normalized = input
+        .map((item) => String(item || '').trim().toLowerCase())
+        .filter((item): item is ResourcePlanId => item === 'free' || item === 'premium');
+    const deduped = Array.from(new Set(normalized));
+    if (deduped.length > 0) {
+        if (deduped.includes('free') && !deduped.includes('premium')) deduped.push('premium');
+        return deduped;
+    }
+    return kind === 'group_activity' ? ['premium'] : ['premium'];
+};
+
+const sanitizeResourceAccess = (access: any, category?: any) => {
+    const kind = normalizeResourceAccessKind(access?.kind, category);
+    return {
+        kind,
+        plans: normalizeResourcePlans(access?.plans, kind),
+        shareRequiresPremium: Boolean(access?.shareRequiresPremium)
+    };
+};
+
+const sanitizeRichHtml = (value: any) => {
+    const html = String(value || '').trim();
+    if (!html) return '';
+    return html
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
+        .trim();
 };
 
 const toSerializable = (value: any): any => {
@@ -345,7 +387,7 @@ export const updateContentItem = regionalFunctions.https.onCall(async (data, con
 
     const editableFields: Record<string, string[]> = {
         circles: ['name', 'description', 'image', 'type', 'category', 'status'],
-        resources: ['title', 'description', 'content', 'image', 'category', 'tag', 'time', 'status'],
+        resources: ['title', 'description', 'content', 'contentFormat', 'image', 'category', 'tag', 'time', 'status', 'access'],
         affirmations: ['content', 'scheduledDate', 'status']
     };
 
@@ -354,6 +396,18 @@ export const updateContentItem = regionalFunctions.https.onCall(async (data, con
 
     for (const [key, value] of Object.entries(updates)) {
         if (!allowed.includes(key)) continue;
+        if (collection === 'resources' && key === 'access') {
+            sanitizedUpdates.access = sanitizeResourceAccess(value, updates.category);
+            continue;
+        }
+        if (collection === 'resources' && key === 'content') {
+            sanitizedUpdates.content = sanitizeRichHtml(value);
+            continue;
+        }
+        if (collection === 'resources' && key === 'contentFormat') {
+            sanitizedUpdates.contentFormat = String(value || '').trim().toLowerCase() === 'html' ? 'html' : 'plain';
+            continue;
+        }
         if (typeof value === 'string') {
             sanitizedUpdates[key] = value.trim();
         } else {
@@ -367,6 +421,11 @@ export const updateContentItem = regionalFunctions.https.onCall(async (data, con
 
     sanitizedUpdates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
     sanitizedUpdates.updatedBy = context.auth!.uid;
+
+    if (collection === 'resources' && !sanitizedUpdates.access) {
+        sanitizedUpdates.access = sanitizeResourceAccess(updates?.access, sanitizedUpdates.category);
+        sanitizedUpdates.contentFormat = sanitizedUpdates.contentFormat || 'html';
+    }
 
     try {
         const docRef = db.collection(collection).doc(id);
@@ -386,6 +445,67 @@ export const updateContentItem = regionalFunctions.https.onCall(async (data, con
     } catch (error) {
         console.error('Error editing content item:', error);
         throw new functions.https.HttpsError('internal', 'Unable to update content item.');
+    }
+});
+
+/**
+ * Create Resource
+ */
+export const createResource = regionalFunctions.https.onCall(async (data, context) => {
+    requireAdmin(context, 'content.edit');
+    const input = (data && typeof data === 'object') ? data : {};
+    const title = String(input?.title || '').trim();
+    const content = sanitizeRichHtml(input?.content);
+    const description = String(input?.description || '').trim();
+    const image = String(input?.image || '').trim();
+    const category = String(input?.category || 'Self-development').trim() || 'Self-development';
+    const tag = String(input?.tag || '').trim();
+    const time = String(input?.time || '').trim();
+    const status = String(input?.status || 'active').trim().toLowerCase() || 'active';
+
+    if (!title) {
+        throw new functions.https.HttpsError('invalid-argument', 'Resource title is required.');
+    }
+    if (!description) {
+        throw new functions.https.HttpsError('invalid-argument', 'Resource description is required.');
+    }
+    if (!content) {
+        throw new functions.https.HttpsError('invalid-argument', 'Resource content is required.');
+    }
+
+    const access = sanitizeResourceAccess(input?.access, category);
+
+    try {
+        const ref = await db.collection('resources').add({
+            title,
+            description,
+            content,
+            contentFormat: 'html',
+            image: image || '',
+            category,
+            tag: tag || '',
+            time: time || '',
+            status,
+            access,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdBy: context.auth!.uid,
+            updatedBy: context.auth!.uid,
+            reviewedBy: context.auth!.uid,
+            reviewedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        const afterSnap = await ref.get();
+        await writeAuditLog({
+            context,
+            action: 'create_resource',
+            targetCollection: 'resources',
+            targetId: ref.id,
+            after: afterSnap.data() || null
+        });
+        return { success: true, id: ref.id };
+    } catch (error) {
+        console.error('Error creating resource:', error);
+        throw new functions.https.HttpsError('internal', 'Unable to create resource.');
     }
 });
 

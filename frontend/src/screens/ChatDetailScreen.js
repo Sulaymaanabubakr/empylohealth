@@ -22,6 +22,8 @@ import { toMillis, formatCountdown, formatEventDateTime } from '../utils/schedul
 import { userService } from '../services/api/userService';
 import { formatTimeUK } from '../utils/dateFormat';
 import { findUnsafeUrlsInMessage, sanitizeChatMessageText } from '../utils/chatMessageSafety';
+import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
+import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
 
 const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
 
@@ -631,10 +633,22 @@ const ChatDetailScreen = ({ navigation, route }) => {
             }
         }
 
+        const huddleGuard = await subscriptionGuardService.canStartHuddle();
+        if (!huddleGuard.allowed) {
+            showUpgradePrompt({
+                navigation,
+                showModal,
+                title: 'Huddle unavailable',
+                guard: huddleGuard
+            });
+            return;
+        }
+
         navigation.navigate('Huddle', {
             chat,
             mode: 'start',
-            callTapTs: Date.now()
+            callTapTs: Date.now(),
+            subscriptionGrant: huddleGuard.grantedMinutes ? { grantedMinutes: huddleGuard.grantedMinutes } : undefined
         });
     };
 

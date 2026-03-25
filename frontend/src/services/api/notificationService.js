@@ -19,6 +19,7 @@ let pushRegistrationPromise = null;
 let lastInAppIncoming = { huddleId: null, ts: 0 };
 const incomingHuddleDedupe = new Map();
 let lastHandledNotificationResponseKey = null;
+let foregroundWarningHandler = null;
 const CHAT_MESSAGE_CATEGORY_ID = 'chat-message-actions';
 const CHAT_MESSAGE_ACTION_REPLY = 'chat-reply';
 const CHAT_MESSAGE_ACTION_MARK_READ = 'chat-mark-read';
@@ -160,6 +161,18 @@ const navigateFromNotificationData = async (payload) => {
                     return true;
                 }
             }
+        }
+
+        if (type === 'HUDDLE_LIMIT_WARNING') {
+            if (huddleId) {
+                navigate('Huddle', {
+                    chat: { id: chatId || 'chat', name: data?.chatName || 'Huddle', isGroup: true },
+                    huddleId,
+                    mode: 'join'
+                });
+                return true;
+            }
+            return false;
         }
 
         return false;
@@ -420,6 +433,13 @@ export const notificationService = {
             if (data?.type === 'CHAT_MESSAGE' && currentUid && String(data?.senderId || '') === currentUid) {
                 return;
             }
+            if (data?.type === 'HUDDLE_LIMIT_WARNING' && typeof foregroundWarningHandler === 'function') {
+                try {
+                    foregroundWarningHandler(data);
+                } catch {
+                    // ignore foreground warning handler failure
+                }
+            }
             maybeShowNativeIncomingCall(notification);
         });
 
@@ -468,6 +488,10 @@ export const notificationService = {
         }
         nativeCallService.cleanup();
         notificationRoutingInitialized = false;
+    },
+
+    setForegroundWarningHandler: (handler) => {
+        foregroundWarningHandler = typeof handler === 'function' ? handler : null;
     },
 
     /**

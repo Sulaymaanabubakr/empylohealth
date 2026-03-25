@@ -6,6 +6,9 @@ import { COLORS } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
 import { mediaService } from '../services/api/mediaService';
 import { useModal } from '../context/ModalContext';
+import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
+import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
+import { useAuth } from '../context/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import ImageCropper from '../components/ImageCropper';
 
@@ -14,6 +17,7 @@ const CIRCLE_NAME_MAX_LENGTH = 40;
 
 const CreateCircleScreen = ({ navigation }) => {
     const { showModal } = useModal();
+    const { user } = useAuth();
     const insets = useSafeAreaInsets();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -54,6 +58,20 @@ const CreateCircleScreen = ({ navigation }) => {
 
         setLoading(true);
         try {
+            const circleType = accessType.toLowerCase() === 'private' ? 'private' : 'public';
+            const allCircles = await circleService.getAllCircles().catch(() => []);
+            const ownedCircles = (allCircles || []).filter((circle) => String(circle?.createdBy || circle?.adminId || '') === String(user?.uid || ''));
+            const circleGuard = await subscriptionGuardService.canCreateCircle({ type: circleType, circles: ownedCircles });
+            if (!circleGuard.allowed) {
+                setLoading(false);
+                showUpgradePrompt({
+                    navigation,
+                    showModal,
+                    title: 'Circle limit reached',
+                    guard: circleGuard
+                });
+                return;
+            }
             // NOTE: In a production app, upload 'image' to Firebase Storage here and get URL.
             // For now, passing the URI/Base64. If passing large base64 strings to callable functions, be careful of limits.
             // We'll pass the image URI/Data.

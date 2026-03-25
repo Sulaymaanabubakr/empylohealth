@@ -17,6 +17,8 @@ import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
 import * as ImagePicker from 'expo-image-picker';
 import { formatDateTimeUK } from '../utils/dateFormat';
+import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
+import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
 
 const CIRCLE_NAME_MAX_LENGTH = 40;
 
@@ -625,6 +627,17 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         }
         try {
             setActionLoading(true);
+            const guard = await subscriptionGuardService.canScheduleHuddle({ circleId });
+            if (!guard.allowed) {
+                setActionLoading(false);
+                showUpgradePrompt({
+                    navigation,
+                    showModal,
+                    title: 'Scheduling unavailable',
+                    guard
+                });
+                return;
+            }
             await circleService.scheduleHuddle(circleId, eventTitle, eventDate);
             setShowScheduleModal(false);
             setEventTitle('');

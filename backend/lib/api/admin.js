@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backfillUserCircles = exports.getAdminAuditLogs = exports.bulkUpdateContent = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = void 0;
+exports.backfillUserCircles = exports.getAdminAuditLogs = exports.bulkUpdateContent = exports.updateTicketStatus = exports.getSupportTickets = exports.resolveReport = exports.getReports = exports.getTransactions = exports.deleteAffirmation = exports.createAffirmation = exports.getAdminAffirmations = exports.deleteItem = exports.toggleUserStatus = exports.createResource = exports.updateContentItem = exports.updateContentStatus = exports.getAllContent = exports.getPendingContent = exports.getAllUsers = exports.getDashboardStats = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 // Re-initialize if needed (though index.ts usually handles this)
@@ -101,6 +101,46 @@ const requireAdmin = (context, permission) => {
         throw new functions.https.HttpsError('permission-denied', `Missing permission: ${permission}`);
     }
     return actor;
+};
+const normalizeResourceAccessKind = (value, category) => {
+    const explicit = String(value || '').trim().toLowerCase();
+    if (explicit === 'group_activity')
+        return 'group_activity';
+    if (explicit === 'self_development')
+        return 'self_development';
+    const normalizedCategory = String(category || '').trim().toLowerCase();
+    return normalizedCategory.includes('group') ? 'group_activity' : 'self_development';
+};
+const normalizeResourcePlans = (value, kind) => {
+    const input = Array.isArray(value) ? value : [];
+    const normalized = input
+        .map((item) => String(item || '').trim().toLowerCase())
+        .filter((item) => item === 'free' || item === 'premium');
+    const deduped = Array.from(new Set(normalized));
+    if (deduped.length > 0) {
+        if (deduped.includes('free') && !deduped.includes('premium'))
+            deduped.push('premium');
+        return deduped;
+    }
+    return kind === 'group_activity' ? ['premium'] : ['premium'];
+};
+const sanitizeResourceAccess = (access, category) => {
+    const kind = normalizeResourceAccessKind(access?.kind, category);
+    return {
+        kind,
+        plans: normalizeResourcePlans(access?.plans, kind),
+        shareRequiresPremium: Boolean(access?.shareRequiresPremium)
+    };
+};
+const sanitizeRichHtml = (value) => {
+    const html = String(value || '').trim();
+    if (!html)
+        return '';
+    return html
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
+        .trim();
 };
 const toSerializable = (value) => {
     if (!value || typeof value !== 'object')
@@ -329,7 +369,7 @@ exports.updateContentItem = regionalFunctions.https.onCall(async (data, context)
     }
     const editableFields = {
         circles: ['name', 'description', 'image', 'type', 'category', 'status'],
-        resources: ['title', 'description', 'content', 'image', 'category', 'tag', 'time', 'status'],
+        resources: ['title', 'description', 'content', 'contentFormat', 'image', 'category', 'tag', 'time', 'status', 'access'],
         affirmations: ['content', 'scheduledDate', 'status']
     };
     const allowed = editableFields[collection] || [];
@@ -337,6 +377,18 @@ exports.updateContentItem = regionalFunctions.https.onCall(async (data, context)
     for (const [key, value] of Object.entries(updates)) {
         if (!allowed.includes(key))
             continue;
+        if (collection === 'resources' && key === 'access') {
+            sanitizedUpdates.access = sanitizeResourceAccess(value, updates.category);
+            continue;
+        }
+        if (collection === 'resources' && key === 'content') {
+            sanitizedUpdates.content = sanitizeRichHtml(value);
+            continue;
+        }
+        if (collection === 'resources' && key === 'contentFormat') {
+            sanitizedUpdates.contentFormat = String(value || '').trim().toLowerCase() === 'html' ? 'html' : 'plain';
+            continue;
+        }
         if (typeof value === 'string') {
             sanitizedUpdates[key] = value.trim();
         }
@@ -349,6 +401,10 @@ exports.updateContentItem = regionalFunctions.https.onCall(async (data, context)
     }
     sanitizedUpdates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
     sanitizedUpdates.updatedBy = context.auth.uid;
+    if (collection === 'resources' && !sanitizedUpdates.access) {
+        sanitizedUpdates.access = sanitizeResourceAccess(updates?.access, sanitizedUpdates.category);
+        sanitizedUpdates.contentFormat = sanitizedUpdates.contentFormat || 'html';
+    }
     try {
         const docRef = db.collection(collection).doc(id);
         const beforeSnap = await docRef.get();
@@ -368,6 +424,64 @@ exports.updateContentItem = regionalFunctions.https.onCall(async (data, context)
     catch (error) {
         console.error('Error editing content item:', error);
         throw new functions.https.HttpsError('internal', 'Unable to update content item.');
+    }
+});
+/**
+ * Create Resource
+ */
+exports.createResource = regionalFunctions.https.onCall(async (data, context) => {
+    requireAdmin(context, 'content.edit');
+    const input = (data && typeof data === 'object') ? data : {};
+    const title = String(input?.title || '').trim();
+    const content = sanitizeRichHtml(input?.content);
+    const description = String(input?.description || '').trim();
+    const image = String(input?.image || '').trim();
+    const category = String(input?.category || 'Self-development').trim() || 'Self-development';
+    const tag = String(input?.tag || '').trim();
+    const time = String(input?.time || '').trim();
+    const status = String(input?.status || 'active').trim().toLowerCase() || 'active';
+    if (!title) {
+        throw new functions.https.HttpsError('invalid-argument', 'Resource title is required.');
+    }
+    if (!description) {
+        throw new functions.https.HttpsError('invalid-argument', 'Resource description is required.');
+    }
+    if (!content) {
+        throw new functions.https.HttpsError('invalid-argument', 'Resource content is required.');
+    }
+    const access = sanitizeResourceAccess(input?.access, category);
+    try {
+        const ref = await db.collection('resources').add({
+            title,
+            description,
+            content,
+            contentFormat: 'html',
+            image: image || '',
+            category,
+            tag: tag || '',
+            time: time || '',
+            status,
+            access,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdBy: context.auth.uid,
+            updatedBy: context.auth.uid,
+            reviewedBy: context.auth.uid,
+            reviewedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        const afterSnap = await ref.get();
+        await writeAuditLog({
+            context,
+            action: 'create_resource',
+            targetCollection: 'resources',
+            targetId: ref.id,
+            after: afterSnap.data() || null
+        });
+        return { success: true, id: ref.id };
+    }
+    catch (error) {
+        console.error('Error creating resource:', error);
+        throw new functions.https.HttpsError('internal', 'Unable to create resource.');
     }
 });
 /**

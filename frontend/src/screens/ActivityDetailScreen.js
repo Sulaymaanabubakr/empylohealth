@@ -1,11 +1,16 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Share } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
+import { useModal } from '../context/ModalContext';
+import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
+import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
+import { RichContentRenderer } from '../components/RichContentRenderer';
 
 const ActivityDetailScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
+    const { showModal } = useModal();
 
     const { activity } = route.params || {};
     if (!activity) {
@@ -23,6 +28,8 @@ const ActivityDetailScreen = ({ navigation, route }) => {
     const durationLabel = String(activity?.time || '5 min');
     const descriptionText = String(activity?.description || '').trim() || 'This guided activity helps you build healthy wellbeing habits in small, consistent steps.';
     const rawContent = String(activity?.content || '').trim();
+    const contentFormat = String(activity?.contentFormat || '').trim().toLowerCase();
+    const isRichHtml = contentFormat === 'html' || /<\/?[a-z][\s\S]*>/i.test(rawContent);
     const parsedParagraphs = (rawContent || descriptionText)
         .split(/\n{2,}/)
         .map((part) => part.trim())
@@ -39,6 +46,44 @@ const ActivityDetailScreen = ({ navigation, route }) => {
     const badgeBg = useDarkText ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.25)';
     const badgeBorder = useDarkText ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.4)';
 
+    useEffect(() => {
+        let cancelled = false;
+        const checkAccess = async () => {
+            const guard = await subscriptionGuardService.canAccessActivity({ resource: activity });
+            if (!cancelled && !guard.allowed) {
+                navigation.goBack();
+                showUpgradePrompt({
+                    navigation,
+                    showModal,
+                    title: 'Premium activity',
+                    guard
+                });
+            }
+        };
+        checkAccess().catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [activity, navigation, showModal]);
+
+    const handleShare = async () => {
+        const guard = await subscriptionGuardService.canShareActivity({ resource: activity });
+        if (!guard.allowed) {
+            showUpgradePrompt({
+                navigation,
+                showModal,
+                title: 'Sharing unavailable',
+                guard
+            });
+            return;
+        }
+        const text = `${activity?.title || 'Activity'}\n\n${descriptionText}`;
+        await Share.share({
+            message: text,
+            title: activity?.title || 'Activity'
+        }).catch(() => {});
+    };
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle={useDarkText ? 'dark-content' : 'light-content'} backgroundColor={accentColor} />
@@ -50,7 +95,7 @@ const ActivityDetailScreen = ({ navigation, route }) => {
                         <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
                             <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.iconButton}>
+                        <TouchableOpacity style={styles.iconButton} onPress={handleShare}>
                             <Ionicons name="share-social-outline" size={24} color={textColor} />
                         </TouchableOpacity>
                     </View>
@@ -70,11 +115,15 @@ const ActivityDetailScreen = ({ navigation, route }) => {
 
                 {/* Content Area */}
                 <View style={styles.contentContainer}>
-                    {contentParagraphs.map((paragraph, index) => (
-                        <Text key={`${index}-${paragraph.slice(0, 20)}`} style={styles.sectionText}>
-                            {paragraph}
-                        </Text>
-                    ))}
+                    {isRichHtml ? (
+                        <RichContentRenderer html={rawContent} />
+                    ) : (
+                        contentParagraphs.map((paragraph, index) => (
+                            <Text key={`${index}-${paragraph.slice(0, 20)}`} style={styles.sectionText}>
+                                {paragraph}
+                            </Text>
+                        ))
+                    )}
 
                     {activity.steps && activity.steps.map((step, index) => (
                         <Text key={index} style={styles.sectionText}>

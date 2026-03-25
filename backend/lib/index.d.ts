@@ -28,6 +28,8 @@ export declare const ringPendingHuddles: import("firebase-functions/scheduler").
 export declare const updateHuddleState: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateHuddleConnection: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const cleanupStaleHuddles: import("firebase-functions/scheduler").ScheduleFunction;
+export declare const warnUpcomingSubscriptionHuddleExpiry: import("firebase-functions/scheduler").ScheduleFunction;
+export declare const expireSubscriptionLimitedHuddles: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const scheduleHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const deleteScheduledHuddle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const toggleScheduledHuddleReminder: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
@@ -51,6 +53,11 @@ export declare const backfillAffirmationImages: import("firebase-functions/v1").
 export declare const seedAll: import("firebase-functions/v1").HttpsFunction;
 export declare const getSeedStatus: import("firebase-functions/v1").HttpsFunction;
 export declare const updateSubscription: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const getSubscriptionCatalog: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const getSubscriptionStatus: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const validateAppleSubscriptionReceipt: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const validateGoogleSubscriptionPurchase: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const restoreSubscriptions: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getExploreContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getRecommendedContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
@@ -58,6 +65,8 @@ export declare const submitContactForm: import("firebase-functions/v1").HttpsFun
 export declare const resolveDeepLink: import("firebase-functions/v1").HttpsFunction;
 export declare const serveAssetLinks: import("firebase-functions/v1").HttpsFunction;
 export declare const serveAppleAssociation: import("firebase-functions/v1").HttpsFunction;
+export declare const handleAppleSubscriptionNotifications: import("firebase-functions/v1").HttpsFunction;
+export declare const handleGoogleSubscriptionNotifications: import("firebase-functions/v1").HttpsFunction;
 export declare const sendAffirmationsMorning: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const sendAffirmationsAfternoon: import("firebase-functions/scheduler").ScheduleFunction;
 export declare const sendAffirmationsEvening: import("firebase-functions/scheduler").ScheduleFunction;
@@ -76,6 +85,7 @@ export declare const getPendingContent: import("firebase-functions/v1").HttpsFun
 export declare const getAllContent: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateContentStatus: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateContentItem: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const createResource: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const toggleUserStatus: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const deleteItem: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const getAdminAffirmations: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

@@ -43,6 +43,7 @@ import PublicProfileScreen from './screens/PublicProfileScreen';
 import NotificationsSettingsScreen from './screens/NotificationsSettingsScreen';
 import PersonalInformationScreen from './screens/PersonalInformationScreen';
 import SecurityScreen from './screens/SecurityScreen';
+import SubscriptionScreen from './screens/SubscriptionScreen';
 import TellAFriendScreen from './screens/TellAFriendScreen';
 import FAQScreen from './screens/FAQScreen';
 import CommunityGuidelinesScreen from './screens/CommunityGuidelinesScreen';
@@ -382,6 +383,7 @@ export default function Navigation() {
                         <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
                         <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />
                         <Stack.Screen name="Security" component={SecurityScreen} />
+                        <Stack.Screen name="Subscription" component={SubscriptionScreen} />
                         <Stack.Screen name="TellAFriend" component={TellAFriendScreen} />
                         <Stack.Screen name="Invitations" component={InvitationsScreen} />
                         <Stack.Screen name="FAQ" component={FAQScreen} />

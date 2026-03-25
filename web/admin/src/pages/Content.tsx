@@ -7,6 +7,7 @@ import { Search, Filter, BookOpen, Users, MessageCircle, Calendar, Plus, RotateC
 import clsx from 'clsx';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { RichContentEditor } from '../components/RichContentEditor';
 
 type ContentTab = 'circles' | 'resources' | 'affirmations';
 type ContentStatus = 'all' | 'active' | 'pending' | 'suspended' | 'rejected';
@@ -31,6 +32,12 @@ interface ContentItem {
     isNew?: boolean;
     scheduledDate?: string;
     createdAt?: string | TimestampLike;
+    contentFormat?: 'plain' | 'html';
+    access?: {
+        kind?: 'self_development' | 'group_activity';
+        plans?: Array<'free' | 'premium'>;
+        shareRequiresPremium?: boolean;
+    };
 }
 
 interface EditFormState {
@@ -45,11 +52,33 @@ interface EditFormState {
     time: string;
     status: string;
     scheduledDate: string;
+    contentFormat: 'plain' | 'html';
+    accessKind: 'self_development' | 'group_activity';
+    accessPlans: Array<'free' | 'premium'>;
+    shareRequiresPremium: boolean;
 }
 
 interface ContentListResponse {
     items?: ContentItem[];
 }
+
+const EMPTY_EDIT_FORM: EditFormState = {
+    name: '',
+    title: '',
+    description: '',
+    content: '',
+    image: '',
+    type: '',
+    category: '',
+    tag: '',
+    time: '',
+    status: '',
+    scheduledDate: '',
+    contentFormat: 'html',
+    accessKind: 'self_development',
+    accessPlans: ['premium'],
+    shareRequiresPremium: false
+};
 
 const TABS: Array<{ id: ContentTab; label: string }> = [
     { id: 'circles', label: 'Circles' },
@@ -60,6 +89,17 @@ const TABS: Array<{ id: ContentTab; label: string }> = [
 const STATUS_OPTIONS: ContentStatus[] = ['all', 'active', 'pending', 'suspended', 'rejected'];
 
 const isContentStatus = (value: string): value is ContentStatus => STATUS_OPTIONS.includes(value as ContentStatus);
+
+const inferAccessKindFromCategory = (category: string): 'self_development' | 'group_activity' => (
+    String(category || '').trim().toLowerCase().includes('group') ? 'group_activity' : 'self_development'
+);
+
+const getAccessPlans = (item?: ContentItem): Array<'free' | 'premium'> => {
+    const plans = Array.isArray(item?.access?.plans)
+        ? item!.access!.plans!.filter((plan): plan is 'free' | 'premium' => plan === 'free' || plan === 'premium')
+        : [];
+    return plans.length > 0 ? plans : ['premium'];
+};
 
 export const Content = () => {
     const { can } = useAuth();
@@ -79,20 +119,15 @@ export const Content = () => {
     const [affirmationDate, setAffirmationDate] = useState(new Date().toISOString().split('T')[0]);
     const [submitting, setSubmitting] = useState(false);
     const [editingItem, setEditingItem] = useState<ContentItem | null>(null);
-    const [editForm, setEditForm] = useState<EditFormState>({
-        name: '',
-        title: '',
-        description: '',
-        content: '',
-        image: '',
-        type: '',
-        category: '',
-        tag: '',
-        time: '',
-        status: '',
-        scheduledDate: ''
-    });
+    const [editForm, setEditForm] = useState<EditFormState>(EMPTY_EDIT_FORM);
     const [savingEdit, setSavingEdit] = useState(false);
+    const [showCreateResource, setShowCreateResource] = useState(false);
+    const [creatingResource, setCreatingResource] = useState(false);
+    const [createForm, setCreateForm] = useState<EditFormState>({
+        ...EMPTY_EDIT_FORM,
+        category: 'Self-development',
+        status: 'active'
+    });
 
     useEffect(() => {
         const queryParam = searchParams.get('query');
@@ -217,13 +252,25 @@ export const Content = () => {
             tag: item.tag || '',
             time: item.time || '',
             status: item.status || '',
-            scheduledDate: item.scheduledDate || ''
+            scheduledDate: item.scheduledDate || '',
+            contentFormat: item.contentFormat || 'html',
+            accessKind: item.access?.kind || inferAccessKindFromCategory(item.category || ''),
+            accessPlans: getAccessPlans(item),
+            shareRequiresPremium: Boolean(item.access?.shareRequiresPremium)
         });
     };
 
     const closeEditModal = () => {
         if (savingEdit) return;
         setEditingItem(null);
+    };
+
+    const resetCreateForm = () => {
+        setCreateForm({
+            ...EMPTY_EDIT_FORM,
+            category: 'Self-development',
+            status: 'active'
+        });
     };
 
     const handleSaveEdit = async () => {
@@ -233,7 +280,7 @@ export const Content = () => {
         setMessage(null);
         try {
             const updateContentItem = httpsCallable(functions, 'updateContentItem');
-            const updates: Record<string, string> = {};
+            const updates: Record<string, any> = {};
 
             if (activeTab === 'circles') {
                 updates.name = editForm.name;
@@ -251,6 +298,12 @@ export const Content = () => {
                 updates.tag = editForm.tag;
                 updates.time = editForm.time;
                 updates.status = editForm.status;
+                updates.contentFormat = 'html';
+                updates.access = {
+                    kind: editForm.accessKind,
+                    plans: editForm.accessPlans,
+                    shareRequiresPremium: editForm.shareRequiresPremium
+                };
             } else {
                 updates.content = editForm.content;
                 updates.scheduledDate = editForm.scheduledDate;
@@ -275,6 +328,40 @@ export const Content = () => {
             setMessage({ type: 'error', text: 'Failed to update content.' });
         } finally {
             setSavingEdit(false);
+        }
+    };
+
+    const handleCreateResource = async () => {
+        if (!canEditContent || creatingResource) return;
+        setCreatingResource(true);
+        setMessage(null);
+        try {
+            const createResource = httpsCallable(functions, 'createResource');
+            await createResource({
+                title: createForm.title,
+                description: createForm.description,
+                content: createForm.content,
+                contentFormat: 'html',
+                image: createForm.image,
+                category: createForm.category,
+                tag: createForm.tag,
+                time: createForm.time,
+                status: createForm.status || 'active',
+                access: {
+                    kind: createForm.accessKind,
+                    plans: createForm.accessPlans,
+                    shareRequiresPremium: createForm.shareRequiresPremium
+                }
+            });
+            await fetchContent();
+            setShowCreateResource(false);
+            resetCreateForm();
+            setMessage({ type: 'success', text: 'Resource created successfully.' });
+        } catch (error) {
+            console.error('Failed to create resource', error);
+            setMessage({ type: 'error', text: 'Failed to create resource.' });
+        } finally {
+            setCreatingResource(false);
         }
     };
 
@@ -344,6 +431,18 @@ export const Content = () => {
                     <h2 className="text-3xl font-display text-gray-900 dark:text-gray-100">Content Library</h2>
                     <p className="text-gray-500 text-sm mt-1 dark:text-gray-400">Manage circles, resources, and daily affirmations with clear status control.</p>
                 </div>
+                {activeTab === 'resources' && canEditContent && (
+                    <button
+                        onClick={() => {
+                            setShowCreateResource((prev) => !prev);
+                            if (showCreateResource) resetCreateForm();
+                        }}
+                        className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm hover:bg-[#008f85]"
+                    >
+                        <Plus size={18} />
+                        {showCreateResource ? 'Close resource form' : 'New resource'}
+                    </button>
+                )}
             </div>
 
             {message && (
@@ -405,6 +504,145 @@ export const Content = () => {
                                 Post Affirmation
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'resources' && showCreateResource && (
+                <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden p-6 dark:bg-dark dark:border-gray-800 space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Create Resource</h3>
+                            <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">Set plan access when the content is created so premium gating stays attached to the item itself.</p>
+                        </div>
+                    </div>
+
+                    <input
+                        value={createForm.title}
+                        onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                        placeholder="Title"
+                    />
+                    <textarea
+                        value={createForm.description}
+                        onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm h-24 resize-none"
+                        placeholder="Short description"
+                    />
+                    <RichContentEditor
+                        value={createForm.content}
+                        onChange={(content) => setCreateForm((prev) => ({ ...prev, content, contentFormat: 'html' }))}
+                        placeholder="Write the full resource content with headings, colors, images, and videos."
+                    />
+                    <input
+                        value={createForm.image}
+                        onChange={(e) => setCreateForm((prev) => ({ ...prev, image: e.target.value }))}
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                        placeholder="Image URL"
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <input
+                            value={createForm.category}
+                            onChange={(e) => setCreateForm((prev) => {
+                                const category = e.target.value;
+                                const inferredKind = inferAccessKindFromCategory(category);
+                                return {
+                                    ...prev,
+                                    category,
+                                    accessKind: inferredKind,
+                                    accessPlans: inferredKind === 'group_activity' ? ['premium'] : prev.accessPlans
+                                };
+                            })}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                            placeholder="Category"
+                        />
+                        <input
+                            value={createForm.tag}
+                            onChange={(e) => setCreateForm((prev) => ({ ...prev, tag: e.target.value }))}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                            placeholder="Tag"
+                        />
+                        <input
+                            value={createForm.time}
+                            onChange={(e) => setCreateForm((prev) => ({ ...prev, time: e.target.value }))}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                            placeholder="Time (e.g. 10 min)"
+                        />
+                        <input
+                            value={createForm.status}
+                            onChange={(e) => setCreateForm((prev) => ({ ...prev, status: e.target.value }))}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                            placeholder="Status"
+                        />
+                    </div>
+
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-4">
+                        <div>
+                            <h4 className="text-sm font-semibold text-gray-900">Subscription Access</h4>
+                            <p className="text-xs text-gray-600 mt-1">Choose who can open this activity and whether sharing stays premium-only.</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Activity type</label>
+                                <select
+                                    value={createForm.accessKind}
+                                    onChange={(e) => setCreateForm((prev) => ({
+                                        ...prev,
+                                        accessKind: e.target.value as 'self_development' | 'group_activity',
+                                        accessPlans: e.target.value === 'group_activity' ? ['premium'] : prev.accessPlans
+                                    }))}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                                >
+                                    <option value="self_development">Self-development</option>
+                                    <option value="group_activity">Group activity</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Access level</label>
+                                <select
+                                    value={createForm.accessPlans.includes('free') ? 'free_and_premium' : 'premium_only'}
+                                    onChange={(e) => setCreateForm((prev) => ({
+                                        ...prev,
+                                        accessPlans: e.target.value === 'free_and_premium' && prev.accessKind !== 'group_activity'
+                                            ? ['free', 'premium']
+                                            : ['premium']
+                                    }))}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                                    disabled={createForm.accessKind === 'group_activity'}
+                                >
+                                    <option value="premium_only">Premium only</option>
+                                    <option value="free_and_premium">Free + Premium</option>
+                                </select>
+                            </div>
+                            <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 mt-[22px]">
+                                <input
+                                    type="checkbox"
+                                    checked={createForm.shareRequiresPremium}
+                                    onChange={(e) => setCreateForm((prev) => ({ ...prev, shareRequiresPremium: e.target.checked }))}
+                                    className="h-4 w-4 rounded border-gray-300"
+                                />
+                                <span className="text-sm text-gray-700">Sharing requires Premium</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3">
+                        <button
+                            onClick={() => {
+                                setShowCreateResource(false);
+                                resetCreateForm();
+                            }}
+                            className="px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleCreateResource}
+                            disabled={!canEditContent || creatingResource}
+                            className="px-4 py-2 rounded-lg text-sm bg-primary text-white hover:bg-[#008f85] disabled:opacity-50"
+                        >
+                            {creatingResource ? 'Creating...' : 'Create Resource'}
+                        </button>
                     </div>
                 </div>
             )}
@@ -526,6 +764,16 @@ export const Content = () => {
                                                     <div className="flex items-center gap-2">
                                                         <p className="font-semibold text-gray-900 text-sm dark:text-gray-100">{item.name || item.title || item.content || 'Untitled'}</p>
                                                         {item.isNew && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">NEW</span>}
+                                                        {activeTab === 'resources' && (
+                                                            <span className={clsx(
+                                                                "text-[10px] px-1.5 py-0.5 rounded font-medium",
+                                                                item.access?.plans?.includes('free')
+                                                                    ? 'bg-sky-100 text-sky-700'
+                                                                    : 'bg-amber-100 text-amber-700'
+                                                            )}>
+                                                                {item.access?.plans?.includes('free') ? 'FREE' : 'PREMIUM'}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <p className="text-xs text-gray-500 line-clamp-1 dark:text-gray-400">{item.description || (activeTab === 'affirmations' ? 'Daily Affirmation' : 'No description')}</p>
                                                 </div>
@@ -714,11 +962,10 @@ export const Content = () => {
                                         className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm h-24 resize-none"
                                         placeholder="Short description"
                                     />
-                                    <textarea
+                                    <RichContentEditor
                                         value={editForm.content}
-                                        onChange={(e) => setEditForm((prev) => ({ ...prev, content: e.target.value }))}
-                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm h-40 resize-y"
-                                        placeholder="Full article content"
+                                        onChange={(content) => setEditForm((prev) => ({ ...prev, content, contentFormat: 'html' }))}
+                                        placeholder="Write the full resource content with headings, colors, images, and videos."
                                     />
                                     <input
                                         value={editForm.image}
@@ -729,7 +976,16 @@ export const Content = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                         <input
                                             value={editForm.category}
-                                            onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
+                                            onChange={(e) => setEditForm((prev) => {
+                                                const category = e.target.value;
+                                                const inferredKind = inferAccessKindFromCategory(category);
+                                                return {
+                                                    ...prev,
+                                                    category,
+                                                    accessKind: inferredKind,
+                                                    accessPlans: inferredKind === 'group_activity' ? ['premium'] : prev.accessPlans
+                                                };
+                                            })}
                                             className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
                                             placeholder="Category"
                                         />
@@ -751,6 +1007,56 @@ export const Content = () => {
                                             className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
                                             placeholder="Status"
                                         />
+                                    </div>
+
+                                    <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-4">
+                                        <div>
+                                            <h4 className="text-sm font-semibold text-gray-900">Subscription Access</h4>
+                                            <p className="text-xs text-gray-600 mt-1">Set whether this resource is free, premium-only, or share-restricted.</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Activity type</label>
+                                                <select
+                                                    value={editForm.accessKind}
+                                                    onChange={(e) => setEditForm((prev) => ({
+                                                        ...prev,
+                                                        accessKind: e.target.value as 'self_development' | 'group_activity',
+                                                        accessPlans: e.target.value === 'group_activity' ? ['premium'] : prev.accessPlans
+                                                    }))}
+                                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                                                >
+                                                    <option value="self_development">Self-development</option>
+                                                    <option value="group_activity">Group activity</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Access level</label>
+                                                <select
+                                                    value={editForm.accessPlans.includes('free') ? 'free_and_premium' : 'premium_only'}
+                                                    onChange={(e) => setEditForm((prev) => ({
+                                                        ...prev,
+                                                        accessPlans: e.target.value === 'free_and_premium' && prev.accessKind !== 'group_activity'
+                                                            ? ['free', 'premium']
+                                                            : ['premium']
+                                                    }))}
+                                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                                                    disabled={editForm.accessKind === 'group_activity'}
+                                                >
+                                                    <option value="premium_only">Premium only</option>
+                                                    <option value="free_and_premium">Free + Premium</option>
+                                                </select>
+                                            </div>
+                                            <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 mt-[22px]">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={editForm.shareRequiresPremium}
+                                                    onChange={(e) => setEditForm((prev) => ({ ...prev, shareRequiresPremium: e.target.checked }))}
+                                                    className="h-4 w-4 rounded border-gray-300"
+                                                />
+                                                <span className="text-sm text-gray-700">Sharing requires Premium</span>
+                                            </label>
+                                        </div>
                                     </div>
                                 </>
                             )}

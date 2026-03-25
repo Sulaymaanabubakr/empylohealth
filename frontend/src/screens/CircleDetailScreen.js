@@ -19,6 +19,8 @@ import { toMillis, formatCountdown, formatEventDateTime } from '../utils/schedul
 import { buildCircleShareText } from '../utils/deepLinks';
 import { isPresenceOnline, presenceFreshnessMs } from '../utils/presence';
 import { formatDateUK } from '../utils/dateFormat';
+import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
+import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
 
 const { width } = Dimensions.get('window');
 
@@ -665,10 +667,22 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                                 return;
                                             }
 
+                                            const huddleGuard = await subscriptionGuardService.canStartHuddle();
+                                            if (!huddleGuard.allowed) {
+                                                showUpgradePrompt({
+                                                    navigation,
+                                                    showModal,
+                                                    title: 'Huddle unavailable',
+                                                    guard: huddleGuard
+                                                });
+                                                return;
+                                            }
+
                                             navigation.navigate('Huddle', {
                                                 chat: { id: circle.chatId, name: circle.name, isGroup: true },
                                                 mode: 'start',
-                                                callTapTs: Date.now()
+                                                callTapTs: Date.now(),
+                                                subscriptionGrant: huddleGuard.grantedMinutes ? { grantedMinutes: huddleGuard.grantedMinutes } : undefined
                                             });
                                         }}
                                     >

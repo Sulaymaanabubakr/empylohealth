@@ -9,6 +9,9 @@ import { resourceService } from '../services/api/resourceService';
 import { assessmentService } from '../services/api/assessmentService';
 import { useAuth } from '../context/AuthContext';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
+import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
+import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
+import { useModal } from '../context/ModalContext';
 
 
 const { width } = Dimensions.get('window');
@@ -29,6 +32,7 @@ const decodeSvgDataUri = (uri = '') => {
 const ExploreScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
+    const { showModal } = useModal();
     const [activeTab, setActiveTab] = useState('Self-development');
     const [activeFilter, setActiveFilter] = useState('All');
     const [activities, setActivities] = useState([]);
@@ -67,14 +71,16 @@ const ExploreScreen = ({ navigation }) => {
             const activitiesToShow = Array.isArray(recommendedItems) && recommendedItems.length > 0
                 ? recommendedItems
                 : fallbackItems;
+            await subscriptionGuardService.getSubscriptionStatus();
+            const gatedActivities = subscriptionGuardService.filterActivities(activitiesToShow || []);
             console.log('ExploreScreen: fetched', activitiesToShow.length, 'recommended resources,', circles.length, 'circles,', affs.length, 'affirmations');
-            setActivities(activitiesToShow);
+            setActivities(gatedActivities);
             const publicCircles = (circles || []).filter((circle) => (circle?.type || 'public') === 'public');
             setSupportGroups(publicCircles);
             setAffirmations(affs);
             if (user?.uid) {
                 screenCacheService.set(`explore:${user.uid}`, {
-                    activities: activitiesToShow || [],
+                    activities: gatedActivities || [],
                     supportGroups: publicCircles || [],
                     affirmations: affs || [],
                 });
@@ -215,7 +221,19 @@ const ExploreScreen = ({ navigation }) => {
                                         <TouchableOpacity
                                             key={item.id}
                                             style={styles.activityCard}
-                                            onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                                            onPress={async () => {
+                                                const guard = await subscriptionGuardService.canAccessActivity({ resource: item });
+                                                if (!guard.allowed) {
+                                                    showUpgradePrompt({
+                                                        navigation,
+                                                        showModal,
+                                                        title: 'Premium activity',
+                                                        guard
+                                                    });
+                                                    return;
+                                                }
+                                                navigation.navigate('ActivityDetail', { activity: item });
+                                            }}
                                         >
                                             <View style={styles.timeBadge}>
                                                 <Text style={styles.timeText}>{time}</Text>

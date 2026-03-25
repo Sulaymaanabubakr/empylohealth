@@ -36,17 +36,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.deleteScheduledHuddle = exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.joinCircleWithInvite = exports.resolveInviteToken = exports.consumeAppInvite = exports.resolveAppInvite = exports.listCircleInvites = exports.revokeCircleInvite = exports.listUserInvitations = exports.createAppInvite = exports.createCircleInvite = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
-exports.deleteUserAccount = exports.submitContactForm = exports.serveAppleAssociation = exports.serveAssetLinks = exports.resolveDeepLink = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = void 0;
+exports.toggleScheduledHuddleReminder = exports.scheduleHuddle = exports.expireSubscriptionLimitedHuddles = exports.warnUpcomingSubscriptionHuddleExpiry = exports.cleanupStaleHuddles = exports.updateHuddleState = exports.ringPendingHuddles = exports.ringHuddleParticipants = exports.endHuddle = exports.updateHuddleConnection = exports.declineHuddle = exports.joinHuddle = exports.startHuddle = exports.restoreSubscriptions = exports.validateGoogleSubscriptionPurchase = exports.validateAppleSubscriptionReceipt = exports.getSubscriptionStatus = exports.getSubscriptionCatalog = exports.updateSubscription = exports.getRecommendedContent = exports.getKeyChallenges = exports.getUserStats = exports.seedResources = exports.seedChallenges = exports.fixAssessmentQuestionsText = exports.seedAssessmentQuestions = exports.submitAssessment = exports.unblockUser = exports.blockUser = exports.sendMessage = exports.getPublicProfile = exports.createDirectChat = exports.handleJoinRequest = exports.manageMember = exports.deleteChat = exports.deleteCircle = exports.leaveCircle = exports.joinCircle = exports.joinCircleWithInvite = exports.resolveInviteToken = exports.consumeAppInvite = exports.resolveAppInvite = exports.listCircleInvites = exports.revokeCircleInvite = exports.listUserInvitations = exports.createAppInvite = exports.createCircleInvite = exports.updateCircle = exports.createCircle = exports.generateUploadSignature = void 0;
+exports.deleteUserAccount = exports.submitContactForm = exports.handleGoogleSubscriptionNotifications = exports.handleAppleSubscriptionNotifications = exports.serveAppleAssociation = exports.serveAssetLinks = exports.resolveDeepLink = exports.sendAffirmationsEvening = exports.sendAffirmationsAfternoon = exports.sendAffirmationsMorning = exports.getSeedStatus = exports.seedAll = exports.backfillAffirmationImages = exports.seedAffirmations = exports.getAffirmations = exports.getExploreContent = exports.resolveCircleReport = exports.submitReport = exports.triggerDueScheduledHuddles = exports.processScheduledHuddles = exports.deleteScheduledHuddle = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const apn_1 = __importDefault(require("apn"));
 const crypto_1 = require("crypto");
+const fs_1 = require("fs");
+const google_auth_library_1 = require("google-auth-library");
+const path_1 = require("path");
 const cloudinary_1 = require("cloudinary");
 const seedData_1 = require("../seedData");
 const security_1 = require("./security");
 const chatLinkSafety_1 = require("../utils/chatLinkSafety");
+const subscription_1 = require("../services/subscription");
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
@@ -307,7 +311,6 @@ exports.generateUploadSignature = regionalFunctions.https.onCall((data, context)
 // ==========================================
 // CIRCLE FUNCTIONS
 // ==========================================
-const MAX_PRIVATE_CIRCLES_PER_CREATOR = 4;
 const MAX_CIRCLE_MEMBERS = 6;
 const INVITE_DEFAULT_EXPIRY_HOURS = 168; // 7 days
 const INVITE_MIN_EXPIRY_HOURS = 1;
@@ -629,16 +632,10 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', `Circle name must be ${CIRCLE_NAME_MAX_LENGTH} characters or fewer.`);
     }
     try {
-        if (type === 'private') {
-            const existing = await db.collection('circles')
-                .where('adminId', '==', uid)
-                .where('type', '==', 'private')
-                .where('status', '==', 'active')
-                .limit(MAX_PRIVATE_CIRCLES_PER_CREATOR + 1)
-                .get();
-            if (existing.size >= MAX_PRIVATE_CIRCLES_PER_CREATOR) {
-                throw new functions.https.HttpsError('failed-precondition', `You can only create up to ${MAX_PRIVATE_CIRCLES_PER_CREATOR} private circles.`);
-            }
+        const normalizedType = type === 'private' ? 'private' : 'public';
+        const circleGuard = await canCreateCircleForState(uid, normalizedType);
+        if (!circleGuard.allowed) {
+            throw new functions.https.HttpsError('failed-precondition', circleGuard.message);
         }
         const batch = db.batch();
         // 3. Create Circle Doc
@@ -659,10 +656,10 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
             tags: normalizedTags,
             image: image || null,
             status: 'active',
-            type: type || 'public', // 'public' | 'private'
+            type: normalizedType, // 'public' | 'private'
             visibility: visibility || 'visible', // 'visible' | 'hidden'
             joinSettings: {
-                requiresApproval: type === 'private',
+                requiresApproval: normalizedType === 'private',
                 questions: []
             },
             createdBy: uid,
@@ -706,6 +703,23 @@ exports.createCircle = regionalFunctions.https.onCall(async (data, context) => {
         });
         batch.update(circleRef, { chatId: chatRef.id });
         await batch.commit();
+        const usageState = await getUserSubscriptionState(uid);
+        await usageState.usageRef.set({
+            uid,
+            serverDay: usageState.dayKey,
+            timezoneBasis: usageState.timeZone,
+            circleCreates: {
+                public: normalizedType === 'public'
+                    ? Number(usageState.usage?.circleCreates?.public || 0) + 1
+                    : Number(usageState.usage?.circleCreates?.public || 0),
+                private: normalizedType === 'private'
+                    ? Number(usageState.usage?.circleCreates?.private || 0) + 1
+                    : Number(usageState.usage?.circleCreates?.private || 0)
+            },
+            lastEventAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
         console.log(`[Circles] Circle created: ${name} (${circleRef.id}) by ${uid}`);
         return { success: true, circleId: circleRef.id };
     }
@@ -2554,7 +2568,8 @@ exports.getRecommendedContent = regionalFunctions.https.onCall(async (data, cont
                     break;
             }
         }
-        const mapped = items.slice(0, 10).map((item) => {
+        const gatedItems = await filterResourcesForUid(uid, items.slice(0, 10));
+        const mapped = gatedItems.map((item) => {
             const reason = item._matchedThemes?.[0]
                 ? `Based on your ${String(item._matchedThemes[0])} assessment`
                 : 'Recommended for your wellbeing goals';
@@ -2581,6 +2596,802 @@ exports.updateSubscription = regionalFunctions.https.onCall(async (data, context
     if (!context.auth)
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     throw new functions.https.HttpsError('failed-precondition', 'Direct subscription updates are disabled. Use verified in-app purchase receipts.');
+});
+const SUBSCRIPTION_IOS_PRODUCT_IDS = (process.env.IOS_SUBSCRIPTION_PRODUCT_IDS || '')
+    .split(',')
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+const SUBSCRIPTION_ANDROID_PRODUCT_IDS = (process.env.ANDROID_SUBSCRIPTION_PRODUCT_IDS || '')
+    .split(',')
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+const ANDROID_PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME || 'com.empylo.circlesapp';
+const APPLE_SERVER_API_PRODUCTION_BASE = 'https://api.storekit.itunes.apple.com';
+const APPLE_SERVER_API_SANDBOX_BASE = 'https://api.storekit-sandbox.itunes.apple.com';
+const APPLE_SERVER_API_AUDIENCE = 'appstoreconnect-v1';
+const APPLE_SERVER_API_ISSUER_ID = String(process.env.APPLE_IN_APP_PURCHASE_ISSUER_ID || '').trim();
+const APPLE_SERVER_API_KEY_ID = String(process.env.APPLE_IN_APP_PURCHASE_KEY_ID || '').trim();
+const APPLE_SERVER_API_KEY_P8 = (() => {
+    const inline = String(process.env.APPLE_IN_APP_PURCHASE_KEY_P8 || '').trim();
+    if (inline)
+        return inline.replace(/\\n/g, '\n');
+    const encoded = String(process.env.APPLE_IN_APP_PURCHASE_KEY_P8_BASE64 || '').trim();
+    if (!encoded)
+        return '';
+    try {
+        return Buffer.from(encoded, 'base64').toString('utf8').trim();
+    }
+    catch {
+        return '';
+    }
+})();
+const APPLE_SERVER_API_BUNDLE_ID = String(process.env.IOS_BUNDLE_ID || 'com.empylo.circlesapp').trim();
+const SUBSCRIPTION_ACTIVITY_GATING_ENABLED = String(process.env.SUBSCRIPTION_ACTIVITY_GATING_ENABLED || 'false').toLowerCase() === 'true';
+const sanitizeProductId = (value) => String(value || '').trim();
+const getUserSubscriptionState = async (uid) => {
+    const [userSnap, entitlementSnap] = await Promise.all([
+        db.collection('users').doc(uid).get(),
+        (0, subscription_1.getEntitlementRef)(db, uid).get()
+    ]);
+    const userData = userSnap.exists ? (userSnap.data() || {}) : {};
+    const entitlement = entitlementSnap.exists ? (entitlementSnap.data() || {}) : {};
+    const plan = (0, subscription_1.getEffectivePlan)(entitlement);
+    const timeZone = getUserTimezone(userData);
+    const dayKey = (0, subscription_1.getUsageDayKeyForTimezone)(timeZone);
+    const usageSnap = await (0, subscription_1.getDailyUsageRef)(db, uid, dayKey).get();
+    const usage = usageSnap.exists
+        ? (0, subscription_1.coerceUsageSnapshot)(uid, usageSnap.data(), dayKey, timeZone)
+        : (0, subscription_1.coerceUsageSnapshot)(uid, null, dayKey, timeZone);
+    return {
+        userData,
+        entitlement,
+        plan,
+        planRules: (0, subscription_1.getPlanRulesForEntitlement)(entitlement),
+        timeZone,
+        dayKey,
+        usage,
+        usageRef: (0, subscription_1.getDailyUsageRef)(db, uid, dayKey)
+    };
+};
+const buildGuardResult = (input) => ({
+    allowed: input.allowed !== false,
+    reasonCode: input.reasonCode || '',
+    message: input.message || '',
+    plan: input.plan,
+    usage: input.usage,
+    upgradeCta: 'upgrade',
+    ...(typeof input.grantedMinutes === 'number' ? { grantedMinutes: input.grantedMinutes } : {}),
+    ...(input.dayKey ? { dayKey: input.dayKey } : {}),
+    ...(input.timeZone ? { timeZone: input.timeZone } : {})
+});
+const getReasonMessage = (reasonCode) => subscription_1.SUBSCRIPTION_REASON_MESSAGES[reasonCode] || 'This feature requires Premium.';
+const canCreateCircleForState = async (uid, circleType) => {
+    const state = await getUserSubscriptionState(uid);
+    const limit = state.planRules.circleLimits[circleType];
+    const usageSummary = (0, subscription_1.buildUsageSummary)(state.usage, state.planRules);
+    if (limit == null) {
+        return buildGuardResult({ plan: state.plan, usage: usageSummary });
+    }
+    const existing = await db.collection('circles')
+        .where('createdBy', '==', uid)
+        .where('type', '==', circleType)
+        .where('status', '==', 'active')
+        .limit(limit + 1)
+        .get();
+    if (existing.size >= limit) {
+        const reasonCode = circleType === 'private' ? 'circle_private_limit_reached' : 'circle_public_limit_reached';
+        return buildGuardResult({
+            allowed: false,
+            reasonCode,
+            message: getReasonMessage(reasonCode),
+            plan: state.plan,
+            usage: usageSummary
+        });
+    }
+    return buildGuardResult({ plan: state.plan, usage: usageSummary });
+};
+const canStartHuddleForState = async (uid) => {
+    const state = await getUserSubscriptionState(uid);
+    const usageSummary = (0, subscription_1.buildUsageSummary)(state.usage, state.planRules);
+    if (usageSummary.huddlesStarted >= state.planRules.huddlesPerDay) {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'huddle_daily_count_reached',
+            message: getReasonMessage('huddle_daily_count_reached'),
+            plan: state.plan,
+            usage: usageSummary
+        });
+    }
+    if (usageSummary.huddleMinutesRemaining <= 0) {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'huddle_daily_minutes_reached',
+            message: getReasonMessage('huddle_daily_minutes_reached'),
+            plan: state.plan,
+            usage: usageSummary
+        });
+    }
+    const grantedMinutes = Math.min(state.planRules.huddleMinutesPerSession, usageSummary.huddleMinutesRemaining);
+    if (grantedMinutes <= 0) {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'huddle_duration_grant_unavailable',
+            message: getReasonMessage('huddle_duration_grant_unavailable'),
+            plan: state.plan,
+            usage: usageSummary
+        });
+    }
+    return buildGuardResult({
+        plan: state.plan,
+        usage: usageSummary,
+        grantedMinutes,
+        dayKey: state.dayKey,
+        timeZone: state.timeZone
+    });
+};
+const canScheduleForState = async (uid) => {
+    const state = await getUserSubscriptionState(uid);
+    const usageSummary = (0, subscription_1.buildUsageSummary)(state.usage, state.planRules);
+    if (!state.planRules.activities.allowSchedule) {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'schedule_requires_premium',
+            message: getReasonMessage('schedule_requires_premium'),
+            plan: state.plan,
+            usage: usageSummary
+        });
+    }
+    return buildGuardResult({ plan: state.plan, usage: usageSummary });
+};
+const canAccessActivityForState = async (uid, resource, action = 'view') => {
+    const state = await getUserSubscriptionState(uid);
+    const usageSummary = (0, subscription_1.buildUsageSummary)(state.usage, state.planRules);
+    if (!SUBSCRIPTION_ACTIVITY_GATING_ENABLED) {
+        return buildGuardResult({ plan: state.plan, usage: usageSummary });
+    }
+    const access = (0, subscription_1.canAccessResourceForPlan)(resource, state.plan);
+    if (!access.allowed) {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: access.reasonCode,
+            message: getReasonMessage(access.reasonCode),
+            plan: state.plan,
+            usage: usageSummary
+        });
+    }
+    if (action === 'share' && (0, subscription_1.isSharePremiumOnly)(resource) && state.plan !== 'premium') {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'activity_share_requires_premium',
+            message: getReasonMessage('activity_share_requires_premium'),
+            plan: state.plan,
+            usage: usageSummary
+        });
+    }
+    return buildGuardResult({ plan: state.plan, usage: usageSummary });
+};
+const syncUserSubscriptionSummary = async (uid, entitlement) => {
+    const source = entitlement ?? (await (0, subscription_1.getEntitlementRef)(db, uid).get()).data() ?? {};
+    const summary = (0, subscription_1.buildSubscriptionSummary)(source);
+    await db.collection('users').doc(uid).set({
+        subscription: summary,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return summary;
+};
+const buildSubscriptionStatusResponse = async (uid) => {
+    const state = await getUserSubscriptionState(uid);
+    const summary = await syncUserSubscriptionSummary(uid, state.entitlement);
+    const usageSummary = (0, subscription_1.buildUsageSummary)(state.usage, state.planRules);
+    return {
+        entitlement: summary,
+        usage: usageSummary,
+        plans: Object.values(subscription_1.PLAN_RULES),
+        activityGatingEnabled: SUBSCRIPTION_ACTIVITY_GATING_ENABLED
+    };
+};
+const filterResourcesForUid = async (uid, resources) => {
+    const state = await getUserSubscriptionState(uid);
+    if (!SUBSCRIPTION_ACTIVITY_GATING_ENABLED) {
+        return resources.map((resource) => ({
+            ...resource,
+            access: {
+                ...(resource?.access || {}),
+                kind: (0, subscription_1.getActivityAccessKind)(resource),
+                plans: (0, subscription_1.getAllowedPlansForResource)(resource)
+            }
+        }));
+    }
+    return resources
+        .map((resource) => ({
+        ...resource,
+        access: {
+            ...(resource?.access || {}),
+            kind: (0, subscription_1.getActivityAccessKind)(resource),
+            plans: (0, subscription_1.getAllowedPlansForResource)(resource)
+        }
+    }))
+        .filter((resource) => (0, subscription_1.canAccessResourceForPlan)(resource, state.plan).allowed);
+};
+const getGoogleAccessToken = async () => {
+    const auth = new google_auth_library_1.GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/androidpublisher']
+    });
+    const client = await auth.getClient();
+    const tokenResponse = await client.getAccessToken();
+    const token = typeof tokenResponse === 'string' ? tokenResponse : tokenResponse?.token;
+    if (!token) {
+        throw new functions.https.HttpsError('internal', 'Unable to authenticate with Google Play.');
+    }
+    return token;
+};
+const toBase64Url = (input) => Buffer.from(input).toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+const createAppleServerApiToken = () => {
+    if (!APPLE_SERVER_API_ISSUER_ID || !APPLE_SERVER_API_KEY_ID || !APPLE_SERVER_API_KEY_P8 || !APPLE_SERVER_API_BUNDLE_ID) {
+        throw new functions.https.HttpsError('failed-precondition', 'Apple App Store Server API credentials are not configured. Set APPLE_IN_APP_PURCHASE_ISSUER_ID, APPLE_IN_APP_PURCHASE_KEY_ID, APPLE_IN_APP_PURCHASE_KEY_P8_BASE64, and IOS_BUNDLE_ID.');
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const header = {
+        alg: 'ES256',
+        kid: APPLE_SERVER_API_KEY_ID,
+        typ: 'JWT'
+    };
+    const payload = {
+        iss: APPLE_SERVER_API_ISSUER_ID,
+        iat: now,
+        exp: now + (5 * 60),
+        aud: APPLE_SERVER_API_AUDIENCE,
+        bid: APPLE_SERVER_API_BUNDLE_ID
+    };
+    const encodedHeader = toBase64Url(JSON.stringify(header));
+    const encodedPayload = toBase64Url(JSON.stringify(payload));
+    const signer = (0, crypto_1.createSign)('SHA256');
+    signer.update(`${encodedHeader}.${encodedPayload}`);
+    signer.end();
+    const signature = signer.sign(APPLE_SERVER_API_KEY_P8);
+    return `${encodedHeader}.${encodedPayload}.${toBase64Url(signature)}`;
+};
+const fetchAppleServerApiJson = async (path, options = {}) => {
+    const baseUrl = options.sandbox ? APPLE_SERVER_API_SANDBOX_BASE : APPLE_SERVER_API_PRODUCTION_BASE;
+    const response = await fetch(`${baseUrl}${path}`, {
+        headers: {
+            Authorization: `Bearer ${createAppleServerApiToken()}`
+        }
+    });
+    const text = await response.text();
+    const payload = text ? JSON.parse(text) : {};
+    if (!response.ok) {
+        const error = new Error(`Apple App Store Server API request failed (${response.status}).`);
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
+    }
+    return payload;
+};
+const fetchAppleServerApiJsonWithFallback = async (path) => {
+    try {
+        return await fetchAppleServerApiJson(path, { sandbox: false });
+    }
+    catch (error) {
+        const status = Number(error?.status || 0);
+        if (status === 404 || status === 400) {
+            return fetchAppleServerApiJson(path, { sandbox: true });
+        }
+        throw error;
+    }
+};
+const normalizeAppleServerTransaction = (transaction, renewalInfo = {}) => {
+    const expiresAtMs = Number(transaction?.expiresDate || transaction?.expiresDateMs || 0);
+    const purchaseAtMs = Number(transaction?.purchaseDate || transaction?.purchaseDateMs || 0);
+    const autoRenewStatus = String(renewalInfo?.autoRenewStatus ?? renewalInfo?.autoRenewPreference ?? '1');
+    return {
+        plan: 'premium',
+        status: expiresAtMs > Date.now() ? 'active' : 'expired',
+        platformSource: 'ios',
+        productId: String(transaction?.productId || ''),
+        originalTransactionId: String(transaction?.originalTransactionId || transaction?.transactionId || ''),
+        purchaseToken: String(transaction?.transactionId || transaction?.originalTransactionId || ''),
+        startsAt: purchaseAtMs > 0 ? admin.firestore.Timestamp.fromMillis(purchaseAtMs) : null,
+        expiresAt: expiresAtMs > 0 ? admin.firestore.Timestamp.fromMillis(expiresAtMs) : null,
+        renewalState: autoRenewStatus === '0' ? 'auto_renew_off' : 'auto_renew_on',
+        lastValidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+};
+const selectLatestAppleSubscription = (payload, productId) => {
+    const candidates = (Array.isArray(payload?.data) ? payload.data : [])
+        .flatMap((group) => Array.isArray(group?.lastTransactions) ? group.lastTransactions : [])
+        .map((entry) => {
+        const transaction = entry?.signedTransactionInfo
+            ? assertAppleSignedPayload(String(entry.signedTransactionInfo))
+            : null;
+        const renewalInfo = entry?.signedRenewalInfo
+            ? assertAppleSignedPayload(String(entry.signedRenewalInfo))
+            : null;
+        return {
+            transaction,
+            renewalInfo
+        };
+    })
+        .filter((entry) => entry.transaction)
+        .filter((entry) => !productId || String(entry.transaction?.productId || '') === productId)
+        .sort((a, b) => {
+        const aExpires = Number(a.transaction?.expiresDate || a.transaction?.expiresDateMs || 0);
+        const bExpires = Number(b.transaction?.expiresDate || b.transaction?.expiresDateMs || 0);
+        return bExpires - aExpires;
+    });
+    return candidates[0] || null;
+};
+const getAppleTransactionInfo = async (transactionId) => {
+    const payload = await fetchAppleServerApiJsonWithFallback(`/inApps/v1/transactions/${encodeURIComponent(transactionId)}`);
+    if (!payload?.signedTransactionInfo) {
+        throw new functions.https.HttpsError('failed-precondition', 'Apple transaction lookup did not return signed transaction info.');
+    }
+    return assertAppleSignedPayload(String(payload.signedTransactionInfo));
+};
+const verifyAppleSubscriptionTransaction = async (input) => {
+    const productId = sanitizeProductId(input?.productId);
+    const transactionId = String(input?.transactionId || '').trim();
+    const suppliedOriginalTransactionId = String(input?.originalTransactionId || '').trim();
+    const signedTransactionInfo = String(input?.signedTransactionInfo || '').trim();
+    const signedTransaction = signedTransactionInfo ? assertAppleSignedPayload(signedTransactionInfo) : null;
+    let originalTransactionId = suppliedOriginalTransactionId || String(signedTransaction?.originalTransactionId || '').trim();
+    if (!originalTransactionId && transactionId) {
+        const lookedUpTransaction = await getAppleTransactionInfo(transactionId);
+        originalTransactionId = String(lookedUpTransaction?.originalTransactionId || lookedUpTransaction?.transactionId || '').trim();
+    }
+    if (originalTransactionId) {
+        const payload = await fetchAppleServerApiJsonWithFallback(`/inApps/v1/subscriptions/${encodeURIComponent(originalTransactionId)}`);
+        const latest = selectLatestAppleSubscription(payload, productId);
+        if (latest?.transaction) {
+            return normalizeAppleServerTransaction(latest.transaction, latest.renewalInfo || {});
+        }
+    }
+    if (transactionId) {
+        const lookedUpTransaction = await getAppleTransactionInfo(transactionId);
+        if (productId && String(lookedUpTransaction?.productId || '') !== productId) {
+            throw new functions.https.HttpsError('failed-precondition', 'Apple transaction does not match the requested product.');
+        }
+        return normalizeAppleServerTransaction(lookedUpTransaction, {});
+    }
+    if (signedTransaction) {
+        if (productId && String(signedTransaction?.productId || '') !== productId) {
+            throw new functions.https.HttpsError('failed-precondition', 'Apple signed transaction does not match the requested product.');
+        }
+        return normalizeAppleServerTransaction(signedTransaction, {});
+    }
+    throw new functions.https.HttpsError('invalid-argument', 'Apple validation requires transactionId, originalTransactionId, or signedTransactionInfo.');
+};
+const verifyGoogleSubscription = async (purchaseToken, productId) => {
+    const token = await getGoogleAccessToken();
+    const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(ANDROID_PACKAGE_NAME)}/purchases/subscriptions/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}`;
+    const response = await fetch(url, {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new functions.https.HttpsError('failed-precondition', `Google purchase validation failed (${response.status}): ${text || 'unknown error'}`);
+    }
+    const payload = await response.json();
+    const expiryTimeMillis = Number(payload?.expiryTimeMillis || 0);
+    const startTimeMillis = Number(payload?.startTimeMillis || 0);
+    const autoRenewing = payload?.autoRenewing !== false;
+    return {
+        plan: 'premium',
+        status: expiryTimeMillis > Date.now() ? 'active' : 'expired',
+        platformSource: 'android',
+        productId,
+        originalTransactionId: String(payload?.orderId || purchaseToken),
+        purchaseToken,
+        startsAt: startTimeMillis > 0 ? admin.firestore.Timestamp.fromMillis(startTimeMillis) : null,
+        expiresAt: expiryTimeMillis > 0 ? admin.firestore.Timestamp.fromMillis(expiryTimeMillis) : null,
+        renewalState: autoRenewing ? 'auto_renew_on' : 'auto_renew_off',
+        lastValidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+};
+const persistEntitlement = async (uid, entitlement) => {
+    await (0, subscription_1.getEntitlementRef)(db, uid).set(entitlement, { merge: true });
+    const summary = await syncUserSubscriptionSummary(uid, entitlement);
+    return summary;
+};
+const decodeJwtSegment = (segment) => {
+    const normalized = String(segment || '').replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    return Buffer.from(padded, 'base64').toString('utf8');
+};
+const getJwtParts = (token) => {
+    const segments = String(token || '').split('.');
+    if (segments.length !== 3)
+        throw new Error('Invalid JWT format.');
+    const [encodedHeader, encodedPayload, encodedSignature] = segments;
+    return {
+        encodedHeader,
+        encodedPayload,
+        encodedSignature,
+        header: JSON.parse(decodeJwtSegment(encodedHeader || '')),
+        payload: JSON.parse(decodeJwtSegment(encodedPayload || ''))
+    };
+};
+const certFromX5c = (value) => `-----BEGIN CERTIFICATE-----\n${String(value || '').match(/.{1,64}/g)?.join('\n') || ''}\n-----END CERTIFICATE-----\n`;
+const assertAppleSignedPayload = (token) => {
+    const { encodedHeader, encodedPayload, encodedSignature, header, payload } = getJwtParts(token);
+    if (String(header?.alg || '') !== 'ES256') {
+        throw new Error('Unsupported Apple notification signing algorithm.');
+    }
+    const x5c = Array.isArray(header?.x5c) ? header.x5c : [];
+    if (x5c.length < 2) {
+        throw new Error('Apple notification certificate chain is missing.');
+    }
+    const leafCert = new crypto_1.X509Certificate(certFromX5c(String(x5c[0] || '')));
+    const intermediateCert = new crypto_1.X509Certificate(certFromX5c(String(x5c[1] || '')));
+    const now = Date.now();
+    if (Date.parse(leafCert.validFrom) > now || Date.parse(leafCert.validTo) < now) {
+        throw new Error('Apple leaf certificate is not currently valid.');
+    }
+    if (Date.parse(intermediateCert.validFrom) > now || Date.parse(intermediateCert.validTo) < now) {
+        throw new Error('Apple intermediate certificate is not currently valid.');
+    }
+    if (!leafCert.verify(intermediateCert.publicKey)) {
+        throw new Error('Apple notification certificate chain verification failed.');
+    }
+    const rootPemPath = String(process.env.APPLE_ROOT_CA_PATH || '').trim() || (0, path_1.resolve)(__dirname, '../../certs/AppleRootCA-G3.pem');
+    const rootPem = (0, fs_1.existsSync)(rootPemPath)
+        ? (0, fs_1.readFileSync)(rootPemPath, 'utf8').trim()
+        : String(process.env.APPLE_ROOT_CA_PEM || '').trim();
+    if (rootPem) {
+        const rootCert = new crypto_1.X509Certificate(rootPem.replace(/\\n/g, '\n'));
+        if (!intermediateCert.verify(rootCert.publicKey)) {
+            throw new Error('Apple intermediate certificate root verification failed.');
+        }
+    }
+    const verifier = (0, crypto_1.createVerify)('sha256');
+    verifier.update(`${encodedHeader}.${encodedPayload}`);
+    verifier.end();
+    const signature = Buffer.from(String(encodedSignature || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    if (!verifier.verify(leafCert.publicKey, signature)) {
+        throw new Error('Apple notification signature verification failed.');
+    }
+    return payload;
+};
+const assertGooglePubSubBearer = async (req) => {
+    const authHeader = String(req.headers?.authorization || '').trim();
+    if (!authHeader.toLowerCase().startsWith('bearer ')) {
+        throw new Error('Missing Google Pub/Sub bearer token.');
+    }
+    const idToken = authHeader.slice(7).trim();
+    const audience = String(process.env.GOOGLE_PUBSUB_AUDIENCE || '').trim();
+    if (!audience) {
+        throw new Error('GOOGLE_PUBSUB_AUDIENCE is not configured.');
+    }
+    const auth = new google_auth_library_1.GoogleAuth();
+    const client = await auth.getIdTokenClient(audience);
+    const ticket = await client.verifyIdToken({
+        idToken,
+        audience
+    });
+    const payload = ticket.getPayload();
+    if (!payload) {
+        throw new Error('Invalid Google Pub/Sub bearer token.');
+    }
+    const expectedEmail = String(process.env.GOOGLE_PUBSUB_SERVICE_ACCOUNT_EMAIL || '').trim();
+    if (expectedEmail && String(payload.email || '').trim() !== expectedEmail) {
+        throw new Error('Unexpected Google Pub/Sub service account.');
+    }
+    return payload;
+};
+const mapAppleNotificationStatus = (notificationType, subtype, expiresAtMs) => {
+    const type = String(notificationType || '').trim().toUpperCase();
+    const sub = String(subtype || '').trim().toUpperCase();
+    if (type === 'EXPIRED' || type === 'REVOKE')
+        return 'expired';
+    if (type === 'DID_FAIL_TO_RENEW' && sub === 'GRACE_PERIOD')
+        return 'grace_period';
+    if (type === 'DID_FAIL_TO_RENEW')
+        return 'expired';
+    if (type === 'DID_CHANGE_RENEWAL_STATUS' && sub === 'AUTO_RENEW_DISABLED')
+        return expiresAtMs > Date.now() ? 'active' : 'canceled';
+    if (type === 'REFUND')
+        return 'expired';
+    if (expiresAtMs > Date.now())
+        return 'active';
+    return 'expired';
+};
+const updateAppleEntitlementsFromNotification = async (signedPayload) => {
+    const payload = assertAppleSignedPayload(signedPayload);
+    const notificationType = String(payload?.notificationType || '');
+    const subtype = String(payload?.subtype || '');
+    const data = payload?.data || {};
+    const transactionInfo = data?.signedTransactionInfo ? assertAppleSignedPayload(String(data.signedTransactionInfo)) : {};
+    const renewalInfo = data?.signedRenewalInfo ? assertAppleSignedPayload(String(data.signedRenewalInfo)) : {};
+    const originalTransactionId = String(transactionInfo?.originalTransactionId ||
+        renewalInfo?.originalTransactionId ||
+        data?.originalTransactionId ||
+        '').trim();
+    const productId = String(transactionInfo?.productId || renewalInfo?.productId || '').trim();
+    const expiresAtMs = Number(transactionInfo?.expiresDate || transactionInfo?.expiresDateMs || 0);
+    const startsAtMs = Number(transactionInfo?.purchaseDate || transactionInfo?.purchaseDateMs || 0);
+    const status = mapAppleNotificationStatus(notificationType, subtype, expiresAtMs);
+    const eventDoc = {
+        provider: 'apple',
+        notificationType,
+        subtype,
+        originalTransactionId,
+        productId,
+        receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        raw: payload
+    };
+    await db.collection('subscriptionWebhookEvents').add(eventDoc);
+    if (!originalTransactionId) {
+        return { updated: 0, matched: 0 };
+    }
+    const snap = await db.collection('subscriptionEntitlements')
+        .where('originalTransactionId', '==', originalTransactionId)
+        .limit(20)
+        .get();
+    let updated = 0;
+    for (const docSnap of snap.docs) {
+        await docSnap.ref.set({
+            status,
+            plan: 'premium',
+            platformSource: 'ios',
+            productId: productId || docSnap.data()?.productId || null,
+            originalTransactionId,
+            startsAt: startsAtMs > 0 ? admin.firestore.Timestamp.fromMillis(startsAtMs) : docSnap.data()?.startsAt || null,
+            expiresAt: expiresAtMs > 0 ? admin.firestore.Timestamp.fromMillis(expiresAtMs) : docSnap.data()?.expiresAt || null,
+            renewalState: String(renewalInfo?.autoRenewStatus || '') === '0' ? 'auto_renew_off' : 'auto_renew_on',
+            lastValidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        await syncUserSubscriptionSummary(docSnap.id, {
+            ...docSnap.data(),
+            status,
+            plan: 'premium',
+            platformSource: 'ios',
+            productId: productId || docSnap.data()?.productId || null,
+            originalTransactionId,
+            startsAt: startsAtMs > 0 ? admin.firestore.Timestamp.fromMillis(startsAtMs) : docSnap.data()?.startsAt || null,
+            expiresAt: expiresAtMs > 0 ? admin.firestore.Timestamp.fromMillis(expiresAtMs) : docSnap.data()?.expiresAt || null,
+            renewalState: String(renewalInfo?.autoRenewStatus || '') === '0' ? 'auto_renew_off' : 'auto_renew_on'
+        });
+        updated += 1;
+    }
+    return { updated, matched: snap.size };
+};
+const mapGoogleNotificationToFallbackStatus = (notificationType) => {
+    if ([1, 2, 4, 7].includes(notificationType))
+        return 'active';
+    if ([3, 12, 13].includes(notificationType))
+        return 'expired';
+    if ([5, 6, 10, 11].includes(notificationType))
+        return 'expired';
+    return 'expired';
+};
+const updateGoogleEntitlementsFromNotification = async (messageData) => {
+    const payload = JSON.parse(Buffer.from(String(messageData || ''), 'base64').toString('utf8'));
+    const subscriptionNotification = payload?.subscriptionNotification || {};
+    const purchaseToken = String(subscriptionNotification?.purchaseToken || '').trim();
+    const productId = String(subscriptionNotification?.subscriptionId || '').trim();
+    const notificationType = Number(subscriptionNotification?.notificationType || 0);
+    await db.collection('subscriptionWebhookEvents').add({
+        provider: 'google',
+        notificationType,
+        purchaseToken,
+        productId,
+        packageName: payload?.packageName || ANDROID_PACKAGE_NAME,
+        eventTimeMillis: Number(payload?.eventTimeMillis || 0),
+        receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        raw: payload
+    });
+    if (!purchaseToken || !productId) {
+        return { updated: 0, matched: 0 };
+    }
+    const snap = await db.collection('subscriptionEntitlements')
+        .where('platformSource', '==', 'android')
+        .where('purchaseToken', '==', purchaseToken)
+        .limit(20)
+        .get();
+    let updated = 0;
+    for (const docSnap of snap.docs) {
+        try {
+            const entitlement = await verifyGoogleSubscription(purchaseToken, productId);
+            await persistEntitlement(docSnap.id, entitlement);
+        }
+        catch {
+            const fallbackStatus = mapGoogleNotificationToFallbackStatus(notificationType);
+            await docSnap.ref.set({
+                status: fallbackStatus,
+                productId,
+                lastValidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            await syncUserSubscriptionSummary(docSnap.id, {
+                ...docSnap.data(),
+                status: fallbackStatus,
+                productId
+            });
+        }
+        updated += 1;
+    }
+    return { updated, matched: snap.size };
+};
+const finalizeHuddleUsage = async (huddleRef, huddle, options) => {
+    const grant = huddle?.subscriptionGrant;
+    if (!grant || !options.endForEveryone)
+        return;
+    const startedBy = String(huddle?.startedBy || '');
+    const usageDayKey = String(grant?.usageDayKey || '').trim();
+    if (!startedBy || !usageDayKey)
+        return;
+    const usageRef = (0, subscription_1.getDailyUsageRef)(db, startedBy, usageDayKey);
+    await db.runTransaction(async (tx) => {
+        const usageSnap = await tx.get(usageRef);
+        if (!usageSnap.exists)
+            return;
+        const usage = (0, subscription_1.coerceUsageSnapshot)(startedBy, usageSnap.data(), usageDayKey, String(grant?.timeZone || 'UTC'));
+        if (usage.finalizedHuddleIds.includes(huddleRef.id))
+            return;
+        const reservedMinutes = Number(grant?.grantedMinutes || 0);
+        const consumedMinutes = Math.min(reservedMinutes, Math.max(0, (0, subscription_1.minutesBetween)(huddle?.ringStartedAt || huddle?.createdAt, admin.firestore.Timestamp.now())));
+        const activeReservations = { ...(usage.activeReservations || {}) };
+        delete activeReservations[huddleRef.id];
+        tx.set(usageRef, {
+            huddleMinutesReserved: Math.max(0, Number(usage.huddleMinutesReserved || 0) - reservedMinutes),
+            huddleMinutesConsumed: Math.max(0, Number(usage.huddleMinutesConsumed || 0) + consumedMinutes),
+            activeReservations,
+            finalizedHuddleIds: admin.firestore.FieldValue.arrayUnion(huddleRef.id),
+            lastEventAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    });
+};
+const sendSubscriptionHuddleWarning = async (params) => {
+    const { huddleId, chatId, recipientUids, title, body } = params;
+    const uniqueRecipients = Array.from(new Set(recipientUids.filter(Boolean)));
+    if (uniqueRecipients.length === 0)
+        return;
+    const batch = db.batch();
+    const fcmTokens = [];
+    const expoMessages = [];
+    for (const uid of uniqueRecipients) {
+        const userSnap = await db.collection('users').doc(uid).get().catch(() => null);
+        const userData = userSnap?.data?.() || {};
+        const userFcm = Array.isArray(userData?.fcmTokens) ? userData.fcmTokens : [];
+        const userExpo = Array.isArray(userData?.expoPushTokens) ? userData.expoPushTokens : [];
+        fcmTokens.push(...userFcm.map((value) => String(value || '').trim()).filter(Boolean));
+        expoMessages.push(...userExpo.map((token) => ({
+            to: String(token || '').trim(),
+            title,
+            body,
+            data: {
+                type: 'HUDDLE_LIMIT_WARNING',
+                huddleId,
+                chatId
+            }
+        })).filter((item) => item.to));
+        batch.set(db.collection('notifications').doc(`subwarn_${huddleId}_${uid}`), {
+            uid,
+            title,
+            subtitle: body,
+            type: 'HUDDLE_LIMIT_WARNING',
+            chatId,
+            huddleId,
+            read: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    }
+    await batch.commit();
+    if (fcmTokens.length > 0) {
+        await admin.messaging().sendEachForMulticast({
+            tokens: fcmTokens,
+            notification: { title, body },
+            data: {
+                type: 'HUDDLE_LIMIT_WARNING',
+                huddleId,
+                chatId
+            }
+        }).catch(() => { });
+    }
+    if (expoMessages.length > 0) {
+        await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(expoMessages)
+        }).catch(() => { });
+    }
+};
+exports.getSubscriptionCatalog = regionalFunctions.https.onCall(async (_data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const snapshot = await db.collection('subscriptionPlans').get();
+    const plans = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    return {
+        plans,
+        defaults: {
+            iosProductIds: SUBSCRIPTION_IOS_PRODUCT_IDS,
+            androidProductIds: SUBSCRIPTION_ANDROID_PRODUCT_IDS
+        }
+    };
+});
+exports.getSubscriptionStatus = regionalFunctions.https.onCall(async (_data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    return buildSubscriptionStatusResponse(context.auth.uid);
+});
+exports.validateAppleSubscriptionReceipt = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const productId = sanitizeProductId(data?.productId);
+    const transactionId = String(data?.transactionId || '').trim();
+    const originalTransactionId = String(data?.originalTransactionId || '').trim();
+    const signedTransactionInfo = String(data?.signedTransactionInfo || '').trim();
+    if (!productId || (!transactionId && !originalTransactionId && !signedTransactionInfo)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Apple validation requires productId plus transactionId, originalTransactionId, or signedTransactionInfo.');
+    }
+    const entitlement = await verifyAppleSubscriptionTransaction({
+        productId,
+        transactionId,
+        originalTransactionId,
+        signedTransactionInfo
+    });
+    const summary = await persistEntitlement(context.auth.uid, entitlement);
+    return {
+        success: true,
+        entitlement: summary
+    };
+});
+exports.validateGoogleSubscriptionPurchase = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const purchaseToken = String(data?.purchaseToken || '').trim();
+    const productId = sanitizeProductId(data?.productId);
+    if (!purchaseToken || !productId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Google purchaseToken and productId are required.');
+    }
+    const entitlement = await verifyGoogleSubscription(purchaseToken, productId);
+    const summary = await persistEntitlement(context.auth.uid, entitlement);
+    return {
+        success: true,
+        entitlement: summary
+    };
+});
+exports.restoreSubscriptions = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const platform = String(data?.platform || '').trim().toLowerCase();
+    if (platform === 'ios') {
+        const productId = sanitizeProductId(data?.productId || SUBSCRIPTION_IOS_PRODUCT_IDS[0] || '');
+        const transactionId = String(data?.transactionId || '').trim();
+        const originalTransactionId = String(data?.originalTransactionId || '').trim();
+        const signedTransactionInfo = String(data?.signedTransactionInfo || '').trim();
+        if (!productId || (!transactionId && !originalTransactionId && !signedTransactionInfo)) {
+            throw new functions.https.HttpsError('invalid-argument', 'Apple restore requires productId plus transactionId, originalTransactionId, or signedTransactionInfo.');
+        }
+        const entitlement = await verifyAppleSubscriptionTransaction({
+            productId,
+            transactionId,
+            originalTransactionId,
+            signedTransactionInfo
+        });
+        const summary = await persistEntitlement(context.auth.uid, entitlement);
+        return { success: true, entitlement: summary };
+    }
+    if (platform === 'android') {
+        const purchaseToken = String(data?.purchaseToken || '').trim();
+        const productId = sanitizeProductId(data?.productId || SUBSCRIPTION_ANDROID_PRODUCT_IDS[0] || '');
+        if (!purchaseToken || !productId) {
+            throw new functions.https.HttpsError('invalid-argument', 'Google restore requires purchaseToken and productId.');
+        }
+        const entitlement = await verifyGoogleSubscription(purchaseToken, productId);
+        const summary = await persistEntitlement(context.auth.uid, entitlement);
+        return { success: true, entitlement: summary };
+    }
+    throw new functions.https.HttpsError('invalid-argument', 'Unsupported restore platform.');
 });
 const IOS_APP_BUNDLE_ID = process.env.IOS_BUNDLE_ID || 'com.empylo.circlesapp';
 const IOS_VOIP_TOPIC = `${IOS_APP_BUNDLE_ID}.voip`;
@@ -2950,6 +3761,11 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
     const { chatId, isGroup } = data;
     const uid = context.auth.uid;
+    let reservedUsageRef = null;
+    let reservedUsageDayKey = '';
+    let reservedUsageTimeZone = 'UTC';
+    let reservedGrantedMinutes = 0;
+    let reservedHuddleId = '';
     if (!chatId)
         throw new functions.https.HttpsError('invalid-argument', 'Chat ID required.');
     try {
@@ -3021,6 +3837,12 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
                 };
             }
         }
+        const guard = await canStartHuddleForState(uid);
+        if (!guard.allowed) {
+            throw new functions.https.HttpsError('failed-precondition', guard.message);
+        }
+        reservedUsageDayKey = String(guard.dayKey || '');
+        reservedUsageTimeZone = String(guard.timeZone || 'UTC');
         const callerName = context.auth.token?.name;
         const { roomUrl, roomName, token } = await createDailyRoomAndToken({
             chatId,
@@ -3028,7 +3850,46 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
             ...(callerName ? { userName: callerName } : {})
         });
         const huddleRef = db.collection('huddles').doc();
+        reservedHuddleId = huddleRef.id;
         const recipients = participants.filter((p) => p !== uid);
+        reservedUsageRef = (0, subscription_1.getDailyUsageRef)(db, uid, reservedUsageDayKey);
+        await db.runTransaction(async (tx) => {
+            const usageSnap = await tx.get(reservedUsageRef);
+            const usage = usageSnap.exists
+                ? (0, subscription_1.coerceUsageSnapshot)(uid, usageSnap.data(), reservedUsageDayKey, reservedUsageTimeZone)
+                : (0, subscription_1.coerceUsageSnapshot)(uid, (0, subscription_1.createEmptyUsageSnapshot)(uid, reservedUsageDayKey, reservedUsageTimeZone), reservedUsageDayKey, reservedUsageTimeZone);
+            const rules = subscription_1.PLAN_RULES[guard.plan];
+            const remainingCount = rules.huddlesPerDay - Number(usage.huddlesStarted || 0);
+            const remainingMinutes = rules.huddleMinutesPerDay - Number(usage.huddleMinutesReserved || 0);
+            const grantMinutes = Math.min(rules.huddleMinutesPerSession, remainingMinutes);
+            if (remainingCount <= 0) {
+                throw new functions.https.HttpsError('failed-precondition', getReasonMessage('huddle_daily_count_reached'));
+            }
+            if (grantMinutes <= 0) {
+                throw new functions.https.HttpsError('failed-precondition', getReasonMessage('huddle_daily_minutes_reached'));
+            }
+            reservedGrantedMinutes = grantMinutes;
+            tx.set(reservedUsageRef, {
+                uid,
+                serverDay: reservedUsageDayKey,
+                timezoneBasis: reservedUsageTimeZone,
+                huddlesStarted: Number(usage.huddlesStarted || 0) + 1,
+                huddleMinutesReserved: Number(usage.huddleMinutesReserved || 0) + grantMinutes,
+                activeReservations: {
+                    ...(usage.activeReservations || {}),
+                    [huddleRef.id]: {
+                        grantedMinutes: grantMinutes,
+                        reservedAt: admin.firestore.FieldValue.serverTimestamp()
+                    }
+                },
+                lastEventAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        });
+        const nowMs = Date.now();
+        const warningAtMs = nowMs + Math.max(0, (reservedGrantedMinutes * 60 * 1000) - subscription_1.SUBSCRIPTION_WARNING_WINDOW_MS);
+        const expiresAtMs = nowMs + (reservedGrantedMinutes * 60 * 1000);
         const huddleData = {
             id: huddleRef.id,
             chatId,
@@ -3059,7 +3920,16 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
             acceptedAt: null,
             endedAt: null,
             endedReason: null,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            subscriptionGrant: {
+                plan: guard.plan,
+                grantedMinutes: reservedGrantedMinutes,
+                usageDayKey: reservedUsageDayKey,
+                timeZone: reservedUsageTimeZone,
+                warningAt: admin.firestore.Timestamp.fromMillis(warningAtMs),
+                expiresAt: admin.firestore.Timestamp.fromMillis(expiresAtMs),
+                warningSentAt: null
+            }
         };
         await huddleRef.set(huddleData);
         // Notify chat participants (e.g. System Message)
@@ -3098,9 +3968,40 @@ exports.startHuddle = regionalFunctions.https.onCall(async (data, context) => {
         }).catch((notifyError) => {
             console.error("Error sending huddle notifications:", notifyError);
         });
-        return { success: true, huddleId: huddleRef.id, roomUrl, token, roomName, startedBy: uid };
+        return {
+            success: true,
+            huddleId: huddleRef.id,
+            roomUrl,
+            token,
+            roomName,
+            startedBy: uid,
+            subscriptionGrant: {
+                plan: guard.plan,
+                grantedMinutes: reservedGrantedMinutes,
+                warningAt: warningAtMs,
+                expiresAt: expiresAtMs
+            }
+        };
     }
     catch (error) {
+        if (reservedUsageRef && reservedUsageDayKey && reservedHuddleId) {
+            await db.runTransaction(async (tx) => {
+                const usageSnap = await tx.get(reservedUsageRef);
+                if (!usageSnap.exists)
+                    return;
+                const usage = (0, subscription_1.coerceUsageSnapshot)(uid, usageSnap.data(), reservedUsageDayKey, reservedUsageTimeZone);
+                if (!(usage.activeReservations || {})[reservedHuddleId])
+                    return;
+                const activeReservations = { ...(usage.activeReservations || {}) };
+                delete activeReservations[reservedHuddleId];
+                tx.set(reservedUsageRef, {
+                    huddlesStarted: Math.max(0, Number(usage.huddlesStarted || 0) - 1),
+                    huddleMinutesReserved: Math.max(0, Number(usage.huddleMinutesReserved || 0) - reservedGrantedMinutes),
+                    activeReservations,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            }).catch(() => { });
+        }
         console.error("Error starting huddle:", error);
         if (error instanceof functions.https.HttpsError) {
             throw error;
@@ -3332,6 +4233,71 @@ exports.updateHuddleConnection = regionalFunctions.https.onCall(async (data, con
         throw new functions.https.HttpsError('internal', 'Unable to update connection.');
     }
 });
+const endHuddleWithExistingFlow = async ({ huddleId, uid, reason }) => {
+    const huddleRef = db.collection('huddles').doc(huddleId);
+    const huddleDoc = await huddleRef.get();
+    if (!huddleDoc.exists)
+        throw new functions.https.HttpsError('not-found', 'Huddle not found.');
+    const huddle = huddleDoc.data() || {};
+    if (huddle.status === 'ended' || huddle.isActive === false) {
+        if (huddle.circleId) {
+            await db.collection('circles').doc(huddle.circleId).update({
+                activeHuddle: admin.firestore.FieldValue.delete()
+            }).catch(() => { });
+        }
+        return { success: true, alreadyEnded: true };
+    }
+    const isHost = huddle.startedBy === uid;
+    const currentParticipants = huddle.participants || [];
+    const remainingAfterLeave = currentParticipants.filter((p) => p !== uid);
+    const shouldEndForEveryone = isHost || remainingAfterLeave.length === 0;
+    if (shouldEndForEveryone) {
+        const endedReason = reason || 'hangup';
+        await huddleRef.update({
+            isActive: false,
+            status: 'ended',
+            endedBy: uid,
+            endedAt: admin.firestore.FieldValue.serverTimestamp(),
+            endedReason,
+            participants: admin.firestore.FieldValue.arrayRemove(uid),
+            activeUserIds: admin.firestore.FieldValue.arrayRemove(uid),
+            [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
+        });
+        await finalizeHuddleUsage(huddleRef, huddle, {
+            endedBy: uid,
+            endedReason,
+            endForEveryone: true
+        });
+        if (huddle.circleId) {
+            await db.collection('circles').doc(huddle.circleId).update({
+                activeHuddle: admin.firestore.FieldValue.delete()
+            });
+        }
+        const roomName = huddle.roomName || extractRoomNameFromUrl(huddle.roomUrl || '');
+        if (roomName) {
+            try {
+                const DAILY_API_KEY = getDailyApiKey();
+                await fetch(`https://api.daily.co/v1/rooms/${roomName}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${DAILY_API_KEY}`
+                    }
+                });
+            }
+            catch (cleanupError) {
+                console.warn('Daily room cleanup failed', cleanupError);
+            }
+        }
+    }
+    else {
+        await huddleRef.update({
+            participants: admin.firestore.FieldValue.arrayRemove(uid),
+            activeUserIds: admin.firestore.FieldValue.arrayRemove(uid),
+            [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
+        });
+    }
+    return { success: true };
+};
 /**
  * End/leave huddle (any participant)
  * - If the caller is the host OR is the last participant: ends the huddle for everyone
@@ -3347,68 +4313,7 @@ exports.endHuddle = regionalFunctions.https.onCall(async (data, context) => {
     if (!huddleId)
         throw new functions.https.HttpsError('invalid-argument', 'Huddle ID required.');
     try {
-        const huddleRef = db.collection('huddles').doc(huddleId);
-        const huddleDoc = await huddleRef.get();
-        if (!huddleDoc.exists)
-            throw new functions.https.HttpsError('not-found', 'Huddle not found.');
-        const huddle = huddleDoc.data() || {};
-        // Idempotency + self-heal: already ended → still clear stale circle pointer if present.
-        if (huddle.status === 'ended' || huddle.isActive === false) {
-            if (huddle.circleId) {
-                await db.collection('circles').doc(huddle.circleId).update({
-                    activeHuddle: admin.firestore.FieldValue.delete()
-                }).catch(() => { });
-            }
-            return { success: true, alreadyEnded: true };
-        }
-        const isHost = huddle.startedBy === uid;
-        const currentParticipants = huddle.participants || [];
-        const remainingAfterLeave = currentParticipants.filter((p) => p !== uid);
-        const shouldEndForEveryone = isHost || remainingAfterLeave.length === 0;
-        if (shouldEndForEveryone) {
-            const endedReason = reason || 'hangup';
-            // End the entire huddle
-            await huddleRef.update({
-                isActive: false,
-                status: 'ended',
-                endedBy: uid,
-                endedAt: admin.firestore.FieldValue.serverTimestamp(),
-                endedReason,
-                participants: admin.firestore.FieldValue.arrayRemove(uid),
-                activeUserIds: admin.firestore.FieldValue.arrayRemove(uid),
-                [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
-            });
-            if (huddle.circleId) {
-                await db.collection('circles').doc(huddle.circleId).update({
-                    activeHuddle: admin.firestore.FieldValue.delete()
-                });
-            }
-            // Best-effort cleanup of Daily room.
-            const roomName = huddle.roomName || extractRoomNameFromUrl(huddle.roomUrl || '');
-            if (roomName) {
-                try {
-                    const DAILY_API_KEY = getDailyApiKey();
-                    await fetch(`https://api.daily.co/v1/rooms/${roomName}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Authorization': `Bearer ${DAILY_API_KEY}`
-                        }
-                    });
-                }
-                catch (cleanupError) {
-                    console.warn('Daily room cleanup failed', cleanupError);
-                }
-            }
-        }
-        else {
-            // Non-host leaving: just remove themselves
-            await huddleRef.update({
-                participants: admin.firestore.FieldValue.arrayRemove(uid),
-                activeUserIds: admin.firestore.FieldValue.arrayRemove(uid),
-                [`participantStates.${uid}.leftAt`]: admin.firestore.FieldValue.serverTimestamp()
-            });
-        }
-        return { success: true };
+        return await endHuddleWithExistingFlow({ huddleId, uid, reason });
     }
     catch (error) {
         console.error('Error ending huddle:', error);
@@ -3694,6 +4599,11 @@ exports.cleanupStaleHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 m
                 endedAt: admin.firestore.FieldValue.serverTimestamp(),
                 endedReason
             });
+            await finalizeHuddleUsage(docSnap.ref, h, {
+                endedBy: String(h?.startedBy || 'system'),
+                endedReason,
+                endForEveryone: true
+            }).catch(() => { });
             ended += 1;
             if (h.circleId) {
                 await db.collection('circles').doc(h.circleId).update({
@@ -3707,6 +4617,73 @@ exports.cleanupStaleHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 m
     catch (error) {
         console.error('[cleanupStaleHuddles] failed', error);
         return;
+    }
+});
+exports.warnUpcomingSubscriptionHuddleExpiry = (0, scheduler_1.onSchedule)({ schedule: 'every 1 minutes', region: 'europe-west1' }, async () => {
+    try {
+        const now = Date.now();
+        const upperBound = admin.firestore.Timestamp.fromMillis(now + 60 * 1000);
+        const snap = await db.collection('huddles')
+            .where('isActive', '==', true)
+            .where('subscriptionGrant.warningSentAt', '==', null)
+            .where('subscriptionGrant.warningAt', '<=', upperBound)
+            .limit(100)
+            .get();
+        for (const docSnap of snap.docs) {
+            const huddle = docSnap.data() || {};
+            const warningAtMs = (0, subscription_1.toTimestampMs)(huddle?.subscriptionGrant?.warningAt);
+            const expiresAtMs = (0, subscription_1.toTimestampMs)(huddle?.subscriptionGrant?.expiresAt);
+            if (warningAtMs <= 0 || expiresAtMs <= now || warningAtMs > (now + 60 * 1000))
+                continue;
+            const recipients = Array.from(new Set([
+                ...(Array.isArray(huddle?.participants) ? huddle.participants : []),
+                ...(Array.isArray(huddle?.invitedUserIds) ? huddle.invitedUserIds : []),
+                ...(Array.isArray(huddle?.acceptedUserIds) ? huddle.acceptedUserIds : [])
+            ]));
+            await sendSubscriptionHuddleWarning({
+                huddleId: docSnap.id,
+                chatId: String(huddle?.chatId || ''),
+                recipientUids: recipients,
+                title: 'Huddle ending soon',
+                body: 'This huddle will end automatically in 2 minutes for your current plan.'
+            });
+            await docSnap.ref.set({
+                subscriptionGrant: {
+                    ...(huddle?.subscriptionGrant || {}),
+                    warningSentAt: admin.firestore.FieldValue.serverTimestamp()
+                }
+            }, { merge: true });
+        }
+    }
+    catch (error) {
+        console.error('[warnUpcomingSubscriptionHuddleExpiry] failed', error);
+    }
+});
+exports.expireSubscriptionLimitedHuddles = (0, scheduler_1.onSchedule)({ schedule: 'every 1 minutes', region: 'europe-west1' }, async () => {
+    try {
+        const now = Date.now();
+        const upperBound = admin.firestore.Timestamp.fromMillis(now);
+        const snap = await db.collection('huddles')
+            .where('isActive', '==', true)
+            .where('subscriptionGrant.expiresAt', '<=', upperBound)
+            .limit(100)
+            .get();
+        for (const docSnap of snap.docs) {
+            const huddle = docSnap.data() || {};
+            const hostUid = String(huddle?.startedBy || '');
+            if (!hostUid)
+                continue;
+            await endHuddleWithExistingFlow({
+                huddleId: docSnap.id,
+                uid: hostUid,
+                reason: 'subscription_limit_reached'
+            }).catch((error) => {
+                console.error('[expireSubscriptionLimitedHuddles] failed ending huddle', docSnap.id, error);
+            });
+        }
+    }
+    catch (error) {
+        console.error('[expireSubscriptionLimitedHuddles] failed', error);
     }
 });
 const startScheduledHuddleInternal = async ({ scheduledRef, scheduledData }) => {
@@ -3734,6 +4711,10 @@ const startScheduledHuddleInternal = async ({ scheduledRef, scheduledData }) => 
         : participants[0];
     if (!startedBy)
         throw new Error('Unable to resolve scheduled host');
+    const startGuard = await canStartHuddleForState(String(startedBy));
+    if (!startGuard.allowed) {
+        throw new Error(startGuard.message || 'Scheduled huddle exceeds subscription limits.');
+    }
     const existingSnap = await db.collection('huddles')
         .where('chatId', '==', chatId)
         .where('isActive', '==', true)
@@ -3760,6 +4741,40 @@ const startScheduledHuddleInternal = async ({ scheduledRef, scheduledData }) => 
         userName: String(scheduledData?.createdByName || 'Scheduled Huddle')
     });
     const huddleRef = db.collection('huddles').doc();
+    const usageRef = (0, subscription_1.getDailyUsageRef)(db, String(startedBy), String(startGuard.dayKey || ''));
+    let grantedMinutes = Number(startGuard.grantedMinutes || 0);
+    await db.runTransaction(async (tx) => {
+        const usageSnap = await tx.get(usageRef);
+        const usage = usageSnap.exists
+            ? (0, subscription_1.coerceUsageSnapshot)(String(startedBy), usageSnap.data(), String(startGuard.dayKey || ''), String(startGuard.timeZone || 'UTC'))
+            : (0, subscription_1.coerceUsageSnapshot)(String(startedBy), (0, subscription_1.createEmptyUsageSnapshot)(String(startedBy), String(startGuard.dayKey || ''), String(startGuard.timeZone || 'UTC')), String(startGuard.dayKey || ''), String(startGuard.timeZone || 'UTC'));
+        const rules = subscription_1.PLAN_RULES[startGuard.plan];
+        const remainingCount = rules.huddlesPerDay - Number(usage.huddlesStarted || 0);
+        const remainingMinutes = rules.huddleMinutesPerDay - Number(usage.huddleMinutesReserved || 0);
+        const nextGrant = Math.min(rules.huddleMinutesPerSession, remainingMinutes);
+        if (remainingCount <= 0 || nextGrant <= 0) {
+            throw new Error('Scheduled huddle exceeds subscription limits.');
+        }
+        grantedMinutes = nextGrant;
+        tx.set(usageRef, {
+            uid: startedBy,
+            serverDay: startGuard.dayKey,
+            timezoneBasis: startGuard.timeZone,
+            huddlesStarted: Number(usage.huddlesStarted || 0) + 1,
+            huddleMinutesReserved: Number(usage.huddleMinutesReserved || 0) + nextGrant,
+            activeReservations: {
+                ...(usage.activeReservations || {}),
+                [huddleRef.id]: {
+                    grantedMinutes: nextGrant,
+                    reservedAt: admin.firestore.FieldValue.serverTimestamp()
+                }
+            },
+            lastEventAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    });
+    const nowMs = Date.now();
     const huddleData = {
         id: huddleRef.id,
         chatId,
@@ -3783,7 +4798,16 @@ const startScheduledHuddleInternal = async ({ scheduledRef, scheduledData }) => 
         acceptedAt: null,
         endedAt: null,
         endedReason: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        subscriptionGrant: {
+            plan: startGuard.plan,
+            grantedMinutes,
+            usageDayKey: startGuard.dayKey,
+            timeZone: startGuard.timeZone,
+            warningAt: admin.firestore.Timestamp.fromMillis(nowMs + Math.max(0, (grantedMinutes * 60 * 1000) - subscription_1.SUBSCRIPTION_WARNING_WINDOW_MS)),
+            expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + (grantedMinutes * 60 * 1000)),
+            warningSentAt: null
+        }
     };
     await huddleRef.set(huddleData);
     await circleRef.set({
@@ -3841,6 +4865,10 @@ exports.scheduleHuddle = regionalFunctions.https.onCall(async (data, context) =>
         throw new functions.https.HttpsError('invalid-argument', 'Missing fields.');
     }
     try {
+        const scheduleGuard = await canScheduleForState(uid);
+        if (!scheduleGuard.allowed) {
+            throw new functions.https.HttpsError('failed-precondition', scheduleGuard.message);
+        }
         // Permission Check
         const memberRef = db.collection('circles').doc(circleId).collection('members').doc(uid);
         const memberDoc = await memberRef.get();
@@ -4289,7 +5317,8 @@ exports.getExploreContent = regionalFunctions.https.onCall(async (data, context)
             .orderBy('publishedAt', 'desc')
             .limit(30)
             .get();
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).map(mapExploreItem);
+        const filtered = await filterResourcesForUid(context.auth.uid, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const items = filtered.map(mapExploreItem);
         return { items };
     }
     catch (error) {
@@ -4981,6 +6010,53 @@ exports.serveAppleAssociation = regionalFunctions.https.onRequest(async (_req, r
     res.set('Content-Type', 'application/json');
     res.set('Cache-Control', 'public, max-age=3600');
     res.status(200).send(JSON.stringify(payload));
+});
+exports.handleAppleSubscriptionNotifications = regionalFunctions.https.onRequest(async (req, res) => {
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        const signedPayload = String(req.body?.signedPayload || '').trim();
+        if (!signedPayload) {
+            res.status(400).json({ error: 'Missing signedPayload.' });
+            return;
+        }
+        const result = await updateAppleEntitlementsFromNotification(signedPayload);
+        res.status(200).json({ success: true, ...result });
+    }
+    catch (error) {
+        console.error('[AppleSubscriptionNotifications] failed', error);
+        res.status(400).json({ error: error?.message || 'Unable to process Apple notification.' });
+    }
+});
+exports.handleGoogleSubscriptionNotifications = regionalFunctions.https.onRequest(async (req, res) => {
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    try {
+        await assertGooglePubSubBearer(req);
+        const messageData = String(req.body?.message?.data || '').trim();
+        if (!messageData) {
+            res.status(400).json({ error: 'Missing Pub/Sub message data.' });
+            return;
+        }
+        const result = await updateGoogleEntitlementsFromNotification(messageData);
+        res.status(200).json({ success: true, ...result });
+    }
+    catch (error) {
+        console.error('[GoogleSubscriptionNotifications] failed', error);
+        res.status(400).json({ error: error?.message || 'Unable to process Google notification.' });
+    }
 });
 // ==========================================
 // CONTACT (WEB) FUNCTIONS

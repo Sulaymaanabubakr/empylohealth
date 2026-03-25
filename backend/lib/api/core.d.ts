@@ -123,6 +123,11 @@ export declare const getRecommendedContent: functions.HttpsFunction & functions.
  * Callable Function: 'updateSubscription'
  */
 export declare const updateSubscription: functions.HttpsFunction & functions.Runnable<any>;
+export declare const getSubscriptionCatalog: functions.HttpsFunction & functions.Runnable<any>;
+export declare const getSubscriptionStatus: functions.HttpsFunction & functions.Runnable<any>;
+export declare const validateAppleSubscriptionReceipt: functions.HttpsFunction & functions.Runnable<any>;
+export declare const validateGoogleSubscriptionPurchase: functions.HttpsFunction & functions.Runnable<any>;
+export declare const restoreSubscriptions: functions.HttpsFunction & functions.Runnable<any>;
 /**
  * Start a Huddle (Video Call Session)
  * Callable Function: 'startHuddle'
@@ -172,6 +177,8 @@ export declare const updateHuddleState: functions.HttpsFunction & functions.Runn
  * - ongoing with no active users: cleanup ghost sessions from abrupt app exits/network loss
  */
 export declare const cleanupStaleHuddles: import("firebase-functions/v2/scheduler").ScheduleFunction;
+export declare const warnUpcomingSubscriptionHuddleExpiry: import("firebase-functions/v2/scheduler").ScheduleFunction;
+export declare const expireSubscriptionLimitedHuddles: import("firebase-functions/v2/scheduler").ScheduleFunction;
 /**
  * Schedule a Huddle
  * Callable Function: 'scheduleHuddle'
@@ -219,6 +226,8 @@ export declare const sendAffirmationsEvening: import("firebase-functions/v2/sche
 export declare const resolveDeepLink: functions.HttpsFunction;
 export declare const serveAssetLinks: functions.HttpsFunction;
 export declare const serveAppleAssociation: functions.HttpsFunction;
+export declare const handleAppleSubscriptionNotifications: functions.HttpsFunction;
+export declare const handleGoogleSubscriptionNotifications: functions.HttpsFunction;
 export declare const submitContactForm: functions.HttpsFunction;
 export declare const deleteUserAccount: functions.HttpsFunction & functions.Runnable<any>;
 //# sourceMappingURL=core.d.ts.map

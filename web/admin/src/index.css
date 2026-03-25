@@ -48,3 +48,53 @@
 ::-webkit-scrollbar-thumb:hover {
     @apply bg-gray-600;
 }
+
+.rich-editor {
+  color: #102027;
+  font-family: 'DMSans_400Regular', 'Space Grotesk', sans-serif;
+  line-height: 1.8;
+}
+
+.rich-editor p {
+  margin: 0 0 0.95rem;
+}
+
+.rich-editor h1,
+.rich-editor h2,
+.rich-editor h3 {
+  font-family: 'Space Grotesk', sans-serif;
+  color: #102027;
+  line-height: 1.2;
+  margin: 1.2rem 0 0.75rem;
+}
+
+.rich-editor h1 { font-size: 2rem; }
+.rich-editor h2 { font-size: 1.625rem; }
+.rich-editor h3 { font-size: 1.25rem; }
+
+.rich-editor ul,
+.rich-editor ol {
+  padding-left: 1.4rem;
+  margin: 0 0 1rem;
+}
+
+.rich-editor li {
+  margin-bottom: 0.4rem;
+}
+
+.rich-editor a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.rich-editor img,
+.rich-editor video {
+  display: block;
+  max-width: 100%;
+  border-radius: 20px;
+  margin: 1rem 0;
+}
+
+.rich-editor .ProseMirror-selectednode {
+  outline: 2px solid rgba(14, 141, 126, 0.35);
+}

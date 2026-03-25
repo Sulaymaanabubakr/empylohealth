@@ -24,6 +24,10 @@ export declare const updateContentStatus: functions.HttpsFunction & functions.Ru
  */
 export declare const updateContentItem: functions.HttpsFunction & functions.Runnable<any>;
 /**
+ * Create Resource
+ */
+export declare const createResource: functions.HttpsFunction & functions.Runnable<any>;
+/**
  * Suspend/Activate User
  */
 export declare const toggleUserStatus: functions.HttpsFunction & functions.Runnable<any>;

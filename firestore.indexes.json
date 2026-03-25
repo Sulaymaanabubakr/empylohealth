@@ -205,6 +205,38 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subscriptionGrant.warningSentAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subscriptionGrant.warningAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "huddles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subscriptionGrant.expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "huddles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "chatId",
           "order": "ASCENDING"
         },

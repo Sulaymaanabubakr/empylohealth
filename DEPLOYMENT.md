@@ -35,6 +35,12 @@ firebase deploy --only functions:getDashboardStats,functions:getAllUsers,functio
 
 # Triggers
 firebase deploy --only functions:onUserCreate,functions:onMessageCreate
+
+# Subscription + webhook functions
+firebase deploy --only functions:getSubscriptionCatalog,functions:getSubscriptionStatus,functions:validateAppleSubscriptionReceipt,functions:validateGoogleSubscriptionPurchase,functions:restoreSubscriptions,functions:handleAppleSubscriptionNotifications,functions:handleGoogleSubscriptionNotifications
+
+# Huddle subscription enforcement workers
+firebase deploy --only functions:warnUpcomingSubscriptionHuddleExpiry,functions:expireSubscriptionLimitedHuddles
 ```
 
 ### Before Every Deployment
@@ -158,6 +164,128 @@ After deploy, verify:
 - `https://empylo.com/.well-known/assetlinks.json`
 - `https://empylo.com/apple-app-site-association`
 
+## Subscription Deployment
+
+### Backend env vars
+
+Populate these in `backend/.env` before deploying subscription support:
+
+```bash
+IOS_SUBSCRIPTION_PRODUCT_IDS=com.empylo.premium.annual
+ANDROID_SUBSCRIPTION_PRODUCT_IDS=com.empylo.premium.annual
+ANDROID_PACKAGE_NAME=com.empylo.circlesapp
+APPLE_IN_APP_PURCHASE_ISSUER_ID=...
+APPLE_IN_APP_PURCHASE_KEY_ID=...
+APPLE_IN_APP_PURCHASE_KEY_P8_BASE64=...
+APPLE_ROOT_CA_PATH=certs/AppleRootCA-G3.pem
+GOOGLE_PUBSUB_AUDIENCE=https://europe-west1-<project-id>.cloudfunctions.net/handleGoogleSubscriptionNotifications
+GOOGLE_PUBSUB_SERVICE_ACCOUNT_EMAIL=...
+SUBSCRIPTION_ACTIVITY_GATING_ENABLED=false
+```
+
+Notes:
+- `APPLE_IN_APP_PURCHASE_ISSUER_ID`, `APPLE_IN_APP_PURCHASE_KEY_ID`, and `APPLE_IN_APP_PURCHASE_KEY_P8_BASE64` are used to mint App Store Server API JWTs. This replaces the deprecated shared-secret `verifyReceipt` flow.
+- `APPLE_ROOT_CA_PATH` should point to the bundled Apple root certificate file shipped with the backend source. The default path in this repo is `backend/certs/AppleRootCA-G3.pem`.
+- `GOOGLE_PUBSUB_AUDIENCE` must exactly match the deployed HTTPS URL of `handleGoogleSubscriptionNotifications`.
+- Keep `SUBSCRIPTION_ACTIVITY_GATING_ENABLED=false` until resource access metadata has been curated.
+
+### Functions to deploy
+
+```bash
+cd /Users/sulaymaanabubakr/Desktop/Empylo
+firebase deploy --only functions:getSubscriptionCatalog,functions:getSubscriptionStatus,functions:validateAppleSubscriptionReceipt,functions:validateGoogleSubscriptionPurchase,functions:restoreSubscriptions,functions:handleAppleSubscriptionNotifications,functions:handleGoogleSubscriptionNotifications,functions:warnUpcomingSubscriptionHuddleExpiry,functions:expireSubscriptionLimitedHuddles
+```
+
+Or use grouped deploys:
+
+```bash
+cd backend
+bash scripts/deploy-functions-group.sh user
+bash scripts/deploy-functions-group.sh huddle
+```
+
+### Firestore deploy
+
+Subscription enforcement requires the updated rules and indexes:
+
+```bash
+cd /Users/sulaymaanabubakr/Desktop/Empylo
+firebase deploy --only firestore:rules
+firebase deploy --only firestore:indexes
+```
+
+### Apple App Store Server Notifications
+
+1. Deploy `handleAppleSubscriptionNotifications`.
+2. In App Store Connect, configure the Production Server URL to:
+   `https://europe-west1-<project-id>.cloudfunctions.net/handleAppleSubscriptionNotifications`
+3. Use the same for Sandbox if you want sandbox events routed to the same verifier.
+4. Ensure the bundled Apple root certificate file is present at the configured `APPLE_ROOT_CA_PATH`.
+5. Trigger a sandbox subscription lifecycle event and verify documents update in:
+   - `subscriptionWebhookEvents`
+   - `subscriptionEntitlements/{uid}`
+
+### Google Play RTDN
+
+1. Deploy `handleGoogleSubscriptionNotifications`.
+2. Create or reuse a Pub/Sub topic for Real-time developer notifications in Google Play Console.
+3. Create a push subscription pointing to:
+   `https://europe-west1-<project-id>.cloudfunctions.net/handleGoogleSubscriptionNotifications`
+4. Configure the push subscription to attach an OIDC token whose audience equals `GOOGLE_PUBSUB_AUDIENCE`.
+5. Set `GOOGLE_PUBSUB_SERVICE_ACCOUNT_EMAIL` to the service account sending the OIDC token if you want email pinning enabled.
+6. Trigger a test RTDN event and verify:
+   - the HTTP endpoint accepts the signed push
+   - `subscriptionWebhookEvents` is populated
+   - matching entitlement docs are refreshed
+
+### Frontend / native build
+
+`react-native-iap` was added to the mobile app. Build a new dev client / production app before testing purchases:
+
+```bash
+cd frontend
+npx expo install
+eas build --platform ios --profile production
+eas build --platform android --profile production
+```
+
+For local device testing with native modules:
+
+```bash
+cd frontend
+npx expo run:ios
+# or
+npx expo run:android
+```
+
+### Resource gating rollout
+
+Before turning on `SUBSCRIPTION_ACTIVITY_GATING_ENABLED=true`, update `resources` docs with:
+
+```json
+{
+  "access": {
+    "kind": "self_development",
+    "plans": ["free", "premium"],
+    "shareRequiresPremium": false
+  }
+}
+```
+
+For premium-only/group content:
+
+```json
+{
+  "access": {
+    "kind": "group_activity",
+    "plans": ["premium"],
+    "shareRequiresPremium": true
+  }
+}
+```
+
+Only enable the flag after this metadata is curated.
+
 ## Common Issues & Solutions
 
 ### Issue: "not-found" error when calling functions
@@ -196,6 +324,16 @@ CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 DAILY_API_KEY=your_daily_key
 CONTACT_ALLOWED_ORIGINS=*
+IOS_SUBSCRIPTION_PRODUCT_IDS=com.empylo.premium.annual
+ANDROID_SUBSCRIPTION_PRODUCT_IDS=com.empylo.premium.annual
+ANDROID_PACKAGE_NAME=com.empylo.circlesapp
+APPLE_IN_APP_PURCHASE_ISSUER_ID=...
+APPLE_IN_APP_PURCHASE_KEY_ID=...
+APPLE_IN_APP_PURCHASE_KEY_P8_BASE64=...
+APPLE_ROOT_CA_PATH=certs/AppleRootCA-G3.pem
+GOOGLE_PUBSUB_AUDIENCE=https://europe-west1-<project-id>.cloudfunctions.net/handleGoogleSubscriptionNotifications
+GOOGLE_PUBSUB_SERVICE_ACCOUNT_EMAIL=...
+SUBSCRIPTION_ACTIVITY_GATING_ENABLED=false
 ```
 
 ### Admin (web/admin/.env)

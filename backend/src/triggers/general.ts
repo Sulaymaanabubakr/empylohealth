@@ -32,6 +32,16 @@ export const onUserCreate = regionalFunctions.auth.user().onCreate(async (user: 
             role: 'personal',
             photoURL: photoURL || '',
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            subscription: {
+                plan: 'free',
+                planId: 'free',
+                label: 'Free',
+                status: 'expired',
+                platformSource: null,
+                expiresAt: null,
+                startsAt: null,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            },
             settings: {
                 notifications: true,
                 biometrics: false,
