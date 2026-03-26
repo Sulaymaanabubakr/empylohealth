@@ -14,7 +14,7 @@ import { chatService } from '../services/api/chatService';
 import { callableClient } from '../services/api/callableClient';
 import { LinearGradient } from 'expo-linear-gradient';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
-import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
+import { getCircleBillingTier, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 import { buildCircleShareText } from '../utils/deepLinks';
 import { isPresenceOnline, presenceFreshnessMs } from '../utils/presence';
@@ -79,7 +79,9 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const [presenceTick, setPresenceTick] = useState(0);
 
     const memberCount = getCircleMemberCount(circle);
-    const isFullForNonMembers = !isMember && memberCount >= MAX_CIRCLE_MEMBERS;
+    const circleTier = getCircleBillingTier(circle);
+    const circleMemberCap = getCircleMemberCap(circle);
+    const isFullForNonMembers = !isMember && memberCount >= circleMemberCap;
 
     // Refresh circle data locally to keep member list updated
     const refreshCircle = async () => {
@@ -301,12 +303,13 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const handleJoinCircle = async () => {
         if (!circle?.id) return;
         const count = getCircleMemberCount(circle);
-        const isFull = count >= MAX_CIRCLE_MEMBERS;
+        const cap = getCircleMemberCap(circle);
+        const isFull = count >= cap;
         if (isFull) {
             showModal({
                 type: 'error',
                 title: 'Circle Full',
-                message: `This circle already has ${MAX_CIRCLE_MEMBERS} members.`
+                message: `This circle already has ${cap} members.`
             });
             return;
         }
@@ -565,6 +568,16 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                 )}
                             </View>
                             <Text style={styles.circleTitle}>{circle.name}</Text>
+                            <View style={[styles.tierPill, circleTier === 'pro' && styles.tierPillPro]}>
+                                <MaterialCommunityIcons
+                                    name={circleTier === 'pro' ? 'crown-outline' : 'chat-processing-outline'}
+                                    size={14}
+                                    color={circleTier === 'pro' ? '#8A5A00' : '#166534'}
+                                />
+                                <Text style={[styles.tierPillText, circleTier === 'pro' && styles.tierPillTextPro]}>
+                                    {circleTier === 'pro' ? 'Pro Circle · Pro huddles only' : 'Free Circle · Chat only'}
+                                </Text>
+                            </View>
                             <Text style={styles.circleCategory}>{circle.category || 'General'}</Text>
                         </View>
                     </SafeAreaView>
@@ -880,7 +893,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                         )}
                     </TouchableOpacity>
                     <Text style={styles.joinButtonSubtext}>
-                        {isFullForNonMembers ? `This circle is at capacity (${MAX_CIRCLE_MEMBERS}).` : 'Join the conversation and connect with others!'}
+                        {isFullForNonMembers ? `This circle is at capacity (${circleMemberCap}).` : (circleTier === 'pro' ? 'This is a Pro Circle. New members must be on Pro, and huddles are limited to Pro members.' : 'Join the conversation and connect with others!')}
                     </Text>
                 </View>
             )}
@@ -1112,6 +1125,30 @@ const styles = StyleSheet.create({
         color: '#FFF',
         marginBottom: 6,
         textAlign: 'center',
+    },
+    tierPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: 'rgba(230,255,244,0.18)',
+        borderWidth: 1,
+        borderColor: 'rgba(230,255,244,0.24)',
+        borderRadius: 999,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        marginBottom: 8,
+    },
+    tierPillPro: {
+        backgroundColor: 'rgba(255,236,192,0.18)',
+        borderColor: 'rgba(255,236,192,0.30)',
+    },
+    tierPillText: {
+        color: '#DDF7EA',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    tierPillTextPro: {
+        color: '#FFE7AE',
     },
     circleCategory: {
         fontSize: 14,

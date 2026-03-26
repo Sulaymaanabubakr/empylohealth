@@ -9,7 +9,7 @@ const db = admin.firestore();
 const regionalFunctions = functions.region('europe-west1');
 const auth = admin.auth();
 type ResourceAccessKind = 'self_development' | 'group_activity';
-type ResourcePlanId = 'free' | 'premium';
+type ResourcePlanId = 'free' | 'pro';
 type AdminPermission =
     | 'dashboard.view'
     | 'users.view'
@@ -100,13 +100,14 @@ const normalizeResourcePlans = (value: any, kind: ResourceAccessKind): ResourceP
     const input = Array.isArray(value) ? value : [];
     const normalized = input
         .map((item) => String(item || '').trim().toLowerCase())
-        .filter((item): item is ResourcePlanId => item === 'free' || item === 'premium');
+        .map((item) => item === 'premium' ? 'pro' : item)
+        .filter((item): item is ResourcePlanId => item === 'free' || item === 'pro');
     const deduped = Array.from(new Set(normalized));
     if (deduped.length > 0) {
-        if (deduped.includes('free') && !deduped.includes('premium')) deduped.push('premium');
+        if (deduped.includes('free') && !deduped.includes('pro')) deduped.push('pro');
         return deduped;
     }
-    return kind === 'group_activity' ? ['premium'] : ['premium'];
+    return kind === 'group_activity' ? ['pro'] : ['pro'];
 };
 
 const sanitizeResourceAccess = (access: any, category?: any) => {

@@ -55,7 +55,7 @@ const ActivityDetailScreen = ({ navigation, route }) => {
                 showUpgradePrompt({
                     navigation,
                     showModal,
-                    title: 'Premium activity',
+                    title: 'Pro activity',
                     guard
                 });
             }

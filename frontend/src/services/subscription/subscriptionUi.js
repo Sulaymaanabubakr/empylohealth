@@ -4,7 +4,7 @@ export const showUpgradePrompt = ({ navigation, showModal, title = 'Upgrade requ
     showModal({
         type: 'confirmation',
         title,
-        message: guard?.message || 'Upgrade to Premium to continue.',
+        message: guard?.message || 'Upgrade to Pro to continue.',
         confirmText: 'View plans',
         cancelText: 'Not now',
         onConfirm: () => {

@@ -115,14 +115,15 @@ const normalizeResourcePlans = (value, kind) => {
     const input = Array.isArray(value) ? value : [];
     const normalized = input
         .map((item) => String(item || '').trim().toLowerCase())
-        .filter((item) => item === 'free' || item === 'premium');
+        .map((item) => item === 'premium' ? 'pro' : item)
+        .filter((item) => item === 'free' || item === 'pro');
     const deduped = Array.from(new Set(normalized));
     if (deduped.length > 0) {
-        if (deduped.includes('free') && !deduped.includes('premium'))
-            deduped.push('premium');
+        if (deduped.includes('free') && !deduped.includes('pro'))
+            deduped.push('pro');
         return deduped;
     }
-    return kind === 'group_activity' ? ['premium'] : ['premium'];
+    return kind === 'group_activity' ? ['pro'] : ['pro'];
 };
 const sanitizeResourceAccess = (access, category) => {
     const kind = normalizeResourceAccessKind(access?.kind, category);

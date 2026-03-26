@@ -25,6 +25,7 @@ export const createAppInvite = coreApi.createAppInvite;
 export const joinCircle = coreApi.joinCircle;
 export const joinCircleWithInvite = coreApi.joinCircleWithInvite;
 export const updateCircle = coreApi.updateCircle;
+export const setCircleBillingTier = coreApi.setCircleBillingTier;
 export const leaveCircle = coreApi.leaveCircle;
 export const deleteCircle = coreApi.deleteCircle;
 export const revokeCircleInvite = coreApi.revokeCircleInvite;

@@ -7,7 +7,9 @@ import { Search, Filter, BookOpen, Users, MessageCircle, Calendar, Plus, RotateC
 import clsx from 'clsx';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { RichContentEditor } from '../components/RichContentEditor';
+import { uploadCloudinaryAsset } from '../lib/media';
 
 type ContentTab = 'circles' | 'resources' | 'affirmations';
 type ContentStatus = 'all' | 'active' | 'pending' | 'suspended' | 'rejected';
@@ -35,7 +37,7 @@ interface ContentItem {
     contentFormat?: 'plain' | 'html';
     access?: {
         kind?: 'self_development' | 'group_activity';
-        plans?: Array<'free' | 'premium'>;
+        plans?: Array<'free' | 'pro'>;
         shareRequiresPremium?: boolean;
     };
 }
@@ -54,7 +56,7 @@ interface EditFormState {
     scheduledDate: string;
     contentFormat: 'plain' | 'html';
     accessKind: 'self_development' | 'group_activity';
-    accessPlans: Array<'free' | 'premium'>;
+    accessPlans: Array<'free' | 'pro'>;
     shareRequiresPremium: boolean;
 }
 
@@ -76,7 +78,7 @@ const EMPTY_EDIT_FORM: EditFormState = {
     scheduledDate: '',
     contentFormat: 'html',
     accessKind: 'self_development',
-    accessPlans: ['premium'],
+    accessPlans: ['pro'],
     shareRequiresPremium: false
 };
 
@@ -86,6 +88,21 @@ const TABS: Array<{ id: ContentTab; label: string }> = [
     { id: 'affirmations', label: 'Daily Affirmations' }
 ];
 
+const TAB_META: Record<ContentTab, { title: string; subtitle: string }> = {
+    circles: {
+        title: 'Circle Library',
+        subtitle: 'Review, approve, and curate circles across the community.'
+    },
+    resources: {
+        title: 'Resource Library',
+        subtitle: 'Create, edit, and publish rich content resources with access control.'
+    },
+    affirmations: {
+        title: 'Daily Affirmations',
+        subtitle: 'Schedule and maintain the daily affirmation feed.'
+    }
+};
+
 const STATUS_OPTIONS: ContentStatus[] = ['all', 'active', 'pending', 'suspended', 'rejected'];
 
 const isContentStatus = (value: string): value is ContentStatus => STATUS_OPTIONS.includes(value as ContentStatus);
@@ -94,18 +111,32 @@ const inferAccessKindFromCategory = (category: string): 'self_development' | 'gr
     String(category || '').trim().toLowerCase().includes('group') ? 'group_activity' : 'self_development'
 );
 
-const getAccessPlans = (item?: ContentItem): Array<'free' | 'premium'> => {
+const getAccessPlans = (item?: ContentItem): Array<'free' | 'pro'> => {
     const plans = Array.isArray(item?.access?.plans)
-        ? item!.access!.plans!.filter((plan): plan is 'free' | 'premium' => plan === 'free' || plan === 'premium')
+        ? item!.access!.plans!
+            .map((plan) => {
+                const value = String(plan || '').trim().toLowerCase();
+                return value === 'premium' ? 'pro' : value;
+            })
+            .filter((plan): plan is 'free' | 'pro' => plan === 'free' || plan === 'pro')
         : [];
-    return plans.length > 0 ? plans : ['premium'];
+    return plans.length > 0 ? plans : ['pro'];
 };
 
 export const Content = () => {
+    return <ContentManager />;
+};
+
+interface ContentManagerProps {
+    forcedTab?: ContentTab;
+    showTabs?: boolean;
+}
+
+export const ContentManager = ({ forcedTab, showTabs = true }: ContentManagerProps) => {
     const { can } = useAuth();
     const canEditContent = can('content.edit');
     const canDeleteContent = can('content.delete');
-    const [activeTab, setActiveTab] = useState<ContentTab>('circles');
+    const [activeTab, setActiveTab] = useState<ContentTab>(forcedTab || 'circles');
     const [items, setItems] = useState<ContentItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -123,11 +154,76 @@ export const Content = () => {
     const [savingEdit, setSavingEdit] = useState(false);
     const [showCreateResource, setShowCreateResource] = useState(false);
     const [creatingResource, setCreatingResource] = useState(false);
+    const [createImageUploading, setCreateImageUploading] = useState(false);
+    const [editImageUploading, setEditImageUploading] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmLoading, setConfirmLoading] = useState(false);
+    const [confirmConfig, setConfirmConfig] = useState<{
+        title: string;
+        message: string;
+        confirmText?: string;
+        type: 'danger' | 'warning' | 'info';
+        onConfirm: () => Promise<void> | void;
+    }>({
+        title: '',
+        message: '',
+        confirmText: 'Confirm',
+        type: 'danger',
+        onConfirm: () => { }
+    });
     const [createForm, setCreateForm] = useState<EditFormState>({
         ...EMPTY_EDIT_FORM,
         category: 'Self-development',
         status: 'active'
     });
+    const pageMeta = TAB_META[activeTab];
+
+    const confirmAction = useCallback((
+        title: string,
+        message: string,
+        onConfirm: () => Promise<void> | void,
+        options?: {
+            confirmText?: string;
+            type?: 'danger' | 'warning' | 'info';
+        }
+    ) => {
+        setConfirmConfig({
+            title,
+            message,
+            onConfirm,
+            confirmText: options?.confirmText ?? 'Confirm',
+            type: options?.type ?? 'danger'
+        });
+        setConfirmOpen(true);
+    }, []);
+
+    const handleConfirm = useCallback(async () => {
+        try {
+            setConfirmLoading(true);
+            await confirmConfig.onConfirm();
+            setConfirmOpen(false);
+        } finally {
+            setConfirmLoading(false);
+        }
+    }, [confirmConfig]);
+
+    const uploadCoverImage = async (file: File, mode: 'create' | 'edit') => {
+        if (!file) return;
+        const setUploading = mode === 'create' ? setCreateImageUploading : setEditImageUploading;
+        const setForm = mode === 'create' ? setCreateForm : setEditForm;
+        setUploading(true);
+        setMessage(null);
+        try {
+            const result = await uploadCloudinaryAsset(file, 'image', 'resources');
+            setForm((prev) => ({ ...prev, image: result.secureUrl }));
+            setMessage({ type: 'success', text: 'Image uploaded successfully.' });
+        } catch (error) {
+            console.error('Failed to upload cover image', error);
+            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to upload image.' });
+        } finally {
+            setUploading(false);
+        }
+    };
 
     useEffect(() => {
         const queryParam = searchParams.get('query');
@@ -135,6 +231,12 @@ export const Content = () => {
             setSearchTerm(queryParam);
         }
     }, [searchParams]);
+
+    useEffect(() => {
+        if (forcedTab && forcedTab !== activeTab) {
+            setActiveTab(forcedTab);
+        }
+    }, [forcedTab, activeTab]);
 
     const fetchContent = useCallback(async () => {
         setLoading(true);
@@ -199,44 +301,64 @@ export const Content = () => {
 
     const handleUpdateStatus = async (id: string, status: string) => {
         if (!canEditContent) return;
-        if (!confirm(`Update status to "${status}"?`)) return;
-        setActionLoading((prev) => ({ ...prev, [id]: true }));
-        setMessage(null);
-        try {
-            const updateStatus = httpsCallable(functions, 'updateContentStatus');
-            await updateStatus({ collection: activeTab, docId: id, status });
-            await fetchContent();
-            setMessage({ type: 'success', text: `Status updated to ${status}.` });
-        } catch (error) {
-            console.error("Failed to update status", error);
-            setMessage({ type: 'error', text: 'Failed to update status.' });
-        } finally {
-            setActionLoading((prev) => ({ ...prev, [id]: false }));
-        }
+        confirmAction(
+            'Update content status?',
+            `This will change the item status to "${status}".`,
+            async () => {
+                setActionLoading((prev) => ({ ...prev, [id]: true }));
+                setMessage(null);
+                try {
+                    const updateStatus = httpsCallable(functions, 'updateContentStatus');
+                    await updateStatus({ collection: activeTab, docId: id, status });
+                    await fetchContent();
+                    setMessage({ type: 'success', text: `Status updated to ${status}.` });
+                } catch (error) {
+                    console.error("Failed to update status", error);
+                    setMessage({ type: 'error', text: 'Failed to update status.' });
+                    throw error;
+                } finally {
+                    setActionLoading((prev) => ({ ...prev, [id]: false }));
+                }
+            },
+            {
+                confirmText: 'Update',
+                type: status === 'active' ? 'info' : 'warning'
+            }
+        );
     };
 
     const handleDelete = async (id: string) => {
         if (!canDeleteContent) return;
-        if (!confirm("Delete this item? This cannot be undone.")) return;
-        setActionLoading((prev) => ({ ...prev, [id]: true }));
-        setMessage(null);
-        try {
-            if (activeTab === 'affirmations') {
-                const deleteAffirmation = httpsCallable(functions, 'deleteAffirmation');
-                await deleteAffirmation({ id });
-                await fetchAffirmations();
-            } else {
-                const del = httpsCallable(functions, 'deleteItem');
-                await del({ collection: activeTab, id });
-                await fetchContent();
+        confirmAction(
+            'Delete this item?',
+            'This action cannot be undone.',
+            async () => {
+                setActionLoading((prev) => ({ ...prev, [id]: true }));
+                setMessage(null);
+                try {
+                    if (activeTab === 'affirmations') {
+                        const deleteAffirmation = httpsCallable(functions, 'deleteAffirmation');
+                        await deleteAffirmation({ id });
+                        await fetchAffirmations();
+                    } else {
+                        const del = httpsCallable(functions, 'deleteItem');
+                        await del({ collection: activeTab, id });
+                        await fetchContent();
+                    }
+                    setMessage({ type: 'success', text: 'Item deleted.' });
+                } catch (error) {
+                    console.error("Failed to delete item", error);
+                    setMessage({ type: 'error', text: 'Failed to delete item.' });
+                    throw error;
+                } finally {
+                    setActionLoading((prev) => ({ ...prev, [id]: false }));
+                }
+            },
+            {
+                confirmText: 'Delete',
+                type: 'danger'
             }
-            setMessage({ type: 'success', text: 'Item deleted.' });
-        } catch (error) {
-            console.error("Failed to delete item", error);
-            setMessage({ type: 'error', text: 'Failed to delete item.' });
-        } finally {
-            setActionLoading((prev) => ({ ...prev, [id]: false }));
-        }
+        );
     };
 
     const openEditModal = (item: ContentItem) => {
@@ -371,27 +493,36 @@ export const Content = () => {
         const ids = filteredItems.map((item) => item.id);
         if (ids.length === 0) return;
         const label = action === 'soft_delete' ? 'delete' : `set status to "${status}"`;
-        if (!confirm(`Bulk action will ${label} for ${ids.length} item(s). Continue?`)) return;
-
-        setMessage(null);
-        try {
-            const bulkUpdateContent = httpsCallable(functions, 'bulkUpdateContent');
-            await bulkUpdateContent({
-                collection: activeTab,
-                ids,
-                action,
-                status: status || null
-            });
-            if (activeTab === 'affirmations') {
-                await fetchAffirmations();
-            } else {
-                await fetchContent();
+        confirmAction(
+            'Run bulk action?',
+            `This will ${label} for ${ids.length} item(s).`,
+            async () => {
+                setMessage(null);
+                try {
+                    const bulkUpdateContent = httpsCallable(functions, 'bulkUpdateContent');
+                    await bulkUpdateContent({
+                        collection: activeTab,
+                        ids,
+                        action,
+                        status: status || null
+                    });
+                    if (activeTab === 'affirmations') {
+                        await fetchAffirmations();
+                    } else {
+                        await fetchContent();
+                    }
+                    setMessage({ type: 'success', text: `Bulk action complete for ${ids.length} item(s).` });
+                } catch (error) {
+                    console.error('Bulk content action failed', error);
+                    setMessage({ type: 'error', text: 'Bulk action failed.' });
+                    throw error;
+                }
+            },
+            {
+                confirmText: action === 'soft_delete' ? 'Delete items' : 'Run action',
+                type: action === 'soft_delete' ? 'danger' : 'warning'
             }
-            setMessage({ type: 'success', text: `Bulk action complete for ${ids.length} item(s).` });
-        } catch (error) {
-            console.error('Bulk content action failed', error);
-            setMessage({ type: 'error', text: 'Bulk action failed.' });
-        }
+        );
     };
 
     const filteredItems = useMemo(() => {
@@ -428,8 +559,8 @@ export const Content = () => {
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-3xl font-display text-gray-900 dark:text-gray-100">Content Library</h2>
-                    <p className="text-gray-500 text-sm mt-1 dark:text-gray-400">Manage circles, resources, and daily affirmations with clear status control.</p>
+                    <h2 className="text-3xl font-display text-gray-900 dark:text-gray-100">{pageMeta.title}</h2>
+                    <p className="text-gray-500 text-sm mt-1 dark:text-gray-400">{pageMeta.subtitle}</p>
                 </div>
                 {activeTab === 'resources' && canEditContent && (
                     <button
@@ -456,23 +587,24 @@ export const Content = () => {
                 </div>
             )}
 
-            {/* Tabs */}
-            <div className="flex gap-4 border-b border-gray-200 dark:border-gray-800">
-                {TABS.map((tab) => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={clsx(
-                            "pb-3 px-1 text-sm font-medium transition-colors border-b-2",
-                            activeTab === tab.id
-                                ? "border-primary text-primary"
-                                : "border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-                        )}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
+            {showTabs && (
+                <div className="flex gap-4 border-b border-gray-200 dark:border-gray-800">
+                    {TABS.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={clsx(
+                                "pb-3 px-1 text-sm font-medium transition-colors border-b-2",
+                                activeTab === tab.id
+                                    ? "border-primary text-primary"
+                                    : "border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                            )}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Affirmation Input Section */}
             {activeTab === 'affirmations' && (
@@ -513,7 +645,7 @@ export const Content = () => {
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Create Resource</h3>
-                            <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">Set plan access when the content is created so premium gating stays attached to the item itself.</p>
+                            <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">Set plan access when the content is created so Pro gating stays attached to the item itself.</p>
                         </div>
                     </div>
 
@@ -534,12 +666,42 @@ export const Content = () => {
                         onChange={(content) => setCreateForm((prev) => ({ ...prev, content, contentFormat: 'html' }))}
                         placeholder="Write the full resource content with headings, colors, images, and videos."
                     />
-                    <input
-                        value={createForm.image}
-                        onChange={(e) => setCreateForm((prev) => ({ ...prev, image: e.target.value }))}
-                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
-                        placeholder="Image URL"
-                    />
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-900">Cover image</h4>
+                                <p className="text-xs text-gray-600 mt-1">Upload a resource image to Cloudinary or paste a URL if you already have one.</p>
+                            </div>
+                            <label className="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 cursor-pointer">
+                                <Plus size={16} />
+                                {createImageUploading ? 'Uploading...' : 'Upload image'}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    disabled={createImageUploading}
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        e.currentTarget.value = '';
+                                        if (file) void uploadCoverImage(file, 'create');
+                                    }}
+                                />
+                            </label>
+                        </div>
+                        {!!createForm.image && (
+                            <img
+                                src={createForm.image}
+                                alt="Resource cover preview"
+                                className="w-full max-h-56 object-cover rounded-xl border border-gray-200 bg-white"
+                            />
+                        )}
+                        <input
+                            value={createForm.image}
+                            onChange={(e) => setCreateForm((prev) => ({ ...prev, image: e.target.value }))}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                            placeholder="Or paste an image URL"
+                        />
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                         <input
                             value={createForm.category}
@@ -550,7 +712,7 @@ export const Content = () => {
                                     ...prev,
                                     category,
                                     accessKind: inferredKind,
-                                    accessPlans: inferredKind === 'group_activity' ? ['premium'] : prev.accessPlans
+                                    accessPlans: inferredKind === 'group_activity' ? ['pro'] : prev.accessPlans
                                 };
                             })}
                             className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
@@ -579,7 +741,7 @@ export const Content = () => {
                     <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-4">
                         <div>
                             <h4 className="text-sm font-semibold text-gray-900">Subscription Access</h4>
-                            <p className="text-xs text-gray-600 mt-1">Choose who can open this activity and whether sharing stays premium-only.</p>
+                            <p className="text-xs text-gray-600 mt-1">Choose who can open this activity and whether sharing stays Pro-only.</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div>
@@ -589,7 +751,7 @@ export const Content = () => {
                                     onChange={(e) => setCreateForm((prev) => ({
                                         ...prev,
                                         accessKind: e.target.value as 'self_development' | 'group_activity',
-                                        accessPlans: e.target.value === 'group_activity' ? ['premium'] : prev.accessPlans
+                                        accessPlans: e.target.value === 'group_activity' ? ['pro'] : prev.accessPlans
                                     }))}
                                     className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                                 >
@@ -600,18 +762,18 @@ export const Content = () => {
                             <div>
                                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Access level</label>
                                 <select
-                                    value={createForm.accessPlans.includes('free') ? 'free_and_premium' : 'premium_only'}
+                                    value={createForm.accessPlans.includes('free') ? 'free_and_pro' : 'pro_only'}
                                     onChange={(e) => setCreateForm((prev) => ({
                                         ...prev,
-                                        accessPlans: e.target.value === 'free_and_premium' && prev.accessKind !== 'group_activity'
-                                            ? ['free', 'premium']
-                                            : ['premium']
+                                        accessPlans: e.target.value === 'free_and_pro' && prev.accessKind !== 'group_activity'
+                                            ? ['free', 'pro']
+                                            : ['pro']
                                     }))}
                                     className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                                     disabled={createForm.accessKind === 'group_activity'}
                                 >
-                                    <option value="premium_only">Premium only</option>
-                                    <option value="free_and_premium">Free + Premium</option>
+                                    <option value="pro_only">Pro only</option>
+                                    <option value="free_and_pro">Free + Pro</option>
                                 </select>
                             </div>
                             <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 mt-[22px]">
@@ -621,7 +783,7 @@ export const Content = () => {
                                     onChange={(e) => setCreateForm((prev) => ({ ...prev, shareRequiresPremium: e.target.checked }))}
                                     className="h-4 w-4 rounded border-gray-300"
                                 />
-                                <span className="text-sm text-gray-700">Sharing requires Premium</span>
+                                <span className="text-sm text-gray-700">Sharing requires Pro</span>
                             </label>
                         </div>
                     </div>
@@ -967,12 +1129,42 @@ export const Content = () => {
                                         onChange={(content) => setEditForm((prev) => ({ ...prev, content, contentFormat: 'html' }))}
                                         placeholder="Write the full resource content with headings, colors, images, and videos."
                                     />
-                                    <input
-                                        value={editForm.image}
-                                        onChange={(e) => setEditForm((prev) => ({ ...prev, image: e.target.value }))}
-                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
-                                        placeholder="Image URL"
-                                    />
+                                    <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-gray-900">Cover image</h4>
+                                                <p className="text-xs text-gray-600 mt-1">Upload a replacement image or paste a direct URL.</p>
+                                            </div>
+                                            <label className="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 cursor-pointer">
+                                                <Plus size={16} />
+                                                {editImageUploading ? 'Uploading...' : 'Upload image'}
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    disabled={editImageUploading}
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        e.currentTarget.value = '';
+                                                        if (file) void uploadCoverImage(file, 'edit');
+                                                    }}
+                                                />
+                                            </label>
+                                        </div>
+                                        {!!editForm.image && (
+                                            <img
+                                                src={editForm.image}
+                                                alt="Resource cover preview"
+                                                className="w-full max-h-56 object-cover rounded-xl border border-gray-200 bg-white"
+                                            />
+                                        )}
+                                        <input
+                                            value={editForm.image}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, image: e.target.value }))}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                                            placeholder="Or paste an image URL"
+                                        />
+                                    </div>
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                         <input
                                             value={editForm.category}
@@ -983,7 +1175,7 @@ export const Content = () => {
                                                     ...prev,
                                                     category,
                                                     accessKind: inferredKind,
-                                                    accessPlans: inferredKind === 'group_activity' ? ['premium'] : prev.accessPlans
+                                                    accessPlans: inferredKind === 'group_activity' ? ['pro'] : prev.accessPlans
                                                 };
                                             })}
                                             className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
@@ -1012,7 +1204,7 @@ export const Content = () => {
                                     <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-4">
                                         <div>
                                             <h4 className="text-sm font-semibold text-gray-900">Subscription Access</h4>
-                                            <p className="text-xs text-gray-600 mt-1">Set whether this resource is free, premium-only, or share-restricted.</p>
+                                            <p className="text-xs text-gray-600 mt-1">Set whether this resource is free, Pro-only, or share-restricted.</p>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                             <div>
@@ -1022,7 +1214,7 @@ export const Content = () => {
                                                     onChange={(e) => setEditForm((prev) => ({
                                                         ...prev,
                                                         accessKind: e.target.value as 'self_development' | 'group_activity',
-                                                        accessPlans: e.target.value === 'group_activity' ? ['premium'] : prev.accessPlans
+                                                        accessPlans: e.target.value === 'group_activity' ? ['pro'] : prev.accessPlans
                                                     }))}
                                                     className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                                                 >
@@ -1033,18 +1225,18 @@ export const Content = () => {
                                             <div>
                                                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Access level</label>
                                                 <select
-                                                    value={editForm.accessPlans.includes('free') ? 'free_and_premium' : 'premium_only'}
+                                                    value={editForm.accessPlans.includes('free') ? 'free_and_pro' : 'pro_only'}
                                                     onChange={(e) => setEditForm((prev) => ({
                                                         ...prev,
-                                                        accessPlans: e.target.value === 'free_and_premium' && prev.accessKind !== 'group_activity'
-                                                            ? ['free', 'premium']
-                                                            : ['premium']
+                                                        accessPlans: e.target.value === 'free_and_pro' && prev.accessKind !== 'group_activity'
+                                                            ? ['free', 'pro']
+                                                            : ['pro']
                                                     }))}
                                                     className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                                                     disabled={editForm.accessKind === 'group_activity'}
                                                 >
-                                                    <option value="premium_only">Premium only</option>
-                                                    <option value="free_and_premium">Free + Premium</option>
+                                                    <option value="pro_only">Pro only</option>
+                                                    <option value="free_and_pro">Free + Pro</option>
                                                 </select>
                                             </div>
                                             <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 mt-[22px]">
@@ -1054,8 +1246,8 @@ export const Content = () => {
                                                     onChange={(e) => setEditForm((prev) => ({ ...prev, shareRequiresPremium: e.target.checked }))}
                                                     className="h-4 w-4 rounded border-gray-300"
                                                 />
-                                                <span className="text-sm text-gray-700">Sharing requires Premium</span>
-                                            </label>
+                                                    <span className="text-sm text-gray-700">Sharing requires Pro</span>
+                                                </label>
                                         </div>
                                     </div>
                                 </>
@@ -1106,6 +1298,23 @@ export const Content = () => {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={confirmOpen}
+                onClose={() => {
+                    if (!confirmLoading) {
+                        setConfirmOpen(false);
+                    }
+                }}
+                onConfirm={() => {
+                    void handleConfirm();
+                }}
+                title={confirmConfig.title}
+                message={confirmConfig.message}
+                confirmText={confirmConfig.confirmText}
+                type={confirmConfig.type}
+                loading={confirmLoading}
+            />
         </div>
     );
 };

@@ -1,5 +1,5 @@
 import { callableClient } from '../api/callableClient';
-import { getActivityAccessKind, getAllowedPlansForResource } from './subscriptionConfig';
+import { getActivityAccessKind, getAllowedPlansForResource, normalizePlanId } from './subscriptionConfig';
 
 let cachedStatus = null;
 let cacheTs = 0;
@@ -9,13 +9,13 @@ const normalizeGuard = (result = {}) => ({
     allowed: result.allowed !== false,
     reasonCode: result.reasonCode || '',
     message: result.message || '',
-    plan: result.plan || cachedStatus?.entitlement?.plan || 'free',
+    plan: normalizePlanId(result.plan || cachedStatus?.entitlement?.plan || 'free'),
     usage: result.usage || cachedStatus?.usage || null,
     upgradeCta: result.upgradeCta || 'upgrade',
     grantedMinutes: typeof result.grantedMinutes === 'number' ? result.grantedMinutes : null
 });
 
-const getCachedPlan = () => cachedStatus?.entitlement?.plan || 'free';
+const getCachedPlan = () => normalizePlanId(cachedStatus?.entitlement?.plan || 'free');
 
 export const subscriptionGuardService = {
     invalidateCache() {
@@ -51,50 +51,29 @@ export const subscriptionGuardService = {
     async canCreateCircle({ type, circles = [] }) {
         const status = await this.getSubscriptionStatus();
         const usage = status?.usage || null;
-        const plan = status?.entitlement?.plan || 'free';
-        if (plan === 'premium') return normalizeGuard({ allowed: true, plan, usage });
-        const limits = { private: 3, public: 3 };
-        const key = type === 'private' ? 'private' : 'public';
-        const current = Array.isArray(circles) && circles.length > 0
-            ? circles.filter((circle) => String(circle?.type || 'public') === key && String(circle?.status || 'active') === 'active').length
-            : Number(usage?.circleCreates?.[key] || 0);
-        if (current >= limits[key]) {
-            return normalizeGuard({
-                allowed: false,
-                reasonCode: key === 'private' ? 'circle_private_limit_reached' : 'circle_public_limit_reached',
-                message: key === 'private'
-                    ? 'Free plan allows up to 3 private circles. Upgrade to Premium to create more.'
-                    : 'Free plan allows up to 3 public circles. Upgrade to Premium to create more.',
-                plan,
-                usage
-            });
-        }
+        const plan = normalizePlanId(status?.entitlement?.plan || 'free');
         return normalizeGuard({ allowed: true, plan, usage });
     },
 
     async canStartHuddle() {
         const status = await this.getSubscriptionStatus();
         const usage = status?.usage || null;
-        const plan = status?.entitlement?.plan || 'free';
-        const limits = plan === 'premium'
-            ? { dailyStarts: 3, dailyMinutes: 120, sessionMinutes: 40 }
-            : { dailyStarts: 2, dailyMinutes: 20, sessionMinutes: 10 };
-        const starts = Number(usage?.huddlesStarted || 0);
-        const remainingMinutes = Number(usage?.huddleMinutesRemaining ?? (limits.dailyMinutes - Number(usage?.huddleMinutesReserved || 0)));
-        if (starts >= limits.dailyStarts) {
+        const plan = normalizePlanId(status?.entitlement?.plan || 'free');
+        if (plan !== 'pro') {
             return normalizeGuard({
                 allowed: false,
-                reasonCode: 'huddle_daily_count_reached',
-                message: 'You have reached your huddle limit for today.',
+                reasonCode: 'free_users_cannot_start_circle_huddle',
+                message: 'Circle huddles are available only in Pro Circles for Pro members.',
                 plan,
                 usage
             });
         }
+        const remainingMinutes = Number(usage?.circleHuddleMinutesRemaining ?? (120 - Number(usage?.circleHuddleMinutesReserved || 0)));
         if (remainingMinutes <= 0) {
             return normalizeGuard({
                 allowed: false,
-                reasonCode: 'huddle_daily_minutes_reached',
-                message: 'You have used all available huddle minutes for today.',
+                reasonCode: 'pro_huddle_daily_minutes_reached',
+                message: 'You have used all available Pro huddle minutes for today.',
                 plan,
                 usage
             });
@@ -103,19 +82,19 @@ export const subscriptionGuardService = {
             allowed: true,
             plan,
             usage,
-            grantedMinutes: Math.min(limits.sessionMinutes, remainingMinutes)
+            grantedMinutes: Math.min(120, remainingMinutes)
         });
     },
 
     async canScheduleHuddle() {
         const status = await this.getSubscriptionStatus();
-        const plan = status?.entitlement?.plan || 'free';
+        const plan = normalizePlanId(status?.entitlement?.plan || 'free');
         const usage = status?.usage || null;
-        if (plan !== 'premium') {
+        if (plan !== 'pro') {
             return normalizeGuard({
                 allowed: false,
-                reasonCode: 'schedule_requires_premium',
-                message: 'Scheduling huddles is available on Premium.',
+                reasonCode: 'schedule_requires_pro',
+                message: 'Scheduling huddles is available on Pro.',
                 plan,
                 usage
             });
@@ -126,16 +105,16 @@ export const subscriptionGuardService = {
     async canAccessActivity({ resource }) {
         const status = await this.getSubscriptionStatus();
         const usage = status?.usage || null;
-        const plan = status?.entitlement?.plan || 'free';
+        const plan = normalizePlanId(status?.entitlement?.plan || 'free');
         const gatingEnabled = status?.activityGatingEnabled === true;
         if (!gatingEnabled) return normalizeGuard({ allowed: true, plan, usage });
         const kind = getActivityAccessKind(resource);
         const allowedPlans = getAllowedPlansForResource(resource);
-        if (kind === 'group_activity' && plan !== 'premium') {
+        if (kind === 'group_activity' && plan !== 'pro') {
             return normalizeGuard({
                 allowed: false,
-                reasonCode: 'group_activity_requires_premium',
-                message: 'Group activities are available on Premium.',
+                reasonCode: 'group_activity_requires_pro',
+                message: 'Group activities are available on Pro.',
                 plan,
                 usage
             });
@@ -143,8 +122,8 @@ export const subscriptionGuardService = {
         if (!allowedPlans.includes(plan)) {
             return normalizeGuard({
                 allowed: false,
-                reasonCode: 'activity_requires_premium',
-                message: 'This activity is available on Premium.',
+                reasonCode: 'activity_requires_pro',
+                message: 'This activity is available on Pro.',
                 plan,
                 usage
             });
@@ -155,11 +134,11 @@ export const subscriptionGuardService = {
     async canShareActivity({ resource }) {
         const access = await this.canAccessActivity({ resource });
         if (!access.allowed) return access;
-        if (resource?.access?.shareRequiresPremium && getCachedPlan() !== 'premium') {
+        if (resource?.access?.shareRequiresPremium && getCachedPlan() !== 'pro') {
             return normalizeGuard({
                 allowed: false,
-                reasonCode: 'activity_share_requires_premium',
-                message: 'Sharing activities is available on Premium.',
+                reasonCode: 'activity_share_requires_pro',
+                message: 'Sharing activities is available on Pro.',
                 plan: getCachedPlan(),
                 usage: cachedStatus?.usage || null
             });
@@ -177,7 +156,7 @@ export const subscriptionGuardService = {
         return resources.filter((resource) => {
             const kind = getActivityAccessKind(resource);
             const allowedPlans = getAllowedPlansForResource(resource);
-            if (kind === 'group_activity' && plan !== 'premium') return false;
+            if (kind === 'group_activity' && plan !== 'pro') return false;
             return allowedPlans.includes(plan);
         });
     },

@@ -12,6 +12,7 @@ import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
 import { useModal } from '../context/ModalContext';
+import { getCircleBillingTier } from '../services/circles/circleLimits';
 
 
 const { width } = Dimensions.get('window');
@@ -108,6 +109,7 @@ const ExploreScreen = ({ navigation }) => {
     });
     const visibleActivitiesSource = displayedActivities.length > 0 ? displayedActivities : activities;
     const visibleActivities = showAllActivities ? visibleActivitiesSource : visibleActivitiesSource.slice(0, 3);
+    const getCircleTierCopy = (circle = {}) => getCircleBillingTier(circle) === 'pro' ? 'Pro Circle' : 'Free Circle';
     // If empty (e.g. first run before seed), maybe show static fallback or specific empty state.
     // For now, assuming backend seed is run or will be run.
 
@@ -227,7 +229,7 @@ const ExploreScreen = ({ navigation }) => {
                                                     showUpgradePrompt({
                                                         navigation,
                                                         showModal,
-                                                        title: 'Premium activity',
+                                                        title: 'Pro activity',
                                                         guard
                                                     });
                                                     return;
@@ -291,6 +293,11 @@ const ExploreScreen = ({ navigation }) => {
                                     <View style={{ flex: 1 }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                             <Text style={styles.groupNamePreview}>{group.name}</Text>
+                                            <View style={[styles.groupTierBadge, getCircleBillingTier(group) === 'pro' && styles.groupTierBadgePro]}>
+                                                <Text style={[styles.groupTierBadgeText, getCircleBillingTier(group) === 'pro' && styles.groupTierBadgeTextPro]}>
+                                                    {getCircleTierCopy(group)}
+                                                </Text>
+                                            </View>
                                             {/* {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />} */}
                                         </View>
                                         <Text style={styles.groupMembersPreview}>{group.members?.length || 0} members</Text>
@@ -683,6 +690,25 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#1A1A1A',
         marginBottom: 2,
+    },
+    groupTierBadge: {
+        marginLeft: 8,
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: '#E7F2ED',
+    },
+    groupTierBadgePro: {
+        backgroundColor: '#FFF2D6',
+    },
+    groupTierBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#166534',
+        textTransform: 'uppercase',
+    },
+    groupTierBadgeTextPro: {
+        color: '#8A5A00',
     },
     groupMembersPreview: {
         fontSize: 13,

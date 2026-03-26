@@ -19,6 +19,8 @@ import {
     canAccessResourceForPlan,
     coerceUsageSnapshot,
     createEmptyUsageSnapshot,
+    getCircleBillingTier,
+    getCircleMemberCap,
     getActivityAccessKind,
     getAllowedPlansForResource,
     getDailyUsageRef,
@@ -26,8 +28,10 @@ import {
     getEntitlementRef,
     getPlanRulesForEntitlement,
     getUsageDayKeyForTimezone,
+    isCircleHuddlesEnabled,
     isSharePremiumOnly,
     minutesBetween,
+    normalizePlanId,
     toTimestampMs
 } from '../services/subscription';
 
@@ -583,6 +587,73 @@ const removeUserFromCircle = async (circleId: string, uid: string) => {
     });
 };
 
+const downgradeCircleToFree = async (circleId: string) => {
+    const circleRef = db.collection('circles').doc(circleId);
+    const circleSnap = await circleRef.get();
+    if (!circleSnap.exists) return;
+    const circleData = circleSnap.data() || {};
+
+    await circleRef.set({
+        billingTier: 'free',
+        huddlesEnabled: false,
+        memberCap: 6,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    if (circleData?.activeHuddle?.huddleId) {
+        await circleRef.update({
+            activeHuddle: admin.firestore.FieldValue.delete()
+        }).catch(() => {});
+    }
+
+    const scheduledSnap = await circleRef.collection('scheduledHuddles')
+        .where('status', '==', 'scheduled')
+        .get()
+        .catch(() => null);
+    if (scheduledSnap && !scheduledSnap.empty) {
+        const batch = db.batch();
+        scheduledSnap.docs.forEach((docSnap) => {
+            batch.set(docSnap.ref, {
+                status: 'invalidated',
+                invalidatedReason: 'circle_downgraded_to_free',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        });
+        await batch.commit().catch(() => {});
+    }
+};
+
+const removeUserFromAllProCircles = async (uid: string) => {
+    const snap = await db.collection('circles')
+        .where('members', 'array-contains', uid)
+        .where('billingTier', '==', 'pro')
+        .limit(200)
+        .get();
+    for (const docSnap of snap.docs) {
+        await removeUserFromCircle(docSnap.id, uid).catch(() => {});
+    }
+};
+
+const downgradeOwnedProCirclesIfNeeded = async (uid: string, nextPlan: 'free' | 'pro') => {
+    if (nextPlan === 'pro') return;
+    const snap = await db.collection('circles')
+        .where('createdBy', '==', uid)
+        .where('billingTier', '==', 'pro')
+        .limit(200)
+        .get();
+    for (const docSnap of snap.docs) {
+        await downgradeCircleToFree(docSnap.id).catch(() => {});
+    }
+};
+
+const reconcileSubscriptionAccessForUser = async (uid: string, entitlement?: any) => {
+    const plan = getEffectivePlan(entitlement || (await getEntitlementRef(db, uid).get()).data() || {});
+    if (plan !== 'pro') {
+        await removeUserFromAllProCircles(uid).catch(() => {});
+        await downgradeOwnedProCirclesIfNeeded(uid, plan).catch(() => {});
+    }
+};
+
 const getBlockedUserIds = async (uid: string): Promise<string[]> => {
     const snap = await db.collection('users').doc(uid).get();
     const data = snap.data() || {};
@@ -716,6 +787,9 @@ export const createCircle = regionalFunctions.https.onCall(async (data, context)
             image: image || null,
             status: 'active',
             type: normalizedType, // 'public' | 'private'
+            billingTier: 'free',
+            huddlesEnabled: false,
+            memberCap: 6,
             visibility: visibility || 'visible', // 'visible' | 'hidden'
             joinSettings: {
                 requiresApproval: normalizedType === 'private',
@@ -861,6 +935,60 @@ export const updateCircle = regionalFunctions.https.onCall(async (data, context)
         console.error("Error updating circle:", error);
         throw new functions.https.HttpsError('internal', 'Unable to update circle.');
     }
+});
+
+export const setCircleBillingTier = regionalFunctions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+    const uid = context.auth.uid;
+    const circleId = String(data?.circleId || '').trim();
+    const nextTier = String(data?.billingTier || '').trim().toLowerCase() === 'pro' ? 'pro' : 'free';
+    if (!circleId) throw new functions.https.HttpsError('invalid-argument', 'Circle ID required.');
+
+    const circleAccess = await assertCanAccessCircle(uid, circleId, 'upgrade');
+    const currentTier = circleAccess.billing.billingTier;
+    if (currentTier === nextTier) {
+        return { success: true, billingTier: currentTier };
+    }
+
+    if (nextTier === 'pro') {
+        if (circleAccess.state.plan !== 'pro') {
+            throw new functions.https.HttpsError('permission-denied', getReasonMessage('pro_circle_requires_pro_membership'));
+        }
+        const memberIds = Array.isArray(circleAccess.circle?.members) ? circleAccess.circle.members : [];
+        if (memberIds.length > 12) {
+            throw new functions.https.HttpsError('failed-precondition', 'Reduce the circle to 12 members or fewer before upgrading to Pro.');
+        }
+        const memberDocs = await Promise.all(
+            memberIds.map((memberUid: string) => circleAccess.circleSnap.ref.collection('members').doc(memberUid).get())
+        );
+        const memberStates = await Promise.all(memberIds.map((memberUid: string) => getUserSubscriptionState(memberUid)));
+        const roleDemotions = memberDocs
+            .map((docSnap, index) => ({
+                ref: docSnap.ref,
+                role: String(docSnap.data()?.role || 'member').toLowerCase(),
+                plan: memberStates[index]?.plan || 'free'
+            }))
+            .filter((entry) => entry.plan !== 'pro' && ['admin', 'moderator'].includes(entry.role));
+
+        const batch = db.batch();
+        batch.set(circleAccess.circleSnap.ref, {
+            billingTier: 'pro',
+            huddlesEnabled: true,
+            memberCap: 12,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        roleDemotions.forEach((entry) => {
+            batch.set(entry.ref, {
+                role: 'member',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        });
+        await batch.commit();
+        return { success: true, billingTier: 'pro', demotedModeratorCount: roleDemotions.length };
+    }
+
+    await downgradeCircleToFree(circleId);
+    return { success: true, billingTier: 'free' };
 });
 
 export const createCircleInvite = regionalFunctions.https.onCall(async (data, context) => {
@@ -1232,9 +1360,19 @@ export const joinCircleWithInvite = regionalFunctions.https.onCall(async (data, 
 
         const c = latestCircleSnap.data() || {};
         const members = Array.isArray(c.members) ? c.members : [];
+        const billing = getCircleBillingState(c);
         const count = getCircleMemberCount(c);
-        if (!members.includes(uid) && count >= MAX_CIRCLE_MEMBERS) {
-            throw new functions.https.HttpsError('failed-precondition', `This circle is full (max ${MAX_CIRCLE_MEMBERS} members).`);
+        if (billing.billingTier === 'pro') {
+            const joiningState = await getUserSubscriptionState(uid);
+            if (joiningState.plan !== 'pro') {
+                throw new functions.https.HttpsError('permission-denied', getReasonMessage('free_users_cannot_join_pro_circle'));
+            }
+        }
+        if (!members.includes(uid) && count >= billing.memberCap) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                billing.billingTier === 'pro' ? getReasonMessage('pro_circle_full') : getReasonMessage('free_circle_full')
+            );
         }
 
         const memberRef = circleRef.collection('members').doc(uid);
@@ -1324,14 +1462,21 @@ export const joinCircle = regionalFunctions.https.onCall(async (data, context) =
         }
 
         const circleData = circleDoc.data() || {};
+        const billing = getCircleBillingState(circleData);
         const isPrivate = circleData.type === 'private';
         const requiresApproval = circleData.joinSettings?.requiresApproval || isPrivate;
         const members = circleData.members || [];
         const currentCount = getCircleMemberCount(circleData);
-        if (!members.includes(uid) && currentCount >= MAX_CIRCLE_MEMBERS) {
+        if (billing.billingTier === 'pro') {
+            const state = await getUserSubscriptionState(uid);
+            if (state.plan !== 'pro') {
+                throw new functions.https.HttpsError('permission-denied', getReasonMessage('free_users_cannot_join_pro_circle'));
+            }
+        }
+        if (!members.includes(uid) && currentCount >= billing.memberCap) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                `This circle is full (max ${MAX_CIRCLE_MEMBERS} members).`
+                billing.billingTier === 'pro' ? getReasonMessage('pro_circle_full') : getReasonMessage('free_circle_full')
             );
         }
 
@@ -1379,15 +1524,22 @@ export const joinCircle = regionalFunctions.https.onCall(async (data, context) =
                 throw new functions.https.HttpsError('not-found', 'Circle not found.');
             }
             const c = snap.data() || {};
+            const billing = getCircleBillingState(c);
             const m = Array.isArray(c.members) ? c.members : [];
             if (m.includes(uid)) {
                 return;
             }
             const count = getCircleMemberCount(c);
-            if (count >= MAX_CIRCLE_MEMBERS) {
+            if (billing.billingTier === 'pro') {
+                const state = await getUserSubscriptionState(uid);
+                if (state.plan !== 'pro') {
+                    throw new functions.https.HttpsError('permission-denied', getReasonMessage('free_users_cannot_join_pro_circle'));
+                }
+            }
+            if (count >= billing.memberCap) {
                 throw new functions.https.HttpsError(
                     'failed-precondition',
-                    `This circle is full (max ${MAX_CIRCLE_MEMBERS} members).`
+                    billing.billingTier === 'pro' ? getReasonMessage('pro_circle_full') : getReasonMessage('free_circle_full')
                 );
             }
 
@@ -1708,12 +1860,26 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
         let roleChangeNotification: { title: string; body: string } | null = null;
         const circleDoc = await circleRef.get();
         const circleData = circleDoc.data() || {};
+        const circleBilling = getCircleBillingState(circleData);
         const circleName = String(circleData?.name || 'Circle');
         const requestorUserDoc = await db.collection('users').doc(uid).get();
         const requestorName = String(requestorUserDoc.data()?.name || requestorUserDoc.data()?.displayName || 'A circle admin');
+        const requestorState = circleBilling.billingTier === 'pro'
+            ? await getUserSubscriptionState(uid)
+            : { plan: 'free' as const };
+
+        if (circleBilling.billingTier === 'pro' && requestorState.plan !== 'pro') {
+            throw new functions.https.HttpsError('permission-denied', 'Only Pro admins can manage roles in a Pro Circle.');
+        }
 
         switch (action) {
             case 'promote_admin':
+                if (circleBilling.billingTier === 'pro') {
+                    const targetState = await getUserSubscriptionState(targetUid);
+                    if (targetState.plan !== 'pro') {
+                        throw new functions.https.HttpsError('failed-precondition', 'Only Pro members can become admins in a Pro Circle.');
+                    }
+                }
                 batch.update(targetRef, { role: 'admin' });
                 roleChangeNotification = {
                     title: 'You are now an admin',
@@ -1721,6 +1887,12 @@ export const manageMember = regionalFunctions.https.onCall(async (data, context)
                 };
                 break;
             case 'promote_mod':
+                if (circleBilling.billingTier === 'pro') {
+                    const targetState = await getUserSubscriptionState(targetUid);
+                    if (targetState.plan !== 'pro') {
+                        throw new functions.https.HttpsError('failed-precondition', 'Only Pro members can become moderators in a Pro Circle.');
+                    }
+                }
                 batch.update(targetRef, { role: 'moderator' });
                 roleChangeNotification = {
                     title: 'You are now a moderator',
@@ -1884,12 +2056,19 @@ export const handleJoinRequest = regionalFunctions.https.onCall(async (data, con
                 const circleSnap = await tx.get(circleRef);
                 if (!circleSnap.exists) throw new functions.https.HttpsError('not-found', 'Circle not found.');
                 const c = circleSnap.data() || {};
+                const billing = getCircleBillingState(c);
                 const count = getCircleMemberCount(c);
                 const membersArr = Array.isArray(c.members) ? c.members : [];
-                if (!membersArr.includes(targetUid) && count >= MAX_CIRCLE_MEMBERS) {
+                if (billing.billingTier === 'pro') {
+                    const targetState = await getUserSubscriptionState(targetUid);
+                    if (targetState.plan !== 'pro') {
+                        throw new functions.https.HttpsError('permission-denied', getReasonMessage('free_users_cannot_join_pro_circle'));
+                    }
+                }
+                if (!membersArr.includes(targetUid) && count >= billing.memberCap) {
                     throw new functions.https.HttpsError(
                         'failed-precondition',
-                        `This circle is full (max ${MAX_CIRCLE_MEMBERS} members).`
+                        billing.billingTier === 'pro' ? getReasonMessage('pro_circle_full') : getReasonMessage('free_circle_full')
                     );
                 }
 
@@ -2164,16 +2343,9 @@ export const sendMessage = regionalFunctions.https.onCall(async (data, context) 
     }
 
     try {
-        const chatRef = db.collection('chats').doc(chatId);
-        const chatDoc = await chatRef.get();
-        if (!chatDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Chat not found.');
-        }
-        const chatData = chatDoc.data();
+        const { chatSnap, chat: chatData } = await assertCanUseChat(uid, chatId, 'message');
+        const chatRef = chatSnap.ref;
         const participants = chatData?.participants || [];
-        if (!participants.includes(uid)) {
-            throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
-        }
 
         if (chatData?.type === 'direct' && participants.length === 2) {
             const otherId = participants.find((participantUid: string) => participantUid !== uid);
@@ -2846,12 +3018,13 @@ type GuardResult = {
     allowed: boolean;
     reasonCode: string;
     message: string;
-    plan: 'free' | 'premium';
+    plan: 'free' | 'pro';
     usage: any;
     upgradeCta: 'upgrade';
     grantedMinutes?: number;
     dayKey?: string;
     timeZone?: string;
+    usageKind?: 'personal' | 'circle';
 };
 
 const SUBSCRIPTION_IOS_PRODUCT_IDS = (process.env.IOS_SUBSCRIPTION_PRODUCT_IDS || '')
@@ -2910,7 +3083,7 @@ const getUserSubscriptionState = async (uid: string) => {
     };
 };
 
-const buildGuardResult = (input: Partial<GuardResult> & { plan: 'free' | 'premium'; usage: any }) => ({
+const buildGuardResult = (input: Partial<GuardResult> & { plan: 'free' | 'pro'; usage: any }) => ({
     allowed: input.allowed !== false,
     reasonCode: input.reasonCode || '',
     message: input.message || '',
@@ -2919,10 +3092,187 @@ const buildGuardResult = (input: Partial<GuardResult> & { plan: 'free' | 'premiu
     upgradeCta: 'upgrade' as const,
     ...(typeof input.grantedMinutes === 'number' ? { grantedMinutes: input.grantedMinutes } : {}),
     ...(input.dayKey ? { dayKey: input.dayKey } : {}),
-    ...(input.timeZone ? { timeZone: input.timeZone } : {})
+    ...(input.timeZone ? { timeZone: input.timeZone } : {}),
+    ...(input.usageKind ? { usageKind: input.usageKind } : {})
 });
 
-const getReasonMessage = (reasonCode: string) => SUBSCRIPTION_REASON_MESSAGES[reasonCode] || 'This feature requires Premium.';
+const getReasonMessage = (reasonCode: string) => SUBSCRIPTION_REASON_MESSAGES[reasonCode] || 'This feature requires Pro.';
+
+const isCircleMemberRoleActive = (memberData: any) => memberData?.status === 'active';
+
+const isCircleModeratorRole = (role: any) => ['creator', 'admin', 'moderator'].includes(String(role || '').trim().toLowerCase());
+
+const getCircleBillingState = (circleData: any) => {
+    const billingTier = getCircleBillingTier(circleData);
+    return {
+        billingTier,
+        huddlesEnabled: isCircleHuddlesEnabled(circleData),
+        memberCap: getCircleMemberCap(circleData)
+    };
+};
+
+const assertCanAccessCircle = async (
+    uid: string,
+    circleId: string,
+    intent: 'view' | 'join' | 'member' | 'moderate' | 'upgrade'
+) => {
+    const [state, circleSnap] = await Promise.all([
+        getUserSubscriptionState(uid),
+        db.collection('circles').doc(circleId).get()
+    ]);
+    if (!circleSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Circle not found.');
+    }
+    const circle = circleSnap.data() || {};
+    const memberSnap = await circleSnap.ref.collection('members').doc(uid).get();
+    const member = memberSnap.exists ? (memberSnap.data() || {}) : null;
+    const billing = getCircleBillingState(circle);
+
+    if (intent === 'view') {
+        return { state, circleSnap, circle, memberSnap, member, billing };
+    }
+
+    if (intent === 'join' && billing.billingTier === 'pro' && state.plan !== 'pro') {
+        throw new functions.https.HttpsError(
+            'permission-denied',
+            getReasonMessage('free_users_cannot_join_pro_circle')
+        );
+    }
+
+    if (intent === 'join') {
+        return { state, circleSnap, circle, memberSnap, member, billing };
+    }
+
+    if (!member || !isCircleMemberRoleActive(member)) {
+        throw new functions.https.HttpsError('permission-denied', 'You no longer have access to this circle.');
+    }
+
+    if (intent === 'moderate' || intent === 'upgrade') {
+        if (billing.billingTier === 'pro' && state.plan !== 'pro') {
+            throw new functions.https.HttpsError('permission-denied', getReasonMessage('pro_circle_requires_pro_membership'));
+        }
+        if (!isCircleModeratorRole(member?.role)) {
+            throw new functions.https.HttpsError('permission-denied', 'Moderator privileges required.');
+        }
+    }
+
+    return { state, circleSnap, circle, memberSnap, member, billing };
+};
+
+const assertCanUseChat = async (
+    uid: string,
+    chatId: string,
+    intent: 'open' | 'message' | 'huddle'
+) => {
+    const chatSnap = await db.collection('chats').doc(chatId).get();
+    if (!chatSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Chat not found.');
+    }
+    const chat = chatSnap.data() || {};
+    const participants = Array.isArray(chat?.participants) ? chat.participants : [];
+    if (!participants.includes(uid)) {
+        throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
+    }
+    let circleContext = null;
+    if (chat?.circleId) {
+        circleContext = await assertCanAccessCircle(uid, String(chat.circleId), 'member');
+    }
+    return { chatSnap, chat, circleContext };
+};
+
+const getActiveHuddleCountForUser = async (uid: string) => {
+    const snap = await db.collection('huddles')
+        .where('participants', 'array-contains', uid)
+        .where('isActive', '==', true)
+        .limit(2)
+        .get();
+    return snap.size;
+};
+
+const assertNoActiveHuddleConflict = async (uid: string) => {
+    const activeCount = await getActiveHuddleCountForUser(uid);
+    if (activeCount > 0) {
+        throw new functions.https.HttpsError('failed-precondition', getReasonMessage('active_huddle_conflict'));
+    }
+};
+
+const canUsePersonalHuddleForState = async (uid: string): Promise<GuardResult> => {
+    const state = await getUserSubscriptionState(uid);
+    const usageSummary = buildUsageSummary(state.usage, state.planRules);
+    if (state.plan !== 'free') {
+        return buildGuardResult({
+            plan: state.plan,
+            usage: usageSummary,
+            grantedMinutes: Math.min(10, usageSummary.personalHuddleMinutesRemaining),
+            dayKey: state.dayKey,
+            timeZone: state.timeZone,
+            usageKind: 'personal'
+        });
+    }
+    if (usageSummary.personalHuddlesStarted >= 2) {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'personal_huddle_daily_count_reached',
+            message: getReasonMessage('personal_huddle_daily_count_reached'),
+            plan: state.plan,
+            usage: usageSummary,
+            usageKind: 'personal'
+        });
+    }
+    if (usageSummary.personalHuddleMinutesRemaining <= 0) {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'personal_huddle_daily_minutes_reached',
+            message: getReasonMessage('personal_huddle_daily_minutes_reached'),
+            plan: state.plan,
+            usage: usageSummary,
+            usageKind: 'personal'
+        });
+    }
+    const grantedMinutes = Math.min(10, usageSummary.personalHuddleMinutesRemaining);
+    return buildGuardResult({
+        plan: state.plan,
+        usage: usageSummary,
+        grantedMinutes,
+        dayKey: state.dayKey,
+        timeZone: state.timeZone,
+        usageKind: 'personal'
+    });
+};
+
+const canUseProCircleHuddleForState = async (uid: string): Promise<GuardResult> => {
+    const state = await getUserSubscriptionState(uid);
+    const usageSummary = buildUsageSummary(state.usage, state.planRules);
+    if (state.plan !== 'pro') {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'free_users_cannot_start_circle_huddle',
+            message: getReasonMessage('free_users_cannot_start_circle_huddle'),
+            plan: state.plan,
+            usage: usageSummary,
+            usageKind: 'circle'
+        });
+    }
+    if (usageSummary.circleHuddleMinutesRemaining <= 0) {
+        return buildGuardResult({
+            allowed: false,
+            reasonCode: 'pro_huddle_daily_minutes_reached',
+            message: getReasonMessage('pro_huddle_daily_minutes_reached'),
+            plan: state.plan,
+            usage: usageSummary,
+            usageKind: 'circle'
+        });
+    }
+    const grantedMinutes = Math.min(120, usageSummary.circleHuddleMinutesRemaining);
+    return buildGuardResult({
+        plan: state.plan,
+        usage: usageSummary,
+        grantedMinutes,
+        dayKey: state.dayKey,
+        timeZone: state.timeZone,
+        usageKind: 'circle'
+    });
+};
 
 const canCreateCircleForState = async (uid: string, circleType: 'public' | 'private'): Promise<GuardResult> => {
     const state = await getUserSubscriptionState(uid);
@@ -2951,43 +3301,7 @@ const canCreateCircleForState = async (uid: string, circleType: 'public' | 'priv
 };
 
 const canStartHuddleForState = async (uid: string): Promise<GuardResult> => {
-    const state = await getUserSubscriptionState(uid);
-    const usageSummary = buildUsageSummary(state.usage, state.planRules);
-    if (usageSummary.huddlesStarted >= state.planRules.huddlesPerDay) {
-        return buildGuardResult({
-            allowed: false,
-            reasonCode: 'huddle_daily_count_reached',
-            message: getReasonMessage('huddle_daily_count_reached'),
-            plan: state.plan,
-            usage: usageSummary
-        });
-    }
-    if (usageSummary.huddleMinutesRemaining <= 0) {
-        return buildGuardResult({
-            allowed: false,
-            reasonCode: 'huddle_daily_minutes_reached',
-            message: getReasonMessage('huddle_daily_minutes_reached'),
-            plan: state.plan,
-            usage: usageSummary
-        });
-    }
-    const grantedMinutes = Math.min(state.planRules.huddleMinutesPerSession, usageSummary.huddleMinutesRemaining);
-    if (grantedMinutes <= 0) {
-        return buildGuardResult({
-            allowed: false,
-            reasonCode: 'huddle_duration_grant_unavailable',
-            message: getReasonMessage('huddle_duration_grant_unavailable'),
-            plan: state.plan,
-            usage: usageSummary
-        });
-    }
-    return buildGuardResult({
-        plan: state.plan,
-        usage: usageSummary,
-        grantedMinutes,
-        dayKey: state.dayKey,
-        timeZone: state.timeZone
-    });
+    return canUseProCircleHuddleForState(uid);
 };
 
 const canScheduleForState = async (uid: string): Promise<GuardResult> => {
@@ -2996,8 +3310,8 @@ const canScheduleForState = async (uid: string): Promise<GuardResult> => {
     if (!state.planRules.activities.allowSchedule) {
         return buildGuardResult({
             allowed: false,
-            reasonCode: 'schedule_requires_premium',
-            message: getReasonMessage('schedule_requires_premium'),
+            reasonCode: 'schedule_requires_pro',
+            message: getReasonMessage('schedule_requires_pro'),
             plan: state.plan,
             usage: usageSummary
         });
@@ -3021,11 +3335,11 @@ const canAccessActivityForState = async (uid: string, resource: any, action: 'vi
             usage: usageSummary
         });
     }
-    if (action === 'share' && isSharePremiumOnly(resource) && state.plan !== 'premium') {
+    if (action === 'share' && isSharePremiumOnly(resource) && state.plan !== 'pro') {
         return buildGuardResult({
             allowed: false,
-            reasonCode: 'activity_share_requires_premium',
-            message: getReasonMessage('activity_share_requires_premium'),
+            reasonCode: 'activity_share_requires_pro',
+            message: getReasonMessage('activity_share_requires_pro'),
             plan: state.plan,
             usage: usageSummary
         });
@@ -3161,7 +3475,7 @@ const normalizeAppleServerTransaction = (transaction: any, renewalInfo: any = {}
     const purchaseAtMs = Number(transaction?.purchaseDate || transaction?.purchaseDateMs || 0);
     const autoRenewStatus = String(renewalInfo?.autoRenewStatus ?? renewalInfo?.autoRenewPreference ?? '1');
     return {
-        plan: 'premium' as const,
+        plan: 'pro' as const,
         status: expiresAtMs > Date.now() ? 'active' : 'expired',
         platformSource: 'ios' as const,
         productId: String(transaction?.productId || ''),
@@ -3269,7 +3583,7 @@ const verifyGoogleSubscription = async (purchaseToken: string, productId: string
     const startTimeMillis = Number(payload?.startTimeMillis || 0);
     const autoRenewing = payload?.autoRenewing !== false;
     return {
-        plan: 'premium' as const,
+        plan: 'pro' as const,
         status: expiryTimeMillis > Date.now() ? 'active' : 'expired',
         platformSource: 'android' as const,
         productId,
@@ -3286,6 +3600,7 @@ const verifyGoogleSubscription = async (purchaseToken: string, productId: string
 const persistEntitlement = async (uid: string, entitlement: any) => {
     await getEntitlementRef(db, uid).set(entitlement, { merge: true });
     const summary = await syncUserSubscriptionSummary(uid, entitlement);
+    await reconcileSubscriptionAccessForUser(uid, entitlement).catch(() => {});
     return summary;
 };
 
@@ -3436,7 +3751,7 @@ const updateAppleEntitlementsFromNotification = async (signedPayload: string) =>
     for (const docSnap of snap.docs) {
         await docSnap.ref.set({
             status,
-            plan: 'premium',
+            plan: 'pro',
             platformSource: 'ios',
             productId: productId || docSnap.data()?.productId || null,
             originalTransactionId,
@@ -3449,7 +3764,7 @@ const updateAppleEntitlementsFromNotification = async (signedPayload: string) =>
         await syncUserSubscriptionSummary(docSnap.id, {
             ...docSnap.data(),
             status,
-            plan: 'premium',
+            plan: 'pro',
             platformSource: 'ios',
             productId: productId || docSnap.data()?.productId || null,
             originalTransactionId,
@@ -3457,6 +3772,17 @@ const updateAppleEntitlementsFromNotification = async (signedPayload: string) =>
             expiresAt: expiresAtMs > 0 ? admin.firestore.Timestamp.fromMillis(expiresAtMs) : docSnap.data()?.expiresAt || null,
             renewalState: String(renewalInfo?.autoRenewStatus || '') === '0' ? 'auto_renew_off' : 'auto_renew_on'
         });
+        await reconcileSubscriptionAccessForUser(docSnap.id, {
+            ...docSnap.data(),
+            status,
+            plan: 'pro',
+            platformSource: 'ios',
+            productId: productId || docSnap.data()?.productId || null,
+            originalTransactionId,
+            startsAt: startsAtMs > 0 ? admin.firestore.Timestamp.fromMillis(startsAtMs) : docSnap.data()?.startsAt || null,
+            expiresAt: expiresAtMs > 0 ? admin.firestore.Timestamp.fromMillis(expiresAtMs) : docSnap.data()?.expiresAt || null,
+            renewalState: String(renewalInfo?.autoRenewStatus || '') === '0' ? 'auto_renew_off' : 'auto_renew_on'
+        }).catch(() => {});
         updated += 1;
     }
     return { updated, matched: snap.size };
@@ -3515,6 +3841,11 @@ const updateGoogleEntitlementsFromNotification = async (messageData: string) => 
                 status: fallbackStatus,
                 productId
             });
+            await reconcileSubscriptionAccessForUser(docSnap.id, {
+                ...docSnap.data(),
+                status: fallbackStatus,
+                productId
+            }).catch(() => {});
         }
         updated += 1;
     }
@@ -3538,6 +3869,9 @@ const finalizeHuddleUsage = async (huddleRef: admin.firestore.DocumentReference,
         const usage = coerceUsageSnapshot(startedBy, usageSnap.data(), usageDayKey, String(grant?.timeZone || 'UTC'));
         if (usage.finalizedHuddleIds.includes(huddleRef.id)) return;
         const reservedMinutes = Number(grant?.grantedMinutes || 0);
+        const usageKind = String(grant?.usageKind || usage.activeReservations?.[huddleRef.id]?.usageKind || 'circle') === 'personal'
+            ? 'personal'
+            : 'circle';
         const consumedMinutes = Math.min(
             reservedMinutes,
             Math.max(0, minutesBetween(huddle?.ringStartedAt || huddle?.createdAt, admin.firestore.Timestamp.now()))
@@ -3547,6 +3881,18 @@ const finalizeHuddleUsage = async (huddleRef: admin.firestore.DocumentReference,
         tx.set(usageRef, {
             huddleMinutesReserved: Math.max(0, Number(usage.huddleMinutesReserved || 0) - reservedMinutes),
             huddleMinutesConsumed: Math.max(0, Number(usage.huddleMinutesConsumed || 0) + consumedMinutes),
+            personalHuddleMinutesReserved: usageKind === 'personal'
+                ? Math.max(0, Number(usage.personalHuddleMinutesReserved || 0) - reservedMinutes)
+                : Number(usage.personalHuddleMinutesReserved || 0),
+            personalHuddleMinutesConsumed: usageKind === 'personal'
+                ? Math.max(0, Number(usage.personalHuddleMinutesConsumed || 0) + consumedMinutes)
+                : Number(usage.personalHuddleMinutesConsumed || 0),
+            circleHuddleMinutesReserved: usageKind === 'circle'
+                ? Math.max(0, Number(usage.circleHuddleMinutesReserved || 0) - reservedMinutes)
+                : Number(usage.circleHuddleMinutesReserved || 0),
+            circleHuddleMinutesConsumed: usageKind === 'circle'
+                ? Math.max(0, Number(usage.circleHuddleMinutesConsumed || 0) + consumedMinutes)
+                : Number(usage.circleHuddleMinutesConsumed || 0),
             activeReservations,
             finalizedHuddleIds: admin.firestore.FieldValue.arrayUnion(huddleRef.id),
             lastEventAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -4161,40 +4507,30 @@ export const startHuddle = regionalFunctions.https.onCall(async (data, context) 
     let reservedUsageTimeZone = 'UTC';
     let reservedGrantedMinutes = 0;
     let reservedHuddleId = '';
+    let reservedUsageKind: 'personal' | 'circle' = 'circle';
 
     if (!chatId) throw new functions.https.HttpsError('invalid-argument', 'Chat ID required.');
 
     try {
-        const chatRef = db.collection('chats').doc(chatId);
-        const chatDoc = await chatRef.get();
-        if (!chatDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Chat not found.');
-        }
-        const chatData = chatDoc.data();
+        const { chatSnap, chat: chatData, circleContext } = await assertCanUseChat(uid, chatId, 'huddle');
         const participants = chatData?.participants || [];
-        if (!participants.includes(uid)) {
-            throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
+        const isCircleChat = Boolean(chatData?.circleId);
+        const isDirectPersonal = !isCircleChat && String(chatData?.type || '').trim().toLowerCase() === 'direct' && participants.length === 2;
+
+        if (isCircleChat) {
+            const role = circleContext?.member?.role;
+            if (!isCircleModeratorRole(role)) {
+                throw new functions.https.HttpsError(
+                    'permission-denied',
+                    'Only the circle creator/admin/moderator can start a huddle in this circle.'
+                );
+            }
+            if (circleContext?.billing?.billingTier !== 'pro' || !circleContext?.billing?.huddlesEnabled) {
+                throw new functions.https.HttpsError('failed-precondition', getReasonMessage('free_users_cannot_start_circle_huddle'));
+            }
+        } else if (!isDirectPersonal) {
+            throw new functions.https.HttpsError('failed-precondition', 'Huddles are only available in Pro Circles or direct 1-to-1 chats.');
         }
-
-	        // PERMISSION CHECK: If it's a circle chat, only Creator/Admin/Moderator can start
-	        if (chatData?.circleId) {
-	            const circleId = chatData.circleId;
-	            const circleDoc = await db.collection('circles').doc(circleId).get();
-	            const circleData = circleDoc.exists ? circleDoc.data() : {};
-	            const memberDoc = await db.collection('circles').doc(circleId).collection('members').doc(uid).get();
-	            const memberData = memberDoc.exists ? (memberDoc.data() || {}) : {};
-	            const role = memberData?.role;
-	            const status = memberData?.status;
-
-	            // Non-negotiable: circle huddles can only be started by creator/admin/moderator.
-	            // Personal chats remain callable by any participant.
-	            if (status !== 'active' || !['creator', 'admin', 'moderator'].includes(role)) {
-	                throw new functions.https.HttpsError(
-	                    'permission-denied',
-	                    'Only the circle creator/admin/moderator can start a huddle in this circle.'
-	                );
-	            }
-	        }
 
         // Re-use active huddle for this chat if one exists and is not stale.
         const existingSnap = await db.collection('huddles')
@@ -4240,12 +4576,17 @@ export const startHuddle = regionalFunctions.https.onCall(async (data, context) 
             }
         }
 
-        const guard = await canStartHuddleForState(uid);
+        await assertNoActiveHuddleConflict(uid);
+
+        const guard = isCircleChat
+            ? await canUseProCircleHuddleForState(uid)
+            : await canUsePersonalHuddleForState(uid);
         if (!guard.allowed) {
             throw new functions.https.HttpsError('failed-precondition', guard.message);
         }
         reservedUsageDayKey = String(guard.dayKey || '');
         reservedUsageTimeZone = String(guard.timeZone || 'UTC');
+        reservedUsageKind = guard.usageKind || (isCircleChat ? 'circle' : 'personal');
 
         const callerName = context.auth.token?.name as string | undefined;
         const { roomUrl, roomName, token } = await createDailyRoomAndToken({
@@ -4263,15 +4604,18 @@ export const startHuddle = regionalFunctions.https.onCall(async (data, context) 
             const usage = usageSnap.exists
                 ? coerceUsageSnapshot(uid, usageSnap.data(), reservedUsageDayKey, reservedUsageTimeZone)
                 : coerceUsageSnapshot(uid, createEmptyUsageSnapshot(uid, reservedUsageDayKey, reservedUsageTimeZone), reservedUsageDayKey, reservedUsageTimeZone);
-            const rules = PLAN_RULES[guard.plan];
-            const remainingCount = rules.huddlesPerDay - Number(usage.huddlesStarted || 0);
-            const remainingMinutes = rules.huddleMinutesPerDay - Number(usage.huddleMinutesReserved || 0);
-            const grantMinutes = Math.min(rules.huddleMinutesPerSession, remainingMinutes);
-            if (remainingCount <= 0) {
-                throw new functions.https.HttpsError('failed-precondition', getReasonMessage('huddle_daily_count_reached'));
+            const grantMinutes = Number(guard.grantedMinutes || 0);
+            const startedCount = reservedUsageKind === 'circle'
+                ? Number(usage.circleHuddlesStarted || 0)
+                : Number(usage.personalHuddlesStarted || 0);
+            if (reservedUsageKind === 'personal' && startedCount >= 2) {
+                throw new functions.https.HttpsError('failed-precondition', getReasonMessage('personal_huddle_daily_count_reached'));
             }
             if (grantMinutes <= 0) {
-                throw new functions.https.HttpsError('failed-precondition', getReasonMessage('huddle_daily_minutes_reached'));
+                throw new functions.https.HttpsError(
+                    'failed-precondition',
+                    getReasonMessage(reservedUsageKind === 'circle' ? 'pro_huddle_daily_minutes_reached' : 'personal_huddle_daily_minutes_reached')
+                );
             }
             reservedGrantedMinutes = grantMinutes;
             tx.set(reservedUsageRef!, {
@@ -4280,10 +4624,23 @@ export const startHuddle = regionalFunctions.https.onCall(async (data, context) 
                 timezoneBasis: reservedUsageTimeZone,
                 huddlesStarted: Number(usage.huddlesStarted || 0) + 1,
                 huddleMinutesReserved: Number(usage.huddleMinutesReserved || 0) + grantMinutes,
+                personalHuddlesStarted: reservedUsageKind === 'personal'
+                    ? Number(usage.personalHuddlesStarted || 0) + 1
+                    : Number(usage.personalHuddlesStarted || 0),
+                personalHuddleMinutesReserved: reservedUsageKind === 'personal'
+                    ? Number(usage.personalHuddleMinutesReserved || 0) + grantMinutes
+                    : Number(usage.personalHuddleMinutesReserved || 0),
+                circleHuddlesStarted: reservedUsageKind === 'circle'
+                    ? Number(usage.circleHuddlesStarted || 0) + 1
+                    : Number(usage.circleHuddlesStarted || 0),
+                circleHuddleMinutesReserved: reservedUsageKind === 'circle'
+                    ? Number(usage.circleHuddleMinutesReserved || 0) + grantMinutes
+                    : Number(usage.circleHuddleMinutesReserved || 0),
                 activeReservations: {
                     ...(usage.activeReservations || {}),
                     [huddleRef.id]: {
                         grantedMinutes: grantMinutes,
+                        usageKind: reservedUsageKind,
                         reservedAt: admin.firestore.FieldValue.serverTimestamp()
                     }
                 },
@@ -4328,6 +4685,7 @@ export const startHuddle = regionalFunctions.https.onCall(async (data, context) 
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             subscriptionGrant: {
                 plan: guard.plan,
+                usageKind: reservedUsageKind,
                 grantedMinutes: reservedGrantedMinutes,
                 usageDayKey: reservedUsageDayKey,
                 timeZone: reservedUsageTimeZone,
@@ -4386,6 +4744,7 @@ export const startHuddle = regionalFunctions.https.onCall(async (data, context) 
             startedBy: uid,
             subscriptionGrant: {
                 plan: guard.plan,
+                usageKind: reservedUsageKind,
                 grantedMinutes: reservedGrantedMinutes,
                 warningAt: warningAtMs,
                 expiresAt: expiresAtMs
@@ -4403,6 +4762,18 @@ export const startHuddle = regionalFunctions.https.onCall(async (data, context) 
                 tx.set(reservedUsageRef!, {
                     huddlesStarted: Math.max(0, Number(usage.huddlesStarted || 0) - 1),
                     huddleMinutesReserved: Math.max(0, Number(usage.huddleMinutesReserved || 0) - reservedGrantedMinutes),
+                    personalHuddlesStarted: reservedUsageKind === 'personal'
+                        ? Math.max(0, Number(usage.personalHuddlesStarted || 0) - 1)
+                        : Number(usage.personalHuddlesStarted || 0),
+                    personalHuddleMinutesReserved: reservedUsageKind === 'personal'
+                        ? Math.max(0, Number(usage.personalHuddleMinutesReserved || 0) - reservedGrantedMinutes)
+                        : Number(usage.personalHuddleMinutesReserved || 0),
+                    circleHuddlesStarted: reservedUsageKind === 'circle'
+                        ? Math.max(0, Number(usage.circleHuddlesStarted || 0) - 1)
+                        : Number(usage.circleHuddlesStarted || 0),
+                    circleHuddleMinutesReserved: reservedUsageKind === 'circle'
+                        ? Math.max(0, Number(usage.circleHuddleMinutesReserved || 0) - reservedGrantedMinutes)
+                        : Number(usage.circleHuddleMinutesReserved || 0),
                     activeReservations,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
@@ -4459,10 +4830,14 @@ export const joinHuddle = regionalFunctions.https.onCall(async (data, context) =
             throw new functions.https.HttpsError('failed-precondition', 'Huddle is missing room info.');
         }
 
-        const chatDoc = await db.collection('chats').doc(chatId).get();
-        const chatParticipants: string[] = chatDoc.data()?.participants || [];
-        if (!chatParticipants.includes(uid)) {
-            throw new functions.https.HttpsError('permission-denied', 'Not a chat participant.');
+        const { chat } = await assertCanUseChat(uid, chatId, 'huddle');
+        const chatParticipants: string[] = Array.isArray(chat?.participants) ? chat.participants : [];
+        const isCircleHuddle = Boolean(huddle?.circleId || chat?.circleId);
+        if (isCircleHuddle) {
+            const state = await getUserSubscriptionState(uid);
+            if (state.plan !== 'pro') {
+                throw new functions.https.HttpsError('permission-denied', getReasonMessage('free_users_cannot_join_circle_huddle'));
+            }
         }
 
         const updates: Record<string, any> = {
@@ -5184,6 +5559,10 @@ const startScheduledHuddleInternal = async ({
     const circleDoc = await circleRef.get();
     if (!circleDoc.exists) throw new Error('Circle not found');
     const circle = circleDoc.data() || {};
+    const circleBilling = getCircleBillingState(circle);
+    if (circleBilling.billingTier !== 'pro' || !circleBilling.huddlesEnabled) {
+        throw new Error('Scheduled huddles are available only in Pro Circles.');
+    }
     const chatId = String(circle?.chatId || '').trim();
     if (!chatId) throw new Error('Circle chat missing');
 
@@ -5198,10 +5577,15 @@ const startScheduledHuddleInternal = async ({
         ? scheduledData.createdBy
         : participants[0];
     if (!startedBy) throw new Error('Unable to resolve scheduled host');
-    const startGuard = await canStartHuddleForState(String(startedBy));
+    const hostCircleAccess = await assertCanAccessCircle(String(startedBy), circleId, 'member');
+    if (hostCircleAccess.state.plan !== 'pro') {
+        throw new Error('Scheduled huddle host is no longer Pro.');
+    }
+    const startGuard = await canUseProCircleHuddleForState(String(startedBy));
     if (!startGuard.allowed) {
         throw new Error(startGuard.message || 'Scheduled huddle exceeds subscription limits.');
     }
+    await assertNoActiveHuddleConflict(String(startedBy));
 
     const existingSnap = await db.collection('huddles')
         .where('chatId', '==', chatId)
@@ -5239,11 +5623,9 @@ const startScheduledHuddleInternal = async ({
         const usage = usageSnap.exists
             ? coerceUsageSnapshot(String(startedBy), usageSnap.data(), String(startGuard.dayKey || ''), String(startGuard.timeZone || 'UTC'))
             : coerceUsageSnapshot(String(startedBy), createEmptyUsageSnapshot(String(startedBy), String(startGuard.dayKey || ''), String(startGuard.timeZone || 'UTC')), String(startGuard.dayKey || ''), String(startGuard.timeZone || 'UTC'));
-        const rules = PLAN_RULES[startGuard.plan];
-        const remainingCount = rules.huddlesPerDay - Number(usage.huddlesStarted || 0);
-        const remainingMinutes = rules.huddleMinutesPerDay - Number(usage.huddleMinutesReserved || 0);
-        const nextGrant = Math.min(rules.huddleMinutesPerSession, remainingMinutes);
-        if (remainingCount <= 0 || nextGrant <= 0) {
+        const remainingMinutes = 120 - Number(usage.circleHuddleMinutesReserved || 0);
+        const nextGrant = Math.min(120, remainingMinutes);
+        if (nextGrant <= 0) {
             throw new Error('Scheduled huddle exceeds subscription limits.');
         }
         grantedMinutes = nextGrant;
@@ -5253,10 +5635,13 @@ const startScheduledHuddleInternal = async ({
             timezoneBasis: startGuard.timeZone,
             huddlesStarted: Number(usage.huddlesStarted || 0) + 1,
             huddleMinutesReserved: Number(usage.huddleMinutesReserved || 0) + nextGrant,
+            circleHuddlesStarted: Number(usage.circleHuddlesStarted || 0) + 1,
+            circleHuddleMinutesReserved: Number(usage.circleHuddleMinutesReserved || 0) + nextGrant,
             activeReservations: {
                 ...(usage.activeReservations || {}),
                 [huddleRef.id]: {
                     grantedMinutes: nextGrant,
+                    usageKind: 'circle',
                     reservedAt: admin.firestore.FieldValue.serverTimestamp()
                 }
             },
@@ -5292,6 +5677,7 @@ const startScheduledHuddleInternal = async ({
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         subscriptionGrant: {
             plan: startGuard.plan,
+            usageKind: 'circle',
             grantedMinutes,
             usageDayKey: startGuard.dayKey,
             timeZone: startGuard.timeZone,
@@ -5368,13 +5754,9 @@ export const scheduleHuddle = regionalFunctions.https.onCall(async (data, contex
         if (!scheduleGuard.allowed) {
             throw new functions.https.HttpsError('failed-precondition', scheduleGuard.message);
         }
-        // Permission Check
-        const memberRef = db.collection('circles').doc(circleId).collection('members').doc(uid);
-        const memberDoc = await memberRef.get();
-        const role = memberDoc.data()?.role;
-
-        if (!['creator', 'admin', 'moderator'].includes(role)) {
-            throw new functions.https.HttpsError('permission-denied', 'Only admins can schedule huddles.');
+        const circleAccess = await assertCanAccessCircle(uid, circleId, 'moderate');
+        if (circleAccess.billing.billingTier !== 'pro' || !circleAccess.billing.huddlesEnabled) {
+            throw new functions.https.HttpsError('failed-precondition', 'Only Pro Circles can schedule huddles.');
         }
 
         const when = new Date(scheduledAt);
@@ -5382,8 +5764,7 @@ export const scheduleHuddle = regionalFunctions.https.onCall(async (data, contex
             throw new functions.https.HttpsError('invalid-argument', 'Scheduled time must be at least 1 minute from now.');
         }
 
-        const circleDoc = await db.collection('circles').doc(circleId).get();
-        const chatId = String(circleDoc.data()?.chatId || '').trim();
+        const chatId = String(circleAccess.circle?.chatId || '').trim();
         if (!chatId) {
             throw new functions.https.HttpsError('failed-precondition', 'Circle chat is not ready.');
         }

@@ -23,7 +23,7 @@ import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
 const CIRCLE_NAME_MAX_LENGTH = 40;
 
 // Components for different tabs
-const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto, busy }) => (
+const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto, onToggleBillingTier, busy }) => (
     <View style={styles.tabContent}>
         <Text style={styles.sectionTitle}>General Information</Text>
         <View style={styles.infoCard}>
@@ -41,6 +41,11 @@ const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto, busy }) => (
                 <Text style={styles.infoLabel}>Accessibility</Text>
                 <Text style={styles.infoValue}>{circle.type === 'private' ? 'Private' : 'Public'}</Text>
             </View>
+            <View style={styles.divider} />
+            <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Circle tier</Text>
+                <Text style={styles.infoValue}>{String(circle?.billingTier || 'free').toLowerCase() === 'pro' ? 'Pro Circle' : 'Free Circle'}</Text>
+            </View>
         </View>
         {canEdit && (
             <View style={{ gap: 10 }}>
@@ -49,6 +54,15 @@ const GeneralSettings = ({ circle, onEdit, canEdit, onEditPhoto, busy }) => (
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.updateButton, busy && styles.disabledButton]} onPress={onEdit} disabled={busy}>
                     <Text style={styles.updateButtonText}>Edit Details</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.updateButton, { backgroundColor: String(circle?.billingTier || 'free').toLowerCase() === 'pro' ? '#FFF4E5' : '#EEF7FF' }, busy && styles.disabledButton]}
+                    onPress={onToggleBillingTier}
+                    disabled={busy}
+                >
+                    <Text style={[styles.updateButtonText, { color: String(circle?.billingTier || 'free').toLowerCase() === 'pro' ? '#9A5B00' : '#0B5CAD' }]}>
+                        {String(circle?.billingTier || 'free').toLowerCase() === 'pro' ? 'Downgrade to Free Circle' : 'Upgrade to Pro Circle'}
+                    </Text>
                 </TouchableOpacity>
             </View>
         )}
@@ -672,6 +686,61 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         });
     };
 
+    const handleToggleBillingTier = async () => {
+        const currentTier = String(circle?.billingTier || 'free').toLowerCase() === 'pro' ? 'pro' : 'free';
+        const nextTier = currentTier === 'pro' ? 'free' : 'pro';
+        if (actionLoading) return;
+        if (nextTier === 'pro') {
+            const status = await subscriptionGuardService.getEffectiveSubscriptionStatus(true).catch(() => ({ plan: 'free' }));
+            if (String(status?.plan || 'free').toLowerCase() !== 'pro') {
+                showUpgradePrompt({
+                    navigation,
+                    showModal,
+                    title: 'Upgrade required',
+                    guard: {
+                        allowed: false,
+                        reasonCode: 'pro_circle_requires_pro_membership',
+                        message: 'You need an active Pro subscription to upgrade this circle.',
+                        plan: 'free'
+                    }
+                });
+                return;
+            }
+        }
+        showModal({
+            type: 'confirmation',
+            title: nextTier === 'pro' ? 'Upgrade Circle' : 'Downgrade Circle',
+            message: nextTier === 'pro'
+                ? 'This will enable Pro-only huddles. New members must be Pro to join. Existing free members can stay in the circle chat, but they must upgrade before they can join huddles. Any free admins or moderators will be changed back to members.'
+                : 'This will disable huddles and scheduled huddles for this circle.',
+            confirmText: nextTier === 'pro' ? 'Upgrade' : 'Downgrade',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    setActionLoading(true);
+                    const result = await circleService.setCircleBillingTier(circleId, nextTier);
+                    showModal({
+                        type: 'success',
+                        title: 'Updated',
+                        message: nextTier === 'pro'
+                            ? (Number(result?.demotedModeratorCount || 0) > 0
+                                ? 'This circle is now a Pro Circle. Existing free admins or moderators were changed back to members.'
+                                : 'This circle is now a Pro Circle.')
+                            : 'This circle is now a Free Circle.'
+                    });
+                } catch (error) {
+                    showModal({
+                        type: 'error',
+                        title: 'Unable to update circle',
+                        message: error?.message || 'Failed to update this circle.'
+                    });
+                } finally {
+                    setActionLoading(false);
+                }
+            }
+        });
+    };
+
     const MembersTab = () => {
         // Uses top-level myRole
 
@@ -851,7 +920,16 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                {activeTab === 'General' && <GeneralSettings circle={circle} onEdit={openEditModal} canEdit={isAdminOrCreator} onEditPhoto={handleUpdatePhoto} busy={actionLoading} />}
+                {activeTab === 'General' && (
+                    <GeneralSettings
+                        circle={circle}
+                        onEdit={openEditModal}
+                        canEdit={isAdminOrCreator}
+                        onEditPhoto={handleUpdatePhoto}
+                        onToggleBillingTier={handleToggleBillingTier}
+                        busy={actionLoading}
+                    />
+                )}
                 {activeTab === 'Members' && <MembersTab />}
                 {activeTab === 'Requests' && isModOrAbove && <RequestsTab />}
                 {activeTab === 'Reports' && isModOrAbove && <ReportsTab />}

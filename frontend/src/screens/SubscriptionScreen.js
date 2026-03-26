@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Linking } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Linking, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,30 +10,30 @@ import { subscriptionGuardService } from '../services/subscription/subscriptionG
 import { getPlanRules } from '../services/subscription/subscriptionConfig';
 
 const FEATURE_ROWS = [
-    { label: 'Private circles', free: '3 max', premium: 'Unlimited' },
-    { label: 'Public circles', free: '3 max', premium: 'Unlimited' },
-    { label: 'Huddles per day', free: '2', premium: '3' },
-    { label: 'Minutes per huddle', free: '10', premium: '40' },
+    { label: 'Circle type', free: 'Free circles only', premium: 'Free + Pro circles' },
+    { label: 'Members per circle', free: '6 max', premium: '12 in public Pro circles' },
+    { label: 'Personal huddles', free: '2 per day', premium: 'Included' },
+    { label: 'Circle huddles', free: 'Locked', premium: 'Pro members only' },
+    { label: 'Huddle allowance', free: '10 mins per session', premium: '120 mins per day' },
     { label: 'Group activities', free: 'Locked', premium: 'Included' },
-    { label: 'Schedule huddles', free: 'Locked', premium: 'Included' },
-    { label: 'Share activities', free: 'Locked', premium: 'Included' }
+    { label: 'Schedule huddles', free: 'Locked', premium: 'Included' }
 ];
 
 const PREMIUM_HIGHLIGHTS = [
     {
         icon: 'infinite',
-        title: 'Unlimited circles',
-        text: 'Expand beyond free-tier public and private circle caps.'
+        title: 'Pro Circles',
+        text: 'Upgrade circles for Pro-only membership and huddle access.'
     },
     {
         icon: 'timer-outline',
-        title: 'Longer huddles',
-        text: 'Get more time per session and more room in your daily allowance.'
+        title: 'Pro huddle time',
+        text: 'Use up to 120 circle-huddle minutes per day across your account.'
     },
     {
         icon: 'sparkles-outline',
         title: 'Full access',
-        text: 'Unlock premium activities, scheduling, and activity sharing.'
+        text: 'Unlock Pro activities, scheduling, and activity sharing.'
     }
 ];
 
@@ -50,6 +50,8 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const [loading, setLoading] = useState(true);
     const [busyProductId, setBusyProductId] = useState('');
     const [restoring, setRestoring] = useState(false);
+    const heroFloat = useRef(new Animated.Value(0)).current;
+    const heroPulse = useRef(new Animated.Value(0)).current;
 
     const refresh = async (forceRefresh = false) => {
         setLoading(true);
@@ -78,8 +80,8 @@ const SubscriptionScreen = ({ navigation, route }) => {
                 await refresh(true);
                 showModal({
                     type: 'success',
-                    title: 'Premium active',
-                    message: 'Your subscription is now active across your account.'
+                    title: 'Pro active',
+                    message: 'Your Pro subscription is now active across your account.'
                 });
                 setBusyProductId('');
             },
@@ -99,19 +101,71 @@ const SubscriptionScreen = ({ navigation, route }) => {
         };
     }, []);
 
+    useEffect(() => {
+        const floatLoop = Animated.loop(
+            Animated.sequence([
+                Animated.timing(heroFloat, {
+                    toValue: 1,
+                    duration: 2600,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true
+                }),
+                Animated.timing(heroFloat, {
+                    toValue: 0,
+                    duration: 2600,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true
+                })
+            ])
+        );
+        const pulseLoop = Animated.loop(
+            Animated.sequence([
+                Animated.timing(heroPulse, {
+                    toValue: 1,
+                    duration: 1800,
+                    easing: Easing.inOut(Easing.quad),
+                    useNativeDriver: true
+                }),
+                Animated.timing(heroPulse, {
+                    toValue: 0,
+                    duration: 1800,
+                    easing: Easing.inOut(Easing.quad),
+                    useNativeDriver: true
+                })
+            ])
+        );
+        floatLoop.start();
+        pulseLoop.start();
+        return () => {
+            floatLoop.stop();
+            pulseLoop.stop();
+        };
+    }, [heroFloat, heroPulse]);
+
     const entitlement = status?.entitlement || { plan: 'free', status: 'expired' };
     const usage = status?.usage || {};
     const currentPlan = entitlement?.plan || 'free';
     const currentRules = getPlanRules(currentPlan);
-    const premiumPlan = plans.find((plan) => String(plan?.id || '').toLowerCase().includes('premium'))
+    const premiumPlan = plans.find((plan) => {
+        const id = String(plan?.id || '').toLowerCase();
+        return id.includes('pro') || id.includes('premium');
+    })
         || plans.find((plan) => String(plan?.productId || '').trim())
         || {
-            id: 'premium',
-            name: 'Premium Annual',
-            description: 'Unlock full circles, activities, scheduling, and longer huddles.',
-            priceLabel: 'Annual subscription',
+            id: 'pro',
+            name: 'Pro Monthly',
+            description: 'Unlock Pro Circles, full activities, scheduling, and circle huddles.',
+            priceLabel: '£10/month',
             productId: ''
         };
+
+    const currentPlanIsPro = currentRules.id === 'pro';
+    const huddlesUsedToday = currentPlanIsPro
+        ? Number(usage?.circleHuddlesStarted || 0)
+        : Number(usage?.personalHuddlesStarted || 0);
+    const minutesUsedToday = currentPlanIsPro
+        ? Number(usage?.circleHuddleMinutesConsumed || 0)
+        : Number(usage?.personalHuddleMinutesConsumed || 0);
 
     const usageRows = useMemo(() => ([
         {
@@ -119,33 +173,44 @@ const SubscriptionScreen = ({ navigation, route }) => {
             value: currentRules.label
         },
         {
-            label: 'Huddles used today',
-            value: `${usage?.huddlesStarted || 0}/${currentRules.huddlesPerDay}`
+            label: currentPlanIsPro ? 'Circle huddles started today' : 'Personal huddles used today',
+            value: currentRules.huddlesPerDay == null
+                ? `${huddlesUsedToday}`
+                : `${huddlesUsedToday}/${currentRules.huddlesPerDay}`
         },
         {
-            label: 'Consumed minutes today',
-            value: `${usage?.huddleMinutesConsumed || 0}/${currentRules.huddleMinutesPerDay}`
+            label: currentPlanIsPro ? 'Circle huddle minutes today' : 'Personal huddle minutes today',
+            value: `${minutesUsedToday}/${currentRules.huddleMinutesPerDay}`
         },
         {
-            label: 'Public circles created',
-            value: currentRules.circleLimits.public == null
-                ? 'Unlimited'
-                : `${usage?.circleCreates?.public || 0}/${currentRules.circleLimits.public}`
+            label: 'Pro circle access',
+            value: currentPlanIsPro ? 'Enabled' : 'Upgrade required'
         },
         {
-            label: 'Private circles created',
-            value: currentRules.circleLimits.private == null
-                ? 'Unlimited'
-                : `${usage?.circleCreates?.private || 0}/${currentRules.circleLimits.private}`
+            label: 'Circle member cap',
+            value: currentPlanIsPro ? '12 in public Pro circles' : '6 in Free circles'
         }
-    ]), [currentRules, usage]);
+    ]), [currentPlanIsPro, currentRules, huddlesUsedToday, minutesUsedToday]);
+
+    const heroFloatUp = heroFloat.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, -10]
+    });
+    const heroFloatDown = heroFloat.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 12]
+    });
+    const heroPulseScale = heroPulse.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 1.08]
+    });
 
     const handleSubscribe = async () => {
         if (!premiumPlan?.productId) {
             showModal({
                 type: 'info',
                 title: 'Purchases unavailable',
-                message: 'No product ID is configured for Premium yet.'
+                message: 'No product ID is configured for Pro yet.'
             });
             return;
         }
@@ -187,8 +252,16 @@ const SubscriptionScreen = ({ navigation, route }) => {
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="light-content" />
             <LinearGradient colors={['#08263D', '#115269', '#1A8A7E']} style={styles.hero}>
-                <View style={styles.heroGlowLarge} />
-                <View style={styles.heroGlowSmall} />
+                <Animated.View style={[styles.heroGlowLarge, { transform: [{ translateY: heroFloatUp }, { scale: heroPulseScale }] }]} />
+                <Animated.View style={[styles.heroGlowSmall, { transform: [{ translateY: heroFloatDown }] }]} />
+                <Animated.View style={[styles.heroOrbitCard, { transform: [{ translateY: heroFloatUp }] }]}>
+                    <Text style={styles.heroOrbitTitle}>Pro Circle</Text>
+                    <Text style={styles.heroOrbitText}>Pro-only joins. Pro-only huddles.</Text>
+                </Animated.View>
+                <Animated.View style={[styles.heroOrbitCardSecondary, { transform: [{ translateY: heroFloatDown }] }]}>
+                    <Text style={styles.heroOrbitTitleSecondary}>Free Circle</Text>
+                    <Text style={styles.heroOrbitTextSecondary}>Open chat. No circle huddles.</Text>
+                </Animated.View>
 
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -204,26 +277,31 @@ const SubscriptionScreen = ({ navigation, route }) => {
                             <Text style={styles.heroEyebrow}>Current plan</Text>
                             <Text style={styles.heroPlan}>{currentRules.label}</Text>
                             <Text style={styles.heroMeta}>{formatExpiry(entitlement?.expiresAt)}</Text>
+                            <Text style={styles.heroSubcopy}>
+                                {currentPlanIsPro
+                                    ? 'Upgrade circles to Pro, keep chat open, and unlock Pro-only huddles.'
+                                    : 'Chat in any circle, then upgrade when you want Pro circles and huddles.'}
+                            </Text>
                         </View>
                         <View style={styles.heroBadge}>
                             <MaterialCommunityIcons name="crown-outline" size={18} color="#0B3B60" />
-                            <Text style={styles.heroBadgeText}>{currentPlan === 'premium' ? 'Active' : 'Upgrade'}</Text>
+                            <Text style={styles.heroBadgeText}>{currentPlanIsPro ? 'Active' : 'Upgrade'}</Text>
                         </View>
                     </View>
 
                     <View style={styles.heroStatsRow}>
                         <View style={styles.heroStat}>
-                            <Text style={styles.heroStatValue}>{usage?.huddlesStarted || 0}</Text>
-                            <Text style={styles.heroStatLabel}>Huddles today</Text>
+                            <Text style={styles.heroStatValue}>{huddlesUsedToday}</Text>
+                            <Text style={styles.heroStatLabel}>{currentPlanIsPro ? 'Circle huddles' : 'Personal huddles'}</Text>
                         </View>
                         <View style={styles.heroStatDivider} />
                         <View style={styles.heroStat}>
-                            <Text style={styles.heroStatValue}>{usage?.huddleMinutesConsumed || 0}</Text>
+                            <Text style={styles.heroStatValue}>{minutesUsedToday}</Text>
                             <Text style={styles.heroStatLabel}>Minutes used</Text>
                         </View>
                         <View style={styles.heroStatDivider} />
                         <View style={styles.heroStat}>
-                            <Text style={styles.heroStatValue}>{currentPlan === 'premium' ? 'Full' : 'Limited'}</Text>
+                            <Text style={styles.heroStatValue}>{currentPlanIsPro ? 'Pro' : 'Free'}</Text>
                             <Text style={styles.heroStatLabel}>Access</Text>
                         </View>
                     </View>
@@ -246,10 +324,10 @@ const SubscriptionScreen = ({ navigation, route }) => {
                     <>
                         <View style={styles.premiumPanel}>
                             <View style={styles.premiumPanelHeader}>
-                                <Text style={styles.premiumPanelEyebrow}>Premium annual</Text>
+                                <Text style={styles.premiumPanelEyebrow}>Pro monthly</Text>
                                 <Text style={styles.premiumPanelTitle}>More room, more time, full access</Text>
                                 <Text style={styles.premiumPanelSubtitle}>
-                                    Premium expands your circles, extends your huddles, and opens the full activity experience.
+                                    Pro unlocks Pro Circles, circle huddles, and the full activity experience.
                                 </Text>
                             </View>
 
@@ -282,11 +360,11 @@ const SubscriptionScreen = ({ navigation, route }) => {
                         </View>
 
                         <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Free vs Premium</Text>
+                            <Text style={styles.sectionTitle}>Free vs Pro</Text>
                             <View style={styles.compareCard}>
                                 <View style={styles.compareLegend}>
                                     <Text style={styles.compareLegendFree}>Free</Text>
-                                    <Text style={styles.compareLegendPremium}>Premium</Text>
+                                    <Text style={styles.compareLegendPremium}>Pro</Text>
                                 </View>
                                 {FEATURE_ROWS.map((item, index) => (
                                     <View
@@ -304,19 +382,19 @@ const SubscriptionScreen = ({ navigation, route }) => {
                         </View>
 
                         <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Premium annual</Text>
+                            <Text style={styles.sectionTitle}>Pro monthly</Text>
                             <View style={styles.planCard}>
                                 <LinearGradient colors={['#FFF4D8', '#FFFDF7']} style={styles.planTop}>
                                     <View style={styles.planHeader}>
                                         <View style={styles.planIdentity}>
                                             <View style={styles.planPill}>
                                                 <MaterialCommunityIcons name="star-four-points-outline" size={16} color="#8A5A00" />
-                                                <Text style={styles.planPillText}>Annual plan</Text>
+                                                <Text style={styles.planPillText}>£10 / month</Text>
                                             </View>
                                         </View>
-                                        <Text style={styles.planName}>{premiumPlan?.name || 'Premium Annual'}</Text>
+                                        <Text style={styles.planName}>{premiumPlan?.name || 'Pro Monthly'}</Text>
                                         <Text style={styles.planDesc}>
-                                            {premiumPlan?.description || 'Full activities, longer huddles, scheduling, and sharing.'}
+                                            {premiumPlan?.description || 'Full activities, Pro circle huddles, scheduling, and sharing.'}
                                         </Text>
                                     </View>
                                     <View style={styles.planPriceWrap}>
@@ -326,15 +404,15 @@ const SubscriptionScreen = ({ navigation, route }) => {
                                 </LinearGradient>
 
                                 <TouchableOpacity
-                                    style={[styles.primaryButton, currentPlan === 'premium' && styles.primaryButtonDisabled]}
+                                    style={[styles.primaryButton, currentPlanIsPro && styles.primaryButtonDisabled]}
                                     onPress={handleSubscribe}
-                                    disabled={currentPlan === 'premium' || !!busyProductId}
+                                    disabled={currentPlanIsPro || !!busyProductId}
                                 >
                                     {busyProductId ? (
                                         <ActivityIndicator color="#FFFFFF" />
                                     ) : (
                                         <Text style={styles.primaryButtonText}>
-                                            {currentPlan === 'premium' ? 'Premium active' : 'Upgrade to Premium'}
+                                            {currentPlanIsPro ? 'Pro active' : 'Upgrade to Pro'}
                                         </Text>
                                     )}
                                 </TouchableOpacity>
@@ -388,6 +466,52 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,214,102,0.15)',
         left: -24,
         bottom: 28
+    },
+    heroOrbitCard: {
+        position: 'absolute',
+        right: 20,
+        top: 108,
+        backgroundColor: 'rgba(255, 245, 214, 0.96)',
+        borderRadius: 18,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.24)'
+    },
+    heroOrbitCardSecondary: {
+        position: 'absolute',
+        left: 18,
+        top: 184,
+        backgroundColor: 'rgba(222, 247, 236, 0.95)',
+        borderRadius: 18,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.18)'
+    },
+    heroOrbitTitle: {
+        color: '#7A4C00',
+        fontSize: 12,
+        fontWeight: '800',
+        textTransform: 'uppercase',
+        marginBottom: 4
+    },
+    heroOrbitText: {
+        color: '#734B00',
+        fontSize: 12,
+        fontWeight: '600'
+    },
+    heroOrbitTitleSecondary: {
+        color: '#166534',
+        fontSize: 12,
+        fontWeight: '800',
+        textTransform: 'uppercase',
+        marginBottom: 4
+    },
+    heroOrbitTextSecondary: {
+        color: '#166534',
+        fontSize: 12,
+        fontWeight: '600'
     },
     header: {
         flexDirection: 'row',
@@ -458,6 +582,13 @@ const styles = StyleSheet.create({
         color: '#DDECEF',
         fontSize: 14,
         marginTop: 6
+    },
+    heroSubcopy: {
+        color: '#E6F3F2',
+        fontSize: 13,
+        lineHeight: 19,
+        marginTop: 10,
+        maxWidth: 230
     },
     heroStatsRow: {
         marginTop: 18,

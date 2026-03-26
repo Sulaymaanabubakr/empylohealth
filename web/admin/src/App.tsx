@@ -6,8 +6,9 @@ import { MainLayout } from './layout/MainLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Employees } from './pages/Employees';
 import { Users } from './pages/Users';
-
-import { Content } from './pages/Content';
+import { CircleLibrary } from './pages/CircleLibrary';
+import { ResourceLibrary } from './pages/ResourceLibrary';
+import { AffirmationLibrary } from './pages/AffirmationLibrary';
 import { Moderation } from './pages/Moderation';
 import { Support } from './pages/Support';
 import { Settings } from './pages/Settings';
@@ -30,7 +31,10 @@ const AppContent = () => {
           <Route path="/" element={<Dashboard />} />
           <Route path="/users" element={<Users />} />
           <Route path="/employees" element={<Employees />} />
-          <Route path="/content" element={<Content />} />
+          <Route path="/content" element={<Navigate to="/content/resources" replace />} />
+          <Route path="/content/circles" element={<CircleLibrary />} />
+          <Route path="/content/resources" element={<ResourceLibrary />} />
+          <Route path="/content/affirmations" element={<AffirmationLibrary />} />
           <Route path="/assessments" element={<Assessments />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/moderation" element={<Moderation />} />

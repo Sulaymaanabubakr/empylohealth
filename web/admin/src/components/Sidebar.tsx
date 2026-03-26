@@ -1,7 +1,6 @@
 import React from 'react';
 import {
     LayoutDashboard,
-    Files,
     Users,
     Settings,
     CreditCard,
@@ -10,7 +9,10 @@ import {
     ClipboardList,
     UserCog,
     MessageSquare,
-    History
+    History,
+    Circle,
+    Sparkles,
+    BookOpen
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Logo } from './Logo';
@@ -88,7 +90,9 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                     <div className="px-6 mb-2 mt-6 text-xs font-semibold text-gray-400 uppercase tracking-wider">Management</div>
                     <SidebarItem icon={<Users size={18} />} label="App Users" path="/users" onNavigate={onClose} />
                     <SidebarItem icon={<UserCog size={18} />} label="Employees" path="/employees" onNavigate={onClose} />
-                    <SidebarItem icon={<Files size={18} />} label="Content" path="/content" onNavigate={onClose} />
+                    <SidebarItem icon={<Circle size={18} />} label="Circles" path="/content/circles" onNavigate={onClose} />
+                    <SidebarItem icon={<BookOpen size={18} />} label="Resources" path="/content/resources" onNavigate={onClose} />
+                    <SidebarItem icon={<Sparkles size={18} />} label="Affirmations" path="/content/affirmations" onNavigate={onClose} />
                     <SidebarItem icon={<ClipboardList size={18} />} label="Assessments" path="/assessments" onNavigate={onClose} />
                     <SidebarItem icon={<CreditCard size={18} />} label="Transactions" path="/transactions" onNavigate={onClose} />
                     <SidebarItem icon={<ShieldCheck size={18} />} label="Moderation" path="/moderation" onNavigate={onClose} />

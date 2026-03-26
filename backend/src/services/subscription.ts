@@ -1,9 +1,11 @@
 import * as admin from 'firebase-admin';
 
-export type PlanId = 'free' | 'premium';
+export type PlanId = 'free' | 'pro';
 export type SubscriptionStatus = 'active' | 'expired' | 'grace_period' | 'canceled';
 export type PlatformSource = 'ios' | 'android' | 'manual';
 export type ActivityAccessKind = 'self_development' | 'group_activity';
+export type CircleBillingTier = 'free' | 'pro';
+export type HuddleUsageKind = 'personal' | 'circle';
 
 export type PlanRules = {
     id: PlanId;
@@ -12,7 +14,7 @@ export type PlanRules = {
         private: number | null;
         public: number | null;
     };
-    huddlesPerDay: number;
+    huddlesPerDay: number | null;
     huddleMinutesPerDay: number;
     huddleMinutesPerSession: number;
     activities: {
@@ -27,8 +29,8 @@ export const PLAN_RULES: Record<PlanId, PlanRules> = {
         id: 'free',
         label: 'Free',
         circleLimits: {
-            private: 3,
-            public: 3
+            private: null,
+            public: null
         },
         huddlesPerDay: 2,
         huddleMinutesPerDay: 20,
@@ -39,16 +41,16 @@ export const PLAN_RULES: Record<PlanId, PlanRules> = {
             allowSchedule: false
         }
     },
-    premium: {
-        id: 'premium',
-        label: 'Premium',
+    pro: {
+        id: 'pro',
+        label: 'Pro',
         circleLimits: {
             private: null,
             public: null
         },
-        huddlesPerDay: 3,
+        huddlesPerDay: null,
         huddleMinutesPerDay: 120,
-        huddleMinutesPerSession: 40,
+        huddleMinutesPerSession: 120,
         activities: {
             allowGroup: true,
             allowShare: true,
@@ -63,15 +65,23 @@ export const SUBSCRIPTION_COLLECTIONS = {
 } as const;
 
 export const SUBSCRIPTION_REASON_MESSAGES: Record<string, string> = {
-    circle_private_limit_reached: 'Free plan allows up to 3 private circles. Upgrade to Premium to create more.',
-    circle_public_limit_reached: 'Free plan allows up to 3 public circles. Upgrade to Premium to create more.',
-    huddle_daily_count_reached: 'You have reached your huddle limit for today.',
-    huddle_daily_minutes_reached: 'You have used all available huddle minutes for today.',
-    huddle_duration_grant_unavailable: 'There are not enough huddle minutes remaining for a new session today.',
-    group_activity_requires_premium: 'Group activities are available on Premium.',
-    activity_requires_premium: 'This activity is available on Premium.',
-    activity_share_requires_premium: 'Sharing activities is available on Premium.',
-    schedule_requires_premium: 'Scheduling huddles is available on Premium.'
+    free_circle_full: 'This Free Circle is full.',
+    pro_circle_full: 'This Pro Circle is full.',
+    free_users_cannot_join_pro_circle: 'Upgrade to Pro to join this Pro Circle.',
+    free_users_cannot_access_pro_circle_chat: 'Upgrade to Pro to access chat in this Pro Circle.',
+    free_users_cannot_start_circle_huddle: 'Circle huddles are available only in Pro Circles for Pro members.',
+    free_users_cannot_join_circle_huddle: 'Upgrade to Pro to join this huddle.',
+    pro_circle_requires_pro_membership: 'Only Pro members can be in a Pro Circle.',
+    personal_huddle_daily_count_reached: 'You have reached your personal huddle limit for today.',
+    personal_huddle_daily_minutes_reached: 'You have used all available personal huddle minutes for today.',
+    personal_huddle_duration_grant_unavailable: 'There are not enough personal huddle minutes remaining for a new session today.',
+    pro_huddle_daily_minutes_reached: 'You have used all available Pro huddle minutes for today.',
+    pro_huddle_duration_grant_unavailable: 'There are not enough Pro huddle minutes remaining for a new session today.',
+    schedule_requires_pro: 'Scheduling huddles is available on Pro.',
+    group_activity_requires_pro: 'Group activities are available on Pro.',
+    activity_requires_pro: 'This activity is available on Pro.',
+    activity_share_requires_pro: 'Sharing activities is available on Pro.',
+    active_huddle_conflict: 'You already have an active huddle in progress.'
 };
 
 export const SUBSCRIPTION_WARNING_WINDOW_MS = 2 * 60 * 1000;
@@ -135,22 +145,29 @@ export const normalizeStatus = (status: any): SubscriptionStatus => {
     return 'expired';
 };
 
+export const normalizePlanId = (plan: any): PlanId => {
+    const value = String(plan || '').trim().toLowerCase();
+    if (value === 'pro' || value === 'premium') return 'pro';
+    return 'free';
+};
+
 export const getEffectivePlan = (entitlement: any): PlanId => {
-    const plan = String(entitlement?.plan || entitlement?.planId || 'free').trim().toLowerCase();
+    const plan = normalizePlanId(entitlement?.plan || entitlement?.planId || 'free');
     const status = normalizeStatus(entitlement?.status);
     const expiresAtMs = toMillis(entitlement?.expiresAt);
-    if (plan !== 'premium') return 'free';
+    if (plan !== 'pro') return 'free';
     if (status !== 'active' && status !== 'grace_period') return 'free';
     if (expiresAtMs > 0 && expiresAtMs <= Date.now()) return 'free';
-    return 'premium';
+    return 'pro';
 };
 
 export const buildSubscriptionSummary = (entitlement: any) => {
     const effectivePlan = getEffectivePlan(entitlement);
     const rules = PLAN_RULES[effectivePlan];
-    const status = effectivePlan === 'free' && String(entitlement?.plan || entitlement?.planId || '').trim().toLowerCase() === 'premium'
+    const rawPlan = normalizePlanId(entitlement?.plan || entitlement?.planId || 'free');
+    const status = effectivePlan === 'free' && rawPlan === 'pro'
         ? 'expired'
-        : normalizeStatus(entitlement?.status || (effectivePlan === 'premium' ? 'active' : 'expired'));
+        : normalizeStatus(entitlement?.status || (effectivePlan === 'pro' ? 'active' : 'expired'));
     return {
         plan: effectivePlan,
         planId: effectivePlan,
@@ -181,9 +198,11 @@ export const getAllowedPlansForResource = (resource: any): PlanId[] => {
     const plans = Array.isArray(resource?.access?.plans)
         ? resource.access.plans.map((value: any) => String(value || '').trim().toLowerCase()).filter(Boolean)
         : [];
-    const normalized = plans.filter((value: string): value is PlanId => value === 'free' || value === 'premium');
+    const normalized = plans
+        .map((value: string) => normalizePlanId(value))
+        .filter((value: string): value is PlanId => value === 'free' || value === 'pro');
     if (normalized.length > 0) return normalized;
-    return getActivityAccessKind(resource) === 'group_activity' ? ['premium'] : ['premium'];
+    return getActivityAccessKind(resource) === 'group_activity' ? ['pro'] : ['pro'];
 };
 
 export const isSharePremiumOnly = (resource: any) => resource?.access?.shareRequiresPremium === true;
@@ -191,11 +210,11 @@ export const isSharePremiumOnly = (resource: any) => resource?.access?.shareRequ
 export const canAccessResourceForPlan = (resource: any, plan: PlanId) => {
     const kind = getActivityAccessKind(resource);
     const allowedPlans = getAllowedPlansForResource(resource);
-    if (kind === 'group_activity' && plan !== 'premium') {
-        return { allowed: false, reasonCode: 'group_activity_requires_premium' };
+    if (kind === 'group_activity' && plan !== 'pro') {
+        return { allowed: false, reasonCode: 'group_activity_requires_pro' };
     }
     if (!allowedPlans.includes(plan)) {
-        return { allowed: false, reasonCode: 'activity_requires_premium' };
+        return { allowed: false, reasonCode: 'activity_requires_pro' };
     }
     return { allowed: true, reasonCode: '' };
 };
@@ -207,6 +226,12 @@ export const createEmptyUsageSnapshot = (uid: string, dayKey: string, timeZone: 
     huddlesStarted: 0,
     huddleMinutesReserved: 0,
     huddleMinutesConsumed: 0,
+    personalHuddlesStarted: 0,
+    personalHuddleMinutesReserved: 0,
+    personalHuddleMinutesConsumed: 0,
+    circleHuddlesStarted: 0,
+    circleHuddleMinutesReserved: 0,
+    circleHuddleMinutesConsumed: 0,
     circleCreates: {
         public: 0,
         private: 0
@@ -227,6 +252,12 @@ export const coerceUsageSnapshot = (uid: string, usage: any, dayKey: string, tim
         huddlesStarted: Number(base.huddlesStarted || 0),
         huddleMinutesReserved: Number(base.huddleMinutesReserved || 0),
         huddleMinutesConsumed: Number(base.huddleMinutesConsumed || 0),
+        personalHuddlesStarted: Number(base.personalHuddlesStarted || 0),
+        personalHuddleMinutesReserved: Number(base.personalHuddleMinutesReserved || 0),
+        personalHuddleMinutesConsumed: Number(base.personalHuddleMinutesConsumed || 0),
+        circleHuddlesStarted: Number(base.circleHuddlesStarted || 0),
+        circleHuddleMinutesReserved: Number(base.circleHuddleMinutesReserved || 0),
+        circleHuddleMinutesConsumed: Number(base.circleHuddleMinutesConsumed || 0),
         circleCreates: {
             public: Number(base?.circleCreates?.public || 0),
             private: Number(base?.circleCreates?.private || 0)
@@ -240,19 +271,50 @@ export const buildUsageSummary = (usage: any, planRules: PlanRules) => {
     const huddlesStarted = Number(usage?.huddlesStarted || 0);
     const huddleMinutesConsumed = Number(usage?.huddleMinutesConsumed || 0);
     const huddleMinutesReserved = Number(usage?.huddleMinutesReserved || 0);
+    const personalHuddlesStarted = Number(usage?.personalHuddlesStarted || 0);
+    const personalHuddleMinutesConsumed = Number(usage?.personalHuddleMinutesConsumed || 0);
+    const personalHuddleMinutesReserved = Number(usage?.personalHuddleMinutesReserved || 0);
+    const circleHuddlesStarted = Number(usage?.circleHuddlesStarted || 0);
+    const circleHuddleMinutesConsumed = Number(usage?.circleHuddleMinutesConsumed || 0);
+    const circleHuddleMinutesReserved = Number(usage?.circleHuddleMinutesReserved || 0);
     return {
         serverDay: usage?.serverDay || null,
         timezoneBasis: usage?.timezoneBasis || 'UTC',
         huddlesStarted,
-        huddlesRemaining: Math.max(0, planRules.huddlesPerDay - huddlesStarted),
+        huddlesRemaining: planRules.huddlesPerDay == null ? null : Math.max(0, planRules.huddlesPerDay - huddlesStarted),
         huddleMinutesConsumed,
         huddleMinutesReserved,
         huddleMinutesRemaining: Math.max(0, planRules.huddleMinutesPerDay - huddleMinutesReserved),
+        personalHuddlesStarted,
+        personalHuddlesRemaining: Math.max(0, 2 - personalHuddlesStarted),
+        personalHuddleMinutesConsumed,
+        personalHuddleMinutesReserved,
+        personalHuddleMinutesRemaining: Math.max(0, 20 - personalHuddleMinutesReserved),
+        circleHuddlesStarted,
+        circleHuddleMinutesConsumed,
+        circleHuddleMinutesReserved,
+        circleHuddleMinutesRemaining: Math.max(0, 120 - circleHuddleMinutesReserved),
         circleCreates: {
             public: Number(usage?.circleCreates?.public || 0),
             private: Number(usage?.circleCreates?.private || 0)
         }
     };
+};
+
+export const getCircleBillingTier = (circle: any): CircleBillingTier => {
+    const value = String(circle?.billingTier || '').trim().toLowerCase();
+    return value === 'pro' ? 'pro' : 'free';
+};
+
+export const getCircleMemberCap = (circle: any) => {
+    const explicit = Number(circle?.memberCap);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    return getCircleBillingTier(circle) === 'pro' ? 12 : 6;
+};
+
+export const isCircleHuddlesEnabled = (circle: any) => {
+    if (typeof circle?.huddlesEnabled === 'boolean') return circle.huddlesEnabled;
+    return getCircleBillingTier(circle) === 'pro';
 };
 
 export const minutesBetween = (fromValue: any, toValue: any) => {

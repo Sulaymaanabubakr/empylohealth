@@ -1,18 +1,21 @@
-import { useState } from "react";
-import { User, Save, Loader2, Edit2, ShieldCheck, Mail } from "lucide-react";
+import { useMemo, useState } from "react";
+import { User, Save, Loader2, Edit2, ShieldCheck, Mail, UploadCloud } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { sendPasswordResetEmail, updateProfile } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import clsx from "clsx";
 import { useNotification } from "../contexts/NotificationContext";
+import { uploadCloudinaryAsset } from "../lib/media";
 
 export const Settings = () => {
-    const { user } = useAuth();
+    const { user, role, permissions } = useAuth();
     const { showNotification } = useNotification();
     const [isEditing, setIsEditing] = useState(false);
     const [loading, setLoading] = useState(false);
     const [resetLoading, setResetLoading] = useState(false);
+    const [photoLoading, setPhotoLoading] = useState(false);
     const [fullName, setFullName] = useState(user?.displayName || "");
+    const permissionPreview = useMemo(() => permissions.includes('*') ? ['Full access'] : permissions.slice(0, 6), [permissions]);
 
     const handleSave = async () => {
         if (!user) return;
@@ -46,8 +49,19 @@ export const Settings = () => {
         }
     };
 
-    const handlePhotoClick = () => {
-        showNotification('info', "Photo upload will be available in the next update.");
+    const handlePhotoUpload = async (file?: File | null) => {
+        if (!user || !file) return;
+        setPhotoLoading(true);
+        try {
+            const result = await uploadCloudinaryAsset(file, 'image', 'admin-profiles');
+            await updateProfile(user, { photoURL: result.secureUrl });
+            showNotification('success', 'Profile photo updated.');
+        } catch (error) {
+            console.error('Error uploading profile photo:', error);
+            showNotification('error', 'Failed to update profile photo.');
+        } finally {
+            setPhotoLoading(false);
+        }
     };
 
     return (
@@ -84,12 +98,20 @@ export const Settings = () => {
                                 )}
                             </div>
                             <div>
-                                <button
-                                    onClick={handlePhotoClick}
-                                    className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                                >
-                                    Change Photo
-                                </button>
+                                <label className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer">
+                                    <UploadCloud size={16} />
+                                    {photoLoading ? 'Uploading...' : 'Change Photo'}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            void handlePhotoUpload(file);
+                                            e.currentTarget.value = '';
+                                        }}
+                                    />
+                                </label>
                             </div>
                         </div>
 
@@ -153,11 +175,26 @@ export const Settings = () => {
                     <div className="space-y-3">
                         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3 flex items-center justify-between">
                             <span className="text-sm text-gray-600 dark:text-gray-300">Access</span>
-                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Verified Admin</span>
+                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{role === 'super_admin' ? 'Super Admin' : role.replace('_', ' ')}</span>
                         </div>
                         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3 flex items-center justify-between">
                             <span className="text-sm text-gray-600 dark:text-gray-300">Primary Email</span>
                             <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{user?.email || '—'}</span>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3">
+                            <span className="text-sm text-gray-600 dark:text-gray-300">Permissions</span>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {permissionPreview.map((permission) => (
+                                    <span key={permission} className="inline-flex px-2.5 py-1 rounded-full bg-white text-xs font-medium text-gray-700 border border-gray-200">
+                                        {permission}
+                                    </span>
+                                ))}
+                                {!permissions.includes('*') && permissions.length > permissionPreview.length && (
+                                    <span className="inline-flex px-2.5 py-1 rounded-full bg-white text-xs font-medium text-gray-500 border border-gray-200">
+                                        +{permissions.length - permissionPreview.length} more
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                     </div>

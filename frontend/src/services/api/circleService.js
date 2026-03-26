@@ -47,6 +47,10 @@ export const circleService = {
         return circleRepository.updateCircle(circleId, data);
     },
 
+    setCircleBillingTier: async (circleId, billingTier) => {
+        return circleRepository.setCircleBillingTier(circleId, billingTier);
+    },
+
     createCircleInvite: async (circleId, options = {}) => {
         return callableClient.invokeWithAuth('createCircleInvite', {
             circleId,

@@ -7,6 +7,7 @@ import {
     purchaseErrorListener,
     requestSubscription
 } from 'react-native-iap';
+import { Platform } from 'react-native';
 import { subscriptionGuardService } from '../subscription/subscriptionGuardService';
 
 let iapReady = false;
@@ -28,10 +29,31 @@ const extractPurchasePayload = (purchase) => ({
     productId: purchase?.productId || ''
 });
 
+const selectFallbackProductId = (plan, defaults) => {
+    const platformKey = Platform.OS === 'ios' ? 'ios' : 'android';
+    const explicitByPlatform = String(plan?.productIds?.[platformKey] || '').trim();
+    if (explicitByPlatform) return explicitByPlatform;
+    const defaultList = Array.isArray(defaults?.[`${platformKey}ProductIds`]) ? defaults[`${platformKey}ProductIds`] : [];
+    const firstDefault = String(defaultList[0] || '').trim();
+    return firstDefault;
+};
+
+const normalizePlan = (plan, defaults) => {
+    const explicitProductId = String(plan?.productId || '').trim();
+    const productId = explicitProductId || selectFallbackProductId(plan, defaults);
+    return {
+        ...plan,
+        productId
+    };
+};
+
 export const subscriptionService = {
     async getCatalog() {
         const catalog = await subscriptionGuardService.getSubscriptionCatalog();
-        const plans = Array.isArray(catalog?.plans) ? catalog.plans : [];
+        const defaults = catalog?.defaults || {};
+        const plans = Array.isArray(catalog?.plans)
+            ? catalog.plans.map((plan) => normalizePlan(plan, defaults))
+            : [];
         const productIds = Array.from(new Set(plans.map((plan) => String(plan?.productId || '').trim()).filter(Boolean)));
         let storeProducts = [];
         if (productIds.length > 0) {

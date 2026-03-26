@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
@@ -62,6 +62,14 @@ export const Moderation = () => {
         void fetchReports();
     }, [fetchReports]);
 
+    const stats = useMemo(() => {
+        const pendingCount = reports.filter((report) => report.status === 'pending').length;
+        const resolvedCount = reports.filter((report) => report.status === 'resolved').length;
+        const contentReports = reports.filter((report) => report.contentType && report.contentType !== 'users').length;
+        const userReports = reports.filter((report) => report.contentType === 'users').length;
+        return { pendingCount, resolvedCount, contentReports, userReports };
+    }, [reports]);
+
     const confirmAction = (title: string, message: string, action: () => void, type: 'danger' | 'warning' | 'info' = 'danger') => {
         setConfirmConfig({ title, message, onConfirm: action, type });
         setConfirmOpen(true);
@@ -122,16 +130,24 @@ export const Moderation = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button onClick={() => setActiveTab('pending')} className={`text-left border ${activeTab === 'pending' ? 'border-primary ring-1 ring-primary' : 'border-border'} rounded-2xl p-4 shadow-sm bg-white hover:bg-gray-50 transition-all`}>
                     <p className="text-xs uppercase tracking-widest text-gray-500">Pending Review</p>
-                    <p className="mt-2 text-3xl font-semibold text-rose-600">{loading ? '...' : reports.length}</p>
+                    <p className="mt-2 text-3xl font-semibold text-rose-600">{loading ? '...' : stats.pendingCount}</p>
                 </button>
-                <div className="border border-border rounded-2xl p-4 shadow-sm bg-gray-50 opacity-60">
-                    <p className="text-xs uppercase tracking-widest text-gray-500">Auto-Flagged (AI)</p>
-                    <p className="mt-2 text-3xl font-semibold text-gray-900">N/A</p>
+                <div className="border border-border rounded-2xl p-4 shadow-sm bg-white">
+                    <p className="text-xs uppercase tracking-widest text-gray-500">Content Reports</p>
+                    <p className="mt-2 text-3xl font-semibold text-amber-600">{loading ? '...' : stats.contentReports}</p>
                 </div>
-                <div className="border border-border rounded-2xl p-4 shadow-sm bg-gray-50 opacity-60">
-                    <p className="text-xs uppercase tracking-widest text-gray-500">Avg Resolution Time</p>
-                    <p className="mt-2 text-3xl font-semibold text-gray-900">N/A</p>
+                <div className="border border-border rounded-2xl p-4 shadow-sm bg-white">
+                    <p className="text-xs uppercase tracking-widest text-gray-500">User Reports</p>
+                    <p className="mt-2 text-3xl font-semibold text-blue-600">{loading ? '...' : stats.userReports}</p>
                 </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-white p-4 flex items-center justify-between">
+                <div>
+                    <p className="text-xs uppercase tracking-widest text-gray-500">Resolved History</p>
+                    <p className="mt-1 text-2xl font-semibold text-emerald-600">{loading ? '...' : stats.resolvedCount}</p>
+                </div>
+                <p className="text-sm text-gray-500">Switch tabs to review pending items or historical decisions.</p>
             </div>
 
             <div className="flex p-1 bg-gray-100 rounded-lg w-fit">

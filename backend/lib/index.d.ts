@@ -7,6 +7,7 @@ export declare const createAppInvite: import("firebase-functions/v1").HttpsFunct
 export declare const joinCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const joinCircleWithInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const updateCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
+export declare const setCircleBillingTier: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const leaveCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const deleteCircle: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;
 export declare const revokeCircleInvite: import("firebase-functions/v1").HttpsFunction & import("firebase-functions/v1").Runnable<any>;

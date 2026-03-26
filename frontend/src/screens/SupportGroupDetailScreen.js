@@ -6,7 +6,7 @@ import { COLORS, SPACING } from '../theme/theme';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
 import { useAuth } from '../context/AuthContext';
-import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
+import { getCircleBillingTier, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
 
 const SupportGroupDetailScreen = ({ navigation, route }) => {
     const group = route.params?.group;
@@ -24,7 +24,8 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
     }, [group.members, joinedOverride, user?.uid]);
     const tags = group?.tags || (group?.category ? [group.category] : []);
     const memberCount = getCircleMemberCount(group);
-    const isFull = !isJoined && memberCount >= MAX_CIRCLE_MEMBERS;
+    const circleTier = getCircleBillingTier(group);
+    const isFull = !isJoined && memberCount >= getCircleMemberCap(group);
 
     if (!group) {
         return (
@@ -77,6 +78,11 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                     </View>
                     <View style={styles.titleContainer}>
                         <Text style={styles.heroTitle}>{group.name}</Text>
+                        <View style={[styles.tierBadge, circleTier === 'pro' && styles.tierBadgePro]}>
+                            <Text style={[styles.tierBadgeText, circleTier === 'pro' && styles.tierBadgeTextPro]}>
+                                {circleTier === 'pro' ? 'Pro Circle' : 'Free Circle'}
+                            </Text>
+                        </View>
                         {group.verified && (
                             <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} style={{ marginLeft: 6 }} />
                         )}
@@ -86,7 +92,7 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                         <Ionicons name="people" size={16} color="#757575" />
                         <Text style={styles.statsText}>{group.members?.length || group.members || 0} members</Text>
                         <Text style={styles.statsDivider}>|</Text>
-                        <Text style={styles.statsText}>{tags[0] || 'General'}</Text>
+                        <Text style={styles.statsText}>{`${tags[0] || 'General'} • Cap ${getCircleMemberCap(group)}`}</Text>
                     </View>
 
                     <TouchableOpacity
@@ -194,7 +200,28 @@ const styles = StyleSheet.create({
     titleContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        flexWrap: 'wrap',
         marginBottom: 8,
+    },
+    tierBadge: {
+        marginLeft: 8,
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: '#E7F2ED',
+    },
+    tierBadgePro: {
+        backgroundColor: '#FFF2D6',
+    },
+    tierBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#166534',
+        textTransform: 'uppercase',
+    },
+    tierBadgeTextPro: {
+        color: '#8A5A00',
     },
     heroTitle: {
         fontSize: 20,

@@ -19,6 +19,7 @@
     "deploy:user": "bash scripts/deploy-functions-group.sh user",
     "deploy:triggers": "bash scripts/deploy-functions-group.sh triggers",
     "deploy:infra": "bash scripts/deploy-functions-group.sh infra",
+    "backfill:circle-billing": "ts-node src/scripts/backfill-circle-billing.ts",
     "logs": "firebase functions:log",
     "test": "npm run build"
   },

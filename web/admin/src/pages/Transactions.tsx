@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Download, Search, ArrowDownLeft, CreditCard } from 'lucide-react';
+import { Download, Search, ArrowDownLeft, CreditCard, RefreshCw } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
 import { formatDateUK } from '../lib/date';
@@ -27,26 +27,27 @@ export const Transactions = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [error, setError] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'failed'>('all');
+
+    const fetchTransactions = useCallback(async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const getTransactions = httpsCallable(functions, 'getTransactions');
+            const result = await getTransactions({ limit: 50 });
+            const data = (result.data ?? {}) as TransactionsResponse;
+            setTransactions(data.items || []);
+        } catch (err) {
+            console.error("Failed to fetch transactions", err);
+            setError('Failed to fetch transactions.');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
-        const fetchTransactions = async () => {
-            setLoading(true);
-            setError('');
-            try {
-                const getTransactions = httpsCallable(functions, 'getTransactions');
-                const result = await getTransactions({ limit: 50 });
-                const data = (result.data ?? {}) as TransactionsResponse;
-                setTransactions(data.items || []);
-            } catch (err) {
-                console.error("Failed to fetch transactions", err);
-                setError('Failed to fetch transactions.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchTransactions();
-    }, []);
+        void fetchTransactions();
+    }, [fetchTransactions]);
 
     const normalizedTransactions = useMemo(() => {
         return transactions.map((trx) => ({
@@ -62,12 +63,13 @@ export const Transactions = () => {
 
     const filteredTransactions = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
-        if (!term) return normalizedTransactions;
         return normalizedTransactions.filter((trx) => {
+            const matchesStatus = statusFilter === 'all' || trx.status === statusFilter;
             const haystack = `${trx.id} ${trx.user} ${trx.email}`.toLowerCase();
-            return haystack.includes(term);
+            const matchesTerm = !term || haystack.includes(term);
+            return matchesStatus && matchesTerm;
         });
-    }, [normalizedTransactions, searchTerm]);
+    }, [normalizedTransactions, searchTerm, statusFilter]);
 
     const stats = useMemo(() => {
         const totalRevenue = filteredTransactions.reduce((sum, t) => sum + (t.status === 'completed' ? t.amount : 0), 0);
@@ -108,6 +110,12 @@ export const Transactions = () => {
                 </div>
                 <div className="flex gap-3">
                     <button
+                        onClick={fetchTransactions}
+                        className="flex items-center gap-2 px-4 py-2 border border-gray-200 bg-surface rounded-xl text-sm font-medium hover:bg-gray-50 text-gray-600 shadow-sm transition-colors"
+                    >
+                        <RefreshCw size={16} /> Refresh
+                    </button>
+                    <button
                         onClick={handleExportCsv}
                         className="flex items-center gap-2 px-4 py-2 border border-gray-200 bg-surface rounded-xl text-sm font-medium hover:bg-gray-50 text-gray-600 shadow-sm transition-colors"
                     >
@@ -119,7 +127,7 @@ export const Transactions = () => {
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
-                    { label: 'Total Revenue', value: `$${stats.totalRevenue.toFixed(2)}`, change: 'Calculated', color: 'text-green-600', bg: 'bg-green-50' },
+                    { label: 'Total Revenue', value: `£${stats.totalRevenue.toFixed(2)}`, change: 'Calculated', color: 'text-green-600', bg: 'bg-green-50' },
                     { label: 'Completed Payments', value: String(stats.activeSubs), change: 'Calculated', color: 'text-blue-600', bg: 'bg-blue-50' },
                     { label: 'Failed Payments', value: String(stats.failed), change: 'Calculated', color: 'text-red-600', bg: 'bg-red-50' },
                 ].map((stat, idx) => (
@@ -149,6 +157,16 @@ export const Transactions = () => {
                                 className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none"
                             />
                         </div>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'completed' | 'pending' | 'failed')}
+                            className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-700"
+                        >
+                            <option value="all">All statuses</option>
+                            <option value="completed">Completed</option>
+                            <option value="pending">Pending</option>
+                            <option value="failed">Failed</option>
+                        </select>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -191,7 +209,7 @@ export const Transactions = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="font-bold text-gray-900">${trx.amount.toFixed(2)}</span>
+                                            <span className="font-bold text-gray-900">£{trx.amount.toFixed(2)}</span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize border ${trx.status === 'completed' ? 'bg-green-50 text-green-700 border-green-100' :
@@ -222,7 +240,7 @@ export const Transactions = () => {
                             <div>
                                 <p className="text-xs uppercase tracking-wide text-gray-500">Avg Payment</p>
                                 <p className="text-lg font-semibold text-gray-900">
-                                    ${filteredTransactions.length ? (stats.totalRevenue / Math.max(stats.activeSubs, 1)).toFixed(2) : '0.00'}
+                                    £{filteredTransactions.length ? (stats.totalRevenue / Math.max(stats.activeSubs, 1)).toFixed(2) : '0.00'}
                                 </p>
                             </div>
                             <span className="text-xs text-gray-500">Completed only</span>

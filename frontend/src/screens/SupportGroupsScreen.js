@@ -8,7 +8,7 @@ import CircleMemberLane from '../components/CircleMemberLane';
 import { circleService } from '../services/api/circleService';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../services/circles/circleLimits';
+import { MAX_CIRCLE_MEMBERS, getCircleBillingTier, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
@@ -63,6 +63,7 @@ const SupportGroupsScreen = ({ route }) => {
     const scope = route?.params?.scope || 'public';
     const showJoinedOnly = scope === 'joined';
     const [activeFilter, setActiveFilter] = useState('All');
+    const [tierFilter, setTierFilter] = useState('All circles');
     const [searchQuery, setSearchQuery] = useState('');
     const [groups, setGroups] = useState([]);
     const [memberPreviewMap, setMemberPreviewMap] = useState({});
@@ -72,6 +73,7 @@ const SupportGroupsScreen = ({ route }) => {
     const filterStateStorageKey = `support_groups_filter:${scope}:${user?.uid || 'guest'}`;
     const resetFilters = () => {
         setActiveFilter('All');
+        setTierFilter('All circles');
         setSearchQuery('');
     };
 
@@ -91,6 +93,9 @@ const SupportGroupsScreen = ({ route }) => {
                         if (parsed?.activeFilter) {
                             setActiveFilter(parsed.activeFilter);
                         }
+                        if (parsed?.tierFilter) {
+                            setTierFilter(parsed.tierFilter);
+                        }
                         if (typeof parsed?.searchQuery === 'string') {
                             setSearchQuery(parsed.searchQuery);
                         }
@@ -105,7 +110,7 @@ const SupportGroupsScreen = ({ route }) => {
                         if (showJoinedOnly) return isMember;
 
                         const isPublic = (c?.type || 'public') === 'public';
-                        const isFull = !isMember && getCircleMemberCount(c) >= MAX_CIRCLE_MEMBERS;
+                        const isFull = !isMember && getCircleMemberCount(c) >= getCircleMemberCap(c);
                         // Public search screen should not include private circles.
                         return isPublic && !isFull;
                     });
@@ -121,8 +126,8 @@ const SupportGroupsScreen = ({ route }) => {
     );
 
     useEffect(() => {
-        AsyncStorage.setItem(filterStateStorageKey, JSON.stringify({ activeFilter, searchQuery })).catch(() => {});
-    }, [filterStateStorageKey, activeFilter, searchQuery]);
+        AsyncStorage.setItem(filterStateStorageKey, JSON.stringify({ activeFilter, tierFilter, searchQuery })).catch(() => {});
+    }, [filterStateStorageKey, activeFilter, tierFilter, searchQuery]);
 
     useEffect(() => {
         let cancelled = false;
@@ -152,15 +157,20 @@ const SupportGroupsScreen = ({ route }) => {
             const matchesFilter =
                 normalizedFilter === 'all' ||
                 filterTerms.has(normalizedFilter);
+            const circleTier = getCircleBillingTier(group);
+            const matchesTier =
+                tierFilter === 'All circles' ||
+                (tierFilter === 'Free circles' && circleTier === 'free') ||
+                (tierFilter === 'Pro circles' && circleTier === 'pro');
             const isMember = !!user?.uid && Array.isArray(group.members) && group.members.includes(user.uid);
             if (showJoinedOnly) {
-                return matchesSearch && matchesFilter && isMember;
+                return matchesSearch && matchesFilter && matchesTier && isMember;
             }
             const isPublic = (group?.type || 'public') === 'public';
-            const isFull = !isMember && getCircleMemberCount(group) >= MAX_CIRCLE_MEMBERS;
-            return matchesSearch && matchesFilter && isPublic && !isFull;
+            const isFull = !isMember && getCircleMemberCount(group) >= getCircleMemberCap(group);
+            return matchesSearch && matchesFilter && matchesTier && isPublic && !isFull;
         });
-    }, [activeFilter, groups, searchQuery, showJoinedOnly, user?.uid]);
+    }, [activeFilter, groups, searchQuery, showJoinedOnly, tierFilter, user?.uid]);
 
     const filterOptions = useMemo(() => {
         const termsByNormalized = new Map();
@@ -236,7 +246,9 @@ const SupportGroupsScreen = ({ route }) => {
         }
     }, [deleteInProgress, deletingCircleId, groups]);
 
-    const renderGroupCard = ({ item, insideSwipe = false }) => (
+    const renderGroupCard = ({ item, insideSwipe = false }) => {
+        const circleTier = getCircleBillingTier(item);
+        return (
         <TouchableOpacity
             style={[styles.groupCard, insideSwipe && styles.groupCardNoMargin]}
             activeOpacity={0.9}
@@ -244,8 +256,17 @@ const SupportGroupsScreen = ({ route }) => {
         >
             <View style={styles.circleHeader}>
                 <View style={styles.circleHeaderMain}>
-                    <Text style={styles.circleTitle} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
-                    <Text style={styles.circleMembers}>{getActiveMemberCount(item.id, item.members, activeMemberIdsMap)} Members • High Activity</Text>
+                    <View style={styles.circleTitleRow}>
+                        <Text style={styles.circleTitle} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
+                        <View style={[styles.circleTierBadge, circleTier === 'pro' && styles.circleTierBadgePro]}>
+                            <Text style={[styles.circleTierBadgeText, circleTier === 'pro' && styles.circleTierBadgeTextPro]}>
+                                {circleTier === 'pro' ? 'Pro Circle' : 'Free Circle'}
+                            </Text>
+                        </View>
+                    </View>
+                    <Text style={styles.circleMembers}>
+                        {getActiveMemberCount(item.id, item.members, activeMemberIdsMap)} Members • Cap {getCircleMemberCap(item)}
+                    </Text>
                 </View>
                 <View style={styles.scoreBadge}>
                     <Ionicons name="star" size={12} color="#00C853" style={{ marginRight: 4 }} />
@@ -287,7 +308,8 @@ const SupportGroupsScreen = ({ route }) => {
                 <Text style={styles.viewCircleButtonText}>View Circle</Text>
             </TouchableOpacity>
         </TouchableOpacity>
-    );
+        );
+    };
 
     const handleDeleteCircle = (circle) => {
         showModal({
@@ -378,6 +400,22 @@ const SupportGroupsScreen = ({ route }) => {
                     />
                 </View>
             </View>
+
+            {!showJoinedOnly && (
+                <View style={styles.tierFilterRow}>
+                    {['All circles', 'Free circles', 'Pro circles'].map((option) => (
+                        <TouchableOpacity
+                            key={option}
+                            style={[styles.tierFilterChip, tierFilter === option && styles.tierFilterChipActive]}
+                            onPress={() => setTierFilter(option)}
+                        >
+                            <Text style={[styles.tierFilterText, tierFilter === option && styles.tierFilterTextActive]}>
+                                {option}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            )}
 
             {/* Filters */}
             <View style={styles.filterContainer}>
@@ -493,6 +531,29 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         marginBottom: 16,
     },
+    tierFilterRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        marginBottom: 12,
+        gap: 10,
+    },
+    tierFilterChip: {
+        borderRadius: 999,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        backgroundColor: '#F2F4F7',
+    },
+    tierFilterChipActive: {
+        backgroundColor: '#0D9488',
+    },
+    tierFilterText: {
+        color: '#4B5563',
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    tierFilterTextActive: {
+        color: '#FFFFFF',
+    },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -605,6 +666,12 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
         marginBottom: 16,
     },
+    circleTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
     circleHeaderMain: {
         flex: 1,
         marginRight: 12,
@@ -620,6 +687,24 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#757575',
         fontWeight: '500',
+    },
+    circleTierBadge: {
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: '#E7F2ED',
+    },
+    circleTierBadgePro: {
+        backgroundColor: '#FFF2D6',
+    },
+    circleTierBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#166534',
+        textTransform: 'uppercase',
+    },
+    circleTierBadgeTextPro: {
+        color: '#8A5A00',
     },
     timelineEmptyText: {
         fontSize: 13,

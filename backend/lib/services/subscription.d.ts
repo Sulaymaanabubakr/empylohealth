@@ -1,8 +1,10 @@
 import * as admin from 'firebase-admin';
-export type PlanId = 'free' | 'premium';
+export type PlanId = 'free' | 'pro';
 export type SubscriptionStatus = 'active' | 'expired' | 'grace_period' | 'canceled';
 export type PlatformSource = 'ios' | 'android' | 'manual';
 export type ActivityAccessKind = 'self_development' | 'group_activity';
+export type CircleBillingTier = 'free' | 'pro';
+export type HuddleUsageKind = 'personal' | 'circle';
 export type PlanRules = {
     id: PlanId;
     label: string;
@@ -10,7 +12,7 @@ export type PlanRules = {
         private: number | null;
         public: number | null;
     };
-    huddlesPerDay: number;
+    huddlesPerDay: number | null;
     huddleMinutesPerDay: number;
     huddleMinutesPerSession: number;
     activities: {
@@ -33,6 +35,7 @@ export declare const getDailyUsageDocId: (uid: string, dayKey: string) => string
 export declare const getEntitlementRef: (db: admin.firestore.Firestore, uid: string) => admin.firestore.DocumentReference<admin.firestore.DocumentData, admin.firestore.DocumentData>;
 export declare const getDailyUsageRef: (db: admin.firestore.Firestore, uid: string, dayKey: string) => admin.firestore.DocumentReference<admin.firestore.DocumentData, admin.firestore.DocumentData>;
 export declare const normalizeStatus: (status: any) => SubscriptionStatus;
+export declare const normalizePlanId: (plan: any) => PlanId;
 export declare const getEffectivePlan: (entitlement: any) => PlanId;
 export declare const buildSubscriptionSummary: (entitlement: any) => {
     plan: PlanId;
@@ -63,6 +66,12 @@ export declare const createEmptyUsageSnapshot: (uid: string, dayKey: string, tim
     huddlesStarted: number;
     huddleMinutesReserved: number;
     huddleMinutesConsumed: number;
+    personalHuddlesStarted: number;
+    personalHuddleMinutesReserved: number;
+    personalHuddleMinutesConsumed: number;
+    circleHuddlesStarted: number;
+    circleHuddleMinutesReserved: number;
+    circleHuddleMinutesConsumed: number;
     circleCreates: {
         public: number;
         private: number;
@@ -80,6 +89,12 @@ export declare const coerceUsageSnapshot: (uid: string, usage: any, dayKey: stri
     huddlesStarted: number;
     huddleMinutesReserved: number;
     huddleMinutesConsumed: number;
+    personalHuddlesStarted: number;
+    personalHuddleMinutesReserved: number;
+    personalHuddleMinutesConsumed: number;
+    circleHuddlesStarted: number;
+    circleHuddleMinutesReserved: number;
+    circleHuddleMinutesConsumed: number;
     circleCreates: {
         public: number;
         private: number;
@@ -91,15 +106,27 @@ export declare const buildUsageSummary: (usage: any, planRules: PlanRules) => {
     serverDay: any;
     timezoneBasis: any;
     huddlesStarted: number;
-    huddlesRemaining: number;
+    huddlesRemaining: number | null;
     huddleMinutesConsumed: number;
     huddleMinutesReserved: number;
     huddleMinutesRemaining: number;
+    personalHuddlesStarted: number;
+    personalHuddlesRemaining: number;
+    personalHuddleMinutesConsumed: number;
+    personalHuddleMinutesReserved: number;
+    personalHuddleMinutesRemaining: number;
+    circleHuddlesStarted: number;
+    circleHuddleMinutesConsumed: number;
+    circleHuddleMinutesReserved: number;
+    circleHuddleMinutesRemaining: number;
     circleCreates: {
         public: number;
         private: number;
     };
 };
+export declare const getCircleBillingTier: (circle: any) => CircleBillingTier;
+export declare const getCircleMemberCap: (circle: any) => number;
+export declare const isCircleHuddlesEnabled: (circle: any) => any;
 export declare const minutesBetween: (fromValue: any, toValue: any) => number;
 export declare const toTimestampMs: (value: any) => any;
 //# sourceMappingURL=subscription.d.ts.map

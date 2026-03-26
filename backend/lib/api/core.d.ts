@@ -18,6 +18,7 @@ export declare const createCircle: functions.HttpsFunction & functions.Runnable<
  * Callable Function: 'updateCircle'
  */
 export declare const updateCircle: functions.HttpsFunction & functions.Runnable<any>;
+export declare const setCircleBillingTier: functions.HttpsFunction & functions.Runnable<any>;
 export declare const createCircleInvite: functions.HttpsFunction & functions.Runnable<any>;
 export declare const createAppInvite: functions.HttpsFunction & functions.Runnable<any>;
 export declare const listUserInvitations: functions.HttpsFunction & functions.Runnable<any>;

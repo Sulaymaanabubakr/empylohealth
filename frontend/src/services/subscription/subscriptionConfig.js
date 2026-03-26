@@ -3,8 +3,8 @@ export const PLAN_RULES = {
         id: 'free',
         label: 'Free',
         circleLimits: {
-            private: 3,
-            public: 3
+            private: null,
+            public: null
         },
         huddlesPerDay: 2,
         huddleMinutesPerDay: 20,
@@ -15,16 +15,16 @@ export const PLAN_RULES = {
             allowSchedule: false
         }
     },
-    premium: {
-        id: 'premium',
-        label: 'Premium',
+    pro: {
+        id: 'pro',
+        label: 'Pro',
         circleLimits: {
             private: null,
             public: null
         },
-        huddlesPerDay: 3,
+        huddlesPerDay: null,
         huddleMinutesPerDay: 120,
-        huddleMinutesPerSession: 40,
+        huddleMinutesPerSession: 120,
         activities: {
             allowGroup: true,
             allowShare: true,
@@ -33,15 +33,21 @@ export const PLAN_RULES = {
     }
 };
 
-export const getPlanRules = (plan = 'free') => PLAN_RULES[plan] || PLAN_RULES.free;
+export const normalizePlanId = (plan = 'free') => {
+    const value = String(plan || '').trim().toLowerCase();
+    if (value === 'pro' || value === 'premium') return 'pro';
+    return 'free';
+};
+
+export const getPlanRules = (plan = 'free') => PLAN_RULES[normalizePlanId(plan)] || PLAN_RULES.free;
 
 export const getAllowedPlansForResource = (resource = {}) => {
     const plans = Array.isArray(resource?.access?.plans)
         ? resource.access.plans.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
         : [];
-    if (plans.length > 0) return plans;
+    if (plans.length > 0) return plans.map((plan) => normalizePlanId(plan));
     const category = String(resource?.access?.kind || resource?.category || '').toLowerCase();
-    return category.includes('group') ? ['premium'] : ['premium'];
+    return category.includes('group') ? ['pro'] : ['pro'];
 };
 
 export const getActivityAccessKind = (resource = {}) => {

@@ -97,6 +97,41 @@ const CreateCircleScreen = ({ navigation }) => {
             if (result?.circleId) {
                 const newCircle = await circleService.getCircleById(result.circleId);
                 if (newCircle) {
+                    const status = await subscriptionGuardService.getEffectiveSubscriptionStatus(true).catch(() => ({ plan: 'free' }));
+                    if (String(status?.plan || 'free').toLowerCase() === 'pro') {
+                        showModal({
+                            type: 'confirmation',
+                            title: 'Make this a Pro Circle?',
+                            message: 'Free Circles support chat for everyone. Pro Circles unlock huddles, allow only Pro users to join going forward, and require Pro admins or moderators to start or schedule huddles.',
+                            confirmText: 'Make it Pro',
+                            cancelText: 'Keep it Free',
+                            onConfirm: async () => {
+                                try {
+                                    setLoading(true);
+                                    const upgradeResult = await circleService.setCircleBillingTier(result.circleId, 'pro');
+                                    const refreshedCircle = await circleService.getCircleById(result.circleId).catch(() => newCircle);
+                                    showModal({
+                                        type: 'success',
+                                        title: 'Pro Circle enabled',
+                                        message: Number(upgradeResult?.demotedModeratorCount || 0) > 0
+                                            ? 'This circle is now Pro. Existing free admins or moderators were changed back to members.'
+                                            : 'This circle is now Pro and ready for Pro-only huddles.'
+                                    });
+                                    navigation.replace('CircleDetail', { circle: refreshedCircle || newCircle });
+                                } catch (error) {
+                                    showModal({
+                                        type: 'error',
+                                        title: 'Could not enable Pro Circle',
+                                        message: error?.message || 'The circle was created, but we could not turn on Pro huddles.'
+                                    });
+                                    navigation.replace('CircleDetail', { circle: newCircle });
+                                } finally {
+                                    setLoading(false);
+                                }
+                            }
+                        });
+                        return;
+                    }
                     navigation.replace('CircleDetail', { circle: newCircle });
                     return;
                 }
@@ -216,6 +251,18 @@ const CreateCircleScreen = ({ navigation }) => {
                                 ? "Anyone can find and join this circle."
                                 : "Only invited members can join this circle."}
                         </Text>
+                    </View>
+
+                    <View style={styles.planCallout}>
+                        <View style={styles.planCalloutIcon}>
+                            <MaterialCommunityIcons name="crown-outline" size={18} color="#8A5A00" />
+                        </View>
+                        <View style={styles.planCalloutContent}>
+                            <Text style={styles.planCalloutTitle}>Every new circle starts as a Free Circle</Text>
+                            <Text style={styles.planCalloutText}>
+                                Free Circles support chat for everyone. If you are on Pro, we will ask after creation whether you want to turn this into a Pro Circle for Pro-only huddles.
+                            </Text>
+                        </View>
                     </View>
 
                     <View style={styles.formSection}>
@@ -434,6 +481,39 @@ const styles = StyleSheet.create({
         color: '#9E9E9E',
         marginTop: 8,
         marginLeft: 4,
+    },
+    planCallout: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 12,
+        backgroundColor: '#FFF8E8',
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: '#F2D58B',
+    },
+    planCalloutIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#FFECC0',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    planCalloutContent: {
+        flex: 1,
+    },
+    planCalloutTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#7A4C00',
+        marginBottom: 4,
+    },
+    planCalloutText: {
+        fontSize: 13,
+        lineHeight: 19,
+        color: '#8B6B2E',
     },
     categoryWrap: {
         flexDirection: 'row',

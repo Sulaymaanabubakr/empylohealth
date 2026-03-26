@@ -16,6 +16,7 @@ interface Ticket {
     status: 'open' | 'resolved' | 'pending';
     createdAt: string;
     updatedAt?: string;
+    lastReply?: string | null;
 }
 
 interface SupportTicketsResponse {
@@ -100,10 +101,23 @@ export const Support = () => {
         return res;
     }, [tickets, searchTerm, filter]);
 
-    const stats = useMemo(() => ({
-        open: tickets.filter(t => t.status === 'open').length,
-        resolved: tickets.filter(t => t.status === 'resolved').length,
-    }), [tickets]);
+    const stats = useMemo(() => {
+        const open = tickets.filter((t) => t.status === 'open').length;
+        const pending = tickets.filter((t) => t.status === 'pending').length;
+        const resolved = tickets.filter((t) => t.status === 'resolved').length;
+        const responseSamples = tickets
+            .filter((t) => t.status === 'resolved' && t.updatedAt && t.createdAt)
+            .map((t) => {
+                const created = new Date(t.createdAt).getTime();
+                const updated = new Date(t.updatedAt || t.createdAt).getTime();
+                return Math.max(updated - created, 0);
+            });
+        const avgResponseMs = responseSamples.length
+            ? responseSamples.reduce((sum, value) => sum + value, 0) / responseSamples.length
+            : 0;
+        const avgResponseHours = avgResponseMs > 0 ? `${(avgResponseMs / (1000 * 60 * 60)).toFixed(1)}h` : '—';
+        return { open, pending, resolved, avgResponseHours };
+    }, [tickets]);
 
     return (
         <div className="space-y-6">
@@ -120,13 +134,20 @@ export const Support = () => {
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex items-center justify-between">
                     <div>
                         <p className="text-xs uppercase tracking-widest text-gray-500">Open Tickets</p>
                         <p className="mt-1 text-3xl font-semibold text-rose-600">{stats.open}</p>
                     </div>
                     <div className="bg-rose-50 text-rose-600 p-3 rounded-xl"><MessageSquare size={24} /></div>
+                </div>
+                <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs uppercase tracking-widest text-gray-500">Pending Follow-up</p>
+                        <p className="mt-1 text-3xl font-semibold text-amber-600">{stats.pending}</p>
+                    </div>
+                    <div className="bg-amber-50 text-amber-600 p-3 rounded-xl"><Clock size={24} /></div>
                 </div>
                 <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex items-center justify-between">
                     <div>
@@ -138,7 +159,7 @@ export const Support = () => {
                 <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex items-center justify-between">
                     <div>
                         <p className="text-xs uppercase tracking-widest text-gray-500">Response Time</p>
-                        <p className="mt-1 text-3xl font-semibold text-blue-600">N/A</p>
+                        <p className="mt-1 text-3xl font-semibold text-blue-600">{stats.avgResponseHours}</p>
                     </div>
                     <div className="bg-blue-50 text-blue-600 p-3 rounded-xl"><Clock size={24} /></div>
                 </div>
@@ -268,6 +289,15 @@ export const Support = () => {
                                 >
                                     <Mail size={16} /> Reply via Email
                                 </button>
+                                {selectedTicket.status !== 'pending' && (
+                                    <button
+                                        onClick={() => handleUpdateStatus(selectedTicket.id, 'pending')}
+                                        disabled={actionLoading}
+                                        className="px-4 py-2 border border-amber-200 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-50"
+                                    >
+                                        Mark as Pending
+                                    </button>
+                                )}
                                 {selectedTicket.status !== 'resolved' ? (
                                     <button
                                         onClick={() => handleUpdateStatus(selectedTicket.id, 'resolved')}

@@ -3,7 +3,7 @@ import { circleService } from '../api/circleService';
 import { assessmentService } from '../api/assessmentService';
 import { chatService } from '../api/chatService';
 import { screenCacheService } from './screenCacheService';
-import { MAX_CIRCLE_MEMBERS, getCircleMemberCount } from '../circles/circleLimits';
+import { getCircleMemberCap, getCircleMemberCount } from '../circles/circleLimits';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let inflight = null;
@@ -44,7 +44,7 @@ const runPreload = async (uid) => {
   const joinedCircles = (circles || []).filter((circle) => Array.isArray(circle?.members) && circle.members.includes(uid));
   const supportGroupsPublic = publicCircles.filter((c) => {
     const isMember = Array.isArray(c?.members) && c.members.includes(uid);
-    const isFull = !isMember && getCircleMemberCount(c) >= MAX_CIRCLE_MEMBERS;
+    const isFull = !isMember && getCircleMemberCount(c) >= getCircleMemberCap(c);
     return !isFull;
   });
 
