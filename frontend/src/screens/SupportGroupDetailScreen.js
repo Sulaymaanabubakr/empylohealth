@@ -78,11 +78,13 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                     </View>
                     <View style={styles.titleContainer}>
                         <Text style={styles.heroTitle}>{group.name}</Text>
-                        <View style={[styles.tierBadge, circleTier === 'pro' && styles.tierBadgePro]}>
-                            <Text style={[styles.tierBadgeText, circleTier === 'pro' && styles.tierBadgeTextPro]}>
-                                {circleTier === 'pro' ? 'Pro Circle' : 'Free Circle'}
-                            </Text>
-                        </View>
+                        {circleTier === 'pro' && (
+                            <View style={[styles.tierBadge, styles.tierBadgePro]}>
+                                <Text style={[styles.tierBadgeText, styles.tierBadgeTextPro]}>
+                                    Pro Circle
+                                </Text>
+                            </View>
+                        )}
                         {group.verified && (
                             <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} style={{ marginLeft: 6 }} />
                         )}

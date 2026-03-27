@@ -166,10 +166,15 @@ const CreateCircleScreen = ({ navigation }) => {
 
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={{ flex: 1 }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+                style={styles.keyboardContainer}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 20}
             >
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentInsetAdjustmentBehavior="always"
+                >
 
                     {/* Circle Icon Picker */}
                     <View style={styles.iconContainer}>
@@ -253,18 +258,6 @@ const CreateCircleScreen = ({ navigation }) => {
                         </Text>
                     </View>
 
-                    <View style={styles.planCallout}>
-                        <View style={styles.planCalloutIcon}>
-                            <MaterialCommunityIcons name="crown-outline" size={18} color="#8A5A00" />
-                        </View>
-                        <View style={styles.planCalloutContent}>
-                            <Text style={styles.planCalloutTitle}>Every new circle starts as a Free Circle</Text>
-                            <Text style={styles.planCalloutText}>
-                                Free Circles support chat for everyone. If you are on Pro, we will ask after creation whether you want to turn this into a Pro Circle for Pro-only huddles.
-                            </Text>
-                        </View>
-                    </View>
-
                     <View style={styles.formSection}>
                         <Text style={styles.label}>Category</Text>
                         <View style={styles.categoryWrap}>
@@ -326,18 +319,17 @@ const CreateCircleScreen = ({ navigation }) => {
                     </View>
 
                 </ScrollView>
+                {/* Footer */}
+                <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
+                    <TouchableOpacity style={styles.createButton} onPress={handleCreate} disabled={loading}>
+                        {loading ? (
+                            <ActivityIndicator color="#FFF" />
+                        ) : (
+                            <Text style={styles.createButtonText}>Create Circle</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
             </KeyboardAvoidingView>
-
-            {/* Footer */}
-            <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
-                <TouchableOpacity style={styles.createButton} onPress={handleCreate} disabled={loading}>
-                    {loading ? (
-                        <ActivityIndicator color="#FFF" />
-                    ) : (
-                        <Text style={styles.createButtonText}>Create Circle</Text>
-                    )}
-                </TouchableOpacity>
-            </View>
         </SafeAreaView>
     );
 };
@@ -347,9 +339,13 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#F8F9FA',
     },
+    keyboardContainer: {
+        flex: 1,
+    },
     scrollContent: {
+        flexGrow: 1,
         paddingHorizontal: 24,
-        paddingBottom: 40,
+        paddingBottom: 24,
         paddingTop: 20,
     },
     header: {
@@ -561,21 +557,25 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     footer: {
-        padding: 24,
-        paddingBottom: 20,
-        backgroundColor: '#F8F9FA',
+        paddingTop: 12,
+        paddingHorizontal: 20,
+        paddingBottom: 16,
+        backgroundColor: 'rgba(248,249,250,0.96)',
+        borderTopWidth: 1,
+        borderTopColor: '#E6EBEF',
     },
     createButton: {
         backgroundColor: COLORS.primary,
         width: '100%',
         paddingVertical: 18,
-        borderRadius: 32,
+        borderRadius: 20,
         alignItems: 'center',
         shadowColor: COLORS.primary,
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
         shadowRadius: 12,
         elevation: 8,
+        minHeight: 58,
     },
     createButtonText: {
         color: '#FFFFFF',

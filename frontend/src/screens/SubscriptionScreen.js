@@ -1,46 +1,41 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Linking, Animated, Easing } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Linking, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useModal } from '../context/ModalContext';
 import { LEGAL_LINKS } from '../constants/legalLinks';
 import { subscriptionService } from '../services/api/subscriptionService';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { getPlanRules } from '../services/subscription/subscriptionConfig';
+import { COLORS, SPACING } from '../theme/theme';
 
-const FEATURE_ROWS = [
-    { label: 'Circle type', free: 'Free circles only', premium: 'Free + Pro circles' },
-    { label: 'Members per circle', free: '6 max', premium: '12 in public Pro circles' },
-    { label: 'Personal huddles', free: '2 per day', premium: 'Included' },
-    { label: 'Circle huddles', free: 'Locked', premium: 'Pro members only' },
-    { label: 'Huddle allowance', free: '10 mins per session', premium: '120 mins per day' },
-    { label: 'Group activities', free: 'Locked', premium: 'Included' },
-    { label: 'Schedule huddles', free: 'Locked', premium: 'Included' }
-];
-
-const PREMIUM_HIGHLIGHTS = [
-    {
-        icon: 'infinite',
-        title: 'Pro Circles',
-        text: 'Upgrade circles for Pro-only membership and huddle access.'
-    },
-    {
-        icon: 'timer-outline',
-        title: 'Pro huddle time',
-        text: 'Use up to 120 circle-huddle minutes per day across your account.'
-    },
-    {
-        icon: 'sparkles-outline',
-        title: 'Full access',
-        text: 'Unlock Pro activities, scheduling, and activity sharing.'
-    }
+const PLAN_COMPARISON = [
+    { label: 'Create circles', free: true, pro: true },
+    { label: 'Personal huddles', free: true, pro: true },
+    { label: 'Pro circles', free: false, pro: true },
+    { label: 'Circle huddles', free: false, pro: true },
+    { label: 'Schedule huddles', free: false, pro: true },
+    { label: 'Share activities', free: false, pro: true },
+    { label: 'Full activities', free: false, pro: true },
 ];
 
 const formatExpiry = (expiresAt) => {
     const date = expiresAt?.toDate ? expiresAt.toDate() : (expiresAt ? new Date(expiresAt) : null);
-    if (!date || Number.isNaN(date.getTime())) return 'No active renewal';
-    return `Renews ${date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+    if (!date || Number.isNaN(date.getTime())) return 'Auto-renews monthly. Cancel anytime.';
+    return `Renews ${date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.`;
+};
+
+const PlanCell = ({ enabled, accent = false, text }) => {
+    if (typeof text === 'string') {
+        return <Text style={[styles.planCellText, accent && styles.planCellTextAccent]}>{text}</Text>;
+    }
+    return (
+        <Ionicons
+            name={enabled ? 'checkmark' : 'remove'}
+            size={18}
+            color={enabled ? (accent ? COLORS.primary : COLORS.text) : '#B7BEC7'}
+        />
+    );
 };
 
 const SubscriptionScreen = ({ navigation, route }) => {
@@ -50,8 +45,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const [loading, setLoading] = useState(true);
     const [busyProductId, setBusyProductId] = useState('');
     const [restoring, setRestoring] = useState(false);
-    const heroFloat = useRef(new Animated.Value(0)).current;
-    const heroPulse = useRef(new Animated.Value(0)).current;
+    const [comparisonPlan, setComparisonPlan] = useState('pro');
 
     const refresh = async (forceRefresh = false) => {
         setLoading(true);
@@ -101,65 +95,27 @@ const SubscriptionScreen = ({ navigation, route }) => {
         };
     }, []);
 
-    useEffect(() => {
-        const floatLoop = Animated.loop(
-            Animated.sequence([
-                Animated.timing(heroFloat, {
-                    toValue: 1,
-                    duration: 2600,
-                    easing: Easing.inOut(Easing.sin),
-                    useNativeDriver: true
-                }),
-                Animated.timing(heroFloat, {
-                    toValue: 0,
-                    duration: 2600,
-                    easing: Easing.inOut(Easing.sin),
-                    useNativeDriver: true
-                })
-            ])
-        );
-        const pulseLoop = Animated.loop(
-            Animated.sequence([
-                Animated.timing(heroPulse, {
-                    toValue: 1,
-                    duration: 1800,
-                    easing: Easing.inOut(Easing.quad),
-                    useNativeDriver: true
-                }),
-                Animated.timing(heroPulse, {
-                    toValue: 0,
-                    duration: 1800,
-                    easing: Easing.inOut(Easing.quad),
-                    useNativeDriver: true
-                })
-            ])
-        );
-        floatLoop.start();
-        pulseLoop.start();
-        return () => {
-            floatLoop.stop();
-            pulseLoop.stop();
-        };
-    }, [heroFloat, heroPulse]);
-
     const entitlement = status?.entitlement || { plan: 'free', status: 'expired' };
     const usage = status?.usage || {};
     const currentPlan = entitlement?.plan || 'free';
     const currentRules = getPlanRules(currentPlan);
-    const premiumPlan = plans.find((plan) => {
+    const currentPlanIsPro = currentRules.id === 'pro';
+
+    useEffect(() => {
+        setComparisonPlan(currentPlanIsPro ? 'pro' : 'free');
+    }, [currentPlanIsPro]);
+
+    const proPlan = plans.find((plan) => {
         const id = String(plan?.id || '').toLowerCase();
         return id.includes('pro') || id.includes('premium');
-    })
-        || plans.find((plan) => String(plan?.productId || '').trim())
-        || {
-            id: 'pro',
-            name: 'Pro Monthly',
-            description: 'Unlock Pro Circles, full activities, scheduling, and circle huddles.',
-            priceLabel: '£10/month',
-            productId: ''
-        };
+    }) || plans.find((plan) => String(plan?.productId || '').trim()) || {
+        id: 'pro',
+        name: 'Pro Monthly',
+        description: 'Unlock Pro circles, full activities, scheduling, and circle huddles.',
+        priceLabel: '£10/month',
+        productId: ''
+    };
 
-    const currentPlanIsPro = currentRules.id === 'pro';
     const huddlesUsedToday = currentPlanIsPro
         ? Number(usage?.circleHuddlesStarted || 0)
         : Number(usage?.personalHuddlesStarted || 0);
@@ -167,46 +123,21 @@ const SubscriptionScreen = ({ navigation, route }) => {
         ? Number(usage?.circleHuddleMinutesConsumed || 0)
         : Number(usage?.personalHuddleMinutesConsumed || 0);
 
-    const usageRows = useMemo(() => ([
-        {
-            label: 'Plan',
-            value: currentRules.label
-        },
-        {
-            label: currentPlanIsPro ? 'Circle huddles started today' : 'Personal huddles used today',
-            value: currentRules.huddlesPerDay == null
-                ? `${huddlesUsedToday}`
-                : `${huddlesUsedToday}/${currentRules.huddlesPerDay}`
-        },
-        {
-            label: currentPlanIsPro ? 'Circle huddle minutes today' : 'Personal huddle minutes today',
-            value: `${minutesUsedToday}/${currentRules.huddleMinutesPerDay}`
-        },
-        {
-            label: 'Pro circle access',
-            value: currentPlanIsPro ? 'Enabled' : 'Upgrade required'
-        },
-        {
-            label: 'Circle member cap',
-            value: currentPlanIsPro ? '12 in public Pro circles' : '6 in Free circles'
-        }
+    const summaryRows = useMemo(() => ([
+        currentPlanIsPro
+            ? `${huddlesUsedToday} circle huddles started today`
+            : `${huddlesUsedToday}/${currentRules.huddlesPerDay} personal huddles today`,
+        `${minutesUsedToday}/${currentRules.huddleMinutesPerDay} minutes used today`,
+        currentPlanIsPro ? 'Pro circles enabled' : 'Upgrade for Pro circles and circle huddles'
     ]), [currentPlanIsPro, currentRules, huddlesUsedToday, minutesUsedToday]);
 
-    const heroFloatUp = heroFloat.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, -10]
-    });
-    const heroFloatDown = heroFloat.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 12]
-    });
-    const heroPulseScale = heroPulse.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 1.08]
-    });
+    const comparisonTitle = comparisonPlan === 'pro' ? 'Get Pro' : 'Start free';
+    const comparisonSubtitle = comparisonPlan === 'pro'
+        ? 'Unlock circle huddles, scheduling, and the full Pro circle experience.'
+        : 'Keep chatting in circles for free, then upgrade when you need Pro huddles.';
 
     const handleSubscribe = async () => {
-        if (!premiumPlan?.productId) {
+        if (!proPlan?.productId) {
             showModal({
                 type: 'info',
                 title: 'Purchases unavailable',
@@ -215,8 +146,8 @@ const SubscriptionScreen = ({ navigation, route }) => {
             return;
         }
         try {
-            setBusyProductId(String(premiumPlan.productId));
-            await subscriptionService.requestPlanPurchase(premiumPlan);
+            setBusyProductId(String(proPlan.productId));
+            await subscriptionService.requestPlanPurchase(proPlan);
         } catch (error) {
             setBusyProductId('');
             showModal({
@@ -230,7 +161,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const handleRestore = async () => {
         try {
             setRestoring(true);
-            await subscriptionService.restore({ productId: premiumPlan?.productId || '' });
+            await subscriptionService.restore({ productId: proPlan?.productId || '' });
             await refresh(true);
             showModal({
                 type: 'success',
@@ -250,186 +181,123 @@ const SubscriptionScreen = ({ navigation, route }) => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <StatusBar barStyle="light-content" />
-            <LinearGradient colors={['#08263D', '#115269', '#1A8A7E']} style={styles.hero}>
-                <Animated.View style={[styles.heroGlowLarge, { transform: [{ translateY: heroFloatUp }, { scale: heroPulseScale }] }]} />
-                <Animated.View style={[styles.heroGlowSmall, { transform: [{ translateY: heroFloatDown }] }]} />
-                <Animated.View style={[styles.heroOrbitCard, { transform: [{ translateY: heroFloatUp }] }]}>
-                    <Text style={styles.heroOrbitTitle}>Pro Circle</Text>
-                    <Text style={styles.heroOrbitText}>Pro-only joins. Pro-only huddles.</Text>
-                </Animated.View>
-                <Animated.View style={[styles.heroOrbitCardSecondary, { transform: [{ translateY: heroFloatDown }] }]}>
-                    <Text style={styles.heroOrbitTitleSecondary}>Free Circle</Text>
-                    <Text style={styles.heroOrbitTextSecondary}>Open chat. No circle huddles.</Text>
-                </Animated.View>
+            <StatusBar barStyle="dark-content" />
 
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Subscription</Text>
-                    <View style={styles.headerSpacer} />
-                </View>
-
-                <View style={styles.heroCard}>
-                    <View style={styles.heroTopRow}>
-                        <View style={styles.heroPlanWrap}>
-                            <Text style={styles.heroEyebrow}>Current plan</Text>
-                            <Text style={styles.heroPlan}>{currentRules.label}</Text>
-                            <Text style={styles.heroMeta}>{formatExpiry(entitlement?.expiresAt)}</Text>
-                            <Text style={styles.heroSubcopy}>
-                                {currentPlanIsPro
-                                    ? 'Upgrade circles to Pro, keep chat open, and unlock Pro-only huddles.'
-                                    : 'Chat in any circle, then upgrade when you want Pro circles and huddles.'}
-                            </Text>
-                        </View>
-                        <View style={styles.heroBadge}>
-                            <MaterialCommunityIcons name="crown-outline" size={18} color="#0B3B60" />
-                            <Text style={styles.heroBadgeText}>{currentPlanIsPro ? 'Active' : 'Upgrade'}</Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.heroStatsRow}>
-                        <View style={styles.heroStat}>
-                            <Text style={styles.heroStatValue}>{huddlesUsedToday}</Text>
-                            <Text style={styles.heroStatLabel}>{currentPlanIsPro ? 'Circle huddles' : 'Personal huddles'}</Text>
-                        </View>
-                        <View style={styles.heroStatDivider} />
-                        <View style={styles.heroStat}>
-                            <Text style={styles.heroStatValue}>{minutesUsedToday}</Text>
-                            <Text style={styles.heroStatLabel}>Minutes used</Text>
-                        </View>
-                        <View style={styles.heroStatDivider} />
-                        <View style={styles.heroStat}>
-                            <Text style={styles.heroStatValue}>{currentPlanIsPro ? 'Pro' : 'Free'}</Text>
-                            <Text style={styles.heroStatLabel}>Access</Text>
-                        </View>
-                    </View>
-
-                    {!!route?.params?.reasonCode && (
-                        <View style={styles.reasonBanner}>
-                            <MaterialCommunityIcons name="shield-lock-outline" size={18} color="#0B3B60" />
-                            <Text style={styles.reasonText}>Upgrade to unlock this feature.</Text>
-                        </View>
-                    )}
-                </View>
-            </LinearGradient>
+            <View style={styles.topBar}>
+                <View style={styles.topBarSpacer} />
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+                    <Ionicons name="close" size={24} color={COLORS.text} />
+                </TouchableOpacity>
+            </View>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 {loading ? (
                     <View style={styles.loadingWrap}>
-                        <ActivityIndicator color="#0B7A75" />
+                        <ActivityIndicator color={COLORS.primary} />
                     </View>
                 ) : (
                     <>
-                        <View style={styles.premiumPanel}>
-                            <View style={styles.premiumPanelHeader}>
-                                <Text style={styles.premiumPanelEyebrow}>Pro monthly</Text>
-                                <Text style={styles.premiumPanelTitle}>More room, more time, full access</Text>
-                                <Text style={styles.premiumPanelSubtitle}>
-                                    Pro unlocks Pro Circles, circle huddles, and the full activity experience.
-                                </Text>
+                        <View style={styles.hero}>
+                            <View style={styles.heroIcon}>
+                                <Image source={require('../assets/images/logo_teal.png')} style={styles.heroLogo} resizeMode="contain" />
                             </View>
+                            <Text style={styles.heroTitle}>{comparisonTitle}</Text>
+                            <Text style={styles.heroSubtitle}>{comparisonSubtitle}</Text>
 
-                            <View style={styles.highlightGrid}>
-                                {PREMIUM_HIGHLIGHTS.map((item) => (
-                                    <View key={item.title} style={styles.highlightCard}>
-                                        <View style={styles.highlightIcon}>
-                                            <Ionicons name={item.icon} size={18} color="#0B3B60" />
-                                        </View>
-                                        <Text style={styles.highlightTitle}>{item.title}</Text>
-                                        <Text style={styles.highlightText}>{item.text}</Text>
-                                    </View>
-                                ))}
-                            </View>
-                        </View>
-
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Usage today</Text>
-                            <View style={styles.usageCard}>
-                                {usageRows.map((row, index) => (
-                                    <View
-                                        key={row.label}
-                                        style={[styles.usageRow, index === usageRows.length - 1 && styles.lastRow]}
+                            <View style={styles.toggleWrap}>
+                                <View style={styles.toggleTrack}>
+                                    <TouchableOpacity
+                                        style={[styles.togglePill, comparisonPlan === 'free' && styles.togglePillActive]}
+                                        onPress={() => setComparisonPlan('free')}
+                                        activeOpacity={0.9}
                                     >
-                                        <Text style={styles.usageLabel}>{row.label}</Text>
-                                        <Text style={styles.usageValue}>{row.value}</Text>
-                                    </View>
-                                ))}
-                            </View>
-                        </View>
-
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Free vs Pro</Text>
-                            <View style={styles.compareCard}>
-                                <View style={styles.compareLegend}>
-                                    <Text style={styles.compareLegendFree}>Free</Text>
-                                    <Text style={styles.compareLegendPremium}>Pro</Text>
+                                        <Text style={[styles.toggleLabel, comparisonPlan === 'free' ? styles.toggleLabelActiveText : styles.toggleLabelMuted]}>Free</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.togglePill, comparisonPlan === 'pro' && styles.togglePillActive]}
+                                        onPress={() => setComparisonPlan('pro')}
+                                        activeOpacity={0.9}
+                                    >
+                                        <Text style={[styles.toggleLabel, comparisonPlan === 'pro' ? styles.toggleLabelActiveText : styles.toggleLabelMuted]}>Pro</Text>
+                                    </TouchableOpacity>
                                 </View>
-                                {FEATURE_ROWS.map((item, index) => (
-                                    <View
-                                        key={item.label}
-                                        style={[styles.compareRow, index === FEATURE_ROWS.length - 1 && styles.lastRow]}
-                                    >
-                                        <Text style={styles.compareLabel}>{item.label}</Text>
-                                        <View style={styles.compareValues}>
-                                            <Text style={styles.compareFree}>{item.free}</Text>
-                                            <Text style={styles.comparePremium}>{item.premium}</Text>
-                                        </View>
-                                    </View>
-                                ))}
                             </View>
                         </View>
 
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Pro monthly</Text>
-                            <View style={styles.planCard}>
-                                <LinearGradient colors={['#FFF4D8', '#FFFDF7']} style={styles.planTop}>
-                                    <View style={styles.planHeader}>
-                                        <View style={styles.planIdentity}>
-                                            <View style={styles.planPill}>
-                                                <MaterialCommunityIcons name="star-four-points-outline" size={16} color="#8A5A00" />
-                                                <Text style={styles.planPillText}>£10 / month</Text>
-                                            </View>
-                                        </View>
-                                        <Text style={styles.planName}>{premiumPlan?.name || 'Pro Monthly'}</Text>
-                                        <Text style={styles.planDesc}>
-                                            {premiumPlan?.description || 'Full activities, Pro circle huddles, scheduling, and sharing.'}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.planPriceWrap}>
-                                        <Text style={styles.planPrice}>{premiumPlan?.priceLabel || premiumPlan?.price || 'Configured in store'}</Text>
-                                        <Text style={styles.planPriceCaption}>Billed through the App Store or Google Play.</Text>
-                                    </View>
-                                </LinearGradient>
-
-                                <TouchableOpacity
-                                    style={[styles.primaryButton, currentPlanIsPro && styles.primaryButtonDisabled]}
-                                    onPress={handleSubscribe}
-                                    disabled={currentPlanIsPro || !!busyProductId}
-                                >
-                                    {busyProductId ? (
-                                        <ActivityIndicator color="#FFFFFF" />
-                                    ) : (
-                                        <Text style={styles.primaryButtonText}>
-                                            {currentPlanIsPro ? 'Pro active' : 'Upgrade to Pro'}
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
-
-                                <TouchableOpacity style={styles.secondaryButton} onPress={handleRestore} disabled={restoring}>
-                                    {restoring ? <ActivityIndicator color="#0B3B60" /> : <Text style={styles.secondaryButtonText}>Restore purchases</Text>}
-                                </TouchableOpacity>
+                        {!!route?.params?.reasonCode && (
+                            <View style={styles.noticeCard}>
+                                <MaterialCommunityIcons name="lock-outline" size={16} color={COLORS.primary} />
+                                <Text style={styles.noticeText}>Upgrade to unlock this feature.</Text>
                             </View>
+                        )}
+
+                        <View style={styles.compareCard}>
+                            <View style={styles.compareHeaderRow}>
+                                <Text style={styles.compareHeaderTitle}>Features</Text>
+                                <View style={styles.compareColumnsHeader}>
+                                    <Text style={styles.compareFreeHeader}>Free</Text>
+                                    <Text style={styles.compareProHeader}>Pro</Text>
+                                </View>
+                            </View>
+
+                            {PLAN_COMPARISON.map((row, index) => (
+                                <View key={row.label} style={[styles.compareRow, index === PLAN_COMPARISON.length - 1 && styles.compareRowLast]}>
+                                    <Text style={styles.compareLabel}>{row.label}</Text>
+                                    <View style={styles.compareColumns}>
+                                        <View style={styles.compareColumnCell}>
+                                            <PlanCell enabled={row.free} />
+                                        </View>
+                                        <View style={styles.compareColumnCell}>
+                                            <PlanCell enabled={row.pro} accent />
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
                         </View>
 
-                        <View style={styles.footerLinks}>
-                            <TouchableOpacity onPress={() => Linking.openURL(LEGAL_LINKS.terms)}>
-                                <Text style={styles.footerLink}>Terms</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => Linking.openURL(LEGAL_LINKS.privacy)}>
-                                <Text style={styles.footerLink}>Privacy</Text>
-                            </TouchableOpacity>
+                        <View style={styles.statusCard}>
+                            <View style={styles.statusCardHeader}>
+                                <Text style={styles.statusTitle}>Current plan</Text>
+                                <Text style={styles.statusValue}>{currentRules.label}</Text>
+                            </View>
+                            {summaryRows.map((row) => (
+                                <Text key={row} style={styles.statusLine}>{row}</Text>
+                            ))}
+                            <Text style={styles.statusMeta}>{formatExpiry(entitlement?.expiresAt)}</Text>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.upgradeButton, currentPlanIsPro && styles.upgradeButtonDisabled]}
+                            onPress={handleSubscribe}
+                            disabled={currentPlanIsPro || !!busyProductId}
+                        >
+                            {busyProductId ? (
+                                <ActivityIndicator color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.upgradeButtonText}>
+                                    {currentPlanIsPro ? 'Pro active' : `Upgrade for ${proPlan?.priceLabel || '£10/month'}`}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.restoreButton} onPress={handleRestore} disabled={restoring}>
+                            {restoring ? (
+                                <ActivityIndicator color={COLORS.text} />
+                            ) : (
+                                <Text style={styles.restoreButtonText}>Restore purchases</Text>
+                            )}
+                        </TouchableOpacity>
+
+                        <View style={styles.footerBlock}>
+                            <View style={styles.footerLinks}>
+                                <TouchableOpacity onPress={() => Linking.openURL(LEGAL_LINKS.terms)}>
+                                    <Text style={styles.footerLink}>Terms</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => Linking.openURL(LEGAL_LINKS.privacy)}>
+                                    <Text style={styles.footerLink}>Privacy</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.footerMeta}>Auto-renews monthly. Cancel anytime.</Text>
                         </View>
                     </>
                 )}
@@ -441,448 +309,287 @@ const SubscriptionScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F4F7F4'
+        backgroundColor: '#F8FBFA'
     },
-    hero: {
-        paddingBottom: 28,
-        paddingHorizontal: 20,
-        position: 'relative',
-        overflow: 'hidden'
-    },
-    heroGlowLarge: {
-        position: 'absolute',
-        width: 220,
-        height: 220,
-        borderRadius: 110,
-        backgroundColor: 'rgba(255,255,255,0.10)',
-        right: -60,
-        top: 44
-    },
-    heroGlowSmall: {
-        position: 'absolute',
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        backgroundColor: 'rgba(255,214,102,0.15)',
-        left: -24,
-        bottom: 28
-    },
-    heroOrbitCard: {
-        position: 'absolute',
-        right: 20,
-        top: 108,
-        backgroundColor: 'rgba(255, 245, 214, 0.96)',
-        borderRadius: 18,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.24)'
-    },
-    heroOrbitCardSecondary: {
-        position: 'absolute',
-        left: 18,
-        top: 184,
-        backgroundColor: 'rgba(222, 247, 236, 0.95)',
-        borderRadius: 18,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.18)'
-    },
-    heroOrbitTitle: {
-        color: '#7A4C00',
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-        marginBottom: 4
-    },
-    heroOrbitText: {
-        color: '#734B00',
-        fontSize: 12,
-        fontWeight: '600'
-    },
-    heroOrbitTitleSecondary: {
-        color: '#166534',
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-        marginBottom: 4
-    },
-    heroOrbitTextSecondary: {
-        color: '#166534',
-        fontSize: 12,
-        fontWeight: '600'
-    },
-    header: {
+    topBar: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
-        paddingTop: 8,
-        marginBottom: 24
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingTop: SPACING.sm
     },
-    backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.16)',
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    headerTitle: {
-        color: '#FFFFFF',
-        fontSize: 17,
-        fontWeight: '700'
-    },
-    headerSpacer: {
+    topBarSpacer: {
         width: 40
     },
-    heroCard: {
-        backgroundColor: 'rgba(255,255,255,0.14)',
-        borderRadius: 24,
-        padding: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.10)'
-    },
-    heroTopRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        gap: 12
-    },
-    heroPlanWrap: {
-        flex: 1
-    },
-    heroBadge: {
-        flexDirection: 'row',
+    closeButton: {
+        width: 40,
+        height: 40,
         alignItems: 'center',
-        gap: 6,
-        backgroundColor: '#F4E3B2',
-        borderRadius: 999,
-        paddingHorizontal: 12,
-        paddingVertical: 8
-    },
-    heroBadgeText: {
-        color: '#0B3B60',
-        fontSize: 12,
-        fontWeight: '800'
-    },
-    heroEyebrow: {
-        color: '#D5ECF4',
-        fontSize: 12,
-        fontWeight: '700',
-        textTransform: 'uppercase',
-        marginBottom: 6
-    },
-    heroPlan: {
-        color: '#FFFFFF',
-        fontSize: 34,
-        fontWeight: '800'
-    },
-    heroMeta: {
-        color: '#DDECEF',
-        fontSize: 14,
-        marginTop: 6
-    },
-    heroSubcopy: {
-        color: '#E6F3F2',
-        fontSize: 13,
-        lineHeight: 19,
-        marginTop: 10,
-        maxWidth: 230
-    },
-    heroStatsRow: {
-        marginTop: 18,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(4,18,30,0.18)',
-        borderRadius: 18,
-        paddingVertical: 14,
-        paddingHorizontal: 10
-    },
-    heroStat: {
-        flex: 1,
-        alignItems: 'center'
-    },
-    heroStatValue: {
-        color: '#FFFFFF',
-        fontSize: 20,
-        fontWeight: '800'
-    },
-    heroStatLabel: {
-        color: '#D3E4EA',
-        fontSize: 11,
-        fontWeight: '700',
-        marginTop: 4,
-        textTransform: 'uppercase'
-    },
-    heroStatDivider: {
-        width: 1,
-        height: 30,
-        backgroundColor: 'rgba(255,255,255,0.16)'
-    },
-    reasonBanner: {
-        marginTop: 14,
-        borderRadius: 16,
-        backgroundColor: '#F4E3B2',
-        padding: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8
-    },
-    reasonText: {
-        color: '#0B3B60',
-        fontSize: 13,
-        fontWeight: '600'
+        justifyContent: 'center'
     },
     content: {
-        padding: 20,
-        paddingBottom: 40
-    },
-    premiumPanel: {
-        marginTop: -22,
-        marginBottom: 24,
-        backgroundColor: '#FFFDF7',
-        borderRadius: 28,
-        padding: 18,
-        borderWidth: 1,
-        borderColor: '#EADFC7'
-    },
-    premiumPanelHeader: {
-        marginBottom: 16
-    },
-    premiumPanelEyebrow: {
-        color: '#9B6A18',
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-        letterSpacing: 0.6,
-        marginBottom: 6
-    },
-    premiumPanelTitle: {
-        color: '#102027',
-        fontSize: 24,
-        fontWeight: '800',
-        lineHeight: 28
-    },
-    premiumPanelSubtitle: {
-        marginTop: 8,
-        color: '#596D75',
-        fontSize: 14,
-        lineHeight: 20
-    },
-    highlightGrid: {
-        gap: 12
-    },
-    highlightCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#EEE7D8'
-    },
-    highlightIcon: {
-        width: 34,
-        height: 34,
-        borderRadius: 17,
-        backgroundColor: '#F6E7C3',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 10
-    },
-    highlightTitle: {
-        color: '#102027',
-        fontSize: 16,
-        fontWeight: '800',
-        marginBottom: 4
-    },
-    highlightText: {
-        color: '#5E7178',
-        fontSize: 13,
-        lineHeight: 18
+        paddingHorizontal: 24,
+        paddingBottom: 36,
+        paddingTop: 8
     },
     loadingWrap: {
-        paddingVertical: 80
+        paddingTop: 96,
+        alignItems: 'center'
     },
-    section: {
-        marginBottom: 24
+    hero: {
+        alignItems: 'center',
+        paddingTop: 28,
+        paddingBottom: 24
     },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#102027',
-        marginBottom: 12
+    heroIcon: {
+        width: 84,
+        height: 84,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20
     },
-    usageCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#E2ECE7'
+    heroLogo: {
+        width: 68,
+        height: 68,
     },
-    usageRow: {
+    heroTitle: {
+        fontFamily: 'SpaceGrotesk_700Bold',
+        fontSize: 38,
+        color: COLORS.text,
+        textAlign: 'center'
+    },
+    heroSubtitle: {
+        marginTop: 10,
+        fontFamily: 'DMSans_500Medium',
+        fontSize: 17,
+        lineHeight: 24,
+        color: '#6B7280',
+        textAlign: 'center',
+        paddingHorizontal: 20
+    },
+    toggleWrap: {
+        marginTop: 24,
+        width: '100%',
+        alignItems: 'center'
+    },
+    toggleTrack: {
+        width: '100%',
+        maxWidth: 340,
+        backgroundColor: '#E6F4F2',
+        borderRadius: 999,
+        padding: 4,
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingVertical: 10,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#D9E4E0'
+        alignItems: 'center'
     },
-    lastRow: {
-        borderBottomWidth: 0
+    togglePill: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12
     },
-    usageLabel: {
-        fontSize: 14,
-        color: '#49606A'
+    toggleLabel: {
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 15,
     },
-    usageValue: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#102027'
+    toggleLabelMuted: {
+        color: '#6E8E89'
+    },
+    togglePillActive: {
+        backgroundColor: COLORS.white,
+        borderRadius: 999,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1
+    },
+    toggleLabelActiveText: {
+        color: COLORS.primary
+    },
+    noticeCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#E8F7F5',
+        borderRadius: 16,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        marginBottom: 16
+    },
+    noticeText: {
+        fontFamily: 'DMSans_500Medium',
+        fontSize: 13,
+        color: '#0C7F76'
     },
     compareCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 16,
+        backgroundColor: COLORS.white,
+        borderRadius: 28,
         borderWidth: 1,
-        borderColor: '#E2ECE7'
+        borderColor: '#E6E7E4',
+        paddingHorizontal: 18,
+        paddingVertical: 14
     },
-    compareLegend: {
+    compareHeaderRow: {
         flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 8
+        paddingHorizontal: 6,
+        paddingBottom: 12
     },
-    compareLegendFree: {
-        color: '#6C757D',
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase'
+    compareHeaderTitle: {
+        flex: 1,
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 17,
+        color: '#8A8F98'
     },
-    compareLegendPremium: {
-        color: '#0B7A75',
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase'
-    },
-    compareRow: {
-        paddingVertical: 12,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#D9E4E0'
-    },
-    compareLabel: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#102027',
-        marginBottom: 6
-    },
-    compareValues: {
+    compareColumnsHeader: {
+        width: 120,
         flexDirection: 'row',
         justifyContent: 'space-between'
     },
-    compareFree: {
-        color: '#6C757D',
-        fontSize: 13
+    compareFreeHeader: {
+        width: 48,
+        textAlign: 'center',
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 16,
+        color: '#8A8F98'
     },
-    comparePremium: {
-        color: '#0B7A75',
-        fontSize: 13,
-        fontWeight: '700'
+    compareProHeader: {
+        width: 48,
+        textAlign: 'center',
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 16,
+        color: COLORS.primary
     },
-    planCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 24,
-        padding: 18,
-        borderWidth: 1,
-        borderColor: '#E3E8E3',
-        overflow: 'hidden'
-    },
-    planTop: {
-        marginHorizontal: -18,
-        marginTop: -18,
-        marginBottom: 18,
-        paddingHorizontal: 18,
-        paddingTop: 18,
-        paddingBottom: 18
-    },
-    planHeader: {
-        marginBottom: 12
-    },
-    planIdentity: {
-        flexDirection: 'row',
-        marginBottom: 10
-    },
-    planPill: {
+    compareRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        backgroundColor: '#FFF0C2',
-        borderRadius: 999,
-        paddingHorizontal: 10,
-        paddingVertical: 6
+        justifyContent: 'space-between',
+        paddingHorizontal: 6,
+        paddingVertical: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#F0F1EE'
     },
-    planPillText: {
-        color: '#8A5A00',
-        fontSize: 11,
-        fontWeight: '800',
-        textTransform: 'uppercase'
+    compareRowLast: {
+        paddingBottom: 10
     },
-    planName: {
-        fontSize: 22,
-        fontWeight: '800',
-        color: '#102027'
+    compareLabel: {
+        flex: 1,
+        paddingRight: 12,
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 18,
+        lineHeight: 24,
+        color: COLORS.text
     },
-    planDesc: {
-        marginTop: 6,
-        color: '#5C7078',
-        lineHeight: 20
+    compareColumns: {
+        width: 120,
+        flexDirection: 'row',
+        justifyContent: 'space-between'
     },
-    planPriceWrap: {
-        gap: 4
+    compareColumnCell: {
+        width: 48,
+        alignItems: 'center',
+        justifyContent: 'center'
     },
-    planPrice: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#0B7A75'
+    planCellText: {
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 12,
+        color: '#8A8F98',
+        textAlign: 'center'
     },
-    planPriceCaption: {
-        color: '#6B7E85',
-        fontSize: 12
+    planCellTextAccent: {
+        color: COLORS.primary
     },
-    primaryButton: {
-        backgroundColor: '#0B7A75',
-        borderRadius: 16,
-        paddingVertical: 15,
-        alignItems: 'center'
-    },
-    primaryButtonDisabled: {
-        opacity: 0.65
-    },
-    primaryButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '800'
-    },
-    secondaryButton: {
-        marginTop: 12,
-        borderRadius: 16,
+    statusCard: {
+        marginTop: 18,
+        backgroundColor: COLORS.white,
+        borderRadius: 22,
         borderWidth: 1,
-        borderColor: '#BFD3CB',
-        paddingVertical: 14,
-        alignItems: 'center'
+        borderColor: '#ECEDE8',
+        padding: 18
     },
-    secondaryButtonText: {
-        color: '#0B3B60',
+    statusCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10
+    },
+    statusTitle: {
+        fontFamily: 'DMSans_700Bold',
         fontSize: 15,
-        fontWeight: '700'
+        color: '#8A8F98'
+    },
+    statusValue: {
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 15,
+        color: COLORS.text
+    },
+    statusLine: {
+        fontFamily: 'DMSans_500Medium',
+        fontSize: 14,
+        lineHeight: 21,
+        color: '#4B5563',
+        marginTop: 4
+    },
+    statusMeta: {
+        marginTop: 12,
+        fontFamily: 'DMSans_500Medium',
+        fontSize: 13,
+        color: '#8A8F98'
+    },
+    upgradeButton: {
+        marginTop: 28,
+        minHeight: 62,
+        borderRadius: 31,
+        backgroundColor: COLORS.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 24,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.18,
+        shadowRadius: 20,
+        elevation: 5
+    },
+    upgradeButtonDisabled: {
+        opacity: 0.7
+    },
+    upgradeButtonText: {
+        color: COLORS.white,
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 20
+    },
+    restoreButton: {
+        marginTop: 18,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    restoreButtonText: {
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 18,
+        color: COLORS.primary,
+        textDecorationLine: 'underline'
+    },
+    footerBlock: {
+        alignItems: 'center',
+        marginTop: 14,
+        gap: 10
     },
     footerLinks: {
         flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 24,
-        marginTop: 8
+        gap: 18
     },
     footerLink: {
-        color: '#52727C',
+        fontFamily: 'DMSans_700Bold',
         fontSize: 13,
-        fontWeight: '700'
+        color: '#4B5563'
+    },
+    footerMeta: {
+        fontFamily: 'DMSans_500Medium',
+        fontSize: 15,
+        color: COLORS.text,
+        textAlign: 'center'
     }
 });
 

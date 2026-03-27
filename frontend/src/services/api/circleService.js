@@ -6,6 +6,12 @@ import { callableClient } from './callableClient';
 const dueScheduleKickState = new Map();
 const DUE_SCHEDULE_KICK_THROTTLE_MS = 20000;
 
+const isCircleDeleted = (circle) => {
+    if (!circle) return true;
+    if (circle.isDeleted === true) return true;
+    return String(circle.status || '').trim().toLowerCase() === 'deleted';
+};
+
 const isAuthPermissionError = (error) => {
     const code = String(error?.code || '');
     const message = String(error?.message || '').toLowerCase();
@@ -109,7 +115,9 @@ export const circleService = {
 
         const attach = () => {
             unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-                const circles = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+                const circles = snapshot.docs
+                    .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+                    .filter((circle) => !isCircleDeleted(circle));
                 callback(circles);
             }, async (error) => {
                 if (!disposed && !retriedAfterAuthRefresh && isAuthPermissionError(error) && auth.currentUser) {
@@ -147,7 +155,10 @@ export const circleService = {
         );
         const publicSnapshot = await getDocsWithAuthRetry(publicQuery, 'circles_public');
         publicSnapshot.docs.forEach((docSnap) => {
-            resultsById.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+            const circle = { id: docSnap.id, ...docSnap.data() };
+            if (!isCircleDeleted(circle)) {
+                resultsById.set(docSnap.id, circle);
+            }
         });
 
         // Also include circles the user is already in (private circles won't match the public query).
@@ -159,7 +170,10 @@ export const circleService = {
             );
             const mineSnapshot = await getDocsWithAuthRetry(mineQuery, 'circles_mine');
             mineSnapshot.docs.forEach((docSnap) => {
-                resultsById.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+                const circle = { id: docSnap.id, ...docSnap.data() };
+                if (!isCircleDeleted(circle)) {
+                    resultsById.set(docSnap.id, circle);
+                }
             });
         }
 
@@ -263,6 +277,8 @@ export const circleService = {
         const docRef = doc(db, 'circles', circleId);
         const docSnap = await getDoc(docRef);
         if (!docSnap.exists()) return null;
-        return { id: docSnap.id, ...docSnap.data() };
+        const circle = { id: docSnap.id, ...docSnap.data() };
+        if (isCircleDeleted(circle)) return null;
+        return circle;
     }
 };

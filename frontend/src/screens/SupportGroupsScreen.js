@@ -258,11 +258,13 @@ const SupportGroupsScreen = ({ route }) => {
                 <View style={styles.circleHeaderMain}>
                     <View style={styles.circleTitleRow}>
                         <Text style={styles.circleTitle} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
-                        <View style={[styles.circleTierBadge, circleTier === 'pro' && styles.circleTierBadgePro]}>
-                            <Text style={[styles.circleTierBadgeText, circleTier === 'pro' && styles.circleTierBadgeTextPro]}>
-                                {circleTier === 'pro' ? 'Pro Circle' : 'Free Circle'}
-                            </Text>
-                        </View>
+                        {circleTier === 'pro' && (
+                            <View style={[styles.circleTierBadge, styles.circleTierBadgePro]}>
+                                <Text style={[styles.circleTierBadgeText, styles.circleTierBadgeTextPro]}>
+                                    Pro Circle
+                                </Text>
+                            </View>
+                        )}
                     </View>
                     <Text style={styles.circleMembers}>
                         {getActiveMemberCount(item.id, item.members, activeMemberIdsMap)} Members • Cap {getCircleMemberCap(item)}

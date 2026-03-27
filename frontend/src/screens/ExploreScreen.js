@@ -109,7 +109,7 @@ const ExploreScreen = ({ navigation }) => {
     });
     const visibleActivitiesSource = displayedActivities.length > 0 ? displayedActivities : activities;
     const visibleActivities = showAllActivities ? visibleActivitiesSource : visibleActivitiesSource.slice(0, 3);
-    const getCircleTierCopy = (circle = {}) => getCircleBillingTier(circle) === 'pro' ? 'Pro Circle' : 'Free Circle';
+    const getCircleTierCopy = (circle = {}) => getCircleBillingTier(circle) === 'pro' ? 'Pro Circle' : '';
     // If empty (e.g. first run before seed), maybe show static fallback or specific empty state.
     // For now, assuming backend seed is run or will be run.
 
@@ -293,11 +293,13 @@ const ExploreScreen = ({ navigation }) => {
                                     <View style={{ flex: 1 }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                             <Text style={styles.groupNamePreview}>{group.name}</Text>
-                                            <View style={[styles.groupTierBadge, getCircleBillingTier(group) === 'pro' && styles.groupTierBadgePro]}>
-                                                <Text style={[styles.groupTierBadgeText, getCircleBillingTier(group) === 'pro' && styles.groupTierBadgeTextPro]}>
-                                                    {getCircleTierCopy(group)}
-                                                </Text>
-                                            </View>
+                                            {getCircleBillingTier(group) === 'pro' && (
+                                                <View style={[styles.groupTierBadge, styles.groupTierBadgePro]}>
+                                                    <Text style={[styles.groupTierBadgeText, styles.groupTierBadgeTextPro]}>
+                                                        {getCircleTierCopy(group)}
+                                                    </Text>
+                                                </View>
+                                            )}
                                             {/* {group.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />} */}
                                         </View>
                                         <Text style={styles.groupMembersPreview}>{group.members?.length || 0} members</Text>

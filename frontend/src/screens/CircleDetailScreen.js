@@ -568,16 +568,18 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                 )}
                             </View>
                             <Text style={styles.circleTitle}>{circle.name}</Text>
-                            <View style={[styles.tierPill, circleTier === 'pro' && styles.tierPillPro]}>
-                                <MaterialCommunityIcons
-                                    name={circleTier === 'pro' ? 'crown-outline' : 'chat-processing-outline'}
-                                    size={14}
-                                    color={circleTier === 'pro' ? '#8A5A00' : '#166534'}
-                                />
-                                <Text style={[styles.tierPillText, circleTier === 'pro' && styles.tierPillTextPro]}>
-                                    {circleTier === 'pro' ? 'Pro Circle · Pro huddles only' : 'Free Circle · Chat only'}
-                                </Text>
-                            </View>
+                            {circleTier === 'pro' && (
+                                <View style={[styles.tierPill, styles.tierPillPro]}>
+                                    <MaterialCommunityIcons
+                                        name="crown-outline"
+                                        size={14}
+                                        color="#8A5A00"
+                                    />
+                                    <Text style={[styles.tierPillText, styles.tierPillTextPro]}>
+                                        Pro Circle · Pro huddles only
+                                    </Text>
+                                </View>
+                            )}
                             <Text style={styles.circleCategory}>{circle.category || 'General'}</Text>
                         </View>
                     </SafeAreaView>
