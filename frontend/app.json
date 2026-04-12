@@ -119,7 +119,28 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/SpaceGrotesk_400Regular.ttf",
+            "./assets/fonts/SpaceGrotesk_600SemiBold.ttf",
+            "./assets/fonts/SpaceGrotesk_700Bold.ttf",
+            "./assets/fonts/DMSans_400Regular.ttf",
+            "./assets/fonts/DMSans_500Medium.ttf",
+            "./assets/fonts/DMSans_700Bold.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome6_Brands.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome6_Regular.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome6_Solid.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf",
+            "./node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf"
+          ]
+        }
+      ],
       "expo-apple-authentication",
       [
         "expo-local-authentication",

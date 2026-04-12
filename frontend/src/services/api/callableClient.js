@@ -1,161 +1,138 @@
-import { auth, app, functions, FIREBASE_ENV_INFO } from '../firebaseConfig';
-import { onAuthStateChanged } from 'firebase/auth';
-import { httpsCallable } from 'firebase/functions';
+import { supabase, supabaseFunctionUrl } from '../supabase/supabaseClient';
 
-const waitForAuthUser = async (timeoutMs = 10000) => {
-  if (auth.currentUser) return auth.currentUser;
-  await new Promise((resolve) => {
-    let done = false;
-    const timer = setTimeout(() => {
-      if (done) return;
-      done = true;
-      unsub();
-      resolve();
-    }, timeoutMs);
-    const unsub = onAuthStateChanged(auth, () => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      unsub();
-      resolve();
-    });
-  });
-  return auth.currentUser || null;
-};
-
-const ensureToken = async (forceRefresh = false) => {
-  const user = await waitForAuthUser();
-  if (!user) {
-    throw new Error('Authentication is not ready. Please wait and try again.');
-  }
-  const token = await user.getIdToken(forceRefresh).catch(() => null);
-  if (!token) {
-    throw new Error('Your session expired. Please sign in again.');
-  }
-  return { user, token };
-};
-
-const getCallableUrl = (functionName) => {
-  const projectId = app?.options?.projectId;
-  const region = FIREBASE_ENV_INFO?.functionsRegion || 'europe-west1';
-  if (!projectId) {
-    throw new Error('Firebase project configuration is missing.');
-  }
-  return `https://${region}-${projectId}.cloudfunctions.net/${functionName}`;
-};
-
-const asCallableError = (errorPayload, fallbackMessage) => {
-  const status = String(errorPayload?.status || '').toLowerCase();
-  const message = errorPayload?.message || fallbackMessage || 'Callable request failed.';
-  const err = new Error(message);
-  err.code = status ? `functions/${status}` : 'functions/internal';
-  err.details = errorPayload?.details;
-  return err;
-};
-
-const postCallable = async (functionName, payload, token) => {
-  const response = await fetch(getCallableUrl(functionName), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ data: payload || {} })
-  });
-
-  const raw = await response.text();
-  let json = null;
-  try {
-    json = raw ? JSON.parse(raw) : {};
-  } catch {
-    json = null;
-  }
-
-  if (!response.ok) {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.warn(`[CallableClient] ${functionName} HTTP ${response.status}`, json?.error || raw);
+const tryRefreshSession = async () => {
+    try {
+        const { data } = await supabase.auth.refreshSession();
+        return data.session || null;
+    } catch {
+        return null;
     }
-    throw asCallableError(json?.error, `Callable ${functionName} failed (${response.status}).`);
-  }
-  if (json?.error) {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.warn(`[CallableClient] ${functionName} returned callable error`, json.error);
-    }
-    throw asCallableError(json.error, `Callable ${functionName} returned an error.`);
-  }
-  return json?.result;
 };
 
-const invokeViaSdk = async (functionName, payload) => {
-  const callable = httpsCallable(functions, functionName);
-  const response = await callable(payload || {});
-  return response?.data;
+const waitForSession = async () => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) {
+        return data.session;
+    }
+    return tryRefreshSession();
+};
+
+const asCallableError = (status, payload, fallbackMessage) => {
+    const message = payload?.error?.message || fallbackMessage || 'Function request failed.';
+    const err = new Error(message);
+    err.code = status ? `functions/${status}` : 'functions/internal';
+    err.details = payload?.error?.details;
+    return err;
+};
+
+const FUNCTION_MAP = {
+    generateUploadSignature: { endpoint: 'media-signature', auth: true, map: (payload) => payload || {} },
+    getPublicProfile: { endpoint: 'app-users', auth: true, map: (payload) => ({ action: 'getPublicProfile', ...payload }) },
+    blockUser: { endpoint: 'app-users', auth: true, map: (payload) => ({ action: 'blockUser', ...payload }) },
+    unblockUser: { endpoint: 'app-users', auth: true, map: (payload) => ({ action: 'unblockUser', ...payload }) },
+    savePushToken: { endpoint: 'app-users', auth: true, map: (payload) => ({ action: 'savePushToken', ...payload }) },
+    getExploreContent: { endpoint: 'app-content', auth: true, map: (payload) => ({ action: 'getExploreContent', ...payload }) },
+    getAffirmations: { endpoint: 'app-content', auth: true, map: (payload) => ({ action: 'getAffirmations', ...payload }) },
+    getKeyChallenges: { endpoint: 'app-content', auth: true, map: (payload) => ({ action: 'getKeyChallenges', ...payload }) },
+    getRecommendedContent: { endpoint: 'app-content', auth: true, map: (payload) => ({ action: 'getRecommendedContent', ...payload }) },
+    getDashboardData: { endpoint: 'app-content', auth: true, map: (payload) => ({ action: 'getDashboardData', ...payload }) },
+    createCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'createCircle', ...payload }) },
+    updateCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'updateCircle', ...payload }) },
+    setCircleBillingTier: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'setCircleBillingTier', ...payload }) },
+    joinCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'joinCircle', ...payload }) },
+    leaveCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'leaveCircle', ...payload }) },
+    deleteCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'deleteCircle', ...payload }) },
+    createCircleInvite: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'createCircleInvite', ...payload }) },
+    createAppInvite: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'createAppInvite', ...payload }) },
+    listUserInvitations: { endpoint: 'app-circles', auth: true, map: () => ({ action: 'listUserInvitations' }) },
+    listCircleRequests: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'listCircleRequests', ...payload }) },
+    listCircleReports: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'listCircleReports', ...payload }) },
+    ensureCircleChat: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'ensureCircleChat', ...payload }) },
+    resolveInviteToken: { endpoint: 'app-circles', auth: false, map: (payload) => ({ action: 'resolveInviteToken', ...payload }) },
+    joinCircleWithInvite: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'joinCircleWithInvite', ...payload }) },
+    resolveAppInvite: { endpoint: 'app-circles', auth: false, map: (payload) => ({ action: 'resolveAppInvite', ...payload }) },
+    consumeAppInvite: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'consumeAppInvite', ...payload }) },
+    manageMember: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'manageMember', ...payload, actionType: payload?.action }) },
+    handleJoinRequest: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'handleJoinRequest', ...payload, requestAction: payload?.action }) },
+    resolveCircleReport: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'resolveCircleReport', ...payload, resolutionAction: payload?.action }) },
+    submitReport: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'submitReport', ...payload }) },
+    scheduleHuddle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'scheduleHuddle', ...payload }) },
+    toggleScheduledHuddleReminder: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'toggleScheduledHuddleReminder', ...payload }) },
+    deleteScheduledHuddle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'deleteScheduledHuddle', ...payload }) },
+    triggerDueScheduledHuddles: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'triggerDueScheduledHuddles', ...payload }) },
+    getSubscriptionStatus: { endpoint: 'app-billing', auth: true, map: () => ({ action: 'getSubscriptionStatus' }) },
+    getSubscriptionCatalog: { endpoint: 'app-billing', auth: false, map: () => ({ action: 'getSubscriptionCatalog' }) },
+    getEnterpriseContactConfig: { endpoint: 'app-billing', auth: false, map: () => ({ action: 'getEnterpriseContactConfig' }) },
+    validateAppleSubscriptionReceipt: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'validateAppleSubscriptionReceipt', ...payload }) },
+    validateGoogleSubscriptionPurchase: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'validateGoogleSubscriptionPurchase', ...payload }) },
+    restoreSubscriptions: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'restoreSubscriptions', ...payload }) },
+    validateBoostPurchase: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'validateBoostPurchase', ...payload }) },
+    generateKeyChallengesForLatestAssessment: { endpoint: 'app-ai', auth: true, map: (payload) => ({ action: 'generateKeyChallengesForLatestAssessment', ...payload }) },
+    askAiAboutChallenge: { endpoint: 'app-ai', auth: true, map: (payload) => ({ action: 'askAiAboutChallenge', ...payload }) },
+    seedResources: { local: async () => ({ success: true }) },
+};
+
+const invokeMapped = async (functionName, payload, requireAuth) => {
+    const mapped = FUNCTION_MAP[functionName];
+    if (!mapped) {
+        const token = requireAuth ? (await waitForSession())?.access_token : null;
+        const response = await fetch(supabaseFunctionUrl(functionName), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(payload || {}),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw asCallableError(response.status, body, `Unable to call ${functionName}.`);
+        return body?.result ?? body;
+    }
+
+    if (mapped.local) {
+        return mapped.local(payload || {});
+    }
+
+    let session = requireAuth || mapped.auth ? await waitForSession() : null;
+    if ((requireAuth || mapped.auth) && !session?.access_token) {
+        throw new Error('Your session expired. Please sign in again.');
+    }
+
+    const requestBody = JSON.stringify(mapped.map ? mapped.map(payload || {}) : (payload || {}));
+    const execute = async (accessToken) => {
+        const response = await fetch(supabaseFunctionUrl(mapped.endpoint), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            },
+            body: requestBody,
+        });
+        const body = await response.json().catch(() => ({}));
+        return { response, body };
+    };
+
+    let { response, body } = await execute(session?.access_token || null);
+    if (!response.ok && response.status === 401 && (requireAuth || mapped.auth)) {
+        session = await tryRefreshSession();
+        if (session?.access_token) {
+            ({ response, body } = await execute(session.access_token));
+        }
+    }
+
+    if (!response.ok) {
+        throw asCallableError(response.status, body, `Unable to call ${functionName}.`);
+    }
+
+    return body?.result ?? body;
 };
 
 export const callableClient = {
-  invokePublic: async (functionName, payload) => {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.log(`[CallableClient] invoking public ${functionName}`);
-    }
-    return invokeViaSdk(functionName, payload);
-  },
+    invokePublic(functionName, payload) {
+        return invokeMapped(functionName, payload, false);
+    },
 
-  invokeWithAuth: async (functionName, payload) => {
-    const { user, token } = await ensureToken(false);
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.log(`[CallableClient] invoking ${functionName}`, {
-        uid: user?.uid || null,
-        hasToken: Boolean(token)
-      });
-    }
-
-    let firstError = null;
-    try {
-      return await postCallable(functionName, payload, token);
-    } catch (error) {
-      firstError = error;
-      const code = String(error?.code || '');
-      const message = String(error?.message || '').toLowerCase();
-      const isAuthError =
-        code.includes('unauthenticated') ||
-        message.includes('unauthenticated') ||
-        message.includes('401');
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn(`[CallableClient] ${functionName} failed`, { code: error?.code, message: error?.message });
-      }
-      if (!isAuthError) {
-        // Use SDK callable as a compatibility fallback for callable protocol edge cases.
-        try {
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.log(`[CallableClient] falling back to SDK callable for ${functionName}`);
-          }
-          return await invokeViaSdk(functionName, payload);
-        } catch {
-          throw error;
-        }
-      }
-
-      // Retry once with forced token refresh.
-      const refreshed = await ensureToken(true);
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log(`[CallableClient] retrying ${functionName} with refreshed token`);
-      }
-      try {
-        return await postCallable(functionName, payload, refreshed.token);
-      } catch (secondError) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.warn(`[CallableClient] refreshed-token retry failed for ${functionName}`, {
-            code: secondError?.code,
-            message: secondError?.message
-          });
-          console.log(`[CallableClient] falling back to SDK callable for ${functionName}`);
-        }
-        try {
-          return await invokeViaSdk(functionName, payload);
-        } catch {
-          throw secondError || firstError;
-        }
-      }
-    }
-  }
+    invokeWithAuth(functionName, payload) {
+        return invokeMapped(functionName, payload, true);
+    },
 };

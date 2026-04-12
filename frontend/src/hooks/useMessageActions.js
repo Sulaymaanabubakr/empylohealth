@@ -1,11 +1,15 @@
-import { useCallback } from 'react';
-import { ActionSheetIOS, Alert, Platform } from 'react-native';
+import { useCallback, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { useToast } from '../context/ToastContext';
 import { sanitizeChatMessageText } from '../utils/chatMessageSafety';
 
 export const useMessageActions = ({ onReportMessage } = {}) => {
   const { showToast } = useToast();
+  const [messageActionSheet, setMessageActionSheet] = useState({
+    visible: false,
+    title: '',
+    options: []
+  });
 
   const copyMessageText = useCallback(async (message) => {
     const visibleText = sanitizeChatMessageText(message?.text || '');
@@ -19,52 +23,42 @@ export const useMessageActions = ({ onReportMessage } = {}) => {
 
   const openMessageActions = useCallback((message, options = {}) => {
     const canReport = Boolean(options?.canReport && typeof onReportMessage === 'function');
-    const optionLabels = ['Copy message'];
-    if (canReport) optionLabels.push('Report message');
-    optionLabels.push('Cancel');
-
-    const handleSelection = (index) => {
-      if (index === 0) {
-        copyMessageText(message).catch(() => showToast('Unable to copy message', 'error'));
-        return;
-      }
-      if (canReport && index === 1) {
-        onReportMessage(message);
-      }
-    };
-
-    if (Platform.OS === 'ios' && ActionSheetIOS.showActionSheetWithOptions) {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: optionLabels,
-          cancelButtonIndex: optionLabels.length - 1,
-          destructiveButtonIndex: canReport ? 1 : undefined
-        },
-        handleSelection
-      );
-      return;
-    }
-
-    const buttons = [
+    const actionOptions = [
       {
         text: 'Copy message',
-        onPress: () => handleSelection(0)
+        onPress: () => copyMessageText(message).catch(() => showToast('Unable to copy message', 'error'))
       }
     ];
     if (canReport) {
-      buttons.push({
+      actionOptions.push({
         text: 'Report message',
         style: 'destructive',
-        onPress: () => handleSelection(1)
+        onPress: () => onReportMessage(message)
       });
     }
-    buttons.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Message actions', 'Choose an action for this message.', buttons);
+    setMessageActionSheet({
+      visible: true,
+      title: sanitizeChatMessageText(message?.text || '').trim() || 'Choose an action for this message.',
+      options: actionOptions
+    });
   }, [copyMessageText, onReportMessage, showToast]);
+
+  const closeMessageActions = useCallback(() => {
+    setMessageActionSheet({ visible: false, title: '', options: [] });
+  }, []);
+
+  const runMessageAction = useCallback((option) => {
+    closeMessageActions();
+    setTimeout(() => {
+      option?.onPress?.();
+    }, 0);
+  }, [closeMessageActions]);
 
   return {
     openMessageActions,
-    copyMessageText
+    copyMessageText,
+    messageActionSheet,
+    closeMessageActions,
+    runMessageAction,
   };
 };
-

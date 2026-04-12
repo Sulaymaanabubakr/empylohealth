@@ -48,6 +48,19 @@ export const subscriptionGuardService = {
         return callableClient.invokeWithAuth('getSubscriptionCatalog', {});
     },
 
+    async validateBoostPurchase({ productId, platform, transactionId, originalTransactionId, purchaseToken, idempotencyKey }) {
+        const result = await callableClient.invokeWithAuth('validateBoostPurchase', {
+            productId,
+            platform,
+            transactionId,
+            originalTransactionId,
+            purchaseToken,
+            idempotencyKey
+        });
+        this.invalidateCache();
+        return result;
+    },
+
     async canCreateCircle({ type, circles = [] }) {
         const status = await this.getSubscriptionStatus();
         const usage = status?.usage || null;
@@ -59,21 +72,34 @@ export const subscriptionGuardService = {
         const status = await this.getSubscriptionStatus();
         const usage = status?.usage || null;
         const plan = normalizePlanId(status?.entitlement?.plan || 'free');
-        if (plan !== 'pro') {
+        const capabilities = status?.capabilities || {};
+        const remaining = status?.remaining || {};
+        const limits = status?.limits || {};
+        if (capabilities?.canStartHuddles !== true) {
             return normalizeGuard({
                 allowed: false,
-                reasonCode: 'free_users_cannot_start_circle_huddle',
-                message: 'Circle huddles are available only in Pro Circles for Pro members.',
+                reasonCode: 'plan_cannot_start_huddles',
+                message: 'Your current plan does not allow starting huddles.',
                 plan,
                 usage
             });
         }
-        const remainingMinutes = Number(usage?.circleHuddleMinutesRemaining ?? (120 - Number(usage?.circleHuddleMinutesReserved || 0)));
+        const remainingMinutes = Number(remaining?.huddleMinutesRemaining ?? 0);
         if (remainingMinutes <= 0) {
             return normalizeGuard({
                 allowed: false,
-                reasonCode: 'pro_huddle_daily_minutes_reached',
-                message: 'You have used all available Pro huddle minutes for today.',
+                reasonCode: 'monthly_huddle_minutes_reached',
+                message: 'You have used all available huddle minutes for this billing period.',
+                plan,
+                usage
+            });
+        }
+        const remainingStarts = Number(remaining?.dailyHuddleStartsRemaining ?? limits?.dailyHuddleStarts ?? 0);
+        if (Number.isFinite(remainingStarts) && limits?.dailyHuddleStarts != null && remainingStarts <= 0) {
+            return normalizeGuard({
+                allowed: false,
+                reasonCode: 'daily_huddle_starts_reached',
+                message: 'You have reached your daily huddle start limit.',
                 plan,
                 usage
             });
@@ -82,7 +108,7 @@ export const subscriptionGuardService = {
             allowed: true,
             plan,
             usage,
-            grantedMinutes: Math.min(120, remainingMinutes)
+            grantedMinutes: Math.min(Number(limits?.maxMinutesPerHuddle || remainingMinutes), remainingMinutes)
         });
     },
 
@@ -90,11 +116,11 @@ export const subscriptionGuardService = {
         const status = await this.getSubscriptionStatus();
         const plan = normalizePlanId(status?.entitlement?.plan || 'free');
         const usage = status?.usage || null;
-        if (plan !== 'pro') {
+        if (status?.capabilities?.canScheduleHuddles !== true) {
             return normalizeGuard({
                 allowed: false,
                 reasonCode: 'schedule_requires_pro',
-                message: 'Scheduling huddles is available on Pro.',
+                message: 'Scheduling huddles is not available on your current plan.',
                 plan,
                 usage
             });
@@ -110,7 +136,7 @@ export const subscriptionGuardService = {
         if (!gatingEnabled) return normalizeGuard({ allowed: true, plan, usage });
         const kind = getActivityAccessKind(resource);
         const allowedPlans = getAllowedPlansForResource(resource);
-        if (kind === 'group_activity' && plan !== 'pro') {
+        if (kind === 'group_activity' && status?.capabilities?.canAccessGroupActivities !== true) {
             return normalizeGuard({
                 allowed: false,
                 reasonCode: 'group_activity_requires_pro',
@@ -134,7 +160,7 @@ export const subscriptionGuardService = {
     async canShareActivity({ resource }) {
         const access = await this.canAccessActivity({ resource });
         if (!access.allowed) return access;
-        if (resource?.access?.shareRequiresPremium && getCachedPlan() !== 'pro') {
+        if (resource?.access?.shareRequiresPremium && !cachedStatus?.capabilities?.canShareActivities) {
             return normalizeGuard({
                 allowed: false,
                 reasonCode: 'activity_share_requires_pro',
@@ -156,24 +182,25 @@ export const subscriptionGuardService = {
         return resources.filter((resource) => {
             const kind = getActivityAccessKind(resource);
             const allowedPlans = getAllowedPlansForResource(resource);
-            if (kind === 'group_activity' && plan !== 'pro') return false;
+            if (kind === 'group_activity' && !cachedStatus?.capabilities?.canAccessGroupActivities) return false;
             return allowedPlans.includes(plan);
         });
     },
 
-    async validateAppleTransaction({ productId, transactionId, originalTransactionId, signedTransactionInfo }) {
+    async validateAppleTransaction({ productId, transactionId, originalTransactionId, signedTransactionInfo, idempotencyKey }) {
         const result = await callableClient.invokeWithAuth('validateAppleSubscriptionReceipt', {
             productId,
             transactionId,
             originalTransactionId,
-            signedTransactionInfo
+            signedTransactionInfo,
+            idempotencyKey
         });
         this.invalidateCache();
         return result;
     },
 
-    async validateGooglePurchase({ purchaseToken, productId }) {
-        const result = await callableClient.invokeWithAuth('validateGoogleSubscriptionPurchase', { purchaseToken, productId });
+    async validateGooglePurchase({ purchaseToken, productId, idempotencyKey }) {
+        const result = await callableClient.invokeWithAuth('validateGoogleSubscriptionPurchase', { purchaseToken, productId, idempotencyKey });
         this.invalidateCache();
         return result;
     },

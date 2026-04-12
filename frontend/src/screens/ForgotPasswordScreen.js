@@ -20,6 +20,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
             showModal({ type: 'error', title: 'Missing email', message: 'Please enter your email address.' });
             return;
         }
+        console.log('[AuthUI] ForgotPassword submit pressed', { email: String(email || '').trim().toLowerCase() });
         setIsSubmitting(true);
         try {
             const metadata = await getDeviceIdentity();
@@ -33,7 +34,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
                 purpose: 'RESET_PASSWORD',
                 title: 'Reset Password',
                 subtitle: `Enter the code sent to ${email} to continue.`,
-                initialCooldownSeconds: Number(result?.cooldownSeconds || 60),
+                initialCooldownSeconds: Number(result?.cooldownSeconds || 30),
                 nextAction: {
                     type: 'reset_password',
                     email

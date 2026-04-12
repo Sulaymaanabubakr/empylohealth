@@ -24,22 +24,19 @@ const runPreload = async (uid) => {
     items,
     circles,
     affs,
-    stats,
-    challs,
-    recs,
+    dashboardData,
     history,
     chats,
   ] = await Promise.all([
     resourceService.getExploreContent(),
     circleService.getAllCircles(),
     resourceService.getAffirmations(),
-    assessmentService.getWellbeingStats(),
-    assessmentService.getKeyChallenges(),
-    assessmentService.getRecommendedContent(),
+    assessmentService.getDashboardData().catch(() => null),
     assessmentService.getAssessmentHistory(10),
     chatService.preloadChatList(uid),
   ]);
 
+  const recs = dashboardData?.recommendations || [];
   const publicCircles = (circles || []).filter((circle) => (circle?.type || 'public') === 'public');
   const joinedCircles = (circles || []).filter((circle) => Array.isArray(circle?.members) && circle.members.includes(uid));
   const supportGroupsPublic = publicCircles.filter((c) => {
@@ -55,9 +52,9 @@ const runPreload = async (uid) => {
       affirmations: affs || [],
     }),
     screenCacheService.set(`dashboard:${uid}`, {
-      wellbeing: stats || null,
-      challenges: challs || [],
-      recommendations: recs || [],
+      wellbeing: dashboardData?.wellbeing || null,
+      challenges: dashboardData?.challenges || [],
+      recommendations: recs,
     }),
     screenCacheService.set(`support_groups_public:${uid}`, supportGroupsPublic || []),
     screenCacheService.set(`support_groups_joined:${uid}`, joinedCircles || []),

@@ -3,23 +3,8 @@ import { View, Image, StyleSheet, Animated, Easing } from 'react-native';
 import { COLORS } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 
-const SplashScreen = ({ navigation }) => {
-  const { user, loading } = useAuth();
+export const BrandedSplash = () => {
   const pulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    // If auth is still loading, wait.
-    if (loading) return;
-
-    // If suddenly user appears (from slow firebase), navigation will switch stack automatically
-    // due to Navigation.js logic. But if we are STILL in this unauthenticated stack's Splash:
-    if (!user) {
-      const timer = setTimeout(() => {
-        navigation.replace('Onboarding');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [navigation, user, loading]);
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -53,6 +38,26 @@ const SplashScreen = ({ navigation }) => {
       </Animated.View>
     </View>
   );
+};
+
+const SplashScreen = ({ navigation }) => {
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    // If auth is still loading, wait.
+    if (loading) return;
+
+    // If suddenly user appears, navigation will switch stack automatically.
+    // But if we are still in the unauthenticated splash route, continue to onboarding.
+    if (!user) {
+      const timer = setTimeout(() => {
+        navigation.replace('Onboarding');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [navigation, user, loading]);
+
+  return <BrandedSplash />;
 };
 
 const styles = StyleSheet.create({

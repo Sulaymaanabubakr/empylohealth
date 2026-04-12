@@ -149,7 +149,7 @@ const ChatListScreen = ({ navigation }) => {
             <TouchableOpacity
                 style={styles.chatCard}
                 activeOpacity={0.85}
-                onPress={() => navigation.navigate('ChatDetail', { chat: item })}
+                onPress={() => navigation.navigate('ChatDetail', { chat: chatService.serializeChatForNavigation(item) })}
             >
                 <View style={styles.avatarContainer}>
                     <Avatar

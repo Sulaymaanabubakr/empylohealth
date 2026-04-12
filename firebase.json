@@ -14,7 +14,7 @@
   "hosting": [
     {
       "target": "landing",
-      "public": "web/landing/dist",
+      "public": "web/dist",
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -46,6 +46,10 @@
           "function": "resolveDeepLink"
         },
         {
+          "source": "/admin/**",
+          "destination": "/index.html"
+        },
+        {
           "source": "**",
           "destination": "/index.html"
         }
@@ -53,11 +57,18 @@
     },
     {
       "target": "admin",
-      "public": "web/admin/dist",
+      "public": "web/dist",
       "ignore": [
         "firebase.json",
         "**/.*",
         "**/node_modules/**"
+      ],
+      "redirects": [
+        {
+          "source": "/",
+          "destination": "/admin",
+          "type": 302
+        }
       ],
       "rewrites": [
         {

@@ -1,19 +1,16 @@
-import { auth, db } from '../firebaseConfig';
-import { callableClient } from '../api/callableClient';
-import {
-    doc,
-    getDoc
-} from 'firebase/firestore';
+import { supabase } from '../supabase/supabaseClient';
+import { authApiClient } from '../auth/authApiClient';
 
 export const chatRepository = {
     async createOrGetDirectChat(recipientId) {
-        const currentUid = auth.currentUser?.uid;
+        const { data } = await supabase.auth.getUser();
+        const currentUid = data.user?.id;
         if (!currentUid) throw new Error('User must be authenticated.');
         if (!recipientId || recipientId === currentUid) {
             throw new Error('Recipient ID is invalid.');
         }
 
-        const result = await callableClient.invokeWithAuth('createDirectChat', { recipientId });
+        const result = await authApiClient.invokeWithAuth('create-direct-chat', { recipientId });
         if (!result?.chatId) {
             throw new Error('Unable to create or fetch direct chat.');
         }
@@ -21,39 +18,24 @@ export const chatRepository = {
     },
 
     async sendMessage(chatId, text, type = 'text', mediaUrl = null, clientMessageId = null) {
-        const uid = auth.currentUser?.uid;
-        if (!uid) throw new Error('User must be authenticated.');
         if (!chatId) throw new Error('chatId is required');
 
-        const chatDocRef = doc(db, 'chats', chatId);
-        const chatSnapshot = await getDoc(chatDocRef);
-        if (!chatSnapshot.exists()) {
-            throw new Error('Chat not found.');
-        }
-
-        const chatData = chatSnapshot.data();
-        if (!Array.isArray(chatData.participants) || !chatData.participants.includes(uid)) {
-            throw new Error('Not allowed to send messages to this chat.');
-        }
-
-        const result = await callableClient.invokeWithAuth('sendMessage', {
+        const result = await authApiClient.invokeWithAuth('send-message', {
             chatId,
             text: text || '',
             type,
             mediaUrl: mediaUrl || null,
-            clientMessageId: clientMessageId || null
+            clientMessageId: clientMessageId || null,
         });
 
         return result || { success: true };
     },
 
-    async deleteChat(chatId, options = {}) {
-        const uid = auth.currentUser?.uid;
+    async deleteChat(chatId) {
+        const { data } = await supabase.auth.getUser();
+        const uid = data.user?.id;
         if (!uid) throw new Error('User must be authenticated.');
         if (!chatId) throw new Error('chatId is required');
-        return callableClient.invokeWithAuth('deleteChat', {
-            chatId,
-            deleteCircleIfLastAdmin: !!options?.deleteCircleIfLastAdmin
-        });
-    }
+        return authApiClient.invokeWithAuth('delete-chat', { chatId });
+    },
 };

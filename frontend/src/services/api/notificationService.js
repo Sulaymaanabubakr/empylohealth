@@ -2,12 +2,12 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { auth, db } from '../firebaseConfig';
-import { doc, arrayUnion, setDoc, getDoc } from 'firebase/firestore';
 import { navigate } from '../../navigation/navigationRef';
 import { nativeCallService } from '../native/nativeCallService';
 import { chatService } from './chatService';
 import { huddleService } from './huddleService';
+import { supabase } from '../supabase/supabaseClient';
+import { callableClient } from './callableClient';
 
 let notificationRoutingInitialized = false;
 let responseSubscription = null;
@@ -30,6 +30,7 @@ const HUDDLE_CALLS_CHANNEL_ID = 'huddle-calls-ringtone';
 const REQUIRE_NATIVE_INCOMING_CALL_UI = true;
 
 let VoipPushNotification = null;
+let currentAuthUid = null;
 try {
     // Optional native module available in custom/dev builds.
     VoipPushNotification = require('react-native-voip-push-notification').default;
@@ -37,60 +38,57 @@ try {
     VoipPushNotification = null;
 }
 
+supabase.auth.getSession().then(({ data }) => {
+    currentAuthUid = data.session?.user?.id || null;
+}).catch(() => {});
+
+supabase.auth.onAuthStateChange((_event, session) => {
+    currentAuthUid = session?.user?.id || null;
+});
+
 const saveUserPushToken = async (uid, field, token) => {
     if (!uid || !token) return;
-    const userRef = doc(db, 'users', uid);
-    try {
-        await setDoc(userRef, { [field]: arrayUnion(token) }, { merge: true });
-    } catch (error) {
-        const code = String(error?.code || '');
-        const message = String(error?.message || '').toLowerCase();
-        const isAuthError = code.includes('permission-denied') || code.includes('unauthenticated') || message.includes('permission') || message.includes('unauthenticated');
-        if (!isAuthError || !auth.currentUser) throw error;
-
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.warn('[FirestoreAuthRetry] saveUserPushToken failed; refreshing token and retrying once', {
-                code: error?.code,
-                message: error?.message,
-                uid: auth.currentUser?.uid || null,
-                field
-            });
-        }
-
-        await auth.currentUser.getIdToken(true).catch(() => null);
-        await setDoc(userRef, { [field]: arrayUnion(token) }, { merge: true });
-    }
+    const { data } = await supabase.auth.getSession();
+    if (!data.session?.access_token) return;
+    const normalizedFieldMap = {
+        expoPushTokens: 'expo_push_tokens',
+        fcmTokens: 'fcm_tokens',
+        voipPushTokens: 'voip_push_tokens',
+    };
+    const normalizedField = normalizedFieldMap[field] || field;
+    await callableClient.invokeWithAuth('savePushToken', { field: normalizedField, token });
 };
 
 const resolveChatNavigationPayload = async (chatId) => {
     if (!chatId) return null;
     try {
-        const chatSnap = await getDoc(doc(db, 'chats', chatId));
-        if (!chatSnap.exists()) return null;
+        const [{ data: chatData, error: chatError }, { data: participantRows, error: participantError }] = await Promise.all([
+            supabase.from('chats').select('*').eq('id', chatId).maybeSingle(),
+            supabase.from('chat_participants').select('user_id').eq('chat_id', chatId).is('left_at', null),
+        ]);
+        if (chatError) throw chatError;
+        if (participantError) throw participantError;
+        if (!chatData) return null;
 
-        const chatData = chatSnap.data() || {};
-        const participants = Array.isArray(chatData.participants) ? chatData.participants : [];
-        const isGroup = chatData.type === 'group' || participants.length > 2;
+        const participants = Array.isArray(participantRows) ? participantRows.map((row) => row.user_id) : [];
+        const isGroup = chatData.type === 'group' || participants.length > 2 || Boolean(chatData.circle_id);
 
         let name = chatData.name || 'Chat';
-        let avatar = chatData.avatar || chatData.photoURL || chatData.image || '';
+        let avatar = chatData.avatar || chatData.photo_url || chatData.image || '';
 
-        if (isGroup && chatData.circleId) {
-            const circleSnap = await getDoc(doc(db, 'circles', chatData.circleId));
-            if (circleSnap.exists()) {
-                const circleData = circleSnap.data() || {};
+        if (isGroup && chatData.circle_id) {
+            const { data: circleData } = await supabase.from('circles').select('name, image').eq('id', chatData.circle_id).maybeSingle();
+            if (circleData) {
                 name = circleData.name || name;
-                avatar = circleData.image || circleData.avatar || circleData.photoURL || avatar;
+                avatar = circleData.image || avatar;
             }
         } else if (!isGroup) {
-            const currentUid = auth.currentUser?.uid;
-            const otherId = participants.find((id) => id !== currentUid) || participants[0];
+            const otherId = participants.find((id) => id !== currentAuthUid) || participants[0];
             if (otherId) {
-                const userSnap = await getDoc(doc(db, 'users', otherId));
-                if (userSnap.exists()) {
-                    const userData = userSnap.data() || {};
-                    name = userData.name || userData.displayName || name;
-                    avatar = userData.photoURL || avatar;
+                const { data: profileData } = await supabase.from('profiles').select('name, photo_url').eq('id', otherId).maybeSingle();
+                if (profileData) {
+                    name = profileData.name || name;
+                    avatar = profileData.photo_url || avatar;
                 }
             }
         }
@@ -102,7 +100,7 @@ const resolveChatNavigationPayload = async (chatId) => {
             avatar,
             isGroup,
             members: participants.length,
-            me: auth.currentUser?.uid || null
+            me: currentAuthUid || null
         };
     } catch {
         return null;
@@ -130,7 +128,7 @@ const navigateFromNotificationData = async (payload) => {
         if ((type === 'CHAT_MESSAGE' || chatId) && chatId) {
             const chat = await resolveChatNavigationPayload(chatId);
             if (chat) {
-                navigate('ChatDetail', { chat });
+                navigate('ChatDetail', { chat: chatService.serializeChatForNavigation(chat) });
                 return true;
             }
             navigate('ChatDetail', {
@@ -157,7 +155,7 @@ const navigateFromNotificationData = async (payload) => {
             if (data?.chatId) {
                 const chat = await resolveChatNavigationPayload(data.chatId);
                 if (chat) {
-                    navigate('ChatDetail', { chat });
+                    navigate('ChatDetail', { chat: chatService.serializeChatForNavigation(chat) });
                     return true;
                 }
             }
@@ -183,7 +181,7 @@ const navigateFromNotificationData = async (payload) => {
 };
 
 const markChatNotificationsAsRead = async (chatId) => {
-    await chatService.markChatNotificationsRead(chatId, auth.currentUser?.uid);
+    await chatService.markChatNotificationsRead(chatId, currentAuthUid);
 };
 
 const handleNotificationAction = async (response) => {
@@ -407,7 +405,7 @@ export const notificationService = {
         Notifications.setNotificationHandler({
             handleNotification: async (notification) => {
                 const data = extractNotificationData(notification);
-                const currentUid = auth.currentUser?.uid || null;
+                const currentUid = currentAuthUid || null;
                 // Never show push for messages authored by the currently signed-in user.
                 if (data?.type === 'CHAT_MESSAGE' && currentUid && String(data?.senderId || '') === currentUid) {
                     return {
@@ -429,7 +427,7 @@ export const notificationService = {
 
         receiveSubscription = Notifications.addNotificationReceivedListener((notification) => {
             const data = extractNotificationData(notification);
-            const currentUid = auth.currentUser?.uid || null;
+            const currentUid = currentAuthUid || null;
             if (data?.type === 'CHAT_MESSAGE' && currentUid && String(data?.senderId || '') === currentUid) {
                 return;
             }

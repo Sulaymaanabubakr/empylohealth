@@ -95,7 +95,7 @@ const PersonalInformationScreen = ({ navigation }) => {
                         purpose: 'CHANGE_PASSWORD',
                         title: 'Confirm Password Change',
                         subtitle: `Enter the 6-digit code sent to ${user?.email}.`,
-                        initialCooldownSeconds: Number(otpResult?.cooldownSeconds || 60),
+                        initialCooldownSeconds: Number(otpResult?.cooldownSeconds || 30),
                         nextAction: {
                             type: 'change_password',
                             newPassword

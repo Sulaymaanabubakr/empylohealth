@@ -35,6 +35,7 @@ const SignInScreen = ({ navigation }) => {
       return;
     }
 
+    console.log('[AuthUI] SignIn submit pressed', { email: String(email || '').trim().toLowerCase() });
     setLoading(true);
     const result = await login(email, password);
     setLoading(false);
@@ -57,6 +58,11 @@ const SignInScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {socialLoading ? (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={COLORS.secondary} />
+        </View>
+      ) : null}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -107,9 +113,13 @@ const SignInScreen = ({ navigation }) => {
                 style={[styles.socialIcon, (isAuthenticating || socialLoading) && styles.socialIconDisabled]}
                 onPress={async () => {
                   if (isAuthenticating || socialLoading) return;
+                  console.log('[AuthUI] Google sign-in pressed on SignIn');
                   setSocialLoading('google');
                   try {
-                    await loginWithGoogle();
+                    const res = await loginWithGoogle();
+                    if (!res?.success && !res?.cancelled) {
+                      showToast(res?.error || 'Google sign-in failed', 'error');
+                    }
                   } finally {
                     setSocialLoading(null);
                   }
@@ -125,15 +135,19 @@ const SignInScreen = ({ navigation }) => {
               {Platform.OS === 'ios' && (
                 <TouchableOpacity
                   style={[styles.socialIcon, (isAuthenticating || socialLoading) && styles.socialIconDisabled]}
-                  onPress={async () => {
-                    if (isAuthenticating || socialLoading) return;
-                    setSocialLoading('apple');
-                    try {
-                      await loginWithApple();
-                    } finally {
-                      setSocialLoading(null);
+                onPress={async () => {
+                  if (isAuthenticating || socialLoading) return;
+                  console.log('[AuthUI] Apple sign-in pressed on SignIn');
+                  setSocialLoading('apple');
+                  try {
+                    const res = await loginWithApple();
+                    if (!res?.success && !res?.cancelled) {
+                      showToast(res?.error || 'Apple sign-in failed', 'error');
                     }
-                  }}
+                  } finally {
+                    setSocialLoading(null);
+                  }
+                }}
                   disabled={isAuthenticating || socialLoading}
                 >
                   {socialLoading === 'apple' ? (
@@ -252,6 +266,13 @@ const styles = StyleSheet.create({
   forgotPassword: {
     alignItems: 'center',
     marginTop: SPACING.sm,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    backgroundColor: 'rgba(15, 23, 42, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
   }
 });
 

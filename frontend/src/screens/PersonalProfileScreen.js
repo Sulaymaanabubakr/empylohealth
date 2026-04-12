@@ -17,9 +17,8 @@ import { authService } from '../services/auth/authService';
 import { userService } from '../services/api/userService';
 import { mediaService } from '../services/api/mediaService';
 import { useModal } from '../context/ModalContext';
-import { db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
 import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } from '../services/circles/activeMembers';
+import { screenCacheService } from '../services/bootstrap/screenCacheService';
 
 
 const PersonalProfileScreen = ({ navigation }) => {
@@ -42,13 +41,29 @@ const PersonalProfileScreen = ({ navigation }) => {
     const [tempImage, setTempImage] = useState(null);
 
     useEffect(() => {
-        if (user?.uid) {
-            const unsubscribe = circleService.subscribeToMyCircles(user.uid, (circles) => {
-                setMyCircles(circles);
-            });
-            return () => unsubscribe();
-        }
-    }, [user]);
+        if (!user?.uid) return;
+        let active = true;
+
+        const hydrate = async () => {
+            const cached = await screenCacheService.get(`support_groups_joined:${user.uid}`);
+            if (active && Array.isArray(cached) && cached.length > 0) {
+                setMyCircles(cached);
+            }
+        };
+
+        hydrate();
+
+        const unsubscribe = circleService.subscribeToMyCircles(user.uid, (circles) => {
+            if (!active) return;
+            setMyCircles(circles);
+            screenCacheService.set(`support_groups_joined:${user.uid}`, circles || []);
+        });
+
+        return () => {
+            active = false;
+            unsubscribe?.();
+        };
+    }, [user?.uid]);
 
     useEffect(() => {
         let cancelled = false;
@@ -109,8 +124,8 @@ const PersonalProfileScreen = ({ navigation }) => {
             await Promise.all(
                 allMemberIds.slice(0, 80).map(async (memberId) => {
                     try {
-                        const snap = await getDoc(doc(db, 'users', memberId));
-                        if (snap.exists()) docs[memberId] = snap.data() || {};
+                        const data = await userService.getUserDocument(memberId);
+                        if (data) docs[memberId] = data;
                     } catch {
                         // ignore partial profile failures
                     }

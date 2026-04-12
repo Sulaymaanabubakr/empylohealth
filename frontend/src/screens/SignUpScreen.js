@@ -11,7 +11,8 @@ import {
     Dimensions,
     KeyboardAvoidingView,
     Platform,
-    Linking
+    Linking,
+    ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../theme/theme';
@@ -36,6 +37,7 @@ const SignUpScreen = ({ navigation }) => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [agree, setAgree] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [socialLoading, setSocialLoading] = useState(null);
 
     const handleSignUp = async () => {
         if (!name || !email || !password || !confirmPassword) {
@@ -53,6 +55,7 @@ const SignUpScreen = ({ navigation }) => {
             return;
         }
 
+        console.log('[AuthUI] SignUp submit pressed', { email: String(email || '').trim().toLowerCase() });
         setLoading(true);
         try {
             const metadata = await getDeviceIdentity();
@@ -66,8 +69,8 @@ const SignUpScreen = ({ navigation }) => {
                 email,
                 purpose: 'SIGNUP_VERIFY',
                 title: 'Verify Your Email',
-                subtitle: `We sent a 6-digit code to ${email}. Enter it to create your account.`,
-                initialCooldownSeconds: Number(otpResult?.cooldownSeconds || 60),
+                subtitle: `We sent a 6-digit code to ${email}. Enter it to verify your account.`,
+                initialCooldownSeconds: Number(otpResult?.cooldownSeconds || 30),
                 nextAction: {
                     type: 'signup',
                     email,
@@ -83,6 +86,11 @@ const SignUpScreen = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container}>
+            {socialLoading ? (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color={COLORS.secondary} />
+                </View>
+            ) : null}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
@@ -160,22 +168,52 @@ const SignUpScreen = ({ navigation }) => {
                         <Text style={styles.orText}>Or continue with</Text>
 
                         <View style={styles.socialContainer}>
-                            <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-                                const res = await loginWithGoogle();
-                                if (!res?.success && !res?.cancelled) {
-                                    showToast(res?.error || 'Google sign-in failed', 'error');
-                                }
-                            }}>
-                                <AntDesign name="google" size={24} color="black" />
+                            <TouchableOpacity
+                                style={[styles.socialIcon, socialLoading && styles.socialIconDisabled]}
+                                onPress={async () => {
+                                    if (socialLoading) return;
+                                    console.log('[AuthUI] Google sign-in pressed on SignUp');
+                                    setSocialLoading('google');
+                                    try {
+                                        const res = await loginWithGoogle();
+                                        if (!res?.success && !res?.cancelled) {
+                                            showToast(res?.error || 'Google sign-in failed', 'error');
+                                        }
+                                    } finally {
+                                        setSocialLoading(null);
+                                    }
+                                }}
+                                disabled={Boolean(socialLoading)}
+                            >
+                                {socialLoading === 'google' ? (
+                                    <ActivityIndicator size="small" color={COLORS.secondary} />
+                                ) : (
+                                    <AntDesign name="google" size={24} color="black" />
+                                )}
                             </TouchableOpacity>
                             {Platform.OS === 'ios' && (
-                                <TouchableOpacity style={styles.socialIcon} onPress={async () => {
-                                    const res = await loginWithApple();
-                                    if (!res?.success && !res?.cancelled) {
-                                        showToast(res?.error || 'Apple sign-in failed', 'error');
-                                    }
-                                }}>
-                                    <FontAwesome name="apple" size={24} color="black" />
+                                <TouchableOpacity
+                                    style={[styles.socialIcon, socialLoading && styles.socialIconDisabled]}
+                                    onPress={async () => {
+                                        if (socialLoading) return;
+                                        console.log('[AuthUI] Apple sign-in pressed on SignUp');
+                                        setSocialLoading('apple');
+                                        try {
+                                            const res = await loginWithApple();
+                                            if (!res?.success && !res?.cancelled) {
+                                                showToast(res?.error || 'Apple sign-in failed', 'error');
+                                            }
+                                        } finally {
+                                            setSocialLoading(null);
+                                        }
+                                    }}
+                                    disabled={Boolean(socialLoading)}
+                                >
+                                    {socialLoading === 'apple' ? (
+                                        <ActivityIndicator size="small" color={COLORS.secondary} />
+                                    ) : (
+                                        <FontAwesome name="apple" size={24} color="black" />
+                                    )}
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -282,6 +320,17 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.white,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    socialIconDisabled: {
+        opacity: 0.6,
+        backgroundColor: '#F5F5F5',
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 20,
+        backgroundColor: 'rgba(15, 23, 42, 0.22)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     footer: {
         flexDirection: 'row',

@@ -11,8 +11,6 @@ import AssessmentModal from '../components/AssessmentModal';
 import { weeklyAssessment } from '../services/assessments/weeklyAssessment';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
-import { db } from '../services/firebaseConfig';
-import { doc, getDoc, getDocs, limit, collection, query, where, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import CircleMemberLane from '../components/CircleMemberLane';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
@@ -22,6 +20,9 @@ import { labelFromWellbeingScore, normalizeWellbeingLabel } from '../utils/wellb
 import { MAX_CIRCLE_MEMBERS } from '../services/circles/circleLimits';
 
 import { assessmentService } from '../services/api/assessmentService';
+import { supabase } from '../services/supabase/supabaseClient';
+import { userService } from '../services/api/userService';
+import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 
 const { width } = Dimensions.get('window');
 
@@ -182,6 +183,7 @@ const DashboardScreen = ({ navigation }) => {
     const [allCircles, setAllCircles] = useState([]);
     const [selectedCircleId, setSelectedCircleId] = useState('');
     const [wellbeing, setWellbeing] = useState({ score: null, label: '' });
+    const [challenges, setChallenges] = useState([]);
     const [recommendations, setRecommendations] = useState([]);
     const [showAssessment, setShowAssessment] = useState(false);
     const [assessmentType, setAssessmentType] = useState('daily'); // 'daily' or 'weekly'
@@ -191,7 +193,10 @@ const DashboardScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
     const [lastUpdatedAt, setLastUpdatedAt] = useState(0);
+    const [subscriptionPlan, setSubscriptionPlan] = useState(null);
+    const [subscriptionPlanResolved, setSubscriptionPlanResolved] = useState(false);
     const primaryCircleStorageKey = user?.uid ? `dashboard_primary_circle:${user.uid}` : '';
+    const isFreePlan = subscriptionPlanResolved && subscriptionPlan === 'free';
 
     const localWellbeingFallback = useCallback(() => {
         const resolved = resolveMemberWellbeing(userData || {});
@@ -204,21 +209,32 @@ const DashboardScreen = ({ navigation }) => {
 
     useEffect(() => {
         if (!user?.uid) return;
+        let active = true;
+        const load = async () => {
+            try {
+                const { count, error } = await supabase
+                    .from('notifications')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('user_id', user.uid)
+                    .eq('read', false);
+                if (error) throw error;
+                if (active) setHasUnreadNotifications((count || 0) > 0);
+            } catch (error) {
+                console.log("Error fetching notifications:", error);
+                if (active) setHasUnreadNotifications(false);
+            }
+        };
 
-        const q = query(
-            collection(db, 'notifications'),
-            where('uid', '==', user.uid),
-            where('read', '==', false)
-        );
+        load();
+        const channel = supabase
+            .channel(`dashboard-notifications:${user.uid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.uid}` }, load)
+            .subscribe();
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            setHasUnreadNotifications(!snapshot.empty);
-        }, (error) => {
-            console.log("Error fetching notifications:", error);
-            setHasUnreadNotifications(false);
-        });
-
-        return () => unsubscribe();
+        return () => {
+            active = false;
+            supabase.removeChannel(channel).catch(() => {});
+        };
     }, [user?.uid]);
 
     useEffect(() => {
@@ -234,20 +250,34 @@ const DashboardScreen = ({ navigation }) => {
         console.log('DashboardScreen mounted. User:', user?.email);
         const hydrate = async () => {
             if (!user?.uid) return;
-            const cached = await screenCacheService.get(`dashboard:${user.uid}`);
-            if (!cached) return;
-            if (cached?.wellbeing && typeof cached.wellbeing === 'object') {
-                const score = typeof cached.wellbeing?.score === 'number' ? cached.wellbeing.score : null;
-                const label = cached.wellbeing?.label || 'No data';
-                if (score != null) {
-                    setWellbeing({
-                        score,
-                        label,
-                        streak: Number(cached.wellbeing?.streak || 0)
-                    });
+            const [cached, cachedCircles] = await Promise.all([
+                screenCacheService.get(`dashboard:${user.uid}`),
+                screenCacheService.get(`support_groups_joined:${user.uid}`),
+            ]);
+            if (cached) {
+                if (cached?.wellbeing && typeof cached.wellbeing === 'object') {
+                    const score = typeof cached.wellbeing?.score === 'number' ? cached.wellbeing.score : null;
+                    const label = cached.wellbeing?.label || 'No data';
+                    if (score != null) {
+                        setWellbeing({
+                            score,
+                            label,
+                            streak: Number(cached.wellbeing?.streak || 0)
+                        });
+                    }
                 }
+                if (Array.isArray(cached?.challenges)) setChallenges(cached.challenges);
+                if (Array.isArray(cached?.recommendations)) setRecommendations(cached.recommendations);
             }
-            if (Array.isArray(cached?.recommendations)) setRecommendations(cached.recommendations);
+            // Hydrate circles from preload cache so cards show instantly
+            if (Array.isArray(cachedCircles) && cachedCircles.length > 0) {
+                const sorted = cachedCircles.sort((a, b) => {
+                    const timeA = new Date(a.updatedAt || a.lastMessageAt || 0).getTime();
+                    const timeB = new Date(b.updatedAt || b.lastMessageAt || 0).getTime();
+                    return timeB - timeA;
+                });
+                setAllCircles(sorted);
+            }
         };
         hydrate();
         checkAssessments();
@@ -258,12 +288,14 @@ const DashboardScreen = ({ navigation }) => {
                 console.log('Fetched circles:', data.length);
                 // Sort by most engaged (updatedAt or lastMessageAt)
                 const sorted = (data || []).sort((a, b) => {
-                    const timeA = a.updatedAt?.toMillis?.() || 0;
-                    const timeB = b.updatedAt?.toMillis?.() || 0;
+                    const timeA = new Date(a.updatedAt || a.lastMessageAt || 0).getTime();
+                    const timeB = new Date(b.updatedAt || b.lastMessageAt || 0).getTime();
                     return timeB - timeA;
                 });
                 setAllCircles(sorted);
                 setLastUpdatedAt(Date.now());
+                // Update cache so deleted circles don't reappear on next open
+                screenCacheService.set(`support_groups_joined:${user.uid}`, sorted).catch(() => {});
                 setSelectedCircleId((previous) => {
                     if (!sorted.length) return '';
                     const selectedStillExists = previous && sorted.some((item) => item.id === previous);
@@ -277,7 +309,27 @@ const DashboardScreen = ({ navigation }) => {
             });
             return () => unsubscribe();
         }
-    }, [user, primaryCircleStorageKey]);
+    }, [user?.uid, primaryCircleStorageKey]);
+
+    useEffect(() => {
+        if (!user?.uid) return;
+        let active = true;
+        setSubscriptionPlanResolved(false);
+        subscriptionGuardService.getSubscriptionStatus()
+            .then((status) => {
+                if (!active) return;
+                setSubscriptionPlan(String(status?.entitlement?.plan || 'free').toLowerCase());
+                setSubscriptionPlanResolved(true);
+            })
+            .catch(() => {
+                if (!active) return;
+                setSubscriptionPlan('free');
+                setSubscriptionPlanResolved(true);
+            });
+        return () => {
+            active = false;
+        };
+    }, [user?.uid]);
 
     const selectedCircle = useMemo(() => {
         if (!allCircles.length) return null;
@@ -322,17 +374,21 @@ const DashboardScreen = ({ navigation }) => {
 
     const fetchDashboardData = async () => {
         try {
-            const [stats, recs] = await Promise.all([
-                assessmentService.getWellbeingStats(),
-                assessmentService.getRecommendedContent()
-            ]);
-            const hasScore = typeof stats?.score === 'number';
+            const data = await assessmentService.getDashboardData();
+            const stats = data?.wellbeing || {};
+            const challs = data?.challenges || [];
+            const recs = data?.recommendations || [];
+
+            const hasScore = typeof stats.score === 'number';
             setWellbeing(hasScore ? stats : localWellbeingFallback());
-            setRecommendations(recs);
+            setChallenges(Array.isArray(challs) ? challs : []);
+            setRecommendations(Array.isArray(recs) ? recs : []);
+
             if (user?.uid) {
                 screenCacheService.set(`dashboard:${user.uid}`, {
                     wellbeing: hasScore ? stats : localWellbeingFallback(),
-                    recommendations: recs || []
+                    challenges: Array.isArray(challs) ? challs : [],
+                    recommendations: Array.isArray(recs) ? recs : []
                 });
             }
         } catch (err) {
@@ -352,14 +408,12 @@ const DashboardScreen = ({ navigation }) => {
                 const cachedCompleted = await AsyncStorage.getItem(completionKey);
                 let hasCompletedAssessment = cachedCompleted === 'true';
                 if (!hasCompletedAssessment) {
-                    const firstAssessmentSnap = await getDocs(
-                        query(
-                            collection(db, 'assessments'),
-                            where('uid', '==', user.uid),
-                            limit(1)
-                        )
-                    );
-                    hasCompletedAssessment = !firstAssessmentSnap.empty;
+                    const firstAssessmentSnap = await supabase
+                        .from('assessments')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('user_id', user.uid)
+                        .limit(1);
+                    hasCompletedAssessment = (firstAssessmentSnap.count || 0) > 0;
                     if (hasCompletedAssessment) {
                         await AsyncStorage.setItem(completionKey, 'true');
                     }
@@ -461,9 +515,8 @@ const DashboardScreen = ({ navigation }) => {
             await Promise.all(memberIds.map(async (memberId) => {
                 if (memberId === user?.uid) return;
                 try {
-                    const memberDoc = await getDoc(doc(db, 'users', memberId));
-                    if (!memberDoc.exists()) return;
-                    const data = memberDoc.data();
+                    const data = await userService.getUserDocument(memberId);
+                    if (!data) return;
                     const wellbeing = resolveMemberWellbeing(data);
                     profiles[memberId] = {
                         name: data.name || data.displayName || 'Member',
@@ -730,53 +783,117 @@ const DashboardScreen = ({ navigation }) => {
                     </View>
                 )}
 
-                {/* Recommended Activities */}
-                <View style={[styles.sectionHeader, { marginTop: 10 }]}>
-                    <Text style={styles.sectionTitle}>Recommended For You</Text>
-                </View>
+                <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>{isFreePlan ? 'Today for You' : 'Key Challenges'}</Text>
 
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginBottom: 20, marginHorizontal: -SPACING.lg }}
-                    contentContainerStyle={{
-                        paddingHorizontal: SPACING.lg,
-                        paddingVertical: 10 // Space for shadows
-                    }}
-                >
-                    {recommendations.length > 0 ? (
-                        recommendations.map((item, index) => (
-                            (() => {
-                                const svgXml = decodeSvgDataUri(item.image);
+                {isFreePlan ? (
+                    <View style={styles.freePanel}>
+                        <View style={styles.freePanelHeader}>
+                            <View style={styles.freePanelIcon}>
+                                <MaterialCommunityIcons name="compass-rose" size={24} color={COLORS.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.freePanelTitle}>Keep your momentum going</Text>
+                                <Text style={styles.freePanelBody}>
+                                    Key Challenges are available on paid plans. For now, here are simple next steps to support your wellbeing today.
+                                </Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.freePanelActions}>
+                            <TouchableOpacity style={styles.freeActionCard} onPress={() => {
+                                setAssessmentType('daily');
+                                setAssessmentMandatory(false);
+                                setShowAssessment(true);
+                            }}>
+                                <MaterialCommunityIcons name="clipboard-text-outline" size={20} color={COLORS.primary} />
+                                <Text style={styles.freeActionTitle}>Take a daily check-in</Text>
+                                <Text style={styles.freeActionBody}>Refresh your score and stay aware of how you feel.</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.freeActionCard} onPress={() => navigation.navigate('Explore')}>
+                                <MaterialCommunityIcons name="book-open-page-variant-outline" size={20} color={COLORS.primary} />
+                                <Text style={styles.freeActionTitle}>Explore resources</Text>
+                                <Text style={styles.freeActionBody}>Open a guided resource or activity that fits today.</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={[styles.freeActionCard, styles.freeUpgradeCard]} onPress={() => navigation.navigate('Subscription')}>
+                                <MaterialCommunityIcons name="star-four-points-outline" size={20} color="#FFFFFF" />
+                                <Text style={styles.freeUpgradeTitle}>Unlock Key Challenges</Text>
+                                <Text style={styles.freeUpgradeBody}>Upgrade to get AI-powered challenge insights and deeper guidance.</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ) : (
+                    <View style={styles.challengeList}>
+                        {challenges.length > 0 ? (
+                            ['Focus Area', 'Connection', 'Growth', 'Daily Win'].map((themeName, index) => {
+                                const challenge = challenges.find((c) => String(c.theme || '').toLowerCase() === themeName.toLowerCase()) || challenges[index] || {};
+
+                                let levelPalette;
+                                if (themeName === 'Focus Area') {
+                                    levelPalette = { bg: '#FFF1F2', border: '#FFE0E6', text: '#C62828', iconBg: '#FEE2E2', icon: 'bullseye-arrow' };
+                                } else if (themeName === 'Connection') {
+                                    levelPalette = { bg: '#F3E5F5', border: '#E1BEE7', text: '#6A1B9A', iconBg: '#F3E5F5', icon: 'account-group' };
+                                } else if (themeName === 'Growth') {
+                                    levelPalette = { bg: '#F1F8E9', border: '#DCECC6', text: '#33691E', iconBg: '#E8F5E9', icon: 'sprout' };
+                                } else {
+                                    levelPalette = { bg: '#FFF8E1', border: '#FFE7B3', text: '#E65100', iconBg: '#FFF3E0', icon: 'star-circle-outline' };
+                                }
+
+                                const iconName = challenge.icon || levelPalette.icon;
+                                const safeIconName = MaterialCommunityIcons?.glyphMap?.[iconName] ? iconName : levelPalette.icon;
+                                const explanation = String(challenge.explanation || challenge.description || '').trim();
+                                const reasonText = String(challenge.reason || '').trim();
+
                                 return (
                                     <TouchableOpacity
-                                        key={item.id || index}
-                                        style={styles.recommendationCard}
-                                        onPress={() => navigation.navigate('ActivityDetail', { activity: item })}
+                                        key={challenge.id || `theme_${index}`}
+                                        activeOpacity={0.9}
+                                        onPress={() => navigation.navigate('ChallengeDetail', { challenge: { ...challenge, theme: themeName } })}
+                                        style={[
+                                            styles.challengeCard,
+                                            {
+                                                backgroundColor: levelPalette.bg,
+                                                borderColor: levelPalette.border,
+                                                width: '48%',
+                                                marginBottom: 12,
+                                            }
+                                        ]}
                                     >
-                                        <View style={[styles.recommendationImageContainer, { backgroundColor: item.color || '#E0F7FA' }]}>
-                                            {svgXml ? (
-                                                <SvgXml xml={svgXml} width="100%" height="100%" style={styles.recommendationSvg} />
-                                            ) : item.image ? (
-                                                <Image source={{ uri: item.image }} style={styles.recommendationImage} resizeMode="contain" />
-                                            ) : (
-                                                <MaterialCommunityIcons name="feather" size={32} color={COLORS.primary} />
-                                            )}
+                                        <View style={{ alignItems: 'center', marginBottom: 10 }}>
+                                            <View style={[styles.challengeIcon, { backgroundColor: challenge.bg || levelPalette.iconBg }]}>
+                                                <MaterialCommunityIcons name={safeIconName} size={24} color={challenge.color || levelPalette.text} />
+                                            </View>
                                         </View>
-                                        <View style={styles.recommendationContent}>
-                                            <Text style={styles.recommendationTitle} numberOfLines={2}>{item.title}</Text>
-                                            <Text style={styles.recommendationTag}>{item.tag || item.category || 'Activity'}</Text>
+                                        <View style={[styles.challengeLevelPill, { backgroundColor: levelPalette.iconBg, alignSelf: 'center', marginBottom: 8 }]}>
+                                            <Text style={[styles.challengeLevel, { color: levelPalette.text }]}>
+                                                {themeName}
+                                            </Text>
                                         </View>
+                                        <Text style={[styles.challengeTitle, { fontSize: 15, textAlign: 'center', marginBottom: 6 }]} numberOfLines={2}>
+                                            {challenge.title || themeName}
+                                        </Text>
+                                        {!!reasonText && (
+                                            <Text style={{ color: levelPalette.text, fontStyle: 'italic', fontSize: 11, textAlign: 'center', marginBottom: 4, lineHeight: 15 }} numberOfLines={2}>
+                                                {reasonText}
+                                            </Text>
+                                        )}
+                                        {!!explanation && (
+                                            <Text style={[styles.challengeExplanation, { fontSize: 12, textAlign: 'center' }]} numberOfLines={3}>
+                                                {explanation}
+                                            </Text>
+                                        )}
                                     </TouchableOpacity>
                                 );
-                            })()
-                        ))
-                    ) : (
-                        <View style={styles.emptyRecommendation}>
-                            <Text style={styles.emptyText}>Complete a check-in to get recommendations!</Text>
-                        </View>
-                    )}
-                </ScrollView>
+                            })
+                        ) : (
+                            <Text style={{ color: '#999', fontStyle: 'italic', padding: 10 }}>No specific challenges flagged.</Text>
+                        )}
+                    </View>
+                )}
+
+
+
 
             </ScrollView>
 
@@ -1037,14 +1154,14 @@ const styles = StyleSheet.create({
     },
     circleCard: {
         backgroundColor: '#FFF',
-        borderRadius: 32,
-        padding: 24,
-        marginBottom: 32,
+        borderRadius: 24,
+        padding: 16,
+        marginBottom: 20,
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.08,
-        shadowRadius: 24,
-        elevation: 10,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 16,
+        elevation: 6,
         borderWidth: 1,
         borderColor: '#F5F5F5',
     },
@@ -1205,9 +1322,87 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
     },
-    challengeRow: {
+    challengeList: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        marginBottom: 24,
+    },
+    freePanel: {
+        marginBottom: 24,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#E8EDF4',
+        padding: 18,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.04,
+        shadowRadius: 16,
+        elevation: 2,
+    },
+    freePanelHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
         marginBottom: 16,
+    },
+    freePanelIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 16,
+        backgroundColor: '#E9F7F6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    freePanelTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#102A43',
+        marginBottom: 4,
+    },
+    freePanelBody: {
+        fontSize: 14,
+        lineHeight: 21,
+        color: '#5B6C7D',
+    },
+    freePanelActions: {
+        gap: 12,
+    },
+    freeActionCard: {
+        borderRadius: 18,
+        padding: 16,
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    freeActionTitle: {
+        marginTop: 10,
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#102A43',
+    },
+    freeActionBody: {
+        marginTop: 6,
+        fontSize: 13,
+        lineHeight: 19,
+        color: '#5B6C7D',
+    },
+    freeUpgradeCard: {
+        backgroundColor: COLORS.primary,
+        borderColor: COLORS.primary,
+    },
+    freeUpgradeTitle: {
+        marginTop: 10,
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#FFFFFF',
+    },
+    freeUpgradeBody: {
+        marginTop: 6,
+        fontSize: 13,
+        lineHeight: 19,
+        color: 'rgba(255,255,255,0.9)',
     },
     challengeCard: {
         backgroundColor: '#FFF',
@@ -1220,28 +1415,74 @@ const styles = StyleSheet.create({
         elevation: 5,
         borderWidth: 1,
         borderColor: '#FAFAFA',
-        alignItems: 'center', // Center content horizontally
+    },
+    challengeHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    challengeCopy: {
+        flex: 1,
+        marginLeft: 14,
+    },
+    challengeTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 8,
     },
     challengeIcon: {
-        width: 56,
-        height: 56,
+        width: 52,
+        height: 52,
         borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 16,
     },
     challengeTitle: {
+        flex: 1,
         fontSize: 18,
         fontWeight: '800',
         color: '#212121',
-        marginBottom: 4,
-        textAlign: 'center', // Center text
+    },
+    challengeExplanation: {
+        fontSize: 14,
+        color: '#616161',
+        lineHeight: 20,
+    },
+    challengeLevelPill: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
     },
     challengeLevel: {
-        fontSize: 14,
-        color: '#757575',
-        fontWeight: '500',
-        textAlign: 'center', // Center text
+        fontSize: 12,
+        fontWeight: '800',
+        textTransform: 'uppercase',
+        letterSpacing: 0.6,
+    },
+    challengeSuggestions: {
+        marginTop: 14,
+        paddingTop: 14,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.05)',
+    },
+    challengeSuggestionRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
+    challengeSuggestionDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        marginTop: 7,
+        marginRight: 10,
+    },
+    challengeSuggestionText: {
+        flex: 1,
+        fontSize: 13,
+        lineHeight: 19,
+        color: '#424242',
     },
     bottomNavContainer: {
         position: 'absolute',

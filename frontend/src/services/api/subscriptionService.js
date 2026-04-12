@@ -1,10 +1,11 @@
 import {
     finishTransaction,
     getAvailablePurchases,
-    getProducts,
+    fetchProducts,
     initConnection,
     purchaseUpdatedListener,
     purchaseErrorListener,
+    requestPurchase,
     requestSubscription
 } from 'react-native-iap';
 import { Platform } from 'react-native';
@@ -29,6 +30,15 @@ const extractPurchasePayload = (purchase) => ({
     productId: purchase?.productId || ''
 });
 
+const buildIdempotencyKey = (purchase, productId = '') =>
+    String(
+        purchase?.transactionId
+        || purchase?.transactionIdentifierIOS
+        || purchase?.originalTransactionIdentifierIOS
+        || purchase?.purchaseToken
+        || `${productId}:${Date.now()}`
+    );
+
 const selectFallbackProductId = (plan, defaults) => {
     const platformKey = Platform.OS === 'ios' ? 'ios' : 'android';
     const explicitByPlatform = String(plan?.productIds?.[platformKey] || '').trim();
@@ -47,6 +57,12 @@ const normalizePlan = (plan, defaults) => {
     };
 };
 
+const buildPurchaseRequest = (productId) => (
+    Platform.OS === 'ios'
+        ? { ios: { sku: productId } }
+        : { android: { skus: [productId] } }
+);
+
 export const subscriptionService = {
     async getCatalog() {
         const catalog = await subscriptionGuardService.getSubscriptionCatalog();
@@ -54,19 +70,29 @@ export const subscriptionService = {
         const plans = Array.isArray(catalog?.plans)
             ? catalog.plans.map((plan) => normalizePlan(plan, defaults))
             : [];
-        const productIds = Array.from(new Set(plans.map((plan) => String(plan?.productId || '').trim()).filter(Boolean)));
+        const boosts = Array.isArray(catalog?.boosts) ? catalog.boosts : [];
+        const boostIds = Array.from(new Set(boosts.map((boost) => String(boost?.productId || boost?.id || '').trim()).filter(Boolean)));
+        
         let storeProducts = [];
-        if (productIds.length > 0) {
-            try {
-                await ensureConnection();
-                storeProducts = await getProducts({ skus: productIds });
-            } catch (error) {
-                console.warn('[subscriptionService] Failed to fetch store products', error?.message || error);
+        try {
+            await ensureConnection();
+            const queries = [];
+            if (productIds.length > 0) queries.push(fetchProducts({ skus: productIds, type: 'subs' }));
+            if (boostIds.length > 0) queries.push(fetchProducts({ skus: boostIds, type: 'in-app' }));
+            
+            if (queries.length > 0) {
+                const results = await Promise.all(queries);
+                storeProducts = results.flat();
             }
+        } catch (error) {
+            console.warn('[subscriptionService] Failed to fetch store products:', error?.message || error);
         }
+
         return {
             plans,
-            storeProducts
+            boosts,
+            storeProducts,
+            enterprise: catalog?.enterprise || null
         };
     },
 
@@ -80,9 +106,16 @@ export const subscriptionService = {
             throw new Error('This plan is not configured for purchase yet.');
         }
         await ensureConnection();
-        return requestSubscription({
-            sku: productId
-        });
+        return requestSubscription(buildPurchaseRequest(productId));
+    },
+
+    async requestBoostPurchase(boost) {
+        const productId = String(boost?.productId || boost?.id || '').trim();
+        if (!productId) {
+            throw new Error('This boost is not configured for purchase yet.');
+        }
+        await ensureConnection();
+        return requestPurchase(buildPurchaseRequest(productId));
     },
 
     async restore(payload = {}) {
@@ -118,21 +151,35 @@ export const subscriptionService = {
         updateSub = purchaseUpdatedListener(async (purchase) => {
             try {
                 const payload = extractPurchasePayload(purchase);
-                if (payload.purchaseToken && purchase?.purchaseToken) {
-                    await subscriptionGuardService.validateGooglePurchase({
+                const idempotencyKey = buildIdempotencyKey(purchase, payload.productId);
+                const isBoostPurchase = String(payload.productId || '').toLowerCase().includes('boost');
+                let result;
+                if (isBoostPurchase) {
+                    result = await subscriptionGuardService.validateBoostPurchase({
+                        productId: payload.productId,
+                        platform: Platform.OS,
                         purchaseToken: payload.purchaseToken,
-                        productId: payload.productId
+                        transactionId: payload.transactionId,
+                        originalTransactionId: payload.originalTransactionId,
+                        idempotencyKey
+                    });
+                } else if (payload.purchaseToken && purchase?.purchaseToken) {
+                    result = await subscriptionGuardService.validateGooglePurchase({
+                        purchaseToken: payload.purchaseToken,
+                        productId: payload.productId,
+                        idempotencyKey
                     });
                 } else {
-                    await subscriptionGuardService.validateAppleTransaction({
+                    result = await subscriptionGuardService.validateAppleTransaction({
                         productId: payload.productId,
                         transactionId: payload.transactionId,
                         originalTransactionId: payload.originalTransactionId,
-                        signedTransactionInfo: payload.signedTransactionInfo
+                        signedTransactionInfo: payload.signedTransactionInfo,
+                        idempotencyKey
                     });
                 }
-                await finishTransaction({ purchase, isConsumable: false });
-                if (typeof onSuccess === 'function') onSuccess(purchase);
+                await finishTransaction({ purchase, isConsumable: isBoostPurchase });
+                if (typeof onSuccess === 'function') onSuccess(purchase, result);
             } catch (error) {
                 if (typeof onError === 'function') onError(error);
             }

@@ -6,11 +6,11 @@ import Navigation from './src/Navigation';
 import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/context/ToastContext';
 import { ModalProvider } from './src/context/ModalContext';
+import { BrandedSplash } from './src/screens/SplashScreen';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Font from 'expo-font';
 
-import { View, Platform, Text, TextInput } from 'react-native';
+import { View, Text, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { perfLogger } from './src/services/diagnostics/perfLogger';
 
@@ -49,55 +49,59 @@ export default function App() {
   const fontLoadStart = Date.now();
   const splashHidden = useRef(false);
   const authReady = useRef(false);
+  const [authBootReady, setAuthBootReady] = React.useState(false);
 
-  const [fontsLoaded] = Font.useFonts({
-    'SpaceGrotesk_400Regular': require('./assets/fonts/SpaceGrotesk_400Regular.ttf'),
-    'SpaceGrotesk_600SemiBold': require('./assets/fonts/SpaceGrotesk_600SemiBold.ttf'),
-    'SpaceGrotesk_700Bold': require('./assets/fonts/SpaceGrotesk_700Bold.ttf'),
-    'DMSans_400Regular': require('./assets/fonts/DMSans_400Regular.ttf'),
-    'DMSans_500Medium': require('./assets/fonts/DMSans_500Medium.ttf'),
-    'DMSans_700Bold': require('./assets/fonts/DMSans_700Bold.ttf'),
-  });
+  // All fonts (custom + icon) are natively bundled via the expo-font config plugin in app.json.
+  // Do NOT use Font.useFonts() — it triggers redundant runtime downloads from Metro that fail.
+  const fontsLoaded = true;
+  const fontError = null;
 
   const [errorState, setErrorState] = React.useState(null);
 
-  // Hide splash only when BOTH fonts AND auth are ready
-  const tryHideSplash = useCallback(async () => {
-    if (fontsLoaded && authReady.current && !splashHidden.current) {
+  // On the current dev build, font asset delivery can be flaky.
+  // Keep startup deterministic by keying splash dismissal off auth/bootstrap readiness.
+  const hideNativeSplash = useCallback(async () => {
+    if (!splashHidden.current) {
       splashHidden.current = true;
-      console.log('[PERF] App: Fonts + Auth ready, hiding splash screen');
+      console.log('[PERF] App: Auth ready, hiding native splash screen');
       await SplashScreen.hideAsync().catch(() => { });
     }
-  }, [fontsLoaded]);
+  }, []);
 
   // Called by AuthProvider when auth is fully resolved
   const onAuthReady = useCallback(() => {
     console.log('[PERF] App: Auth ready callback received');
     perfLogger.log('time_to_auth_ready', perfLogger.elapsedSince('app_process_start'));
     authReady.current = true;
-    tryHideSplash();
-  }, [tryHideSplash]);
+    setAuthBootReady(true);
+    hideNativeSplash();
+  }, [hideNativeSplash]);
 
   // Check if we can hide splash when fonts load
   useEffect(() => {
-    if (fontsLoaded) {
-      console.log('[PERF] App: Fonts loaded', `${Date.now() - fontLoadStart}ms`);
-      perfLogger.log('time_to_first_render_fonts_ready', perfLogger.elapsedSince('app_process_start'));
-      tryHideSplash();
+    if (fontError) {
+      console.error('[App] Font load failed', fontError);
     }
-  }, [fontsLoaded, tryHideSplash]);
+  }, [fontError]);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      console.log('[PERF] App: Fonts and icon fonts loaded', `${Date.now() - fontLoadStart}ms`);
+      perfLogger.log('time_to_first_render_fonts_ready', perfLogger.elapsedSince('app_process_start'));
+    }
+  }, [fontsLoaded]);
 
   // Safety timeout in case auth hangs (increase to 5s for slow networks)
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (!splashHidden.current) {
-        console.log('[PERF] App: Forcing Splash Screen hide (timeout)');
-        splashHidden.current = true;
-        await SplashScreen.hideAsync().catch(() => { });
+        console.warn('[PERF] App: Splash hide timeout reached before auth was ready');
+        setAuthBootReady(true);
+        await hideNativeSplash();
       }
     }, 10000); // Increased to 10s for production reliability
     return () => clearTimeout(timer);
-  }, []);
+  }, [hideNativeSplash]);
 
   if (errorState) {
     return (
@@ -115,7 +119,11 @@ export default function App() {
           <ModalProvider>
             <AuthProvider onAuthReady={onAuthReady}>
               <ErrorBoundary onError={setErrorState}>
-                <Navigation />
+                {authBootReady ? (
+                  <Navigation />
+                ) : (
+                  <BrandedSplash />
+                )}
               </ErrorBoundary>
             </AuthProvider>
           </ModalProvider>

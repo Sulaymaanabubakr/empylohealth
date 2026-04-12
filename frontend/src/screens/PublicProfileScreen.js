@@ -93,13 +93,13 @@ const PublicProfileScreen = ({ navigation, route }) => {
         try {
             const result = await chatService.createDirectChat(profile.uid);
             navigation.navigate('ChatDetail', {
-                chat: {
+                chat: chatService.serializeChatForNavigation({
                     id: result?.chatId,
                     name: profile.name,
                     avatar: profile.photoURL || '',
                     isGroup: false,
                     participants: [user?.uid, profile.uid]
-                }
+                })
             });
         } catch (error) {
             showModal({ type: 'error', title: 'Error', message: 'Unable to open chat right now.' });

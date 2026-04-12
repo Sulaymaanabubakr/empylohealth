@@ -1,12 +1,228 @@
-import { db, auth } from '../firebaseConfig';
-import { collection, query, where, orderBy, onSnapshot, limit, doc, getDoc, getDocs, writeBatch, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { chatRepository } from '../repositories/ChatRepository';
 import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { presenceRepository } from '../repositories/PresenceRepository';
+import { supabase } from '../supabase/supabaseClient';
 import { resolveWellbeingScore } from '../../utils/wellbeing';
 import { isPresenceOnline } from '../../utils/presence';
 import { formatTimeUK } from '../../utils/dateFormat';
 import { findUnsafeUrlsInMessage, sanitizeChatMessageText } from '../../utils/chatMessageSafety';
+
+const randomChannel = (prefix, id) => `${prefix}-${id}-${Math.random().toString(36).slice(2, 8)}`;
+
+const serializeChatTimestamp = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value?.toDate === 'function') return value.toDate().toISOString();
+    if (typeof value?.toMillis === 'function') return new Date(value.toMillis()).toISOString();
+    if (typeof value === 'number') return new Date(value).toISOString();
+    return value;
+};
+
+const serializeChatForNavigation = (chat) => {
+    if (!chat || typeof chat !== 'object') return chat;
+    return {
+        ...chat,
+        updatedAt: serializeChatTimestamp(chat.updatedAt),
+        createdAt: serializeChatTimestamp(chat.createdAt),
+        lastMessageAt: serializeChatTimestamp(chat.lastMessageAt),
+    };
+};
+
+const mapMessage = (row) => ({
+    _id: row.id,
+    clientMessageId: row.client_message_id || null,
+    text: row.text,
+    type: row.type || 'text',
+    systemKind: row.system_kind || null,
+    visibleTo: Array.isArray(row.visible_to) ? row.visible_to : [],
+    createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+    createdAtMs: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    readBy: Array.isArray(row.read_by) ? row.read_by : [],
+    user: {
+        _id: row.sender_id,
+    },
+    image: row.media_url || undefined,
+});
+
+const fetchMessages = async (chatId) => {
+    const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', chatId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+    if (error) {
+        throw error;
+    }
+
+    return (data || []).map(mapMessage);
+};
+
+const fetchParticipantProfiles = async (chatId) => {
+    const { data: participants, error: participantError } = await supabase
+        .from('chat_participants')
+        .select('user_id')
+        .eq('chat_id', chatId)
+        .is('left_at', null);
+    if (participantError) throw participantError;
+
+    const userIds = (participants || []).map((item) => item.user_id);
+    if (userIds.length === 0) return [];
+
+    const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, photo_url')
+        .in('id', userIds);
+    if (profilesError) throw profilesError;
+
+    return userIds.map((uid) => {
+        const profile = (profiles || []).find((item) => item.id === uid);
+        return {
+            uid,
+            name: profile?.name || 'Member',
+            photoURL: profile?.photo_url || '',
+            wellbeingScore: resolveWellbeingScore(profile || {}),
+            wellbeingLabel: profile?.wellbeingLabel || profile?.wellbeingStatus || '',
+        };
+    });
+};
+
+const fetchChatList = async (uid) => {
+    const { data: memberships, error: membershipError } = await supabase
+        .from('chat_participants')
+        .select('chat_id, is_muted, last_read_at')
+        .eq('user_id', uid)
+        .is('left_at', null);
+    if (membershipError) throw membershipError;
+
+    const chatIds = (memberships || []).map((item) => item.chat_id);
+    if (chatIds.length === 0) return [];
+
+    const { data: chats, error: chatsError } = await supabase
+        .from('chats')
+        .select('*')
+        .in('id', chatIds)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false });
+    if (chatsError) throw chatsError;
+
+    const { data: participants, error: participantsError } = await supabase
+        .from('chat_participants')
+        .select('chat_id, user_id')
+        .in('chat_id', chatIds)
+        .is('left_at', null);
+    if (participantsError) throw participantsError;
+
+    const participantIds = [...new Set((participants || []).map((row) => row.user_id))];
+    const { data: profiles } = participantIds.length
+        ? await supabase.from('profiles').select('id, name, photo_url').in('id', participantIds)
+        : { data: [] };
+
+    const membershipMap = new Map((memberships || []).map((item) => [item.chat_id, item]));
+    const participantsByChat = new Map();
+    (participants || []).forEach((item) => {
+        const list = participantsByChat.get(item.chat_id) || [];
+        list.push(item.user_id);
+        participantsByChat.set(item.chat_id, list);
+    });
+    const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+
+    return Promise.all((chats || []).map(async (chat) => {
+        const participantIdsForChat = participantsByChat.get(chat.id) || [];
+        const isGroup = chat.type === 'group' || participantIdsForChat.length > 2 || Boolean(chat.circle_id);
+        const membership = membershipMap.get(chat.id);
+        let name = chat.name || 'Chat';
+        let avatar = chat.avatar || null;
+        let isOnline = false;
+        let wellbeingScore = null;
+        let wellbeingLabel = '';
+
+        if (!isGroup) {
+            const otherId = participantIdsForChat.find((id) => id !== uid);
+            if (otherId) {
+                const profile = profileMap.get(otherId);
+                name = profile?.name || 'Anonymous';
+                avatar = profile?.photo_url || null;
+                try {
+                    const presence = await presenceRepository.getPresence(otherId).catch(() => ({ state: 'offline' }));
+                    isOnline = isPresenceOnline(presence);
+                } catch {
+                    isOnline = false;
+                }
+                wellbeingScore = resolveWellbeingScore(profile || {});
+                wellbeingLabel = profile?.wellbeingLabel || profile?.wellbeingStatus || '';
+            }
+        }
+
+        let unread = 0;
+        const lastReadAt = membership?.last_read_at || null;
+        let unreadQuery = supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('chat_id', chat.id)
+            .neq('sender_id', uid);
+        if (lastReadAt) {
+            unreadQuery = unreadQuery.gt('created_at', lastReadAt);
+        }
+        const { count } = await unreadQuery;
+
+        const updatedAt = chat.updated_at || null;
+
+        return {
+            id: chat.id,
+            ...chat,
+            participants: participantIdsForChat,
+            circleId: chat.circle_id || null,
+            name,
+            avatar,
+            time: updatedAt ? formatTimeUK(updatedAt) : '',
+            members: participantIdsForChat.length,
+            unread: count || 0,
+            isOnline,
+            isGroup,
+            isMuted: Boolean(membership?.is_muted),
+            me: uid,
+            wellbeingScore,
+            wellbeingLabel,
+            updatedAt: chat.updated_at || null,
+            createdAt: chat.created_at || null,
+            lastMessage: chat.last_message_text || '',
+            lastMessageType: chat.last_message_type || 'text',
+            lastMessageSenderId: chat.last_message_sender_id || null,
+            lastMessageAt: chat.last_message_at || null,
+            lastMessageReadBy: [],
+        };
+    }));
+};
+
+const subscribeWithReload = ({ uid, callback, tables }) => {
+    let active = true;
+    const load = async () => {
+        try {
+            const chats = await fetchChatList(uid);
+            if (active) callback(chats);
+        } catch (error) {
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                console.warn('[Supabase] chat list reload failed', error?.message || error);
+            }
+        }
+    };
+
+    load();
+
+    const channels = tables.map((table) =>
+        supabase
+            .channel(randomChannel(`chat-list-${table}`, uid))
+            .on('postgres_changes', { event: '*', schema: 'public', table }, load)
+            .subscribe()
+    );
+
+    return () => {
+        active = false;
+        channels.forEach((channel) => supabase.removeChannel(channel));
+    };
+};
 
 export const chatService = {
     createDirectChat: async (recipientId) => {
@@ -29,272 +245,127 @@ export const chatService = {
         return chatRepository.deleteChat(chatId, options);
     },
 
-    setChatMuted: async (chatId, muted, uid = auth.currentUser?.uid) => {
+    setChatMuted: async (chatId, muted, uid = null) => {
         if (!uid || !chatId) throw new Error('Unable to update mute settings.');
-        await updateDoc(doc(db, 'users', uid), {
-            mutedChatIds: muted ? arrayUnion(chatId) : arrayRemove(chatId),
-            updatedAt: new Date()
-        });
+        const { error } = await supabase
+            .from('chat_participants')
+            .update({ is_muted: !!muted, updated_at: new Date().toISOString() })
+            .eq('chat_id', chatId)
+            .eq('user_id', uid);
+        if (error) throw error;
         return { success: true };
     },
 
     subscribeToMessages: (chatId, callback) => {
-        const q = query(
-            collection(db, 'chats', chatId, 'messages'),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-        );
-        return onSnapshot(q, (snapshot) => {
-            const currentUid = auth.currentUser?.uid || null;
-            const messages = snapshot.docs.map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                    _id: docSnap.id,
-                    clientMessageId: data.clientMessageId || null,
-                    text: data.text,
-                    type: data.type || 'text',
-                    systemKind: data.systemKind || null,
-                    visibleTo: Array.isArray(data.visibleTo) ? data.visibleTo : [],
-                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-                    createdAtMs: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
-                    readBy: Array.isArray(data.readBy) ? data.readBy : [],
-                    user: {
-                        _id: data.senderId
-                    },
-                    image: data.mediaUrl || undefined
-                };
-            }).filter((message) => {
-                if (!Array.isArray(message.visibleTo) || message.visibleTo.length === 0) return true;
-                if (!currentUid) return false;
-                return message.visibleTo.includes(currentUid);
-            });
-            callback(messages);
-        });
-    },
-
-    subscribeToChatList: (uid, callback) => {
-        const q = query(
-            collection(db, 'chats'),
-            where('participants', 'array-contains', uid),
-            orderBy('updatedAt', 'desc')
-        );
-        return onSnapshot(q, async (snapshot) => {
-            let blockedUserIds = [];
-            let mutedChatIds = [];
+        let active = true;
+        const load = async () => {
             try {
-                const selfDoc = await getDoc(doc(db, 'users', uid));
-                blockedUserIds = Array.isArray(selfDoc.data()?.blockedUserIds) ? selfDoc.data().blockedUserIds : [];
-                mutedChatIds = Array.isArray(selfDoc.data()?.mutedChatIds) ? selfDoc.data().mutedChatIds : [];
-            } catch {
-                blockedUserIds = [];
-                mutedChatIds = [];
-            }
-            const circleCache = new Map();
-            const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
-                const data = docSnap.data();
-                const participants = data.participants || [];
-                const isGroup = data.type === 'group' || participants.length > 2;
-                let name = data.name || 'Chat';
-                let avatar = data.avatar || null;
-                let isOnline = false;
-
-                if (!isGroup) {
-                    const otherId = participants.find((id) => id !== uid);
-                    if (otherId) {
-                        try {
-                            const [userDoc, presence] = await Promise.all([
-                                getDoc(doc(db, 'users', otherId)),
-                                presenceRepository.getPresence(otherId).catch(() => ({ state: 'offline' }))
-                            ]);
-                            const userData = userDoc.exists() ? userDoc.data() : {};
-                            name = userData?.name || userData?.displayName || 'Anonymous';
-                            avatar = userData?.photoURL || null;
-                            isOnline = isPresenceOnline(presence);
-                            data.wellbeingScore = resolveWellbeingScore(userData);
-                            data.wellbeingLabel = userData?.wellbeingLabel || userData?.wellbeingStatus || '';
-                        } catch {
-                            // Ignore enrichment errors.
-                        }
-                    }
-                } else if (data?.circleId) {
-                    try {
-                        const circleId = data.circleId;
-                        if (!circleCache.has(circleId)) {
-                            const circleDoc = await getDoc(doc(db, 'circles', circleId));
-                            circleCache.set(circleId, circleDoc.exists() ? (circleDoc.data() || {}) : null);
-                        }
-                        const circleData = circleCache.get(circleId);
-                        if (circleData) {
-                            name = circleData?.name || name;
-                            avatar = circleData?.image || circleData?.avatar || circleData?.photoURL || avatar || null;
-                        }
-                    } catch {
-                        // Ignore group enrichment errors.
-                    }
+                const messages = await fetchMessages(chatId);
+                if (active) callback(messages);
+            } catch (error) {
+                if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                    console.warn('[Supabase] subscribeToMessages failed', error?.message || error);
                 }
+            }
+        };
 
-                const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
-                const time = updatedAt ? formatTimeUK(updatedAt) : '';
+        load();
 
-                return {
-                    id: docSnap.id,
-                    ...data,
-                    name,
-                    avatar,
-                    time,
-                    members: participants.length,
-                    unread: 0,
-                    isOnline,
-                    isGroup,
-                    isMuted: mutedChatIds.includes(docSnap.id),
-                    me: auth.currentUser?.uid || uid
-                };
-            }));
-            const visibleChats = chats.filter((chat) => {
-                if (chat?.isGroup) return true;
-                const otherId = Array.isArray(chat?.participants)
-                    ? chat.participants.find((id) => id !== uid)
-                    : null;
-                return !otherId || !blockedUserIds.includes(otherId);
-            });
-            callback(visibleChats);
-        });
+        const channel = supabase
+            .channel(randomChannel('messages', chatId))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, load)
+            .subscribe();
+
+        return () => {
+            active = false;
+            supabase.removeChannel(channel);
+        };
     },
+
+    subscribeToChatList: (uid, callback) => subscribeWithReload({
+        uid,
+        callback,
+        tables: ['chats', 'chat_participants', 'messages'],
+    }),
 
     subscribeUnreadCounts: (uid, callback) => {
         if (!uid) {
             callback({ byChat: {}, total: 0 });
             return () => {};
         }
-        const q = query(
-            collection(db, 'notifications'),
-            where('uid', '==', uid),
-            where('type', '==', 'CHAT_MESSAGE'),
-            where('read', '==', false)
-        );
-        return onSnapshot(q, (snapshot) => {
-            const byChat = {};
-            snapshot.docs.forEach((docSnap) => {
-                const chatId = docSnap.data()?.chatId;
-                if (!chatId) return;
-                byChat[chatId] = (byChat[chatId] || 0) + 1;
-            });
-            callback({
-                byChat,
-                total: snapshot.size
-            });
-        }, () => {
-            callback({ byChat: {}, total: 0 });
-        });
+
+        const pushCounts = async () => {
+            try {
+                const chats = await fetchChatList(uid);
+                const byChat = chats.reduce((acc, chat) => {
+                    acc[chat.id] = Number(chat.unread || 0);
+                    return acc;
+                }, {});
+                const total = Object.values(byChat).reduce((sum, value) => sum + Number(value || 0), 0);
+                callback({ byChat, total });
+            } catch {
+                callback({ byChat: {}, total: 0 });
+            }
+        };
+
+        pushCounts();
+        const channel = supabase
+            .channel(randomChannel('unread', uid))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, pushCounts)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_participants', filter: `user_id=eq.${uid}` }, pushCounts)
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
-    markChatNotificationsRead: async (chatId, uid = auth.currentUser?.uid) => {
+    markChatNotificationsRead: async (chatId, uid = null) => {
         if (!uid || !chatId) return;
-        const q = query(
-            collection(db, 'notifications'),
-            where('uid', '==', uid),
-            where('type', '==', 'CHAT_MESSAGE'),
-            where('chatId', '==', chatId),
-            where('read', '==', false)
-        );
-        const snap = await getDocs(q);
-        if (snap.empty) return;
-        const batch = writeBatch(db);
-        snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
-        await batch.commit();
-        await updateDoc(doc(db, 'chats', chatId), {
-            lastMessageReadBy: arrayUnion(uid)
-        }).catch(() => {});
+        await supabase
+            .from('chat_participants')
+            .update({ last_read_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq('chat_id', chatId)
+            .eq('user_id', uid);
     },
 
     preloadChatList: async (uid) => {
         if (!uid) return [];
-        const q = query(
-            collection(db, 'chats'),
-            where('participants', 'array-contains', uid),
-            orderBy('updatedAt', 'desc')
-        );
-        const [snapshot, selfDoc] = await Promise.all([
-            getDocs(q),
-            getDoc(doc(db, 'users', uid)).catch(() => null)
-        ]);
-        const blockedUserIds = Array.isArray(selfDoc?.data?.()?.blockedUserIds) ? selfDoc.data().blockedUserIds : [];
-        const mutedChatIds = Array.isArray(selfDoc?.data?.()?.mutedChatIds) ? selfDoc.data().mutedChatIds : [];
-        const circleCache = new Map();
-        const chats = await Promise.all(snapshot.docs.map(async (docSnap) => {
-            const data = docSnap.data();
-            const participants = data.participants || [];
-            const isGroup = data.type === 'group' || participants.length > 2;
-            let name = data.name || 'Chat';
-            let avatar = data.avatar || null;
-            let isOnline = false;
+        return fetchChatList(uid);
+    },
 
-            if (!isGroup) {
-                const otherId = participants.find((id) => id !== uid);
-                if (otherId) {
-                    try {
-                        const [userDoc, presence] = await Promise.all([
-                            getDoc(doc(db, 'users', otherId)),
-                            presenceRepository.getPresence(otherId).catch(() => ({ state: 'offline' }))
-                        ]);
-                        const userData = userDoc.exists() ? userDoc.data() : {};
-                        name = userData?.name || userData?.displayName || 'Anonymous';
-                        avatar = userData?.photoURL || null;
-                        isOnline = isPresenceOnline(presence);
-                        data.wellbeingScore = resolveWellbeingScore(userData);
-                        data.wellbeingLabel = userData?.wellbeingLabel || userData?.wellbeingStatus || '';
-                    } catch {
-                        // Ignore enrichment errors.
-                    }
+    subscribeToParticipantProfiles: (chatId, callback) => {
+        if (!chatId) return () => {};
+        let active = true;
+        const load = async () => {
+            try {
+                const profiles = await fetchParticipantProfiles(chatId);
+                if (active) callback(profiles);
+            } catch (error) {
+                if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                    console.warn('[Supabase] subscribeToParticipantProfiles failed', error?.message || error);
                 }
-            } else if (data?.circleId) {
-                try {
-                    const circleId = data.circleId;
-                    if (!circleCache.has(circleId)) {
-                        const circleDoc = await getDoc(doc(db, 'circles', circleId));
-                        circleCache.set(circleId, circleDoc.exists() ? (circleDoc.data() || {}) : null);
-                    }
-                    const circleData = circleCache.get(circleId);
-                    if (circleData) {
-                        name = circleData?.name || name;
-                        avatar = circleData?.image || circleData?.avatar || circleData?.photoURL || avatar || null;
-                    }
-                } catch {
-                    // Ignore group enrichment errors.
-                }
+                if (active) callback([]);
             }
-
-            const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
-            const time = updatedAt ? formatTimeUK(updatedAt) : '';
-            return {
-                id: docSnap.id,
-                ...data,
-                name,
-                avatar,
-                time,
-                members: participants.length,
-                unread: 0,
-                isOnline,
-                isGroup,
-                isMuted: mutedChatIds.includes(docSnap.id),
-                me: auth.currentUser?.uid || uid
-            };
-        }));
-        return chats.filter((chat) => {
-            if (chat?.isGroup) return true;
-            const otherId = Array.isArray(chat?.participants)
-                ? chat.participants.find((id) => id !== uid)
-                : null;
-            return !otherId || !blockedUserIds.includes(otherId);
-        });
+        };
+        load();
+        const channel = supabase
+            .channel(randomChannel('chat-participants', chatId))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_participants', filter: `chat_id=eq.${chatId}` }, load)
+            .subscribe();
+        return () => {
+            active = false;
+            supabase.removeChannel(channel);
+        };
     },
 
     setTyping: (chatId, isTyping) => {
-        const uid = auth.currentUser?.uid;
-        return liveStateRepository.setTyping(chatId, uid, isTyping);
+        return supabase.auth.getUser().then(({ data }) => liveStateRepository.setTyping(chatId, data.user?.id, isTyping));
     },
 
     subscribeTyping: (chatId, callback) => {
         return liveStateRepository.subscribeTyping(chatId, callback);
-    }
+    },
+
+    serializeChatForNavigation,
 };

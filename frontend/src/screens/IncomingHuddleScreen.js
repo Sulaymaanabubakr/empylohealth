@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View, Vibration } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
 import { COLORS } from '../theme/theme';
 import { huddleService } from '../services/api/huddleService';
 import { callDiagnostics } from '../services/calling/callDiagnostics';
@@ -11,6 +9,7 @@ import { loopingSound } from '../services/audio/loopingSound';
 import Avatar from '../components/Avatar';
 
 // Audio playback is handled via loopingSound (expo-audio).
+const RINGBACK_REPEAT_MS = 4200;
 
 const safeCall = async (fn) => {
   try {
@@ -32,9 +31,22 @@ export default function IncomingHuddleScreen({ navigation, route }) {
   const [processing, setProcessing] = useState(false);
   const ringtoneRef = useRef(null);
   const ringtoneSessionRef = useRef(0);
+  const vibrationIntervalRef = useRef(null);
+  const ringtoneReplayIntervalRef = useRef(null);
 
-  const stopRingtone = useCallback(async () => {
-    ringtoneSessionRef.current += 1;
+  const stopRingtone = useCallback(async (invalidateSession = true) => {
+    if (invalidateSession) {
+      ringtoneSessionRef.current += 1;
+    }
+    if (vibrationIntervalRef.current) {
+      clearInterval(vibrationIntervalRef.current);
+      vibrationIntervalRef.current = null;
+    }
+    if (ringtoneReplayIntervalRef.current) {
+      clearInterval(ringtoneReplayIntervalRef.current);
+      ringtoneReplayIntervalRef.current = null;
+    }
+    Vibration.cancel();
     const instance = ringtoneRef.current;
     ringtoneRef.current = null;
     if (!instance) return;
@@ -42,40 +54,49 @@ export default function IncomingHuddleScreen({ navigation, route }) {
   }, []);
 
   const startRingtone = useCallback(async () => {
+    await stopRingtone(false);
     const sessionId = ringtoneSessionRef.current + 1;
     ringtoneSessionRef.current = sessionId;
-    await stopRingtone();
 
     const instance = await safeCall(() => loopingSound.createAndPlay(
       require('../assets/sounds/ringback.wav'),
-      { volume: 1.0 }
+      { volume: 1.0, loop: false }
     ));
-    if (!instance?.handle) return;
+    if (!instance?.handle) {
+      Vibration.vibrate(350);
+      vibrationIntervalRef.current = setInterval(() => {
+        Vibration.vibrate(350);
+      }, RINGBACK_REPEAT_MS);
+      return;
+    }
     if (ringtoneSessionRef.current !== sessionId) {
       await safeCall(() => loopingSound.stopAndUnload(instance));
       return;
     }
     ringtoneRef.current = instance;
+    ringtoneReplayIntervalRef.current = setInterval(() => {
+      if (ringtoneSessionRef.current !== sessionId || !ringtoneRef.current?.handle) return;
+      safeCall(async () => {
+        await ringtoneRef.current.handle.seekTo?.(0);
+        ringtoneRef.current.handle.play?.();
+      });
+    }, RINGBACK_REPEAT_MS);
   }, [stopRingtone]);
 
   useEffect(() => {
     if (!huddleId) return undefined;
-    const ref = doc(db, 'huddles', huddleId);
-    const unsub = onSnapshot(ref, (snap) => {
+    const unsub = huddleService.subscribeToHuddle(huddleId, (data) => {
       setLoading(false);
-      if (!snap.exists()) {
+      if (!data) {
         setStatus('ended');
         return;
       }
-      const data = snap.data() || {};
       const next = data.status || null;
       setStatus(next);
       if (next === 'ended' || data.isActive === false) {
         stopRingtone();
         navigation.goBack();
       }
-    }, () => {
-      setLoading(false);
     });
     return unsub;
   }, [huddleId, navigation, stopRingtone]);

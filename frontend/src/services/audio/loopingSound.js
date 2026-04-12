@@ -25,17 +25,22 @@ const resolveImpl = () => {
 };
 
 export const loopingSound = {
-  createAndPlay: async (assetModuleId, { volume = 1.0 } = {}) => {
+  createAndPlay: async (assetModuleId, { volume = 1.0, loop = true } = {}) => {
     const impl = resolveImpl();
     if (impl.kind === 'expo-audio') {
+      await impl.mod.setIsAudioActiveAsync?.(true);
       await impl.mod.setAudioModeAsync?.({
         playsInSilentMode: true,
-        interruptionMode: 'duckOthers',
+        interruptionMode: 'doNotMix',
+        shouldPlayInBackground: true,
+        shouldRouteThroughEarpiece: false,
       });
-      const player = impl.mod.createAudioPlayer(assetModuleId);
-      player.loop = true;
+      const player = impl.mod.createAudioPlayer(assetModuleId, {
+        keepAudioSessionActive: true,
+      });
+      player.loop = loop;
       player.volume = volume;
-      await player.play?.();
+      player.play?.();
       return { kind: impl.kind, handle: player };
     }
 
@@ -49,6 +54,7 @@ export const loopingSound = {
       await handle.pause?.();
       await handle.seekTo?.(0);
       await handle.remove?.();
+      await resolveImpl().mod?.setIsAudioActiveAsync?.(false);
       return;
     }
   }

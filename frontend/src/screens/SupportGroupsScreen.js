@@ -9,13 +9,11 @@ import { circleService } from '../services/api/circleService';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { MAX_CIRCLE_MEMBERS, getCircleBillingTier, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
-import { db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { useModal } from '../context/ModalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchActiveMemberIdsMap, getActiveMemberCount, getDisplayMemberIds } from '../services/circles/activeMembers';
-import { callableClient } from '../services/api/callableClient';
+import { userService } from '../services/api/userService';
 
 const normalizeText = (value = '') => String(value || '').trim().toLowerCase();
 const getCircleFilterValues = (group = {}) => {
@@ -26,12 +24,6 @@ const getCircleFilterValues = (group = {}) => {
 };
 const buildCircleFilterTerms = (group = {}) => {
     return new Set(getCircleFilterValues(group).map(normalizeText).filter(Boolean));
-};
-
-const isPermissionDeniedError = (error) => {
-    const code = String(error?.code || '');
-    const message = String(error?.message || '').toLowerCase();
-    return code.includes('permission-denied') || message.includes('permission');
 };
 
 const calculateCircleRating = (circle) => {
@@ -200,8 +192,7 @@ const SupportGroupsScreen = ({ route }) => {
                     const ids = getDisplayMemberIds(group?.id, group?.members || [], activeMemberIdsMap).slice(0, MAX_CIRCLE_MEMBERS);
                     const members = await Promise.all(ids.map(async (uid) => {
                         try {
-                            const snap = await getDoc(doc(db, 'users', uid));
-                            const data = snap.exists() ? snap.data() : {};
+                            const data = await userService.getUserDocument(uid);
                             return {
                                 uid,
                                 name: data?.name || data?.displayName || 'Member',
@@ -210,20 +201,6 @@ const SupportGroupsScreen = ({ route }) => {
                                 wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || ''
                             };
                         } catch (error) {
-                            if (isPermissionDeniedError(error)) {
-                                try {
-                                    const publicProfile = await callableClient.invokeWithAuth('getPublicProfile', { uid });
-                                    return {
-                                        uid,
-                                        name: publicProfile?.name || 'Member',
-                                        photoURL: publicProfile?.photoURL || '',
-                                        wellbeingScore: publicProfile?.wellbeingScore ?? null,
-                                        wellbeingLabel: publicProfile?.wellbeingLabel || ''
-                                    };
-                                } catch {
-                                    // Continue to generic fallback below.
-                                }
-                            }
                             return { uid, name: 'Member', photoURL: '' };
                         }
                     }));

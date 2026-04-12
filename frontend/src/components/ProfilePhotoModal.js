@@ -4,7 +4,18 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
-const ProfilePhotoModal = ({ visible, onClose, currentImage, onUseAvatar, onTakePhoto, onChoosePhoto, onDeletePhoto }) => {
+const ProfilePhotoModal = ({
+    visible,
+    onClose,
+    currentImage,
+    onUseAvatar,
+    onTakePhoto,
+    onChoosePhoto,
+    onDeletePhoto,
+    showUseAvatar = true,
+    showDeletePhoto = true,
+    title = 'Edit Profile Picture',
+}) => {
     return (
         <Modal
             animationType="slide"
@@ -23,19 +34,22 @@ const ProfilePhotoModal = ({ visible, onClose, currentImage, onUseAvatar, onTake
                                 <View style={[styles.profileImage, { backgroundColor: '#E0E0E0' }]} />
                             )}
                         </View>
-                        <Text style={styles.title}>Edit Profile Picture</Text>
+                        <Text style={styles.title}>{title}</Text>
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                             <Ionicons name="close-circle" size={24} color="#BDBDBD" />
                         </TouchableOpacity>
                     </View>
 
                     <View style={styles.optionsContainer}>
-                        <TouchableOpacity style={styles.optionItem} onPress={onUseAvatar}>
-                            <Text style={styles.optionText}>Use Avatar</Text>
-                            <MaterialCommunityIcons name="face-man-profile" size={22} color="#424242" />
-                        </TouchableOpacity>
-
-                        <View style={styles.divider} />
+                        {showUseAvatar && (
+                            <>
+                                <TouchableOpacity style={styles.optionItem} onPress={onUseAvatar}>
+                                    <Text style={styles.optionText}>Use Avatar</Text>
+                                    <MaterialCommunityIcons name="face-man-profile" size={22} color="#424242" />
+                                </TouchableOpacity>
+                                <View style={styles.divider} />
+                            </>
+                        )}
 
                         <TouchableOpacity style={styles.optionItem} onPress={onTakePhoto}>
                             <Text style={styles.optionText}>Take Photo</Text>
@@ -51,10 +65,15 @@ const ProfilePhotoModal = ({ visible, onClose, currentImage, onUseAvatar, onTake
 
                         <View style={styles.divider} />
 
-                        <TouchableOpacity style={[styles.optionItem, styles.lastItem]} onPress={onDeletePhoto}>
-                            <Text style={styles.optionText}>Delete Photo</Text>
-                            <Ionicons name="trash-outline" size={22} color="#FF5252" />
-                        </TouchableOpacity>
+                        {showDeletePhoto && (
+                            <>
+                                <View style={styles.divider} />
+                                <TouchableOpacity style={[styles.optionItem, styles.lastItem]} onPress={onDeletePhoto}>
+                                    <Text style={styles.optionText}>Delete Photo</Text>
+                                    <Ionicons name="trash-outline" size={22} color="#FF5252" />
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 </View>
             </View>

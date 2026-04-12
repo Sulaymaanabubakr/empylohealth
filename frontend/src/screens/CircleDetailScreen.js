@@ -4,14 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
-import { db } from '../services/firebaseConfig';
-import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
 import { chatService } from '../services/api/chatService';
-import { callableClient } from '../services/api/callableClient';
 import { LinearGradient } from 'expo-linear-gradient';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { getCircleBillingTier, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
@@ -21,6 +18,8 @@ import { isPresenceOnline, presenceFreshnessMs } from '../utils/presence';
 import { formatDateUK } from '../utils/dateFormat';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
+import { supabase } from '../services/supabase/supabaseClient';
+import { userService } from '../services/api/userService';
 
 const { width } = Dimensions.get('window');
 
@@ -47,12 +46,6 @@ const isJoinableHuddleDoc = (huddleData) => {
     if (!huddleData) return false;
     const status = String(huddleData?.status || '').toLowerCase();
     return huddleData?.isActive !== false && status !== 'ended';
-};
-
-const isPermissionDeniedError = (error) => {
-    const code = String(error?.code || '');
-    const message = String(error?.message || '').toLowerCase();
-    return code.includes('permission-denied') || message.includes('permission');
 };
 
 const CircleDetailScreen = ({ navigation, route }) => {
@@ -102,23 +95,30 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
     useEffect(() => {
         if (!circleId) return undefined;
-        const circleRef = doc(db, 'circles', circleId);
-        const unsubscribeCircle = onSnapshot(circleRef, (snap) => {
-            if (snap.exists()) {
-                setCircle({ id: snap.id, ...snap.data() });
+        let active = true;
+        const load = async () => {
+            try {
+                const nextCircle = await circleService.getCircleById(circleId);
+                if (active && nextCircle) setCircle(nextCircle);
+            } catch (error) {
+                console.error('Failed to subscribe to circle updates', error);
             }
-        }, (error) => {
-            console.error('Failed to subscribe to circle updates', error);
-        });
+        };
+        load();
+        const channel = supabase
+            .channel(`circle-detail:${circleId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'circles', filter: `id=eq.${circleId}` }, load)
+            .subscribe();
 
-        return () => unsubscribeCircle();
+        return () => {
+            active = false;
+            supabase.removeChannel(channel).catch(() => {});
+        };
     }, [circleId]);
 
     useEffect(() => {
         if (!isPotentiallyActiveHuddle(circle?.activeHuddle)) return undefined;
-        const huddleRef = doc(db, 'huddles', circle.activeHuddle.huddleId);
-        return onSnapshot(huddleRef, (snap) => {
-            const data = snap.exists() ? (snap.data() || {}) : null;
+        return huddleService.subscribeToHuddle(circle.activeHuddle.huddleId, (data) => {
             if (!isJoinableHuddleDoc(data)) {
                 setCircle((prev) => (prev ? { ...prev, activeHuddle: null } : prev));
             }
@@ -139,54 +139,54 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
         // 1. Load Public Profiles
         const loadMembers = async () => {
-            // ... (keep existing loadMembers logic short for brevity, just hook placement)
-            if (!Array.isArray(circle?.members) || circle.members.length === 0) {
+            if (!circle?.id) {
                 setMemberProfiles([]);
                 return;
             }
             try {
+                const { data: memberRows, error: membersError } = await supabase
+                    .from('circle_members')
+                    .select('user_id, role')
+                    .eq('circle_id', circle.id)
+                    .eq('status', 'active');
+                if (membersError) throw membersError;
+
+                const resolvedMemberRows = Array.isArray(memberRows) ? memberRows : [];
+                const resolvedMemberIds = resolvedMemberRows.map((row) => row.user_id).filter(Boolean);
+                const effectiveMemberIds = resolvedMemberIds.length > 0 ? resolvedMemberIds : memberIds;
+
+                if (effectiveMemberIds.length === 0) {
+                    setMemberProfiles([]);
+                    return;
+                }
+
+                const roleByUid = new Map(
+                    resolvedMemberRows.map((row) => [row.user_id, row.role || (row.user_id === circle.adminId ? 'admin' : 'member')])
+                );
+
                 const docs = await Promise.all(
-                    circle.members.map(async (uid) => {
+                    effectiveMemberIds.map(async (uid) => {
                         const [presence, memberDoc, profile] = await Promise.all([
                             presenceRepository.getPresence(uid).catch(() => ({ state: 'offline' })),
-                            knownMember
-                                ? getDoc(doc(db, 'circles', circle.id, 'members', uid)).catch(() => null)
-                                : Promise.resolve(null),
+                            Promise.resolve({ data: { role: roleByUid.get(uid) } }),
                             (async () => {
                                 try {
-                                    const userDoc = await getDoc(doc(db, 'users', uid));
-                                    const data = userDoc.exists() ? userDoc.data() : {};
+                                    const data = await userService.getUserDocument(uid);
                                     return {
                                         name: data?.name || data?.displayName || 'Member',
                                         photoURL: data?.photoURL || '',
                                         score: resolveMemberScore(data)
                                     };
                                 } catch (error) {
-                                    if (!isPermissionDeniedError(error)) {
-                                        return {
-                                            name: 'Member',
-                                            photoURL: '',
-                                            score: null
-                                        };
-                                    }
-                                    try {
-                                        const publicProfile = await callableClient.invokeWithAuth('getPublicProfile', { uid });
-                                        return {
-                                            name: publicProfile?.name || 'Member',
-                                            photoURL: publicProfile?.photoURL || '',
-                                            score: resolveMemberScore(publicProfile)
-                                        };
-                                    } catch {
-                                        return {
-                                            name: 'Member',
-                                            photoURL: '',
-                                            score: null
-                                        };
-                                    }
+                                    return {
+                                        name: 'Member',
+                                        photoURL: '',
+                                        score: null
+                                    };
                                 }
                             })()
                         ]);
-                        const memberData = memberDoc?.exists?.() ? memberDoc.data() : {};
+                        const memberData = memberDoc?.data || {};
                         const memberRole = memberData?.role || (uid === circle.adminId ? 'admin' : 'member');
                         return {
                             id: uid,
@@ -209,36 +209,36 @@ const CircleDetailScreen = ({ navigation, route }) => {
         let unsubscribe = () => {};
         let unsubscribeEvents = () => {};
 
-        if (knownMember) {
-            unsubscribe = circleService.subscribeToCircleMember(
-                circleId,
-                user.uid,
-                (member) => {
-                    if (member) {
-                        if (member.status === 'pending' || member.role === 'pending') {
-                            setRequestStatus('pending');
-                            setIsMember(false);
-                            setRole(null);
-                        } else {
-                            setRole(member.role || 'member');
-                            setIsMember(true);
-                            setRequestStatus('none');
-                            if (!circle.members?.includes(user.uid)) {
-                                refreshCircle();
-                            }
-                        }
-                    } else {
-                        setRole(null);
+        unsubscribe = circleService.subscribeToCircleMember(
+            circleId,
+            user.uid,
+            (member) => {
+                if (member) {
+                    if (member.status === 'pending' || member.role === 'pending') {
+                        setRequestStatus('pending');
                         setIsMember(false);
+                        setRole(null);
+                    } else {
+                        setRole(member.role || 'member');
+                        setIsMember(true);
+                        setRequestStatus('none');
+                        if (!circle.members?.includes(user.uid)) {
+                            refreshCircle();
+                        }
                     }
-                },
-                (error) => {
-                    console.warn('Failed to subscribe to circle member', error?.code || error?.message || error);
+                } else {
                     setRole(null);
                     setIsMember(false);
                 }
-            );
+            },
+            (error) => {
+                console.warn('Failed to subscribe to circle member', error?.code || error?.message || error);
+                setRole(null);
+                setIsMember(false);
+            }
+        );
 
+        if (knownMember) {
             unsubscribeEvents = circleService.subscribeToScheduledHuddles(
                 circleId,
                 (list) => setEvents(list),
@@ -264,14 +264,25 @@ const CircleDetailScreen = ({ navigation, route }) => {
             return undefined;
         }
 
-        const requestsRef = collection(db, 'circles', circleId, 'requests');
-        const unsubRequests = onSnapshot(requestsRef, (snap) => {
-            setPendingRequestsCount(snap.size);
-        }, () => {
-            setPendingRequestsCount(0);
-        });
+        let active = true;
+        const load = async () => {
+            try {
+                const requests = await circleService.listCircleRequests(circleId);
+                if (active) setPendingRequestsCount(requests.length);
+            } catch {
+                if (active) setPendingRequestsCount(0);
+            }
+        };
+        load();
+        const channel = supabase
+            .channel(`circle-detail-requests:${circleId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'circle_join_requests', filter: `circle_id=eq.${circleId}` }, load)
+            .subscribe();
 
-        return () => unsubRequests();
+        return () => {
+            active = false;
+            supabase.removeChannel(channel).catch(() => {});
+        };
     }, [circleId, role]);
 
     useEffect(() => {
@@ -452,7 +463,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                 });
                 return;
             }
-            navigation.navigate('ChatDetail', { chat: directChat });
+            navigation.navigate('ChatDetail', { chat: chatService.serializeChatForNavigation(directChat) });
         } catch (error) {
             setMemberModalVisible(false);
             showModal({ type: 'error', title: 'Error', message: 'Unable to open chat right now.' });
@@ -619,15 +630,28 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => {
-                                        if (circle.chatId) {
+                                    onPress={async () => {
+                                        let resolvedChatId = circle.chatId || null;
+                                        if (!resolvedChatId) {
+                                            try {
+                                                const result = await circleService.ensureCircleChat(circle.id);
+                                                resolvedChatId = result?.chatId || null;
+                                                if (resolvedChatId) {
+                                                    setCircle((prev) => (prev ? { ...prev, chatId: resolvedChatId } : prev));
+                                                }
+                                            } catch (error) {
+                                                resolvedChatId = null;
+                                            }
+                                        }
+
+                                        if (resolvedChatId) {
                                             navigation.navigate('ChatDetail', {
-                                                chat: {
-                                                    id: circle.chatId,
+                                                chat: chatService.serializeChatForNavigation({
+                                                    id: resolvedChatId,
                                                     name: circle.name,
                                                     isGroup: true,
                                                     circleId: circle.id // Pass circleId for reporting context
-                                                }
+                                                })
                                             });
                                         } else {
                                             showModal({ type: 'info', title: 'Chat unavailable', message: 'This circle does not have a chat yet.' });
@@ -644,20 +668,37 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                 <TouchableOpacity
                                     style={styles.actionItem}
                                     onPress={async () => {
-                                        if (!circle.chatId) {
+                                        let resolvedChatId = circle.chatId || null;
+                                        if (!resolvedChatId) {
+                                            try {
+                                                const result = await circleService.ensureCircleChat(circle.id);
+                                                resolvedChatId = result?.chatId || null;
+                                                if (resolvedChatId) {
+                                                    setCircle((prev) => (prev ? { ...prev, chatId: resolvedChatId } : prev));
+                                                }
+                                            } catch (error) {
+                                                resolvedChatId = null;
+                                            }
+                                        }
+
+                                        if (!resolvedChatId) {
                                             showModal({ type: 'info', title: 'Huddle unavailable', message: 'This circle does not have a chat yet.' });
                                             return;
                                         }
 
                                             const active = circle?.activeHuddle;
                                             if (isPotentiallyActiveHuddle(active)) {
-                                                const huddleSnap = await getDoc(doc(db, 'huddles', active.huddleId)).catch(() => null);
-                                                const huddleData = huddleSnap?.exists?.() ? (huddleSnap.data() || {}) : null;
+                                                const { data: huddleData } = await supabase
+                                                    .from('huddles')
+                                                    .select('*')
+                                                    .eq('id', active.huddleId)
+                                                    .maybeSingle()
+                                                    .catch(() => ({ data: null }));
                                                 const canJoinCurrent = isJoinableHuddleDoc(huddleData);
 
                                                 if (canJoinCurrent) {
                                                     navigation.navigate('Huddle', {
-                                                        chat: { id: circle.chatId, name: circle.name, isGroup: true },
+                                                        chat: { id: resolvedChatId, name: circle.name, isGroup: true },
                                                         huddleId: active.huddleId,
                                                         mode: 'join',
                                                         callTapTs: Date.now()
@@ -694,7 +735,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                             }
 
                                             navigation.navigate('Huddle', {
-                                                chat: { id: circle.chatId, name: circle.name, isGroup: true },
+                                                chat: { id: resolvedChatId, name: circle.name, isGroup: true },
                                                 mode: 'start',
                                                 callTapTs: Date.now(),
                                                 subscriptionGrant: huddleGuard.grantedMinutes ? { grantedMinutes: huddleGuard.grantedMinutes } : undefined

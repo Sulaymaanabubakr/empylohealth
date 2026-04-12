@@ -5,44 +5,57 @@ import { Ionicons } from '@expo/vector-icons';
 import { SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
-import { collection, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
 import { notificationService } from '../services/api/notificationService';
+import { supabase } from '../services/supabase/supabaseClient';
 
 const NotificationsScreen = ({ navigation }) => {
   const { user, userData } = useAuth();
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
-  if (!user?.uid) return null;
-    const q = query(
-      collection(db, 'notifications'),
-      where('uid', '==', user.uid)
-    );
-    return onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return { id: doc.id, ...data };
-      });
-      items.sort((a, b) => {
-        const aMs = a.createdAt?.toMillis?.() || 0;
-        const bMs = b.createdAt?.toMillis?.() || 0;
-        return bMs - aMs;
-      });
-      setNotifications(items);
+    if (!user?.uid) return null;
+    let active = true;
 
-      const unreadDocs = snapshot.docs.filter((d) => d.data()?.read !== true);
-      if (unreadDocs.length > 0) {
-        const batch = writeBatch(db);
-        unreadDocs.forEach((d) => {
-          batch.update(d.ref, { read: true });
-        });
-        batch.commit().catch(() => {});
+    const load = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.uid)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+
+        const items = (data || []).map((item) => ({
+          id: item.id,
+          ...item,
+          createdAt: item.created_at || null,
+        }));
+
+        if (active) {
+          setNotifications(items);
+        }
+
+        const unreadIds = items.filter((item) => item.read !== true).map((item) => item.id);
+        if (unreadIds.length) {
+          await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
+        }
+      } catch (error) {
+        console.log('Notifications query failed:', error);
+        if (active) setNotifications([]);
       }
-    }, (error) => {
-      console.log('Notifications query failed:', error);
-      setNotifications([]);
-    });
+    };
+
+    load();
+
+    const channel = supabase
+      .channel(`notifications:${user.uid}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.uid}` }, load)
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel).catch(() => {});
+    };
   }, [user?.uid]);
 
   const { todayNotifications, earlierNotifications } = useMemo(() => {
@@ -50,7 +63,7 @@ const NotificationsScreen = ({ navigation }) => {
     const today = [];
     const earlier = [];
     notifications.forEach((item) => {
-      const createdAt = item.createdAt?.toDate ? item.createdAt.toDate() : (item.createdAt ? new Date(item.createdAt) : null);
+      const createdAt = item.createdAt ? new Date(item.createdAt) : null;
       const bucket = createdAt && createdAt.toDateString() === todayKey ? today : earlier;
       bucket.push(item);
     });

@@ -3,12 +3,11 @@ import { InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../services/auth/authService';
 import { notificationService } from '../services/api/notificationService';
-import { profileRepository } from '../services/repositories/ProfileRepository';
+import { authProfileService } from '../services/auth/authProfileService';
 import { profileCache } from '../services/bootstrap/profileCache';
 import { perfLogger } from '../services/diagnostics/perfLogger';
 import { logNetworkRegionDebug } from '../services/diagnostics/networkRegionDebug';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
-import { callableClient } from '../services/api/callableClient';
 import { appPreloadService } from '../services/bootstrap/appPreloadService';
 import { getDeviceIdentity } from '../services/auth/deviceIdentity';
 import { useToast } from './ToastContext';
@@ -30,9 +29,17 @@ const ACCOUNT_DELETION_FLAG_PREFIX = 'accountDeletionPending:';
 
 const decideInitialRoute = (user, profile) => {
     if (!user) return ROUTE_TARGETS.UNAUTH;
-    // UX decision: authenticated users should land in-app directly.
-    // Profile setup remains optional and should be user-initiated, not forced on boot.
+    if (!profile?.onboardingCompleted) return ROUTE_TARGETS.PROFILE_SETUP;
     return ROUTE_TARGETS.APP;
+};
+
+const decideCachedRoute = (user, profile) => {
+    if (!user) return ROUTE_TARGETS.UNAUTH;
+    // Only use cached profile data to fast-path known completed users into the app.
+    // Incomplete cached profiles may be stale, so let the network profile confirm
+    // before forcing users back through profile setup.
+    if (profile?.onboardingCompleted) return ROUTE_TARGETS.APP;
+    return null;
 };
 
 export const AuthProvider = ({ children, onAuthReady }) => {
@@ -45,12 +52,25 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
     const profileUnsubscribeRef = useRef(null);
     const presenceCleanupRef = useRef(null);
+    const activeAuthUidRef = useRef(null);
     const authStartRef = useRef(Date.now());
     const hasNotifiedAuthReadyRef = useRef(false);
     const networkProfileBootstrappedRef = useRef(false);
     const preloadedUidRef = useRef(null);
     const loginDeviceReportedRef = useRef('');
     const timezoneSyncedRef = useRef('');
+
+    const waitForProfileBootstrap = async (uid, timeoutMs = 4000) => {
+        const start = Date.now();
+        while ((Date.now() - start) < timeoutMs) {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            const profile = await authProfileService.getProfile(uid).catch(() => null);
+            if (profile) {
+                return profile;
+            }
+        }
+        return null;
+    };
 
     const loading = bootPhase !== BOOT_PHASES.READY;
     const runAfterUiSettles = (task) => {
@@ -91,6 +111,20 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
         const unsubscribe = authService.onAuthStateChanged(async (currentUser) => {
             perfLogger.log('time_to_auth_resolve', Date.now() - authStartRef.current);
+            console.log('[BOOT] Auth state changed', { uid: currentUser?.uid || null });
+
+            const nextUid = currentUser?.uid || null;
+            const sameAuthenticatedUser =
+                Boolean(nextUid)
+                && activeAuthUidRef.current === nextUid
+                && profileUnsubscribeRef.current
+                && networkProfileBootstrappedRef.current;
+
+            if (sameAuthenticatedUser) {
+                setUser((previous) => previous || currentUser);
+                return;
+            }
+
             networkProfileBootstrappedRef.current = false;
 
             if (profileUnsubscribeRef.current) {
@@ -105,47 +139,41 @@ export const AuthProvider = ({ children, onAuthReady }) => {
             setUser(currentUser);
 
             if (!currentUser) {
+                activeAuthUidRef.current = null;
                 setUserData(null);
                 setRouteTarget(ROUTE_TARGETS.UNAUTH);
                 setBootPhase(BOOT_PHASES.READY);
                 preloadedUidRef.current = null;
                 loginDeviceReportedRef.current = '';
+                timezoneSyncedRef.current = '';
                 return;
             }
 
-            if (loginDeviceReportedRef.current !== currentUser.uid) {
-                loginDeviceReportedRef.current = currentUser.uid;
-                runAfterUiSettles(async () => {
-                    const deviceIdentity = await getDeviceIdentity();
-                    await authService.recordLoginDevice(deviceIdentity);
-                });
-            }
-
-            const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-            const timezoneSyncKey = `${currentUser.uid}:${currentTz}`;
-            if (timezoneSyncedRef.current !== timezoneSyncKey) {
-                timezoneSyncedRef.current = timezoneSyncKey;
-                runAfterUiSettles(async () => {
-                    await profileRepository.updateProfile(currentUser.uid, { timezone: currentTz });
-                });
-            }
-
             setBootPhase(BOOT_PHASES.PROFILE_RESOLVING);
+            activeAuthUidRef.current = currentUser.uid;
 
             const cachedProfile = await profileCache.load(currentUser.uid);
             if (cachedProfile) {
                 setUserData(cachedProfile);
-                setRouteTarget(decideInitialRoute(currentUser, cachedProfile));
-                setBootPhase(BOOT_PHASES.READY);
-                console.log('[BOOT] Route decision from cached profile:', decideInitialRoute(currentUser, cachedProfile));
+                const cachedRoute = decideCachedRoute(currentUser, cachedProfile);
+                if (cachedRoute) {
+                    setRouteTarget(cachedRoute);
+                    setBootPhase(BOOT_PHASES.READY);
+                    console.log('[BOOT] Route decision from cached profile:', cachedRoute);
+                } else {
+                    console.log('[BOOT] Cached profile requires network confirmation before routing', {
+                        uid: currentUser.uid,
+                        onboardingCompleted: Boolean(cachedProfile?.onboardingCompleted),
+                    });
+                }
             }
 
-            profileUnsubscribeRef.current = profileRepository.subscribeToProfile(
+            profileUnsubscribeRef.current = authProfileService.subscribeToProfile(
                 currentUser.uid,
                 async (profile) => {
-                    let normalizedProfile = profile;
-
-                    if (!profile) {
+                    let resolvedProfile = profile;
+                    if (!resolvedProfile) {
+                        console.log('[BOOT] No profile found for authenticated user', { uid: currentUser.uid });
                         const deletionFlag = await AsyncStorage.getItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${currentUser.uid}`);
                         if (deletionFlag === '1') {
                             await profileCache.clear(currentUser.uid).catch(() => {});
@@ -155,20 +183,57 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                             await authService.logout().catch(() => {});
                             return;
                         }
-
-                        normalizedProfile = {
-                            uid: currentUser.uid,
-                            email: currentUser.email || '',
-                            name: currentUser.displayName || '',
-                            photoURL: currentUser.photoURL || '',
-                            role: 'personal',
-                            onboardingCompleted: false
-                        };
-                        await profileRepository.ensureProfile(currentUser.uid, normalizedProfile);
+                        console.log('[BOOT] Waiting for profile bootstrap grace period', { uid: currentUser.uid });
+                        resolvedProfile = await waitForProfileBootstrap(currentUser.uid);
+                        if (resolvedProfile) {
+                            console.log('[BOOT] Profile appeared during grace period', { uid: currentUser.uid });
+                        }
                     }
 
+                    if (!resolvedProfile) {
+                        await profileCache.clear(currentUser.uid).catch(() => {});
+                        setUserData(null);
+                        setRouteTarget(ROUTE_TARGETS.UNAUTH);
+                        setBootPhase(BOOT_PHASES.READY);
+                        await authService.logout().catch(() => {});
+                        return;
+                    }
+
+                    const normalizedProfile = resolvedProfile;
                     setUserData(normalizedProfile);
                     await profileCache.save(currentUser.uid, normalizedProfile);
+
+                    if (loginDeviceReportedRef.current !== currentUser.uid) {
+                        loginDeviceReportedRef.current = currentUser.uid;
+                        runAfterUiSettles(async () => {
+                            const deviceIdentity = await getDeviceIdentity();
+                            await authService.recordLoginDevice(deviceIdentity);
+                        });
+                    }
+
+                    const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+                    const timezoneSyncKey = `${currentUser.uid}:${currentTz}`;
+                    if (timezoneSyncedRef.current !== timezoneSyncKey) {
+                        timezoneSyncedRef.current = timezoneSyncKey;
+                        runAfterUiSettles(async () => {
+                            await authProfileService.updateProfile(currentUser.uid, { timezone: currentTz });
+                        });
+                    }
+
+                    if (!presenceCleanupRef.current) {
+                        presenceCleanupRef.current = presenceRepository.startPresence(currentUser.uid);
+                    }
+
+                    runAfterUiSettles(async () => {
+                        await notificationService.registerForPushNotificationsAsync(currentUser.uid);
+                    });
+
+                    if (preloadedUidRef.current !== currentUser.uid) {
+                        preloadedUidRef.current = currentUser.uid;
+                        runAfterUiSettles(async () => {
+                            await appPreloadService.preloadForUser(currentUser.uid);
+                        });
+                    }
 
                     if (networkProfileBootstrappedRef.current) {
                         // After bootstrap is complete, keep profile fresh but avoid re-running boot routing/perf.
@@ -185,33 +250,12 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                 },
                 (error) => {
                     console.error('[BOOT] Profile listener failed:', error);
-                    const fallbackProfile = {
-                        uid: currentUser.uid,
-                        email: currentUser.email || '',
-                        name: currentUser.displayName || '',
-                        photoURL: currentUser.photoURL || '',
-                        role: 'personal',
-                        onboardingCompleted: false
-                    };
-                    setUserData(fallbackProfile);
-                    setRouteTarget(decideInitialRoute(currentUser, fallbackProfile));
+                    setUserData(null);
+                    setRouteTarget(ROUTE_TARGETS.UNAUTH);
                     setBootPhase(BOOT_PHASES.READY);
                     networkProfileBootstrappedRef.current = true;
                 }
             );
-
-            presenceCleanupRef.current = presenceRepository.startPresence(currentUser.uid);
-
-            runAfterUiSettles(async () => {
-                await notificationService.registerForPushNotificationsAsync(currentUser.uid);
-            });
-
-            if (preloadedUidRef.current !== currentUser.uid) {
-                preloadedUidRef.current = currentUser.uid;
-                runAfterUiSettles(async () => {
-                    await appPreloadService.preloadForUser(currentUser.uid);
-                });
-            }
         });
 
         const safetyTimer = setTimeout(() => {
@@ -291,14 +335,12 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const refreshUser = async () => {
         const currentUser = authService.getCurrentUser();
         if (currentUser) {
-            await currentUser.reload();
-            setUser({ ...authService.getCurrentUser() });
+            const refreshedUser = await authService.refreshCurrentUser();
+            setUser(refreshedUser ? { ...refreshedUser } : null);
         }
     };
 
     const deleteAccount = async () => {
-        // Still Functions-backed (privileged + cascade deletes).
-        // Implemented in backend as deleteUserAccount callable.
         const uid = user?.uid;
         if (!uid) {
             throw new Error('No authenticated user.');
@@ -306,7 +348,7 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
         await AsyncStorage.setItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${uid}`, '1');
         try {
-            await callableClient.invokeWithAuth('deleteUserAccount', {});
+            await authService.deleteAccount();
             await logout().catch(() => {});
             await profileCache.clear(uid).catch(() => {});
             await AsyncStorage.removeItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${uid}`).catch(() => {});

@@ -1,21 +1,7 @@
-import { auth, db } from '../firebaseConfig';
-import {
-    addDoc,
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    limit,
-    orderBy,
-    query,
-    serverTimestamp,
-    setDoc,
-    where
-} from 'firebase/firestore';
 import { labelFromWellbeingScore, normalizeWellbeingLabel } from '../../utils/wellbeing';
+import { supabase } from '../supabase/supabaseClient';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-
 const toValidNumber = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
 const LIKERT_SCORE_MAP = {
@@ -23,34 +9,32 @@ const LIKERT_SCORE_MAP = {
     Rarely: 2,
     Sometimes: 3,
     'Most times': 4,
-    Always: 5
+    Always: 5,
 };
 
 const buildThemesFromAnswers = async (answers = {}) => {
     const aggregates = {};
-    const normalizedAnswers = Object.entries(answers || {});
-    if (!normalizedAnswers.length) return {};
+    const entries = Object.entries(answers || {});
+    if (!entries.length) return {};
 
-    const questionsSnap = await getDocs(query(
-        collection(db, 'assessment_questions'),
-        where('isActive', '==', true)
-    ));
-    const questions = questionsSnap.docs.map((docSnap) => docSnap.data() || {});
+    const { data, error } = await supabase
+        .from('assessment_questions')
+        .select('text, tags, is_active')
+        .eq('is_active', true);
+    if (error) throw error;
 
-    normalizedAnswers.forEach(([questionText, answerValue]) => {
-        const question = questions.find((q) => String(q?.text || '').trim() === String(questionText || '').trim());
+    const questions = (data || []).map((item) => ({
+        text: item.text || '',
+        tags: Array.isArray(item.tags) ? item.tags : [],
+    }));
+
+    entries.forEach(([questionText, answerValue]) => {
+        const question = questions.find((item) => String(item.text).trim() === String(questionText).trim());
         if (!question) return;
-        const tags = Array.isArray(question?.tags) ? question.tags : [];
-        if (!tags.length) return;
-
-        let numericValue = 3;
-        if (typeof answerValue === 'number' && Number.isFinite(answerValue)) {
-            numericValue = answerValue;
-        } else {
-            numericValue = LIKERT_SCORE_MAP[String(answerValue || '').trim()] || 3;
-        }
-
-        tags.forEach((tag) => {
+        const numericValue = typeof answerValue === 'number' && Number.isFinite(answerValue)
+            ? answerValue
+            : (LIKERT_SCORE_MAP[String(answerValue || '').trim()] || 3);
+        question.tags.forEach((tag) => {
             if (!aggregates[tag]) aggregates[tag] = { total: 0, count: 0 };
             aggregates[tag].total += numericValue;
             aggregates[tag].count += 1;
@@ -66,39 +50,38 @@ const buildThemesFromAnswers = async (answers = {}) => {
 
 export const assessmentRepository = {
     async submitAssessment({ type, score, answers, mood }) {
-        const uid = auth.currentUser?.uid;
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData.user?.id;
         if (!uid) throw new Error('User must be authenticated.');
 
-        await addDoc(collection(db, 'assessments'), {
-            uid,
+        const { data: insertedAssessment, error: insertError } = await supabase.from('assessments').insert({
+            user_id: uid,
             type,
             score,
             answers: answers || {},
             mood: mood || '',
-            createdAt: serverTimestamp()
-        });
+        }).select('id').single();
+        if (insertError) throw insertError;
 
-        const userRef = doc(db, 'users', uid);
-        const userSnap = await getDoc(userRef);
-        const userData = userSnap.exists() ? userSnap.data() : {};
-
-        const latestAssessmentsSnap = await getDocs(query(
-            collection(db, 'assessments'),
-            where('uid', '==', uid),
-            orderBy('createdAt', 'desc'),
-            limit(30)
-        ));
+        const [{ data: profile }, { data: recentAssessments, error: recentError }] = await Promise.all([
+            supabase.from('profiles').select('*').eq('id', uid).maybeSingle(),
+            supabase
+                .from('assessments')
+                .select('*')
+                .eq('user_id', uid)
+                .order('created_at', { ascending: false })
+                .limit(30),
+        ]);
+        if (recentError) throw recentError;
 
         const recentDailyScores = [];
-        latestAssessmentsSnap.forEach((docSnap) => {
-            const data = docSnap.data();
-            if (data?.type !== 'daily') return;
-            const dailyScore = toValidNumber(data?.score);
+        (recentAssessments || []).forEach((item) => {
+            if (item?.type !== 'daily') return;
+            const dailyScore = toValidNumber(item?.score);
             if (dailyScore == null) return;
             recentDailyScores.push(dailyScore);
         });
 
-        // Ensure the latest daily submission is reflected immediately.
         if (type === 'daily' && recentDailyScores[0] !== score) {
             recentDailyScores.unshift(score);
         }
@@ -108,15 +91,13 @@ export const assessmentRepository = {
             ? Math.round(dailyWindow.reduce((sum, n) => sum + n, 0) / dailyWindow.length)
             : null;
 
-        const existingWeekly = toValidNumber(userData?.weeklyScore);
-        const existingWellbeing = toValidNumber(userData?.wellbeingScore);
+        const existingWeekly = toValidNumber(profile?.stats?.weeklyScore ?? profile?.weekly_score);
+        const existingWellbeing = toValidNumber(profile?.wellbeing_score);
         const weeklyAnchor = type === 'questionnaire'
             ? score
             : (existingWeekly ?? existingWellbeing ?? null);
 
-        const dailyDelta = weeklyAnchor != null && dailyAvg7 != null
-            ? dailyAvg7 - weeklyAnchor
-            : 0;
+        const dailyDelta = weeklyAnchor != null && dailyAvg7 != null ? dailyAvg7 - weeklyAnchor : 0;
         const dailyAdjustment = weeklyAnchor != null && dailyAvg7 != null
             ? clamp(Math.round(dailyDelta * 0.25), -10, 10)
             : 0;
@@ -126,9 +107,20 @@ export const assessmentRepository = {
             : clamp(Math.round(dailyAvg7 ?? score), 0, 100);
 
         const statsPatch = {
+            ...(profile?.stats || {}),
             overallScore: computedWellbeing,
-            lastAssessmentDate: serverTimestamp()
+            lastAssessmentDate: new Date().toISOString(),
+            weeklyScore: weeklyAnchor,
+            dailyTrendScore: dailyAvg7,
+            wellbeingModelVersion: 'v2_weekly_anchor_daily_trend',
+            wellbeingComponents: {
+                weeklyAnchor,
+                dailyAvg7,
+                dailyDelta,
+                dailyAdjustment,
+            },
         };
+
         if (type === 'questionnaire' && answers && Object.keys(answers).length > 0) {
             const themes = await buildThemesFromAnswers(answers).catch(() => ({}));
             if (themes && Object.keys(themes).length > 0) {
@@ -136,63 +128,55 @@ export const assessmentRepository = {
             }
         }
 
-        await setDoc(
-            userRef,
-            {
-                wellbeingScore: computedWellbeing,
-                wellbeingLabel: labelFromWellbeingScore(computedWellbeing),
-                weeklyScore: weeklyAnchor,
-                dailyTrendScore: dailyAvg7,
-                wellbeingModelVersion: 'v2_weekly_anchor_daily_trend',
-                wellbeingComponents: {
-                    weeklyAnchor,
-                    dailyAvg7,
-                    dailyDelta,
-                    dailyAdjustment
-                },
-                lastAssessmentAt: serverTimestamp(),
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .update({
+                wellbeing_score: computedWellbeing,
+                wellbeing_label: labelFromWellbeingScore(computedWellbeing),
                 stats: statsPatch,
-                updatedAt: serverTimestamp()
-            },
-            { merge: true }
-        );
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', uid);
+        if (profileError) throw profileError;
 
-        return { success: true };
+        return { success: true, assessmentId: insertedAssessment?.id || '' };
     },
 
     async getUserStats() {
-        const uid = auth.currentUser?.uid;
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData.user?.id;
         if (!uid) return { score: null, label: 'No data', streak: 0 };
 
-        const userSnap = await getDoc(doc(db, 'users', uid));
-        if (!userSnap.exists()) {
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
+        if (error || !data) {
             return { score: null, label: 'No data', streak: 0 };
         }
 
-        const userData = userSnap.data();
         return {
-            score: userData.wellbeingScore ?? null,
-            label: normalizeWellbeingLabel(userData.wellbeingLabel, userData.wellbeingScore || 0),
-            streak: userData.streak || 0
+            score: data.wellbeing_score ?? null,
+            label: normalizeWellbeingLabel(data.wellbeing_label, data.wellbeing_score || 0),
+            streak: data.streak || 0,
         };
     },
 
     async getAssessmentHistory(limitCount = 7) {
-        const uid = auth.currentUser?.uid;
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData.user?.id;
         if (!uid) return [];
 
-        const q = query(
-            collection(db, 'assessments'),
-            where('uid', '==', uid),
-            orderBy('createdAt', 'desc'),
-            limit(limitCount)
-        );
+        const { data, error } = await supabase
+            .from('assessments')
+            .select('*')
+            .eq('user_id', uid)
+            .order('created_at', { ascending: false })
+            .limit(limitCount);
+        if (error) throw error;
 
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-            createdAt: docSnap.data().createdAt?.toDate?.() || null
+        return (data || []).map((item) => ({
+            id: item.id,
+            ...item,
+            uid: item.user_id,
+            createdAt: item.created_at ? new Date(item.created_at) : null,
         }));
-    }
+    },
 };

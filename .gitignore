@@ -5,9 +5,10 @@ node_modules/
 
 # Expo
 .expo/
-# dist/
+dist/
 web-build/
 expo-env.d.ts
+.npm-cache/
 
 # Native
 .kotlin/
@@ -25,6 +26,8 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+.npm/
+Library/
 
 # macOS
 .DS_Store
@@ -40,7 +43,10 @@ backend/.env
 backend/.env.yaml
 backend/.env.backup
 backend/.env.backup.*
+supabase\ backend/.env
+supabase\ backend/.env.*
 *.env.yaml
+/package-lock.json
 
 # typescript
 *.tsbuildinfo

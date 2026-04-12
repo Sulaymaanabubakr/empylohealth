@@ -7,6 +7,8 @@ import Input from '../components/Input';
 import Button from '../components/Button';
 import Dropdown from '../components/Dropdown';
 import DatePicker from '../components/DatePicker';
+import ProfilePhotoModal from '../components/ProfilePhotoModal';
+import ImageCropper from '../components/ImageCropper';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
@@ -28,10 +30,17 @@ const ProfileSetupScreen = ({ navigation }) => {
     const [dateOfBirth, setDateOfBirth] = useState('');
     const [avatarUri, setAvatarUri] = useState(user?.photoURL || '');
     const [uploading, setUploading] = useState(false);
+    const [isEditPhotoVisible, setIsEditPhotoVisible] = useState(false);
+    const [cropperVisible, setCropperVisible] = useState(false);
+    const [tempImage, setTempImage] = useState(null);
 
     const genderOptions = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
 
-    const pickImage = async () => {
+    const openPhotoEditor = () => {
+        setIsEditPhotoVisible(true);
+    };
+
+    const handleChoosePhoto = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
             showToast('Permission needed to upload an image', 'warning');
@@ -40,13 +49,35 @@ const ProfileSetupScreen = ({ navigation }) => {
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
-            allowsEditing: true,
-            aspect: [1, 1],
+            allowsEditing: false,
             quality: 0.8,
+            exif: false,
         });
 
-        if (!result.canceled && result.assets[0]) {
-            setAvatarUri(result.assets[0].uri);
+        if (!result.canceled && result.assets[0]?.uri) {
+            setIsEditPhotoVisible(false);
+            setTempImage(result.assets[0].uri);
+            setTimeout(() => setCropperVisible(true), 300);
+        }
+    };
+
+    const handleTakePhoto = async () => {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            showToast('Permission needed to take a photo', 'warning');
+            return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: false,
+            quality: 0.8,
+            exif: false,
+        });
+
+        if (!result.canceled && result.assets[0]?.uri) {
+            setIsEditPhotoVisible(false);
+            setTempImage(result.assets[0].uri);
+            setTimeout(() => setCropperVisible(true), 300);
         }
     };
 
@@ -76,8 +107,7 @@ const ProfileSetupScreen = ({ navigation }) => {
                 timezone,
                 photoURL,
                 role: 'personal',
-                onboardingCompleted: true,
-                updatedAt: new Date()
+                onboardingCompleted: true
             };
 
             await Promise.all([
@@ -125,7 +155,7 @@ const ProfileSetupScreen = ({ navigation }) => {
                 <View style={styles.avatarSection}>
                     <TouchableOpacity
                         style={styles.avatarContainer}
-                        onPress={pickImage}
+                        onPress={openPhotoEditor}
                         activeOpacity={0.8}
                     >
                         <View style={styles.avatarBorder}>
@@ -144,7 +174,9 @@ const ProfileSetupScreen = ({ navigation }) => {
                             <Ionicons name="camera" size={18} color="white" />
                         </LinearGradient>
                     </TouchableOpacity>
-                    <Text style={styles.avatarHint}>Add a profile photo</Text>
+                    <TouchableOpacity onPress={openPhotoEditor} activeOpacity={0.8}>
+                        <Text style={styles.avatarHint}>Add a profile photo</Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Form Card */}
@@ -189,6 +221,32 @@ const ProfileSetupScreen = ({ navigation }) => {
                     />
                 </View>
             </ScrollView>
+
+            <ProfilePhotoModal
+                visible={isEditPhotoVisible}
+                onClose={() => setIsEditPhotoVisible(false)}
+                currentImage={avatarUri}
+                onUseAvatar={() => setIsEditPhotoVisible(false)}
+                onTakePhoto={handleTakePhoto}
+                onChoosePhoto={handleChoosePhoto}
+                onDeletePhoto={() => {
+                    setAvatarUri('');
+                    setIsEditPhotoVisible(false);
+                }}
+                showUseAvatar={false}
+                showDeletePhoto={Boolean(avatarUri)}
+                title="Profile Photo"
+            />
+
+            <ImageCropper
+                visible={cropperVisible}
+                imageUri={tempImage}
+                onClose={() => setCropperVisible(false)}
+                onCrop={(uri) => {
+                    setCropperVisible(false);
+                    setAvatarUri(uri);
+                }}
+            />
         </View>
     );
 };

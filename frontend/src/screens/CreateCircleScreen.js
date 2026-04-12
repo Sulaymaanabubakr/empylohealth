@@ -83,22 +83,24 @@ const CreateCircleScreen = ({ navigation }) => {
                         .filter(Boolean)
                 )
             ).slice(0, 12);
-            const result = await circleService.createCircle(
-                trimmedName,
+            const result = await circleService.createCircle({
+                name: trimmedName,
                 description,
                 category,
-                accessType.toLowerCase(),
+                type: accessType.toLowerCase(),
                 image,
-                'visible',
+                visibility: 'visible',
                 location,
                 tags
-            );
+            });
 
-            if (result?.circleId) {
-                const newCircle = await circleService.getCircleById(result.circleId);
+            const createdCircleId = result?.circleId || result?.id;
+            const createdCircle = result?.id ? result : null;
+            if (createdCircleId) {
+                const newCircle = createdCircle || await circleService.getCircleById(createdCircleId);
                 if (newCircle) {
                     const status = await subscriptionGuardService.getEffectiveSubscriptionStatus(true).catch(() => ({ plan: 'free' }));
-                    if (String(status?.plan || 'free').toLowerCase() === 'pro') {
+                    if (['pro', 'premium', 'enterprise'].includes(String(status?.plan || 'free').toLowerCase())) {
                         showModal({
                             type: 'confirmation',
                             title: 'Make this a Pro Circle?',
@@ -108,8 +110,8 @@ const CreateCircleScreen = ({ navigation }) => {
                             onConfirm: async () => {
                                 try {
                                     setLoading(true);
-                                    const upgradeResult = await circleService.setCircleBillingTier(result.circleId, 'pro');
-                                    const refreshedCircle = await circleService.getCircleById(result.circleId).catch(() => newCircle);
+                                    const upgradeResult = await circleService.setCircleBillingTier(createdCircleId, 'pro');
+                                    const refreshedCircle = await circleService.getCircleById(createdCircleId).catch(() => newCircle);
                                     showModal({
                                         type: 'success',
                                         title: 'Pro Circle enabled',

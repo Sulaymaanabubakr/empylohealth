@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import DashboardScreen from '../screens/DashboardScreen';
 import ExploreScreen from '../screens/ExploreScreen';
+import AiHubScreen from '../screens/AiHubScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import BottomNavigation from '../components/BottomNavigation';
@@ -36,6 +37,7 @@ const MainTabs = () => {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
+      <Tab.Screen name="AiHub" component={AiHubScreen} />
       <Tab.Screen
         name="ChatList"
         component={ChatListScreen}

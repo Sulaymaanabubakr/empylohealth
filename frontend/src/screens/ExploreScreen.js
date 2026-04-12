@@ -72,8 +72,14 @@ const ExploreScreen = ({ navigation }) => {
             const activitiesToShow = Array.isArray(recommendedItems) && recommendedItems.length > 0
                 ? recommendedItems
                 : fallbackItems;
-            await subscriptionGuardService.getSubscriptionStatus();
-            const gatedActivities = subscriptionGuardService.filterActivities(activitiesToShow || []);
+            let gatedActivities = activitiesToShow || [];
+            try {
+                await subscriptionGuardService.getSubscriptionStatus();
+                const filtered = subscriptionGuardService.filterActivities(activitiesToShow || []);
+                gatedActivities = filtered.length > 0 ? filtered : (activitiesToShow || []);
+            } catch (gatingError) {
+                console.warn('ExploreScreen: activity gating unavailable, using ungated content:', gatingError?.message || gatingError);
+            }
             console.log('ExploreScreen: fetched', activitiesToShow.length, 'recommended resources,', circles.length, 'circles,', affs.length, 'affirmations');
             setActivities(gatedActivities);
             const publicCircles = (circles || []).filter((circle) => (circle?.type || 'public') === 'public');
@@ -197,7 +203,7 @@ const ExploreScreen = ({ navigation }) => {
                             <TouchableOpacity style={styles.retryButton} onPress={() => {
                                 setLoading(true);
                                 setError(null);
-                                // Re-trigger effect? For now just manual reload via navigation or we need to extract loadContent
+                                loadContent();
                             }}>
                                 <Text style={styles.retryText}>Retry</Text>
                             </TouchableOpacity>

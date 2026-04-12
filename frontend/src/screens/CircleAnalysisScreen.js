@@ -5,17 +5,11 @@ import { COLORS, SPACING } from '../theme/theme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import Avatar from '../components/Avatar';
-import { db } from '../services/firebaseConfig';
-import { doc, getDoc, collection, query, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { callableClient } from '../services/api/callableClient';
+import { supabase } from '../services/supabase/supabaseClient';
+import { circleService } from '../services/api/circleService';
+import { userService } from '../services/api/userService';
 
 const { width } = Dimensions.get('window');
-
-const isPermissionDeniedError = (error) => {
-    const code = String(error?.code || '');
-    const message = String(error?.message || '').toLowerCase();
-    return code.includes('permission-denied') || message.includes('permission');
-};
 
 const CircleAnalysisScreen = ({ route, navigation }) => {
     const insets = useSafeAreaInsets();
@@ -32,16 +26,24 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
 
     useEffect(() => {
         if (!circleId) return undefined;
-        const circleRef = doc(db, 'circles', circleId);
-        const unsubscribe = onSnapshot(circleRef, (snap) => {
-            if (snap.exists()) {
-                setCircle({ id: snap.id, ...snap.data() });
+        let active = true;
+        const load = async () => {
+            try {
+                const nextCircle = await circleService.getCircleById(circleId);
+                if (active && nextCircle) setCircle(nextCircle);
+            } catch (error) {
+                console.error('Failed to subscribe to circle analysis updates', error);
             }
-        }, (error) => {
-            console.error('Failed to subscribe to circle analysis updates', error);
-        });
-
-        return () => unsubscribe();
+        };
+        load();
+        const channel = supabase
+            .channel(`circle-analysis:${circleId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'circles', filter: `id=eq.${circleId}` }, load)
+            .subscribe();
+        return () => {
+            active = false;
+            supabase.removeChannel(channel).catch(() => {});
+        };
     }, [circleId]);
 
     useEffect(() => {
@@ -99,17 +101,28 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                 return;
             }
 
-            const messagesRef = collection(db, 'chats', chatId, 'messages');
-            const q = query(messagesRef, orderBy('createdAt', 'desc'), limit(200));
-            let messageSnap = await getDocs(q);
-
-            if (messageSnap.empty && currentCircle.id !== chatId) {
-                const legacyRef = collection(db, 'circles', currentCircle.id, 'messages');
-                const legacyQ = query(legacyRef, orderBy('createdAt', 'desc'), limit(200));
-                messageSnap = await getDocs(legacyQ);
+            let effectiveChatId = chatId;
+            if (effectiveChatId === currentCircle?.id) {
+                const { data: chatRow } = await supabase
+                    .from('chats')
+                    .select('id')
+                    .eq('circle_id', currentCircle.id)
+                    .limit(1)
+                    .maybeSingle();
+                effectiveChatId = chatRow?.id || effectiveChatId;
             }
-
-            const messages = messageSnap.docs.map(doc => doc.data());
+            const { data: messageRows, error: messageError } = await supabase
+                .from('messages')
+                .select('*')
+                .eq('chat_id', effectiveChatId)
+                .order('created_at', { ascending: false })
+                .limit(200);
+            if (messageError) throw messageError;
+            const messages = (messageRows || []).map((item) => ({
+                ...item,
+                createdAt: item.created_at ? new Date(item.created_at) : null,
+                senderId: item.sender_id,
+            }));
             const daysShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
             const today = new Date();
             today.setHours(23, 59, 59, 999);
@@ -163,26 +176,9 @@ const CircleAnalysisScreen = ({ route, navigation }) => {
                 for (const memberId of currentCircle.members) {
                     let memberData = null;
                     try {
-                        const docRef = doc(db, 'users', memberId);
-                        const snap = await getDoc(docRef);
-                        if (snap.exists()) {
-                            memberData = snap.data();
-                        }
+                        memberData = await userService.getUserDocument(memberId);
                     } catch (error) {
-                        if (isPermissionDeniedError(error)) {
-                            try {
-                                const publicProfile = await callableClient.invokeWithAuth('getPublicProfile', { uid: memberId });
-                                memberData = {
-                                    name: publicProfile?.name || 'Member',
-                                    displayName: publicProfile?.name || 'Member',
-                                    photoURL: publicProfile?.photoURL || '',
-                                    wellbeingScore: publicProfile?.wellbeingScore ?? null,
-                                    wellbeingLabel: publicProfile?.wellbeingLabel || ''
-                                };
-                            } catch {
-                                memberData = null;
-                            }
-                        }
+                        memberData = null;
                     }
 
                     if (!memberData) continue;

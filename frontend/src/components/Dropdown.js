@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, TextInput } from 'react-native';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Feather } from '@expo/vector-icons';
 
@@ -20,10 +20,19 @@ const normalizeOption = (option) => {
 
 const Dropdown = ({ label, value, options = [], onSelect, icon, placeholder = 'Select' }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const normalizedOptions = useMemo(
         () => options.map(normalizeOption).filter((item) => item.value),
         [options]
     );
+    const filteredOptions = useMemo(() => {
+        const query = String(searchQuery || '').trim().toLowerCase();
+        if (!query) return normalizedOptions;
+        return normalizedOptions.filter((item) => {
+            const haystack = `${item.label} ${item.value}`.toLowerCase();
+            return haystack.includes(query);
+        });
+    }, [normalizedOptions, searchQuery]);
     const selectedOption = useMemo(
         () => normalizedOptions.find((item) => item.value === value || item.label === value) || null,
         [normalizedOptions, value]
@@ -31,6 +40,7 @@ const Dropdown = ({ label, value, options = [], onSelect, icon, placeholder = 'S
 
     const handleSelect = (option) => {
         onSelect(option.value);
+        setSearchQuery('');
         setIsOpen(false);
     };
 
@@ -40,7 +50,10 @@ const Dropdown = ({ label, value, options = [], onSelect, icon, placeholder = 'S
 
             <TouchableOpacity
                 style={styles.dropdown}
-                onPress={() => setIsOpen(true)}
+                onPress={() => {
+                    setSearchQuery('');
+                    setIsOpen(true);
+                }}
                 activeOpacity={0.7}
             >
                 {icon && <View style={styles.iconContainer}>{icon}</View>}
@@ -69,28 +82,52 @@ const Dropdown = ({ label, value, options = [], onSelect, icon, placeholder = 'S
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView style={styles.optionsList}>
-                            {normalizedOptions.map((option, index) => (
+                        <View style={styles.searchWrap}>
+                            <Feather name="search" size={18} color="#94A3B8" />
+                            <TextInput
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                placeholder={`Search ${String(label || 'options').toLowerCase()}...`}
+                                placeholderTextColor="#94A3B8"
+                                style={styles.searchInput}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                            />
+                        </View>
+
+                        <FlatList
+                            style={styles.optionsList}
+                            data={filteredOptions}
+                            keyExtractor={(option, index) => `${option.value}-${index}`}
+                            initialNumToRender={16}
+                            maxToRenderPerBatch={20}
+                            windowSize={8}
+                            keyboardShouldPersistTaps="handled"
+                            renderItem={({ item: option }) => (
                                 <TouchableOpacity
-                                    key={`${option.value}-${index}`}
                                     style={[
                                         styles.optionItem,
                                         selectedOption?.value === option.value && styles.optionItemSelected
                                     ]}
                                     onPress={() => handleSelect(option)}
                                 >
-                                    <Text style={[
-                                        styles.optionText,
-                                        selectedOption?.value === option.value && styles.optionTextSelected
-                                    ]}>
-                                        {option.label}
-                                    </Text>
+                                    <View style={styles.optionTextWrap}>
+                                        <Text
+                                            style={[
+                                                styles.optionText,
+                                                selectedOption?.value === option.value && styles.optionTextSelected
+                                            ]}
+                                            numberOfLines={2}
+                                        >
+                                            {option.label}
+                                        </Text>
+                                    </View>
                                     {selectedOption?.value === option.value && (
                                         <Feather name="check" size={20} color={COLORS.primary} />
                                     )}
                                 </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                            )}
+                        />
                     </View>
                 </TouchableOpacity>
             </Modal>
@@ -153,6 +190,26 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: COLORS.text,
     },
+    searchWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: SPACING.lg,
+        marginBottom: SPACING.md,
+        marginTop: SPACING.sm,
+        paddingHorizontal: SPACING.md,
+        height: 48,
+        borderRadius: 16,
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        gap: 10,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 15,
+        color: COLORS.text,
+        paddingVertical: 0,
+    },
     optionsList: {
         maxHeight: 400,
     },
@@ -165,12 +222,17 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F0F0F0',
     },
+    optionTextWrap: {
+        flex: 1,
+        paddingRight: SPACING.sm,
+    },
     optionItemSelected: {
         backgroundColor: '#E0F2F1',
     },
     optionText: {
         fontSize: 16,
         color: COLORS.text,
+        flexShrink: 1,
     },
     optionTextSelected: {
         fontWeight: '600',

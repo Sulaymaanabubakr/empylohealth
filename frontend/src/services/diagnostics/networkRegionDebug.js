@@ -1,9 +1,8 @@
-import { FIREBASE_ENV_INFO } from '../firebaseConfig';
+import { supabaseFunctionUrl } from '../supabase/supabaseClient';
 
 export const logNetworkRegionDebug = () => {
     if (!__DEV__) return;
 
-    console.log('[NetworkRegionDebug] Functions region:', FIREBASE_ENV_INFO.functionsRegion);
-    console.log('[NetworkRegionDebug] Firestore location:', FIREBASE_ENV_INFO.firestoreRegion);
-    console.log('[NetworkRegionDebug] RTDB URL:', FIREBASE_ENV_INFO.rtdbUrl);
+    console.log('[NetworkRegionDebug] Function base URL:', supabaseFunctionUrl('health').replace(/\/health$/, ''));
+    console.log('[NetworkRegionDebug] Backend provider:', 'supabase');
 };

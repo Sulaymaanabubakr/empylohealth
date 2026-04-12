@@ -4,8 +4,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
-import { doc, collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import Avatar from '../components/Avatar';
@@ -19,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { formatDateTimeUK } from '../utils/dateFormat';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
+import { supabase } from '../services/supabase/supabaseClient';
 
 const CIRCLE_NAME_MAX_LENGTH = 40;
 
@@ -340,50 +339,53 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     // Real-time Circle + related collections
     useEffect(() => {
         if (!circleId) return;
-        const circleRef = doc(db, 'circles', circleId);
-        const unsubCircle = onSnapshot(circleRef, (snap) => {
-            if (snap.exists()) {
-                setCircle({ id: snap.id, ...snap.data() });
+        let active = true;
+        const loadAll = async () => {
+            try {
+                const [nextCircle, nextRequests, nextReports, memberRows] = await Promise.all([
+                    circleService.getCircleById(circleId),
+                    circleService.listCircleRequests(circleId),
+                    circleService.listCircleReports(circleId),
+                    supabase
+                        .from('circle_members')
+                        .select('*')
+                        .eq('circle_id', circleId)
+                        .order('joined_at', { ascending: false }),
+                ]);
+
+                if (!active) return;
+                setCircle(nextCircle);
+                setRequests(nextRequests || []);
+                setReports(nextReports || []);
+                setMembers((memberRows.data || []).map((item) => ({
+                    uid: item.user_id,
+                    role: item.role,
+                    status: item.status,
+                    joinedAt: item.joined_at,
+                })));
+            } catch (error) {
+                console.error('Failed to subscribe to circle settings updates', error);
+            } finally {
+                if (active) setInitialLoading(false);
             }
-            setInitialLoading(false);
-        }, (error) => {
-            console.error('Failed to subscribe to circle settings updates', error);
-            setInitialLoading(false);
-        });
+        };
 
-        // Listen for requests (if private)
-        const qReq = query(collection(db, 'circles', circleId, 'requests'), orderBy('createdAt', 'desc'));
-        const unsubReq = onSnapshot(qReq, (snap) => {
-            setRequests(snap.docs.map(d => ({ uid: d.id, ...d.data() })));
-        });
+        loadAll();
 
-        // Listen for reports
-        const qRep = query(collection(db, 'circles', circleId, 'reports'), orderBy('createdAt', 'desc'));
-        const unsubRep = onSnapshot(qRep, (snap) => {
-            setReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-
-        // Listen for members (basic subcollection list for management)
-        // Optimization: In real app, might paginate. Here we fetch all (up to reasonable limit)
-        const qMem = query(collection(db, 'circles', circleId, 'members'), orderBy('joinedAt', 'desc'));
-        const unsubMem = onSnapshot(qMem, (snap) => {
-            // In reality need to fetch user profiles for names/images
-            // For demo, we might miss profile data if not joined with users...
-            // Let's do a quick client-side join logic or just display rough data?
-            // Since we need names, let's fetch profiles if changed.
-            const mems = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-            setMembers(mems);
-        });
+        const channels = [
+            supabase.channel(`circle-settings:${circleId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'circles', filter: `id=eq.${circleId}` }, loadAll).subscribe(),
+            supabase.channel(`circle-members:${circleId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'circle_members', filter: `circle_id=eq.${circleId}` }, loadAll).subscribe(),
+            supabase.channel(`circle-requests:${circleId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'circle_join_requests', filter: `circle_id=eq.${circleId}` }, loadAll).subscribe(),
+            supabase.channel(`circle-reports:${circleId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'circle_reports', filter: `circle_id=eq.${circleId}` }, loadAll).subscribe(),
+        ];
 
         const unsubEvents = circleService.subscribeToScheduledHuddles(circleId, (list) => {
             setEvents(list);
         });
 
         return () => {
-            unsubCircle();
-            unsubReq();
-            unsubMem();
-            unsubRep();
+            active = false;
+            channels.forEach((channel) => supabase.removeChannel(channel).catch(() => {}));
             unsubEvents();
         };
     }, [circleId]);
@@ -509,7 +511,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const handleAcceptRequest = async (req) => {
         setProcessingId(req.uid);
         try {
-            await circleService.handleJoinRequest(circleId, req.uid, 'accept');
+            await circleService.handleJoinRequest(circleId, req.uid, 'approve');
             showModal({ type: 'success', title: 'Approved', message: `${req.displayName} has gathered to the circle.` });
         } catch (error) {
             if (__DEV__) {
@@ -555,17 +557,17 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         // ADMIN/CREATOR ACTIONS
         if (myRole === 'creator' || (myRole === 'admin' && member.role !== 'admin')) {
             if (member.role === 'member') {
-                options.push({ text: 'Promote to Moderator', onPress: () => performMemberAction(member, 'promote_mod') });
+                options.push({ text: 'Promote to Moderator', onPress: () => performMemberAction(member, 'promote_moderator') });
                 options.push({ text: 'Promote to Admin', onPress: () => performMemberAction(member, 'promote_admin') });
             } else if (member.role === 'moderator') {
                 options.push({ text: 'Promote to Admin', onPress: () => performMemberAction(member, 'promote_admin') });
-                options.push({ text: 'Demote to Member', onPress: () => performMemberAction(member, 'demote') });
+                options.push({ text: 'Demote to Member', onPress: () => performMemberAction(member, 'demote_member') });
             } else if (member.role === 'admin' && myRole === 'creator') {
-                options.push({ text: 'Demote to Moderator', onPress: () => performMemberAction(member, 'promote_mod') });
-                options.push({ text: 'Demote to Member', onPress: () => performMemberAction(member, 'demote') });
+                options.push({ text: 'Demote to Moderator', onPress: () => performMemberAction(member, 'promote_moderator') });
+                options.push({ text: 'Demote to Member', onPress: () => performMemberAction(member, 'demote_member') });
             }
             // Kick/Ban
-            options.push({ text: 'Remove User', onPress: () => performMemberAction(member, 'kick'), style: 'destructive' });
+            options.push({ text: 'Remove User', onPress: () => performMemberAction(member, 'remove'), style: 'destructive' });
             options.push({ text: 'Block User', onPress: () => performMemberAction(member, 'ban'), style: 'destructive' });
         } else {
             // REGULAR MEMBER ACTIONS (Report)
@@ -692,7 +694,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         if (actionLoading) return;
         if (nextTier === 'pro') {
             const status = await subscriptionGuardService.getEffectiveSubscriptionStatus(true).catch(() => ({ plan: 'free' }));
-            if (String(status?.plan || 'free').toLowerCase() !== 'pro') {
+            if (!['pro', 'premium', 'enterprise'].includes(String(status?.plan || 'free').toLowerCase())) {
                 showUpgradePrompt({
                     navigation,
                     showModal,

@@ -1,6 +1,37 @@
 // TypeScript conversion in progress
 import { liveStateRepository } from '../repositories/LiveStateRepository';
-import { callableClient } from './callableClient';
+import { authApiClient } from '../auth/authApiClient';
+import { supabase } from '../supabase/supabaseClient';
+
+const mapHuddle = (row) => {
+    if (!row) return null;
+    return {
+        ...row,
+        chatId: row.chat_id,
+        circleId: row.circle_id,
+        roomUrl: row.room_url,
+        roomName: row.room_name,
+        startedBy: row.started_by,
+        acceptedBy: row.accepted_by,
+        isGroup: row.is_group,
+        isActive: row.is_active,
+        invitedUserIds: row.invited_user_ids || [],
+        acceptedUserIds: row.accepted_user_ids || [],
+        declinedUserIds: row.declined_user_ids || [],
+        activeUserIds: row.active_user_ids || [],
+        ringStartedAt: row.ring_started_at,
+        acceptedAt: row.accepted_at,
+        ongoingAt: row.ongoing_at,
+        endedAt: row.ended_at,
+        endedBy: row.ended_by,
+        endedReason: row.ended_reason,
+        lastRingSentAt: row.last_ring_sent_at,
+        ringCount: row.ring_count || 0,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        participants: row.accepted_user_ids || [],
+    };
+};
 
 let activeLocalSession = null;
 const sessionListeners = new Set();
@@ -46,7 +77,7 @@ export const huddleService = {
      */
     startHuddle: async (chatId, isGroup = false) => {
         try {
-            const result = await callableClient.invokeWithAuth('startHuddle', { chatId, isGroup });
+            const result = await authApiClient.invokeWithAuth('start-huddle', { chatId, isGroup });
             if (result?.huddleId) {
                 await liveStateRepository.upsertHuddleLiveState(result.huddleId, {
                     state: 'ringing',
@@ -63,7 +94,7 @@ export const huddleService = {
 
     joinHuddle: async (huddleId) => {
         try {
-            const result = await callableClient.invokeWithAuth('joinHuddle', { huddleId });
+            const result = await authApiClient.invokeWithAuth('join-huddle', { huddleId });
             await liveStateRepository.upsertHuddleLiveState(huddleId, {
                 state: 'in-call'
             }).catch(() => {});
@@ -76,7 +107,7 @@ export const huddleService = {
 
     declineHuddle: async (huddleId) => {
         try {
-            const result = await callableClient.invokeWithAuth('declineHuddle', { huddleId });
+            const result = await authApiClient.invokeWithAuth('decline-huddle', { huddleId });
             await liveStateRepository.upsertHuddleLiveState(huddleId, { state: 'idle' }).catch(() => {});
             return result || { success: true };
         } catch (error) {
@@ -87,7 +118,7 @@ export const huddleService = {
 
     endHuddle: async (huddleId) => {
         try {
-            const result = await callableClient.invokeWithAuth('endHuddle', { huddleId });
+            const result = await authApiClient.invokeWithAuth('end-huddle', { huddleId });
             await liveStateRepository.upsertHuddleLiveState(huddleId, {
                 state: 'ended'
             }).catch(() => {});
@@ -100,7 +131,7 @@ export const huddleService = {
 
     endHuddleWithReason: async (huddleId, reason) => {
         try {
-            const result = await callableClient.invokeWithAuth('endHuddle', { huddleId, reason });
+            const result = await authApiClient.invokeWithAuth('end-huddle', { huddleId, reason });
             await liveStateRepository.upsertHuddleLiveState(huddleId, { state: 'ended' }).catch(() => {});
             return result;
         } catch (error) {
@@ -111,7 +142,7 @@ export const huddleService = {
 
     updateHuddleConnection: async (huddleId, action) => {
         try {
-            const result = await callableClient.invokeWithAuth('updateHuddleConnection', { huddleId, action }); // action: 'daily_joined' | 'daily_left'
+            const result = await authApiClient.invokeWithAuth('update-huddle-connection', { huddleId, action });
             return result || { success: true };
         } catch (error) {
             console.error("Error updating huddle connection:", error);
@@ -125,7 +156,7 @@ export const huddleService = {
      */
     ringHuddleParticipants: async (huddleId) => {
         try {
-            const result = await callableClient.invokeWithAuth('ringHuddleParticipants', { huddleId });
+            const result = await authApiClient.invokeWithAuth('ring-huddle-participants', { huddleId });
             return result || { success: true };
         } catch (error) {
             console.error("Error ringing participants:", error);
@@ -140,7 +171,15 @@ export const huddleService = {
      */
     updateHuddleState: async (huddleId, action) => {
         try {
-            await callableClient.invokeWithAuth('updateHuddleState', { huddleId, action });
+            if (action === 'join') {
+                await authApiClient.invokeWithAuth('join-huddle', { huddleId });
+            } else if (action === 'leave') {
+                await authApiClient.invokeWithAuth('end-huddle', { huddleId, reason: 'leave' });
+            } else if (action === 'daily_joined' || action === 'daily_left') {
+                await authApiClient.invokeWithAuth('update-huddle-connection', { huddleId, action });
+            } else {
+                await authApiClient.invokeWithAuth('update-huddle-state', { huddleId, action });
+            }
             await liveStateRepository.upsertHuddleLiveState(huddleId, {
                 state: action === 'join' ? 'in-call' : (action === 'leave' ? 'idle' : action),
                 lastAction: action
@@ -150,6 +189,30 @@ export const huddleService = {
             console.error("Error updating huddle:", error);
             throw error;
         }
+    },
+
+    subscribeToHuddle: (huddleId, callback) => {
+        if (!huddleId) return () => {};
+
+        const load = async () => {
+            const { data } = await supabase
+                .from('huddles')
+                .select('*')
+                .eq('id', huddleId)
+                .maybeSingle();
+            callback(mapHuddle(data));
+        };
+
+        load();
+
+        const channel = supabase
+            .channel(`huddle-${huddleId}-${Math.random().toString(36).slice(2, 8)}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'huddles', filter: `id=eq.${huddleId}` }, load)
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
     setActiveLocalSession: (session) => {

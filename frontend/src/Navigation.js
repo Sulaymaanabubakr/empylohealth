@@ -4,7 +4,6 @@ import { View, Pressable, Text, StyleSheet, TouchableOpacity, Animated, PanRespo
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import MainTabs from './navigation/MainTabs';
 
 import SplashScreen from './screens/SplashScreen';
@@ -28,6 +27,8 @@ import NotificationsScreen from './screens/NotificationsScreen';
 import { CheckInScreen } from './screens/CheckInScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import ActivityDetailScreen from './screens/ActivityDetailScreen';
+import ChallengeDetailScreen from './screens/ChallengeDetailScreen';
+import ChallengeAiChatScreen from './screens/ChallengeAiChatScreen';
 import AffirmationsScreen from './screens/AffirmationsScreen';
 import SupportGroupsScreen from './screens/SupportGroupsScreen';
 import ChatListScreen from './screens/ChatListScreen';
@@ -40,6 +41,7 @@ import CreateCircleScreen from './screens/CreateCircleScreen';
 import CircleDetailScreen from './screens/CircleDetailScreen';
 import CircleAnalysisScreen from './screens/CircleAnalysisScreen';
 import PublicProfileScreen from './screens/PublicProfileScreen';
+import AiHubChatScreen from './screens/AiHubChatScreen';
 import NotificationsSettingsScreen from './screens/NotificationsSettingsScreen';
 import PersonalInformationScreen from './screens/PersonalInformationScreen';
 import SecurityScreen from './screens/SecurityScreen';
@@ -61,7 +63,7 @@ import { DeepLinkRouter } from './services/deepLink/DeepLinkRouter';
 import { biometricPrefs } from './services/security/biometricPrefs';
 import { useAppLockController } from './services/security/useAppLockController';
 import { userService } from './services/api/userService';
-import { auth } from './services/firebaseConfig';
+import { authService } from './services/auth/authService';
 
 const Stack = createNativeStackNavigator();
 const DRAG_MARGIN = 12;
@@ -112,7 +114,7 @@ export default function Navigation() {
             appLock.setUnlockError('Enter your account password.');
             return false;
         }
-        if (!auth.currentUser?.email) {
+        if (!user?.email) {
             appLock.setUnlockError('Password unlock is only available for email/password accounts.');
             return false;
         }
@@ -120,8 +122,7 @@ export default function Navigation() {
         setPasswordUnlocking(true);
         appLock.setUnlockError('');
         try {
-            const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
-            await reauthenticateWithCredential(auth.currentUser, credential);
+            await authService.reauthenticateWithPassword(user.email, password);
             appLock.forceUnlock('password');
             setUnlockPassword('');
             return true;
@@ -364,10 +365,13 @@ export default function Navigation() {
                         <Stack.Screen name="CheckIn" component={CheckInScreen} />
                         {/* <Stack.Screen name="Explore" component={ExploreScreen} /> Removing duplicate */}
                         <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
+                        <Stack.Screen name="ChallengeDetail" component={ChallengeDetailScreen} />
+                        <Stack.Screen name="ChallengeAiChat" component={ChallengeAiChatScreen} />
                         <Stack.Screen name="Affirmations" component={AffirmationsScreen} />
                         <Stack.Screen name="SupportGroups" component={SupportGroupsScreen} />
                         {/* <Stack.Screen name="ChatList" component={ChatListScreen} /> Removing duplicate */}
                         <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+                        <Stack.Screen name="AiHubChat" component={AiHubChatScreen} />
                         <Stack.Screen name="IncomingHuddle" component={IncomingHuddleScreen} options={{ presentation: 'modal' }} />
                         <Stack.Screen name="Huddle" component={HuddleScreen} options={{ presentation: 'modal' }} />
                         {/* <Stack.Screen name="Profile" component={ProfileScreen} /> Removing duplicate */}

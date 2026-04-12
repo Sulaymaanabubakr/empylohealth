@@ -8,10 +8,9 @@ import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { useToast } from '../context/ToastContext';
 import { chatService } from '../services/api/chatService';
+import { huddleService } from '../services/api/huddleService';
 import { liveStateRepository } from '../services/repositories/LiveStateRepository';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
-import { db } from '../services/firebaseConfig';
-import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import Avatar from '../components/Avatar';
 import ChatMessageText from '../components/chat/ChatMessageText';
 import { useMessageActions } from '../hooks/useMessageActions';
@@ -24,6 +23,7 @@ import { formatTimeUK } from '../utils/dateFormat';
 import { findUnsafeUrlsInMessage, sanitizeChatMessageText } from '../utils/chatMessageSafety';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
+import { supabase } from '../services/supabase/supabaseClient';
 
 const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
 
@@ -161,7 +161,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                     }
                 });
 
-                const pending = [...pendingMessagesRef.current.values()].filter((p) => p?.pending || p?.failed);
+                const pending = [...pendingMessagesRef.current.values()].filter((p) => p?.pending || p?.failed || p?.acked);
                 const merged = [...formatted, ...pending].sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
                 setMessages(merged);
 
@@ -268,50 +268,50 @@ const ChatDetailScreen = ({ navigation, route }) => {
             setActiveHuddle(null);
             return undefined;
         }
-
-        const unsubCircle = onSnapshot(
-            doc(db, 'circles', chat.circleId),
-            (snap) => {
-                if (!snap.exists()) return;
-                const data = snap.data();
-                setActiveHuddle(data?.activeHuddle || null);
-                setResolvedChatName(data?.name || chat?.name || 'Chat');
-                setResolvedChatAvatar(data?.image || data?.avatar || data?.photoURL || chat?.avatar || chat?.photoURL || chat?.image || '');
-            },
-            () => {}
-        );
-
-        const unsubMember = onSnapshot(
-            doc(db, 'circles', chat.circleId, 'members', user.uid),
-            (snap) => {
-                if (!snap.exists()) {
-                    setCircleRole(null);
-                    return;
+        let active = true;
+        const load = async () => {
+            try {
+                const [circleData, memberData] = await Promise.all([
+                    circleService.getCircleById(chat.circleId),
+                    supabase
+                        .from('circle_members')
+                        .select('role, status')
+                        .eq('circle_id', chat.circleId)
+                        .eq('user_id', user.uid)
+                        .maybeSingle(),
+                ]);
+                if (!active) return;
+                if (circleData) {
+                    setActiveHuddle(circleData?.activeHuddle || null);
+                    setResolvedChatName(circleData?.name || chat?.name || 'Chat');
+                    setResolvedChatAvatar(circleData?.image || chat?.avatar || chat?.photoURL || chat?.image || '');
                 }
-                const data = snap.data();
-                setCircleRole(data?.role || null);
-            },
-            () => {
-                setCircleRole(null);
+                const member = memberData.data;
+                setCircleRole(member?.status === 'active' ? (member?.role || null) : null);
+            } catch {
+                if (active) setCircleRole(null);
             }
-        );
+        };
+
+        load();
+
+        const channels = [
+            supabase.channel(`chat-circle:${chat.circleId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'circles', filter: `id=eq.${chat.circleId}` }, load).subscribe(),
+            supabase.channel(`chat-circle-member:${chat.circleId}:${user.uid}`).on('postgres_changes', { event: '*', schema: 'public', table: 'circle_members', filter: `circle_id=eq.${chat.circleId}` }, load).subscribe(),
+        ];
 
         return () => {
-            unsubCircle();
-            unsubMember();
+            active = false;
+            channels.forEach((channel) => supabase.removeChannel(channel).catch(() => {}));
         };
     }, [chat?.avatar, chat?.circleId, chat?.image, chat?.isGroup, chat?.name, chat?.photoURL, user?.uid]);
 
     useEffect(() => {
         if (!chat?.isGroup || !isPotentiallyActiveHuddle(activeHuddle)) return undefined;
-        const huddleRef = doc(db, 'huddles', activeHuddle.huddleId);
-        return onSnapshot(huddleRef, (snap) => {
-            const data = snap.exists() ? (snap.data() || {}) : null;
+        return huddleService.subscribeToHuddle(activeHuddle.huddleId, (data) => {
             if (!isJoinableHuddleDoc(data)) {
                 setActiveHuddle(null);
             }
-        }, () => {
-            setActiveHuddle(null);
         });
     }, [chat?.isGroup, activeHuddle?.huddleId]);
 
@@ -321,21 +321,31 @@ const ChatDetailScreen = ({ navigation, route }) => {
             setLatestRequestCreatedAt(0);
             return undefined;
         }
-        const requestsRef = collection(db, 'circles', chat.circleId, 'requests');
-        const unsubscribe = onSnapshot(requestsRef, (snap) => {
-            setPendingRequestsCount(snap.size);
-            let latest = 0;
-            snap.docs.forEach((docSnap) => {
-                const createdAt = docSnap.data()?.createdAt;
-                const ms = typeof createdAt?.toMillis === 'function' ? createdAt.toMillis() : 0;
-                if (ms > latest) latest = ms;
-            });
-            setLatestRequestCreatedAt(latest);
-        }, () => {
-            setPendingRequestsCount(0);
-            setLatestRequestCreatedAt(0);
-        });
-        return () => unsubscribe();
+        let active = true;
+        const load = async () => {
+            try {
+                const requests = await circleService.listCircleRequests(chat.circleId);
+                if (!active) return;
+                setPendingRequestsCount(requests.length);
+                setLatestRequestCreatedAt(
+                    requests.reduce((max, item) => Math.max(max, new Date(item.createdAt || 0).getTime() || 0), 0)
+                );
+            } catch {
+                if (active) {
+                    setPendingRequestsCount(0);
+                    setLatestRequestCreatedAt(0);
+                }
+            }
+        };
+        load();
+        const channel = supabase
+            .channel(`chat-circle-requests:${chat.circleId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'circle_join_requests', filter: `circle_id=eq.${chat.circleId}` }, load)
+            .subscribe();
+        return () => {
+            active = false;
+            supabase.removeChannel(channel).catch(() => {});
+        };
     }, [chat?.circleId, chat?.isGroup, circleRole]);
 
     useEffect(() => {
@@ -404,8 +414,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         }
 
         try {
-            const snap = await getDoc(doc(db, 'users', uid));
-            const data = snap.exists() ? snap.data() : {};
+            const data = await userService.getUserDocument(uid);
             const profile = {
                 uid,
                 name: data?.name || data?.displayName || 'Member',
@@ -477,7 +486,12 @@ const ChatDetailScreen = ({ navigation, route }) => {
         });
     };
 
-    const { openMessageActions } = useMessageActions({ onReportMessage: handleReportMessage });
+    const {
+        openMessageActions,
+        messageActionSheet,
+        closeMessageActions,
+        runMessageAction
+    } = useMessageActions({ onReportMessage: handleReportMessage });
 
     const handleSend = async () => {
         const sanitizedInput = sanitizeChatMessageText(inputText);
@@ -513,6 +527,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
             time: formatTimeUK(now),
             isMe: true,
             pending: true,
+            acked: false,
             failed: false,
             user: { _id: user?.uid }
         };
@@ -521,12 +536,18 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
         try {
             await chatService.sendMessage(chat.id, textToSend, 'text', null, clientMessageId);
-            // Ack received from backend callable.
-            // Remove only local optimistic placeholder; do not remove any server message
-            // that may already have arrived with the same clientMessageId.
-            pendingMessagesRef.current.delete(clientMessageId);
-            setMessages((prev) => prev.filter((m) => !(m.pending && m.clientMessageId === clientMessageId)));
-            // Scroll to bottom
+            if (pendingMessagesRef.current.has(clientMessageId)) {
+                const acked = {
+                    ...pendingMessagesRef.current.get(clientMessageId),
+                    pending: false,
+                    acked: true,
+                    failed: false,
+                };
+                pendingMessagesRef.current.set(clientMessageId, acked);
+                setMessages((prev) => prev.map((m) => (m.clientMessageId === clientMessageId ? acked : m)));
+            }
+            // Keep the acknowledged optimistic bubble visible until the subscribed server copy arrives.
+            // Reconciliation above removes it once the real message shows up.
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         } catch (error) {
             console.error("Failed to send", error);
@@ -534,6 +555,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 const failed = {
                     ...pendingMessagesRef.current.get(clientMessageId),
                     pending: false,
+                    acked: false,
                     failed: true
                 };
                 pendingMessagesRef.current.set(clientMessageId, failed);
@@ -603,8 +625,12 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const handleCall = async () => {
         if (chat?.isGroup) {
             if (isPotentiallyActiveHuddle(activeHuddle)) {
-                const huddleSnap = await getDoc(doc(db, 'huddles', activeHuddle.huddleId)).catch(() => null);
-                const huddleData = huddleSnap?.exists?.() ? (huddleSnap.data() || {}) : null;
+                const { data: huddleData } = await supabase
+                    .from('huddles')
+                    .select('*')
+                    .eq('id', activeHuddle.huddleId)
+                    .maybeSingle()
+                    .catch(() => ({ data: null }));
                 const canJoinCurrent = isJoinableHuddleDoc(huddleData);
                 if (canJoinCurrent) {
                     navigation.navigate('Huddle', {
@@ -1041,7 +1067,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
                                                 const directChat = await openOrCreateDirectChat();
                                                 if (!directChat) return;
                                                 setProfileModalVisible(false);
-                                                navigation.navigate('ChatDetail', { chat: directChat });
+                                                navigation.navigate('ChatDetail', { chat: chatService.serializeChatForNavigation(directChat) });
                                             } catch (error) {
                                                 showModal({ type: 'error', title: 'Error', message: 'Unable to open chat right now.' });
                                             }
@@ -1098,6 +1124,52 @@ const ChatDetailScreen = ({ navigation, route }) => {
                                 onPress={() => setProfileModalVisible(false)}
                             >
                                 <Text style={styles.profileActionGhostText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={messageActionSheet.visible}
+                transparent
+                animationType="fade"
+                onRequestClose={closeMessageActions}
+            >
+                <View style={styles.sheetOverlay}>
+                    <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={closeMessageActions} />
+                    <View style={styles.sheetCard}>
+                        <Text style={styles.sheetTitle}>Message Actions</Text>
+                        <Text style={styles.sheetSubtitle} numberOfLines={2}>
+                            {messageActionSheet.title}
+                        </Text>
+                        <View style={styles.sheetActions}>
+                            {messageActionSheet.options.map((option, index) => (
+                                <TouchableOpacity
+                                    key={`${option.text}-${index}`}
+                                    style={[
+                                        styles.sheetActionButton,
+                                        option.style !== 'destructive' && styles.sheetActionButtonPrimary,
+                                        option.style === 'destructive' && styles.sheetActionButtonDestructive
+                                    ]}
+                                    onPress={() => runMessageAction(option)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.sheetActionText,
+                                            option.style !== 'destructive' && styles.sheetActionTextPrimary,
+                                            option.style === 'destructive' && styles.sheetActionTextDestructive
+                                        ]}
+                                    >
+                                        {option.text}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
+                                style={[styles.sheetActionButton, styles.sheetCancelButton]}
+                                onPress={closeMessageActions}
+                            >
+                                <Text style={styles.sheetCancelText}>Cancel</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1483,6 +1555,84 @@ const styles = StyleSheet.create({
     profileActionPrimaryText: {
         color: '#FFFFFF',
         fontWeight: '700'
+    },
+    sheetOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        padding: 24,
+        backgroundColor: 'rgba(0,0,0,0.35)'
+    },
+    sheetBackdrop: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0
+    },
+    sheetCard: {
+        width: '100%',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        paddingHorizontal: 20,
+        paddingTop: 22,
+        paddingBottom: 18,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 14,
+        elevation: 6
+    },
+    sheetTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#1A1A1A',
+        textAlign: 'center'
+    },
+    sheetSubtitle: {
+        marginTop: 8,
+        fontSize: 14,
+        lineHeight: 20,
+        color: '#64748B',
+        textAlign: 'center'
+    },
+    sheetActions: {
+        marginTop: 18,
+        gap: 10
+    },
+    sheetActionButton: {
+        borderRadius: 14,
+        paddingVertical: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E2E8F0'
+    },
+    sheetActionButtonPrimary: {
+        backgroundColor: '#E9F7F6',
+        borderColor: '#BDE7E1'
+    },
+    sheetActionButtonDestructive: {
+        backgroundColor: '#FFF1F2',
+        borderColor: '#FECDD3'
+    },
+    sheetActionText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#0F172A'
+    },
+    sheetActionTextPrimary: {
+        color: COLORS.primary
+    },
+    sheetActionTextDestructive: {
+        color: '#BE123C'
+    },
+    sheetCancelButton: {
+        backgroundColor: '#FFFFFF'
+    },
+    sheetCancelText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#6A7385'
     }
 });
 

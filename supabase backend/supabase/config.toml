@@ -1,0 +1,110 @@
+project_id = "mphgfowieudglzchrdve"
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[functions.request-otp]
+verify_jwt = false
+
+[functions.verify-otp]
+verify_jwt = false
+
+[functions.register-with-otp]
+verify_jwt = false
+
+[functions.reset-password-with-otp]
+verify_jwt = false
+
+[functions.change-password-with-otp]
+verify_jwt = false
+
+[functions.complete-email-verification-with-otp]
+verify_jwt = false
+
+[functions.change-email-with-otp]
+verify_jwt = false
+
+[functions.record-login-device]
+verify_jwt = false
+
+[functions.delete-user-account]
+verify_jwt = false
+
+[functions.admin-session-bootstrap]
+verify_jwt = false
+
+[functions.admin-content]
+verify_jwt = false
+
+[functions.admin-assessment-questions]
+verify_jwt = false
+
+[functions.create-direct-chat]
+verify_jwt = false
+
+[functions.send-message]
+verify_jwt = false
+
+[functions.delete-chat]
+verify_jwt = false
+
+[functions.start-huddle]
+verify_jwt = false
+
+[functions.join-huddle]
+verify_jwt = false
+
+[functions.decline-huddle]
+verify_jwt = false
+
+[functions.update-huddle-connection]
+verify_jwt = false
+
+[functions.end-huddle]
+verify_jwt = false
+
+[functions.ring-huddle-participants]
+verify_jwt = false
+
+[functions.update-huddle-state]
+verify_jwt = false
+
+[functions.admin-audit-logs]
+verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = false
+
+[functions.admin-dashboard]
+verify_jwt = false
+
+[functions.admin-support]
+verify_jwt = false
+
+[functions.admin-moderation]
+verify_jwt = false
+
+[functions.admin-transactions]
+verify_jwt = false
+
+[functions.app-ai]
+verify_jwt = false
+
+[functions.app-billing]
+verify_jwt = false
+
+[functions.app-content]
+verify_jwt = false
+
+[functions.app-users]
+verify_jwt = false
+
+[functions.app-circles]
+verify_jwt = false
+
+[functions.media-signature]
+verify_jwt = false
+
+[functions.dispatch-notifications]
+verify_jwt = false

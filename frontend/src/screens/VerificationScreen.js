@@ -37,7 +37,7 @@ const VerificationScreen = ({ navigation }) => {
         purpose: 'EMAIL_VERIFY',
         title: 'Verify Email',
         subtitle: `Enter the code sent to ${currentUser?.email || user?.email}.`,
-        initialCooldownSeconds: Number(result?.cooldownSeconds || 60),
+        initialCooldownSeconds: Number(result?.cooldownSeconds || 30),
         nextAction: { type: 'email_verify' }
       });
     } catch (error) {

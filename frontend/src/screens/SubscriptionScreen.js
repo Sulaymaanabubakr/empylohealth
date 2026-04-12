@@ -6,17 +6,23 @@ import { useModal } from '../context/ModalContext';
 import { LEGAL_LINKS } from '../constants/legalLinks';
 import { subscriptionService } from '../services/api/subscriptionService';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
-import { getPlanRules } from '../services/subscription/subscriptionConfig';
+import { getPlanRules, normalizePlanId } from '../services/subscription/subscriptionConfig';
 import { COLORS, SPACING } from '../theme/theme';
 
-const PLAN_COMPARISON = [
-    { label: 'Create circles', free: true, pro: true },
-    { label: 'Personal huddles', free: true, pro: true },
-    { label: 'Pro circles', free: false, pro: true },
-    { label: 'Circle huddles', free: false, pro: true },
-    { label: 'Schedule huddles', free: false, pro: true },
-    { label: 'Share activities', free: false, pro: true },
-    { label: 'Full activities', free: false, pro: true },
+const PLAN_ORDER = ['free', 'pro', 'premium', 'enterprise'];
+
+const FEATURE_ROWS = [
+    { label: 'Join huddles', key: 'canJoinHuddles', type: 'capability' },
+    { label: 'Start huddles', key: 'canStartHuddles', type: 'capability' },
+    { label: 'Schedule huddles', key: 'canScheduleHuddles', type: 'capability' },
+    { label: 'AI assistant', key: 'canUseAiAssistant', type: 'capability' },
+    { label: 'Full Key Challenges', key: 'hasFullKeyChallenges', type: 'capability' },
+    { label: 'Group activities', key: 'canAccessGroupActivities', type: 'capability' },
+    { label: 'Share activities', key: 'canShareActivities', type: 'capability' },
+    { label: 'Monthly AI credits', key: 'monthlyAiCredits', type: 'limit' },
+    { label: 'Monthly huddle minutes', key: 'monthlyHuddleMinutes', type: 'limit' },
+    { label: 'Daily huddle starts', key: 'dailyHuddleStarts', type: 'limit' },
+    { label: 'Max minutes per huddle', key: 'maxMinutesPerHuddle', type: 'limit' },
 ];
 
 const formatExpiry = (expiresAt) => {
@@ -42,10 +48,12 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const { showModal } = useModal();
     const [status, setStatus] = useState(null);
     const [plans, setPlans] = useState([]);
+    const [boosts, setBoosts] = useState([]);
+    const [enterpriseConfig, setEnterpriseConfig] = useState(null);
     const [loading, setLoading] = useState(true);
     const [busyProductId, setBusyProductId] = useState('');
     const [restoring, setRestoring] = useState(false);
-    const [comparisonPlan, setComparisonPlan] = useState('pro');
+    const [selectedPlanId, setSelectedPlanId] = useState('pro');
 
     const refresh = async (forceRefresh = false) => {
         setLoading(true);
@@ -55,6 +63,8 @@ const SubscriptionScreen = ({ navigation, route }) => {
                 subscriptionService.getStatus(forceRefresh)
             ]);
             setPlans(Array.isArray(catalog?.plans) ? catalog.plans : []);
+            setBoosts(Array.isArray(catalog?.boosts) ? catalog.boosts : []);
+            setEnterpriseConfig(catalog?.enterprise || null);
             setStatus(nextStatus || null);
         } catch (error) {
             showModal({
@@ -74,8 +84,8 @@ const SubscriptionScreen = ({ navigation, route }) => {
                 await refresh(true);
                 showModal({
                     type: 'success',
-                    title: 'Pro active',
-                    message: 'Your Pro subscription is now active across your account.'
+                    title: 'Purchase complete',
+                    message: 'Your balance and subscription status have been updated.'
                 });
                 setBusyProductId('');
             },
@@ -97,57 +107,61 @@ const SubscriptionScreen = ({ navigation, route }) => {
 
     const entitlement = status?.entitlement || { plan: 'free', status: 'expired' };
     const usage = status?.usage || {};
+    const remaining = status?.remaining || {};
+    const limits = status?.limits || {};
+    const capabilities = status?.capabilities || {};
     const currentPlan = entitlement?.plan || 'free';
     const currentRules = getPlanRules(currentPlan);
-    const currentPlanIsPro = currentRules.id === 'pro';
+    const normalizedPlans = useMemo(() => {
+        const mapped = plans.map((plan) => ({
+            ...plan,
+            id: normalizePlanId(plan?.id),
+            capabilities: plan?.capabilities || {},
+            limits: plan?.limits || {}
+        }));
+        const byId = new Map(mapped.map((plan) => [plan.id, plan]));
+        return PLAN_ORDER
+            .map((id) => byId.get(id))
+            .filter(Boolean);
+    }, [plans]);
+
+    const selectedPlan = normalizedPlans.find((plan) => plan.id === selectedPlanId)
+        || normalizedPlans.find((plan) => plan.id === 'pro')
+        || null;
 
     useEffect(() => {
-        setComparisonPlan(currentPlanIsPro ? 'pro' : 'free');
-    }, [currentPlanIsPro]);
+        const fallbackPlan = currentPlan === 'free' ? 'pro' : currentPlan;
+        setSelectedPlanId(fallbackPlan);
+    }, [currentPlan]);
 
-    const proPlan = plans.find((plan) => {
-        const id = String(plan?.id || '').toLowerCase();
-        return id.includes('pro') || id.includes('premium');
-    }) || plans.find((plan) => String(plan?.productId || '').trim()) || {
-        id: 'pro',
-        name: 'Pro Monthly',
-        description: 'Unlock Pro circles, full activities, scheduling, and circle huddles.',
-        priceLabel: '£10/month',
-        productId: ''
-    };
-
-    const huddlesUsedToday = currentPlanIsPro
-        ? Number(usage?.circleHuddlesStarted || 0)
-        : Number(usage?.personalHuddlesStarted || 0);
-    const minutesUsedToday = currentPlanIsPro
-        ? Number(usage?.circleHuddleMinutesConsumed || 0)
-        : Number(usage?.personalHuddleMinutesConsumed || 0);
+    const comparisonTitle = selectedPlan?.displayName || selectedPlan?.name || 'Choose your plan';
+    const comparisonSubtitle = selectedPlanId === 'enterprise'
+        ? 'Coach+ is managed outside the app for organisations and coaching teams.'
+        : 'Plans refresh on your renewal date. Subscription balances do not roll over.';
 
     const summaryRows = useMemo(() => ([
-        currentPlanIsPro
-            ? `${huddlesUsedToday} circle huddles started today`
-            : `${huddlesUsedToday}/${currentRules.huddlesPerDay} personal huddles today`,
-        `${minutesUsedToday}/${currentRules.huddleMinutesPerDay} minutes used today`,
-        currentPlanIsPro ? 'Pro circles enabled' : 'Upgrade for Pro circles and circle huddles'
-    ]), [currentPlanIsPro, currentRules, huddlesUsedToday, minutesUsedToday]);
-
-    const comparisonTitle = comparisonPlan === 'pro' ? 'Get Pro' : 'Start free';
-    const comparisonSubtitle = comparisonPlan === 'pro'
-        ? 'Unlock circle huddles, scheduling, and the full Pro circle experience.'
-        : 'Keep chatting in circles for free, then upgrade when you need Pro huddles.';
+        `AI credits remaining: ${remaining?.aiCreditsRemaining ?? 0}${remaining?.boostAiCreditsRemaining ? ` (+${remaining.boostAiCreditsRemaining} boost)` : ''}`,
+        `Huddle minutes remaining: ${remaining?.huddleMinutesRemaining ?? 0}${remaining?.boostHuddleMinutesRemaining ? ` (+${remaining.boostHuddleMinutesRemaining} boost)` : ''}`,
+        limits?.dailyHuddleStarts != null
+            ? `Daily huddle starts left: ${remaining?.dailyHuddleStartsRemaining ?? limits.dailyHuddleStarts}`
+            : 'Daily huddle starts: unlimited',
+        `Current plan: ${currentRules.label}`,
+    ]), [currentRules.label, limits?.dailyHuddleStarts, remaining]);
 
     const handleSubscribe = async () => {
-        if (!proPlan?.productId) {
+        if (!selectedPlan?.productId) {
             showModal({
                 type: 'info',
                 title: 'Purchases unavailable',
-                message: 'No product ID is configured for Pro yet.'
+                message: selectedPlanId === 'enterprise'
+                    ? 'Enterprise plans are activated by our team outside the app.'
+                    : 'No product ID is configured for this plan yet.'
             });
             return;
         }
         try {
-            setBusyProductId(String(proPlan.productId));
-            await subscriptionService.requestPlanPurchase(proPlan);
+            setBusyProductId(String(selectedPlan.productId));
+            await subscriptionService.requestPlanPurchase(selectedPlan);
         } catch (error) {
             setBusyProductId('');
             showModal({
@@ -161,7 +175,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const handleRestore = async () => {
         try {
             setRestoring(true);
-            await subscriptionService.restore({ productId: proPlan?.productId || '' });
+            await subscriptionService.restore({ productId: selectedPlan?.productId || '' });
             await refresh(true);
             showModal({
                 type: 'success',
@@ -176,6 +190,53 @@ const SubscriptionScreen = ({ navigation, route }) => {
             });
         } finally {
             setRestoring(false);
+        }
+    };
+
+    const handleEnterprisePress = async () => {
+        const url = enterpriseConfig?.url || 'https://circleshealth.com';
+        try {
+            await Linking.openURL(url);
+        } catch {
+            showModal({
+                type: 'error',
+                title: 'Unable to open link',
+                message: 'Please try again later.'
+            });
+        }
+    };
+
+    const renderFeatureValue = (plan, row) => {
+        if (row.type === 'capability') {
+            return <PlanCell enabled={plan?.capabilities?.[row.key] === true} accent={plan?.id === selectedPlanId} />;
+        }
+        const value = plan?.limits?.[row.key];
+        return <PlanCell text={value == null ? 'Custom' : String(value)} accent={plan?.id === selectedPlanId} />;
+    };
+
+    const isCurrentPlanSelected = selectedPlanId === normalizePlanId(currentPlan);
+    const currentProductBusy = busyProductId && busyProductId === selectedPlan?.productId;
+
+    const handleBoostPurchase = async (boost) => {
+        const productId = String(boost?.productId || boost?.id || '').trim();
+        if (!productId) {
+            showModal({
+                type: 'info',
+                title: 'Purchases unavailable',
+                message: 'This boost is not configured for purchase yet.'
+            });
+            return;
+        }
+        try {
+            setBusyProductId(productId);
+            await subscriptionService.requestBoostPurchase(boost);
+        } catch (error) {
+            setBusyProductId('');
+            showModal({
+                type: 'error',
+                title: 'Unable to start purchase',
+                message: error?.message || 'Unable to open the store purchase flow.'
+            });
         }
     };
 
@@ -206,20 +267,18 @@ const SubscriptionScreen = ({ navigation, route }) => {
 
                             <View style={styles.toggleWrap}>
                                 <View style={styles.toggleTrack}>
-                                    <TouchableOpacity
-                                        style={[styles.togglePill, comparisonPlan === 'free' && styles.togglePillActive]}
-                                        onPress={() => setComparisonPlan('free')}
-                                        activeOpacity={0.9}
-                                    >
-                                        <Text style={[styles.toggleLabel, comparisonPlan === 'free' ? styles.toggleLabelActiveText : styles.toggleLabelMuted]}>Free</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.togglePill, comparisonPlan === 'pro' && styles.togglePillActive]}
-                                        onPress={() => setComparisonPlan('pro')}
-                                        activeOpacity={0.9}
-                                    >
-                                        <Text style={[styles.toggleLabel, comparisonPlan === 'pro' ? styles.toggleLabelActiveText : styles.toggleLabelMuted]}>Pro</Text>
-                                    </TouchableOpacity>
+                                    {normalizedPlans.map((plan) => (
+                                        <TouchableOpacity
+                                            key={plan.id}
+                                            style={[styles.togglePill, selectedPlanId === plan.id && styles.togglePillActive]}
+                                            onPress={() => setSelectedPlanId(plan.id)}
+                                            activeOpacity={0.9}
+                                        >
+                                            <Text style={[styles.toggleLabel, selectedPlanId === plan.id ? styles.toggleLabelActiveText : styles.toggleLabelMuted]}>
+                                                {plan.displayName || plan.name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
                                 </View>
                             </View>
                         </View>
@@ -235,20 +294,24 @@ const SubscriptionScreen = ({ navigation, route }) => {
                             <View style={styles.compareHeaderRow}>
                                 <Text style={styles.compareHeaderTitle}>Features</Text>
                                 <View style={styles.compareColumnsHeader}>
-                                    <Text style={styles.compareFreeHeader}>Free</Text>
-                                    <Text style={styles.compareProHeader}>Pro</Text>
+                                    <Text style={styles.compareFreeHeader}>Current</Text>
+                                    <Text style={styles.compareProHeader}>Selected</Text>
                                 </View>
                             </View>
 
-                            {PLAN_COMPARISON.map((row, index) => (
-                                <View key={row.label} style={[styles.compareRow, index === PLAN_COMPARISON.length - 1 && styles.compareRowLast]}>
+                            {FEATURE_ROWS.map((row, index) => (
+                                <View key={row.label} style={[styles.compareRow, index === FEATURE_ROWS.length - 1 && styles.compareRowLast]}>
                                     <Text style={styles.compareLabel}>{row.label}</Text>
                                     <View style={styles.compareColumns}>
                                         <View style={styles.compareColumnCell}>
-                                            <PlanCell enabled={row.free} />
+                                            {renderFeatureValue(normalizedPlans.find((plan) => plan.id === normalizePlanId(currentPlan)) || {
+                                                id: normalizePlanId(currentPlan),
+                                                capabilities,
+                                                limits
+                                            }, row)}
                                         </View>
                                         <View style={styles.compareColumnCell}>
-                                            <PlanCell enabled={row.pro} accent />
+                                            {renderFeatureValue(selectedPlan, row)}
                                         </View>
                                     </View>
                                 </View>
@@ -258,24 +321,66 @@ const SubscriptionScreen = ({ navigation, route }) => {
                         <View style={styles.statusCard}>
                             <View style={styles.statusCardHeader}>
                                 <Text style={styles.statusTitle}>Current plan</Text>
-                                <Text style={styles.statusValue}>{currentRules.label}</Text>
+                                <Text style={styles.statusValue}>{status?.entitlement?.displayName || currentRules.label}</Text>
                             </View>
                             {summaryRows.map((row) => (
                                 <Text key={row} style={styles.statusLine}>{row}</Text>
                             ))}
-                            <Text style={styles.statusMeta}>{formatExpiry(entitlement?.expiresAt)}</Text>
+                            <Text style={styles.statusMeta}>
+                                {status?.refreshesOn
+                                    ? `Credits refresh on ${new Date(status.refreshesOn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.`
+                                    : formatExpiry(entitlement?.expiresAt)}
+                            </Text>
                         </View>
 
+                        {boosts.length > 0 && capabilities?.canUseBoosts === true && (
+                            <View style={styles.statusCard}>
+                                <View style={styles.statusCardHeader}>
+                                    <Text style={styles.statusTitle}>Boost packs</Text>
+                                    <Text style={styles.statusValue}>Non-expiring</Text>
+                                </View>
+                                {boosts.map((boost) => {
+                                    const boostId = boost.productId || boost.id;
+                                    const isBusy = busyProductId === boostId;
+                                    return (
+                                        <View key={boostId} style={styles.boostRow}>
+                                            <View style={styles.boostCopy}>
+                                                <Text style={styles.boostTitle}>{boost.title || boost.name || boost.productId}</Text>
+                                                <Text style={styles.statusLine}>
+                                                    {(boost.priceLabel ? `${boost.priceLabel} · ` : '')}+{boost.aiCredits || 0} AI credits and +{boost.huddleMinutes || 0} huddle minutes
+                                                </Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={styles.boostButton}
+                                                onPress={() => handleBoostPurchase(boost)}
+                                                disabled={!!busyProductId}
+                                            >
+                                                {isBusy ? (
+                                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                                ) : (
+                                                    <Text style={styles.boostButtonText}>Buy</Text>
+                                                )}
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })}
+                            </View>
+                        )}
+
                         <TouchableOpacity
-                            style={[styles.upgradeButton, currentPlanIsPro && styles.upgradeButtonDisabled]}
-                            onPress={handleSubscribe}
-                            disabled={currentPlanIsPro || !!busyProductId}
+                            style={[styles.upgradeButton, (isCurrentPlanSelected || selectedPlanId === 'free') && styles.upgradeButtonDisabled]}
+                            onPress={selectedPlanId === 'enterprise' ? handleEnterprisePress : handleSubscribe}
+                            disabled={selectedPlanId !== 'enterprise' && (isCurrentPlanSelected || selectedPlanId === 'free' || !!busyProductId)}
                         >
-                            {busyProductId ? (
+                            {currentProductBusy ? (
                                 <ActivityIndicator color="#FFFFFF" />
                             ) : (
                                 <Text style={styles.upgradeButtonText}>
-                                    {currentPlanIsPro ? 'Pro active' : `Upgrade for ${proPlan?.priceLabel || '£10/month'}`}
+                                    {selectedPlanId === 'enterprise'
+                                        ? 'Contact us for a demo'
+                                        : isCurrentPlanSelected
+                                            ? `${currentRules.label} active`
+                                            : `Choose ${selectedPlan?.priceLabel || selectedPlan?.annualPriceLabel || 'this plan'}`}
                                 </Text>
                             )}
                         </TouchableOpacity>
@@ -537,6 +642,38 @@ const styles = StyleSheet.create({
         fontFamily: 'DMSans_500Medium',
         fontSize: 13,
         color: '#8A8F98'
+    },
+    boostRow: {
+        marginTop: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F0F1EE',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12
+    },
+    boostCopy: {
+        flex: 1
+    },
+    boostTitle: {
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 14,
+        color: COLORS.text
+    },
+    boostButton: {
+        minWidth: 72,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: COLORS.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 14
+    },
+    boostButtonText: {
+        color: '#FFFFFF',
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 14
     },
     upgradeButton: {
         marginTop: 28,

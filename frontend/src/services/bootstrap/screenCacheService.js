@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const PREFIX = 'screen_cache_v1:';
+const PREFIX = 'screen_cache_v2:';
 
 const makeKey = (key) => `${PREFIX}${key}`;
 
@@ -30,4 +30,3 @@ export const screenCacheService = {
     }
   },
 };
-

@@ -6,15 +6,14 @@ import Daily from '@daily-co/react-native-daily-js';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../theme/theme';
 import { huddleService } from '../services/api/huddleService';
+import { chatService } from '../services/api/chatService';
 import { nativeCallService } from '../services/native/nativeCallService';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
-import { db } from '../services/firebaseConfig';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { callDiagnostics } from '../services/calling/callDiagnostics';
 import { loopingSound } from '../services/audio/loopingSound';
-import { resolveWellbeingScore } from '../utils/wellbeing';
 import { useModal } from '../context/ModalContext';
+import { resolveWellbeingScore } from '../utils/wellbeing';
 
 const MAX_VISIBLE_PARTICIPANTS = 8;
 const JOIN_TIMEOUT_MS = 15000; // 10-15s
@@ -26,6 +25,9 @@ const HOST_ALONE_FORCE_END_DELAY_MS = 300000; // retained for optional UX
 const FORCE_END_COUNTDOWN_SECONDS = 5;
 const MAX_CALL_DURATION_MS = 3600000; // 1 hour
 const MAX_CALL_DURATION_WARNING_MS = 300000; // final 5 minutes
+const HUDDLE_LIMIT_WARNING_MS = 60000;
+const HUDDLE_GRACE_PERIOD_MS = 45000;
+const RINGBACK_REPEAT_MS = 4200;
 const ENABLE_ACCEPTED_ALONE_AUTO_END = true;
 const ENABLE_HOST_ALONE_AUTOMATION = false;
 // Audio playback is handled via loopingSound (expo-audio).
@@ -41,6 +43,7 @@ const HuddleScreen = ({ navigation, route }) => {
     const ringbackSoundRef = useRef(null);
     const ringbackSessionRef = useRef(0);
     const ringbackVibrationIntervalRef = useRef(null);
+    const ringbackReplayIntervalRef = useRef(null);
     const lastAudioRouteApplyAtRef = useRef(0);
     const firstRemoteAudioLoggedRef = useRef(false);
     const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -91,10 +94,14 @@ const HuddleScreen = ({ navigation, route }) => {
     const [showHostAlonePrompt, setShowHostAlonePrompt] = useState(false);
     const [forceEndCountdown, setForceEndCountdown] = useState(null);
     const [maxDurationWarningSeconds, setMaxDurationWarningSeconds] = useState(null);
+    const [limitWarningSeconds, setLimitWarningSeconds] = useState(null);
+    const [graceSeconds, setGraceSeconds] = useState(null);
     const [layoutSize, setLayoutSize] = useState({
         width: Dimensions.get('window').width,
         height: Math.max(Dimensions.get('window').height - 260, 320)
     });
+    const grantedMinutes = Number(route?.params?.subscriptionGrant?.grantedMinutes || 0);
+    const grantedLimitMs = grantedMinutes > 0 ? grantedMinutes * 60 * 1000 : 0;
 
     const logMetric = useCallback((label, value) => {
         console.log(`[HUDDLE_METRIC] ${label}: ${value}ms`);
@@ -155,30 +162,15 @@ const HuddleScreen = ({ navigation, route }) => {
     useEffect(() => {
         if (!chat?.id) return undefined;
 
-        const chatRef = doc(db, 'chats', chat.id);
-        const unsubscribe = onSnapshot(chatRef, async (chatSnap) => {
-            const ids = chatSnap.data()?.participants || [];
-            if (!Array.isArray(ids) || ids.length === 0) {
-                setExpectedParticipants([]);
-                return;
-            }
-            const rows = await Promise.all(ids.map(async (uid) => {
-                const userSnap = await getDoc(doc(db, 'users', uid));
-                const data = userSnap.exists() ? userSnap.data() : {};
-                return {
-                    uid,
-                    name: data?.name || data?.displayName || 'Member',
-                    photoURL: data?.photoURL || '',
-                    wellbeingScore: resolveWellbeingScore(data),
-                    wellbeingLabel: data?.wellbeingLabel || data?.wellbeingStatus || ''
-                };
-            }));
-            setExpectedParticipants(rows);
-        }, () => {
-            setExpectedParticipants([]);
+        const unsubscribe = chatService.subscribeToParticipantProfiles(chat.id, (rows) => {
+            setExpectedParticipants(rows || []);
         });
-
-        return unsubscribe;
+        return () => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+            setExpectedParticipants([]);
+        };
     }, [chat?.id]);
 
     const requestMicPermission = useCallback(async () => {
@@ -296,11 +288,17 @@ const HuddleScreen = ({ navigation, route }) => {
         }, 1000);
     }, []);
 
-    const stopRingbackTone = useCallback(async () => {
-        ringbackSessionRef.current += 1;
+    const stopRingbackTone = useCallback(async (invalidateSession = true) => {
+        if (invalidateSession) {
+            ringbackSessionRef.current += 1;
+        }
         if (ringbackVibrationIntervalRef.current) {
             clearInterval(ringbackVibrationIntervalRef.current);
             ringbackVibrationIntervalRef.current = null;
+        }
+        if (ringbackReplayIntervalRef.current) {
+            clearInterval(ringbackReplayIntervalRef.current);
+            ringbackReplayIntervalRef.current = null;
         }
         Vibration.cancel();
         const instance = ringbackSoundRef.current;
@@ -310,13 +308,13 @@ const HuddleScreen = ({ navigation, route }) => {
     }, []);
 
     const startRingbackTone = useCallback(async () => {
+        await stopRingbackTone(false);
         const sessionId = ringbackSessionRef.current + 1;
         ringbackSessionRef.current = sessionId;
-        await stopRingbackTone();
 
         const instance = await safeCall(() => loopingSound.createAndPlay(
             require('../assets/sounds/ringback.wav'),
-            { volume: 1.0 }
+            { volume: 1.0, loop: false }
         ));
         if (instance?.handle) {
             if (ringbackSessionRef.current !== sessionId) {
@@ -324,6 +322,13 @@ const HuddleScreen = ({ navigation, route }) => {
                 return;
             }
             ringbackSoundRef.current = instance;
+            ringbackReplayIntervalRef.current = setInterval(() => {
+                if (ringbackSessionRef.current !== sessionId || !ringbackSoundRef.current?.handle) return;
+                safeCall(async () => {
+                    await ringbackSoundRef.current.handle.seekTo?.(0);
+                    ringbackSoundRef.current.handle.play?.();
+                });
+            }, RINGBACK_REPEAT_MS);
             return;
         }
 
@@ -331,7 +336,7 @@ const HuddleScreen = ({ navigation, route }) => {
         Vibration.vibrate(350);
         ringbackVibrationIntervalRef.current = setInterval(() => {
             Vibration.vibrate(350);
-        }, 1800);
+        }, RINGBACK_REPEAT_MS);
     }, [stopRingbackTone]);
 
     const detachCallHandlers = useCallback(() => {
@@ -527,6 +532,48 @@ const HuddleScreen = ({ navigation, route }) => {
         return () => clearInterval(timer);
     }, [phase]);
 
+    useEffect(() => {
+        if (!grantedLimitMs || phase === 'ending' || phase === 'ended' || phase === 'error') {
+            setLimitWarningSeconds(null);
+            setGraceSeconds(null);
+            return undefined;
+        }
+
+        const syncGrantedLimit = () => {
+            const startedAtMs = Number(callStartedAtMsRef.current || 0);
+            if (startedAtMs <= 0) return;
+
+            const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+            const remainingMs = Math.max(0, grantedLimitMs - elapsedMs);
+
+            if (remainingMs > 0 && remainingMs <= HUDDLE_LIMIT_WARNING_MS) {
+                setLimitWarningSeconds(Math.ceil(remainingMs / 1000));
+            } else {
+                setLimitWarningSeconds(null);
+            }
+
+            if (remainingMs === 0) {
+                const graceRemainingMs = Math.max(0, HUDDLE_GRACE_PERIOD_MS - Math.max(0, elapsedMs - grantedLimitMs));
+                setGraceSeconds(Math.ceil(graceRemainingMs / 1000));
+                if (graceRemainingMs === 0) {
+                    leaveCallRef.current?.(
+                        false,
+                        true,
+                        true,
+                        'minutes_exhausted',
+                        'Your included huddle time is exhausted for this billing period.'
+                    );
+                }
+            } else {
+                setGraceSeconds(null);
+            }
+        };
+
+        syncGrantedLimit();
+        const timer = setInterval(syncGrantedLimit, 1000);
+        return () => clearInterval(timer);
+    }, [grantedLimitMs, phase]);
+
     useEffect(() => () => {
         stopRingbackTone();
         clearAllTimeouts();
@@ -571,10 +618,8 @@ const HuddleScreen = ({ navigation, route }) => {
         if (!huddleId) return undefined;
         if (isLeavingRef.current) return undefined;
 
-        const huddleDocRef = doc(db, 'huddles', huddleId);
-        const unsubscribe = onSnapshot(huddleDocRef, (snap) => {
-            if (!snap.exists() || isLeavingRef.current) return;
-            const data = snap.data();
+        const unsubscribe = huddleService.subscribeToHuddle(huddleId, (data) => {
+            if (!data || isLeavingRef.current) return;
             const status = data?.status || null;
             setFirebaseStatus(status);
             if (lastFirebaseStatusRef.current !== status) {
@@ -595,10 +640,8 @@ const HuddleScreen = ({ navigation, route }) => {
             }
 
             // Debug: log participant array changes from Firestore
-            const firestoreParticipants = data.participants || [];
-            console.log('[Huddle] Firestore participants updated:', firestoreParticipants.length, firestoreParticipants);
-        }, (err) => {
-            console.warn('[Huddle] onSnapshot error:', err);
+            const participantIds = data.accepted_user_ids || [];
+            console.log('[Huddle] Supabase participants updated:', participantIds.length, participantIds);
         });
 
         return unsubscribe;
@@ -1271,7 +1314,11 @@ const HuddleScreen = ({ navigation, route }) => {
         }, remainingMs);
     };
 
-	    const statusText = isForceEnding
+	    const statusText = graceSeconds != null
+            ? `Grace period: ${graceSeconds}s`
+            : limitWarningSeconds != null
+                ? `Included time ends in ${formatTime(Math.max(0, limitWarningSeconds))}`
+            : isForceEnding
             ? `Call ends in ${forceEndCountdown}s`
             : maxDurationWarningSeconds != null
                 ? `Call ends in ${formatTime(Math.max(0, maxDurationWarningSeconds))}`
@@ -1331,6 +1378,24 @@ const HuddleScreen = ({ navigation, route }) => {
                     </View>
                     <View style={{ width: 36 }} />
                 </View>
+
+                {limitWarningSeconds != null && graceSeconds == null && (
+                    <View style={styles.warningBanner}>
+                        <Ionicons name="time-outline" size={16} color="#8A5A00" />
+                        <Text style={styles.warningBannerText}>
+                            Your included huddle time ends in {formatTime(Math.max(0, limitWarningSeconds))}.
+                        </Text>
+                    </View>
+                )}
+
+                {graceSeconds != null && (
+                    <View style={[styles.warningBanner, styles.warningBannerCritical]}>
+                        <Ionicons name="alert-circle-outline" size={16} color="#991B1B" />
+                        <Text style={[styles.warningBannerText, styles.warningBannerCriticalText]}>
+                            Your included huddle time is up. Disconnecting in {graceSeconds}s.
+                        </Text>
+                    </View>
+                )}
 
                 <View
                     style={styles.circleCanvas}
@@ -1513,6 +1578,29 @@ const styles = StyleSheet.create({
         color: COLORS.gray,
         fontSize: 13,
         marginTop: 2
+    },
+    warningBanner: {
+        marginHorizontal: 14,
+        marginBottom: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: 14,
+        backgroundColor: '#FFF4D6',
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    warningBannerCritical: {
+        backgroundColor: '#FDE8E8'
+    },
+    warningBannerText: {
+        marginLeft: 8,
+        flex: 1,
+        color: '#8A5A00',
+        fontSize: 13,
+        fontWeight: '700'
+    },
+    warningBannerCriticalText: {
+        color: '#991B1B'
     },
     circleCanvas: {
         flex: 1,

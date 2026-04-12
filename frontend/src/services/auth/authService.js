@@ -1,296 +1,369 @@
-import { auth } from '../firebaseConfig';
-import {
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
-    signOut,
-    updateProfile,
-    onAuthStateChanged,
-    sendPasswordResetEmail,
-    confirmPasswordReset,
-    sendEmailVerification,
-    reload,
-    GoogleAuthProvider,
-    OAuthProvider,
-    signInWithCredential,
-} from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { callableClient } from '../api/callableClient';
 import { Platform } from 'react-native';
+import { authApiClient } from './authApiClient';
+import { authProfileService } from './authProfileService';
+import { supabase } from '../supabase/supabaseClient';
 
-/**
- * Service to handle all Authentication logic
- */
+const mapSupabaseUser = (user) => {
+    if (!user) return null;
+    const metadata = user.user_metadata || {};
+    const identities = Array.isArray(user.identities) ? user.identities : [];
+    return {
+        uid: user.id,
+        id: user.id,
+        email: user.email || '',
+        displayName: metadata.name || metadata.full_name || '',
+        photoURL: metadata.avatar_url || metadata.picture || '',
+        emailVerified: Boolean(user.email_confirmed_at),
+        providerData: identities.map((identity) => ({
+            providerId: identity.provider || identity.identity_id || '',
+        })),
+    };
+};
+
+const getCurrentSessionUser = async () => {
+    const { data } = await supabase.auth.getUser();
+    return mapSupabaseUser(data.user || null);
+};
+
+let cachedUser = null;
+
+const waitForSession = async (timeoutMs = 8000) => {
+    const start = Date.now();
+    while ((Date.now() - start) < timeoutMs) {
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.access_token && data.session?.user?.id) {
+            return data.session;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    const { data } = await supabase.auth.getSession();
+    return data.session || null;
+};
+
+const resolveAuthUserFromResponse = (data) => {
+    const sessionUser = data?.session?.user || null;
+    const responseUser = data?.user || null;
+    if (sessionUser?.id && responseUser?.id && sessionUser.id !== responseUser.id) {
+        console.warn('[AuthService] Auth response user mismatch', {
+            sessionUid: sessionUser.id,
+            responseUid: responseUser.id,
+            sessionEmail: sessionUser.email || '',
+            responseEmail: responseUser.email || '',
+        });
+    }
+    return sessionUser || responseUser || null;
+};
+
+const ensureProfileForUser = async (user, { createIfMissing = false } = {}) => {
+    if (!user?.id) return;
+    console.log('[AuthService] ensureProfileForUser start', { uid: user.id, createIfMissing });
+    const session = await waitForSession();
+    if (!session?.access_token) {
+        console.log('[AuthService] ensureProfileForUser missing session', { uid: user.id });
+        throw new Error('Authenticated session was not established.');
+    }
+    const { data: existing, error: fetchError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (existing?.id) {
+        console.log('[AuthService] ensureProfileForUser existing profile found', { uid: user.id });
+        return;
+    }
+    if (!createIfMissing) return;
+
+    const metadata = user.user_metadata || {};
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const payload = {
+        id: user.id,
+        email: user.email || '',
+        name: metadata.name || metadata.full_name || metadata.user_name || '',
+        photo_url: metadata.avatar_url || metadata.picture || '',
+        role: 'personal',
+        onboarding_completed: false,
+        timezone,
+    };
+
+    const { error: insertError } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' });
+    if (insertError) throw insertError;
+    console.log('[AuthService] ensureProfileForUser created profile', { uid: user.id });
+};
+
 export const authService = {
-    /**
-     * Initialize Google Sign In
-     * @param {string} webClientId - From Firebase Console > Auth > Google > Web SDK config
-     */
     init: (webClientId) => {
-        try {
-            if (!webClientId) {
-                console.warn('[AuthService] Google Sign-In web client ID not provided; skipping configure.');
-                return;
-            }
-            GoogleSignin.configure({ webClientId });
-            console.log('[AuthService] Google Sign-In configured successfully');
-        } catch (error) {
-            console.warn('[AuthService] Google Sign-In configuration failed:', error.message);
-            // Non-fatal - app can still run without Google Sign-In
-        }
+        if (!webClientId) return;
+        GoogleSignin.configure({
+            webClientId,
+            offlineAccess: true,
+        });
+        console.log('[AuthService] Google Sign-In configured');
     },
 
-    /**
-     * Login with email and password
-     * ... (existing)
-     */
     login: async (email, password) => {
-        try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            return { success: true, user: userCredential.user };
-        } catch (error) {
-            throw error;
-        }
+        console.log('[AuthService] Password login start', { email: String(email || '').trim().toLowerCase() });
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: String(email || '').trim().toLowerCase(),
+            password: String(password || ''),
+        });
+        if (error) throw error;
+        await ensureProfileForUser(data.user, { createIfMissing: false });
+        cachedUser = mapSupabaseUser(data.user);
+        console.log('[AuthService] Password login success', { uid: cachedUser?.uid || null });
+        return { success: true, user: cachedUser };
     },
 
-    /**
-     * Register a new user
-     * ... (existing)
-     */
-    register: async (email, password, name) => {
-        try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-            await updateProfile(user, { displayName: name });
-            await sendEmailVerification(user);
-            return { success: true, user };
-        } catch (error) {
-            throw error;
-        }
+    register: async () => {
+        throw new Error('Use the OTP registration flow.');
     },
 
     requestOtp: async ({ email, purpose, metadata = {} }) => {
-        return callableClient.invokePublic('requestOtp', { email, purpose, metadata });
+        console.log('[AuthService] requestOtp start', { email: String(email || '').trim().toLowerCase(), purpose });
+        return authApiClient.invokePublic('request-otp', { email, purpose, metadata });
     },
 
     verifyOtp: async ({ email, purpose, code }) => {
-        return callableClient.invokePublic('verifyOtp', { email, purpose, code });
+        console.log('[AuthService] verifyOtp start', { email: String(email || '').trim().toLowerCase(), purpose, codeLength: String(code || '').length });
+        try {
+            return await authApiClient.invokePublic('verify-otp', { email, purpose, code });
+        } catch (error) {
+            const status = Number(error?.status || 0);
+            if (status === 403) {
+                return {
+                    verified: false,
+                    attemptsLeft: Number(error?.details?.attemptsLeft ?? 0),
+                    message: String(error?.message || 'OTP is invalid.'),
+                };
+            }
+            throw error;
+        }
     },
 
     registerWithOtp: async ({ email, password, name, verificationToken }) => {
-        const result = await callableClient.invokePublic('registerWithOtp', {
+        console.log('[AuthService] registerWithOtp start', { email: String(email || '').trim().toLowerCase() });
+        await authApiClient.invokePublic('register-with-otp', {
             email,
             password,
             name,
-            verificationToken
+            verificationToken,
         });
-        // Sign in immediately after server-side account creation.
-        await signInWithEmailAndPassword(auth, email, password);
-        return result;
+        return authService.login(email, password);
     },
 
     resetPasswordWithOtp: async ({ email, newPassword, verificationToken }) => {
-        return callableClient.invokePublic('resetPasswordWithOtp', {
+        console.log('[AuthService] resetPasswordWithOtp start', { email: String(email || '').trim().toLowerCase(), passwordLength: String(newPassword || '').length });
+        return authApiClient.invokePublic('reset-password-with-otp', {
             email,
             newPassword,
-            verificationToken
+            verificationToken,
         });
     },
 
-    changePasswordWithOtp: async ({ newPassword, verificationToken }) => {
-        return callableClient.invokePublic('changePasswordWithOtp', {
+    changePasswordWithOtp: async ({ newPassword, verificationToken }) =>
+        authApiClient.invokeWithAuth('change-password-with-otp', {
             newPassword,
-            verificationToken
-        });
-    },
+            verificationToken,
+        }),
 
-    completeEmailVerificationWithOtp: async ({ verificationToken }) => {
-        return callableClient.invokePublic('completeEmailVerificationWithOtp', {
-            verificationToken
-        });
-    },
+    completeEmailVerificationWithOtp: async ({ verificationToken }) =>
+        authApiClient.invokeWithAuth('complete-email-verification-with-otp', { verificationToken }),
 
-    changeEmailWithOtp: async ({ newEmail, verificationToken }) => {
-        return callableClient.invokePublic('changeEmailWithOtp', {
-            newEmail,
-            verificationToken
-        });
-    },
+    changeEmailWithOtp: async ({ newEmail, verificationToken }) =>
+        authApiClient.invokeWithAuth('change-email-with-otp', { newEmail, verificationToken }),
 
-    recordLoginDevice: async (payload) => {
-        return callableClient.invokeWithAuth('recordLoginDevice', payload || {});
-    },
+    recordLoginDevice: async (payload) =>
+        authApiClient.invokeWithAuth('record-login-device', payload || {}),
 
-    /**
-     * Update Firebase Auth profile
-     */
+    deleteAccount: async () =>
+        authApiClient.invokeWithAuth('delete-user-account', {}),
+
     updateAuthProfile: async (displayName, photoURL) => {
-        const user = auth.currentUser;
-        if (!user) throw new Error('No authenticated user.');
-        await updateProfile(user, { displayName, photoURL });
-    },
-
-    /**
-     * Logout the current user
-     */
-    logout: async () => {
-        try {
-            await AsyncStorage.multiRemove([
-                'pendingWeeklyAssessment',
-                'lastWeeklyAssessmentDate',
-                'lastWeeklyAssessmentWeekKey',
-                'lastDailyCheckInDate'
-            ]);
-            await signOut(auth);
-            try {
-                await GoogleSignin.signOut();
-            } catch (e) {
-                // Ignore if not signed in with Google
-            }
-            return { success: true };
-        } catch (error) {
-            throw error;
+        const { data, error } = await supabase.auth.updateUser({
+            data: {
+                name: displayName || '',
+                avatar_url: photoURL || '',
+            },
+        });
+        if (error) throw error;
+        cachedUser = mapSupabaseUser(data.user);
+        if (cachedUser?.uid) {
+            await authProfileService.updateProfile(cachedUser.uid, {
+                name: displayName || '',
+                photoURL: photoURL || '',
+            }).catch(() => {});
         }
-    },
-
-    /**
-     * Send password reset email
-     */
-    sendPasswordReset: async (email) => {
-        try {
-            await sendPasswordResetEmail(auth, email);
-            return { success: true };
-        } catch (error) {
-            throw error;
-        }
-    },
-
-    /**
-     * Confirm password reset using OOB code
-     */
-    confirmPasswordReset: async (oobCode, newPassword) => {
-        try {
-            await confirmPasswordReset(auth, oobCode, newPassword);
-            return { success: true };
-        } catch (error) {
-            throw error;
-        }
-    },
-
-    /**
-     * Refresh and check if email is verified
-     */
-    refreshEmailVerification: async () => {
-        if (!auth.currentUser) {
-            console.log('[AuthService] No current user for verification refresh');
-            return { verified: false };
-        }
-        console.log('[AuthService] Refreshing email verification for:', auth.currentUser.email);
-        await reload(auth.currentUser);
-        console.log('[AuthService] Email verified status after reload:', auth.currentUser.emailVerified);
-        return { verified: auth.currentUser.emailVerified };
-    },
-
-    sendVerificationEmail: async () => {
-        if (!auth.currentUser) {
-            throw new Error('No authenticated user.');
-        }
-        await sendEmailVerification(auth.currentUser);
         return { success: true };
     },
 
-    /**
-     * Subscribe to auth state changes
-     */
-    onAuthStateChanged: (callback) => {
-        return onAuthStateChanged(auth, callback);
+    logout: async () => {
+        await AsyncStorage.multiRemove([
+            'pendingWeeklyAssessment',
+            'lastWeeklyAssessmentDate',
+            'lastWeeklyAssessmentWeekKey',
+            'lastDailyCheckInDate',
+        ]);
+        await supabase.auth.signOut();
+        cachedUser = null;
+        try {
+            await GoogleSignin.signOut();
+        } catch {
+            // Ignore provider sign-out issues.
+        }
+        return { success: true };
     },
 
-    getCurrentUser: () => auth.currentUser,
+    sendPasswordReset: async () => {
+        throw new Error('Use the OTP password reset flow.');
+    },
 
-    /**
-     * Login with Google (Native)
-     */
+    confirmPasswordReset: async () => {
+        throw new Error('Email-link password reset is not used in this build.');
+    },
+
+    refreshEmailVerification: async () => {
+        cachedUser = await getCurrentSessionUser();
+        return { verified: Boolean(cachedUser?.emailVerified) };
+    },
+
+    sendVerificationEmail: async () => {
+        throw new Error('Use the OTP verification flow.');
+    },
+
+    onAuthStateChanged: (callback) => {
+        supabase.auth.getSession().then(({ data }) => {
+            cachedUser = mapSupabaseUser(data.session?.user || null);
+            console.log('[AuthService] onAuthStateChanged initial', { uid: cachedUser?.uid || null });
+            callback(cachedUser);
+        });
+
+        const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            cachedUser = mapSupabaseUser(session?.user || null);
+            console.log('[AuthService] onAuthStateChanged event', { event: _event, uid: cachedUser?.uid || null });
+            callback(cachedUser);
+        });
+        return () => subscription.subscription.unsubscribe();
+    },
+
+    getCurrentUser: () => cachedUser,
+
+    refreshCurrentUser: async () => {
+        cachedUser = await getCurrentSessionUser();
+        return cachedUser;
+    },
+
     loginWithGoogle: async () => {
         try {
+            console.log('[AuthService] Google sign-in start');
             await GoogleSignin.hasPlayServices();
             const response = await GoogleSignin.signIn();
-            const idToken = (response).data?.idToken || (response).idToken;
-
+            const idToken = response?.data?.idToken || response?.idToken || null;
+            let accessToken = response?.data?.accessToken || response?.accessToken || null;
+            if (!accessToken) {
+                try {
+                    const tokens = await GoogleSignin.getTokens();
+                    accessToken = tokens?.accessToken || null;
+                } catch (tokenError) {
+                    console.warn('[AuthService] Google sign-in access token lookup failed', {
+                        message: String(tokenError?.message || tokenError || ''),
+                    });
+                }
+            }
+            console.log('[AuthService] Google tokens received', {
+                hasIdToken: Boolean(idToken),
+                hasAccessToken: Boolean(accessToken),
+            });
             if (!idToken) {
+                console.log('[AuthService] Google sign-in missing idToken');
                 return { success: false, cancelled: true, message: 'Google Sign-In did not return an ID token.' };
             }
 
-            const googleCredential = GoogleAuthProvider.credential(idToken);
-            const userCredential = await signInWithCredential(auth, googleCredential);
-            return { success: true, user: userCredential.user };
+            const { data, error } = await supabase.auth.signInWithIdToken({
+                provider: 'google',
+                token: idToken,
+                access_token: accessToken || undefined,
+            });
+            if (error) throw error;
+            const authUser = resolveAuthUserFromResponse(data);
+            console.log('[AuthService] Google sign-in auth response', {
+                responseUid: data?.user?.id || null,
+                sessionUid: data?.session?.user?.id || null,
+                responseEmail: data?.user?.email || '',
+                sessionEmail: data?.session?.user?.email || '',
+            });
+            await ensureProfileForUser(authUser, { createIfMissing: true });
+            cachedUser = mapSupabaseUser(authUser);
+            const activeSession = await waitForSession(3000);
+            console.log('[AuthService] Google sign-in success', {
+                uid: cachedUser?.uid || null,
+                email: cachedUser?.email || '',
+                activeSessionUid: activeSession?.user?.id || null,
+                activeSessionEmail: activeSession?.user?.email || '',
+            });
+            return { success: true, user: cachedUser };
         } catch (error) {
             const code = String(error?.code || '');
             const message = String(error?.message || '');
-            const isCancelled =
-                code === '12501' ||
-                code === 'SIGN_IN_CANCELLED' ||
-                message.toLowerCase().includes('cancel');
-            if (isCancelled) {
-                return { success: false, cancelled: true };
-            }
-            console.warn('[AuthService] Google Sign-In failed:', message || code || error);
+            console.log('[AuthService] Google sign-in failed', { code, message });
+            const isCancelled = code === '12501' || code === 'SIGN_IN_CANCELLED' || message.toLowerCase().includes('cancel');
+            if (isCancelled) return { success: false, cancelled: true };
             return { success: false, error: message || 'Google Sign-In failed.' };
         }
     },
 
-    /**
-     * Login with Apple (Native)
-     */
     loginWithApple: async () => {
         try {
+            console.log('[AuthService] Apple sign-in start');
             if (Platform.OS !== 'ios') {
                 return { success: false, cancelled: true, message: 'Apple Sign-In is only available on iOS.' };
             }
             const isAvailable = await AppleAuthentication.isAvailableAsync();
-            if (!isAvailable) {
-                throw new Error('Apple Sign-In is not available on this device/build.');
-            }
-            const csrf = Math.random().toString(36).substring(2, 15);
-            const nonce = Math.random().toString(36).substring(2, 10);
-            const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, nonce);
+            if (!isAvailable) throw new Error('Apple Sign-In is not available on this device/build.');
 
-            const appleCredential = await AppleAuthentication.signInAsync({
+            const rawNonce = Math.random().toString(36).slice(2);
+            const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+            const credential = await AppleAuthentication.signInAsync({
                 requestedScopes: [
                     AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
                     AppleAuthentication.AppleAuthenticationScope.EMAIL,
                 ],
-                nonce: hashedNonce
+                nonce: hashedNonce,
             });
 
-            const { identityToken } = appleCredential;
-            if (!identityToken) {
-                throw new Error('Apple Sign-In failed: missing identity token.');
+            if (!credential.identityToken) {
+                return { success: false, cancelled: true, message: 'Apple Sign-In did not return an identity token.' };
             }
 
-            const provider = new OAuthProvider('apple.com');
-            const credential = provider.credential({
-                idToken: identityToken,
-                rawNonce: nonce,
+            const { data, error } = await supabase.auth.signInWithIdToken({
+                provider: 'apple',
+                token: credential.identityToken,
+                nonce: rawNonce,
             });
-
-            const userCredential = await signInWithCredential(auth, credential);
-
-            // Apple only shares name on first login, update profile if available
-            if (appleCredential.fullName) {
-                const name = `${appleCredential.fullName.givenName || ''} ${appleCredential.fullName.familyName || ''}`.trim();
-                if (name) {
-                    await updateProfile(userCredential.user, { displayName: name });
-                }
-            }
-
-            return { success: true, user: userCredential.user };
+            if (error) throw error;
+            const authUser = resolveAuthUserFromResponse(data);
+            await ensureProfileForUser(authUser, { createIfMissing: true });
+            cachedUser = mapSupabaseUser(authUser);
+            console.log('[AuthService] Apple sign-in success', { uid: cachedUser?.uid || null, email: cachedUser?.email || '' });
+            return { success: true, user: cachedUser };
         } catch (error) {
-            console.error("Apple Sign-In Error", error);
-            if (error.code === 'ERR_CANCELED') return { success: false, cancelled: true };
-            throw error;
+            const message = String(error?.message || '');
+            console.log('[AuthService] Apple sign-in failed', { message });
+            if (message.toLowerCase().includes('cancel')) return { success: false, cancelled: true };
+            return { success: false, error: message || 'Apple Sign-In failed.' };
         }
-    }
+    },
+
+    reauthenticateWithPassword: async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({
+            email: String(email || '').trim().toLowerCase(),
+            password: String(password || ''),
+        });
+        if (error) throw error;
+        cachedUser = await getCurrentSessionUser();
+        return { success: true };
+    },
 };
