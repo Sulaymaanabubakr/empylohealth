@@ -81,6 +81,7 @@ const NotificationsScreen = ({ navigation }) => {
   const getNotificationFallbackIcon = (type) => {
     if (type === 'CHAT_MESSAGE') return 'chatbubble-ellipses-outline';
     if (type === 'HUDDLE_STARTED' || type === 'SCHEDULED_HUDDLE_REMINDER') return 'call-outline';
+    if (type === 'MISSED_HUDDLE') return 'call-outline';
     if (type === 'DAILY_AFFIRMATION') return 'sparkles-outline';
     if (type === 'ROLE_UPDATED') return 'shield-checkmark-outline';
     if (type === 'MODERATION_WARNING') return 'alert-circle-outline';

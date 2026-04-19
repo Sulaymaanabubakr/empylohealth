@@ -66,6 +66,7 @@ const FUNCTION_MAP = {
     validateAppleSubscriptionReceipt: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'validateAppleSubscriptionReceipt', ...payload }) },
     validateGoogleSubscriptionPurchase: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'validateGoogleSubscriptionPurchase', ...payload }) },
     restoreSubscriptions: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'restoreSubscriptions', ...payload }) },
+    syncRevenueCatCustomer: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'syncRevenueCatCustomer', ...payload }) },
     validateBoostPurchase: { endpoint: 'app-billing', auth: true, map: (payload) => ({ action: 'validateBoostPurchase', ...payload }) },
     generateKeyChallengesForLatestAssessment: { endpoint: 'app-ai', auth: true, map: (payload) => ({ action: 'generateKeyChallengesForLatestAssessment', ...payload }) },
     askAiAboutChallenge: { endpoint: 'app-ai', auth: true, map: (payload) => ({ action: 'askAiAboutChallenge', ...payload }) },

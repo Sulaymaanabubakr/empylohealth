@@ -1,15 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View, Vibration } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../theme/theme';
 import { huddleService } from '../services/api/huddleService';
 import { callDiagnostics } from '../services/calling/callDiagnostics';
-import { loopingSound } from '../services/audio/loopingSound';
+import { nativeCallService } from '../services/native/nativeCallService';
+import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
-
-// Audio playback is handled via loopingSound (expo-audio).
-const RINGBACK_REPEAT_MS = 4200;
 
 const safeCall = async (fn) => {
   try {
@@ -20,6 +19,7 @@ const safeCall = async (fn) => {
 };
 
 export default function IncomingHuddleScreen({ navigation, route }) {
+  const { user } = useAuth();
   const huddleId = route?.params?.huddleId || null;
   const chatId = route?.params?.chatId || null;
   const chatName = route?.params?.chatName || 'Huddle';
@@ -27,61 +27,9 @@ export default function IncomingHuddleScreen({ navigation, route }) {
   const avatar = route?.params?.avatar || '';
 
   const [status, setStatus] = useState(null);
+  const [missedStatus, setMissedStatus] = useState('pending');
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const ringtoneRef = useRef(null);
-  const ringtoneSessionRef = useRef(0);
-  const vibrationIntervalRef = useRef(null);
-  const ringtoneReplayIntervalRef = useRef(null);
-
-  const stopRingtone = useCallback(async (invalidateSession = true) => {
-    if (invalidateSession) {
-      ringtoneSessionRef.current += 1;
-    }
-    if (vibrationIntervalRef.current) {
-      clearInterval(vibrationIntervalRef.current);
-      vibrationIntervalRef.current = null;
-    }
-    if (ringtoneReplayIntervalRef.current) {
-      clearInterval(ringtoneReplayIntervalRef.current);
-      ringtoneReplayIntervalRef.current = null;
-    }
-    Vibration.cancel();
-    const instance = ringtoneRef.current;
-    ringtoneRef.current = null;
-    if (!instance) return;
-    await safeCall(() => loopingSound.stopAndUnload(instance));
-  }, []);
-
-  const startRingtone = useCallback(async () => {
-    await stopRingtone(false);
-    const sessionId = ringtoneSessionRef.current + 1;
-    ringtoneSessionRef.current = sessionId;
-
-    const instance = await safeCall(() => loopingSound.createAndPlay(
-      require('../assets/sounds/ringback.wav'),
-      { volume: 1.0, loop: false }
-    ));
-    if (!instance?.handle) {
-      Vibration.vibrate(350);
-      vibrationIntervalRef.current = setInterval(() => {
-        Vibration.vibrate(350);
-      }, RINGBACK_REPEAT_MS);
-      return;
-    }
-    if (ringtoneSessionRef.current !== sessionId) {
-      await safeCall(() => loopingSound.stopAndUnload(instance));
-      return;
-    }
-    ringtoneRef.current = instance;
-    ringtoneReplayIntervalRef.current = setInterval(() => {
-      if (ringtoneSessionRef.current !== sessionId || !ringtoneRef.current?.handle) return;
-      safeCall(async () => {
-        await ringtoneRef.current.handle.seekTo?.(0);
-        ringtoneRef.current.handle.play?.();
-      });
-    }, RINGBACK_REPEAT_MS);
-  }, [stopRingtone]);
 
   useEffect(() => {
     if (!huddleId) return undefined;
@@ -89,35 +37,62 @@ export default function IncomingHuddleScreen({ navigation, route }) {
       setLoading(false);
       if (!data) {
         setStatus('ended');
+        nativeCallService.dismissIncomingHuddle(huddleId, 'ended').catch(() => {});
+        navigation.goBack();
         return;
       }
       const next = data.status || null;
       setStatus(next);
       if (next === 'ended' || data.isActive === false) {
-        stopRingtone();
+        nativeCallService.dismissIncomingHuddle(huddleId, 'ended').catch(() => {});
         navigation.goBack();
       }
     });
     return unsub;
-  }, [huddleId, navigation, stopRingtone]);
+  }, [huddleId, navigation]);
 
   useEffect(() => {
-    if (!huddleId) return;
-    if (loading) return;
-    if (status !== 'ringing') return;
-    callDiagnostics.log(huddleId, 'incoming_screen_shown', { platform: Platform.OS });
-    startRingtone();
-  }, [huddleId, loading, startRingtone, status]);
+    if (!huddleId || !user?.uid) return undefined;
+    const unsub = huddleService.subscribeToMissedHuddleStatus(huddleId, user.uid, (item) => {
+      const nextStatus = item?.status || 'pending';
+      setMissedStatus(nextStatus);
+      if (nextStatus === 'missed' || nextStatus === 'declined' || nextStatus === 'accepted') {
+        if (nextStatus !== 'accepted') {
+          nativeCallService.dismissIncomingHuddle(huddleId, nextStatus).catch(() => {});
+        }
+      }
+      if (nextStatus === 'missed' || nextStatus === 'declined') {
+        navigation.goBack();
+      }
+    });
+    return unsub;
+  }, [huddleId, navigation, user?.uid]);
 
   useEffect(() => () => {
-    stopRingtone();
-  }, [stopRingtone]);
+    nativeCallService.stopIncomingRingtone().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!huddleId || loading || status !== 'ringing') return;
+    callDiagnostics.log(huddleId, 'incoming_screen_shown', { platform: Platform.OS });
+  }, [huddleId, loading, status]);
+
+  const primaryName = isGroup ? chatName : callerName;
+  const subtitleText = status === 'ongoing'
+    ? 'Joining huddle...'
+    : `${callerName} started the huddle`;
 
   const accept = async () => {
     if (processing) return;
     setProcessing(true);
     callDiagnostics.log(huddleId, 'incoming_accept');
-    await stopRingtone();
+    const accepted = await safeCall(() => huddleService.markHuddleAccepted(huddleId));
+    if (!accepted?.success) {
+      setProcessing(false);
+      return;
+    }
+    await nativeCallService.setPendingJoinIntent({ huddleId, chatId, chatName, callerName, avatar }).catch(() => {});
+    await nativeCallService.dismissIncomingHuddle(huddleId, 'accepted').catch(() => {});
     navigation.replace('Huddle', {
       chat: { id: chatId || 'chat', name: chatName, isGroup: true },
       huddleId,
@@ -130,31 +105,41 @@ export default function IncomingHuddleScreen({ navigation, route }) {
     if (processing) return;
     setProcessing(true);
     callDiagnostics.log(huddleId, 'incoming_decline');
-    await stopRingtone();
+    await nativeCallService.dismissIncomingHuddle(huddleId, 'declined').catch(() => {});
     await safeCall(() => huddleService.declineHuddle(huddleId));
     navigation.goBack();
   };
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
+      <ExpoLinearGradient
+        colors={['#071117', '#0E2830', '#EAF7F5']}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.container}
+      >
         <View style={styles.header}>
-          <Ionicons name="call" size={24} color="#FFFFFF" />
-          <Text style={styles.title}>Incoming call</Text>
+          <View style={styles.headerBadge}>
+            <Ionicons name="call" size={18} color="#FFFFFF" />
+            <Text style={styles.headerBadgeText}>Incoming huddle</Text>
+          </View>
         </View>
 
         <View style={styles.body}>
-          <Avatar
-            uri={avatar}
-            name={callerName}
-            size={84}
-            style={styles.avatar}
-          />
-          <Text style={styles.caller}>{callerName}</Text>
-          <Text style={styles.subtitle}>{chatName}</Text>
-          {loading && <ActivityIndicator style={{ marginTop: 18 }} color="#FFFFFF" />}
-          {!loading && status && status !== 'ringing' && (
-            <Text style={styles.status}>Status: {String(status)}</Text>
+          <View style={styles.avatarWrap}>
+            <Avatar
+              uri={avatar}
+              name={callerName}
+              size={96}
+              style={styles.avatar}
+            />
+          </View>
+          <Text style={styles.caller}>{primaryName}</Text>
+          <Text style={styles.subtitle}>{subtitleText}</Text>
+
+          {loading && <ActivityIndicator style={styles.loader} color="#FFFFFF" />}
+          {!loading && status === 'ongoing' && (
+            <Text style={styles.status}>Opening the huddle...</Text>
           )}
         </View>
 
@@ -163,10 +148,11 @@ export default function IncomingHuddleScreen({ navigation, route }) {
             <Text style={styles.btnText}>Decline</Text>
           </TouchableOpacity>
           <TouchableOpacity disabled={processing} style={[styles.btn, styles.accept]} onPress={accept}>
+            <Ionicons name="call" size={18} color="#FFFFFF" />
             <Text style={styles.btnText}>Accept</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ExpoLinearGradient>
     </SafeAreaView>
   );
 }
@@ -178,41 +164,68 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
     justifyContent: 'space-between'
   },
   header: {
+    alignItems: 'flex-start'
+  },
+  headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8
   },
-  title: {
+  headerBadgeText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 18
+    fontSize: 14
   },
   body: {
     alignItems: 'center',
-    paddingHorizontal: 10
+    paddingHorizontal: 8
+  },
+  avatarWrap: {
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    marginBottom: 20
   },
   avatar: {
-    marginBottom: 16
+    marginBottom: 0
   },
   caller: {
     color: '#FFFFFF',
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
     textAlign: 'center'
   },
   subtitle: {
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 14,
-    marginTop: 6
+    color: 'rgba(255,255,255,0.80)',
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 8,
+    textAlign: 'center'
+  },
+  loader: {
+    marginTop: 22
   },
   status: {
-    color: 'rgba(255,255,255,0.72)',
-    marginTop: 18
+    color: 'rgba(255,255,255,0.80)',
+    marginTop: 20,
+    fontSize: 14,
+    fontWeight: '600'
   },
   controls: {
     flexDirection: 'row',
@@ -226,7 +239,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   accept: {
-    backgroundColor: COLORS.primary
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    gap: 8
   },
   decline: {
     backgroundColor: COLORS.error

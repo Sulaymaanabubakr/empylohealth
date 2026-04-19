@@ -2,6 +2,7 @@ import { requireUser } from "../_shared/auth.ts";
 import { writeAuditLog } from "../_shared/audit.ts";
 import { getChatMembership } from "../_shared/chat.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { createPendingMissedHuddles } from "../_shared/huddles.ts";
 import { sendExpoPushNotifications } from "../_shared/push.ts";
 import { getIpAddress, getUserAgent } from "../_shared/request.ts";
 import { errorResponse, json } from "../_shared/response.ts";
@@ -55,28 +56,41 @@ Deno.serve(async (req) => {
       : [];
 
     if (recipientIds.length) {
+      await createPendingMissedHuddles({
+        huddleId,
+        chatId: String(huddle.chat_id),
+        callerId: user.id,
+        receiverIds: recipientIds,
+      });
+
       const [{ data: sender }, { data: chat }] = await Promise.all([
         supabaseAdmin.from("profiles").select("name, photo_url").eq("id", user.id).maybeSingle(),
         supabaseAdmin.from("chats").select("name, avatar").eq("id", String(huddle.chat_id)).maybeSingle(),
       ]);
+      const callerAvatar = sender?.photo_url || "";
+      const chatAvatar = chat?.avatar || "";
+      const displayAvatar = Boolean(huddle.is_group) ? (chatAvatar || callerAvatar) : (callerAvatar || chatAvatar);
 
       await sendExpoPushNotifications({
         userIds: recipientIds,
         type: "HUDDLE_STARTED",
         title: `${sender?.name || "Someone"} is calling again`,
         body: `Tap to join ${chat?.name || "the huddle"}`,
-        avatar: sender?.photo_url || chat?.avatar || "",
+        avatar: displayAvatar,
         data: {
           type: "HUDDLE_STARTED",
           huddleId,
           chatId: String(huddle.chat_id),
           chatName: chat?.name || "Huddle",
           callerName: sender?.name || "Someone",
+          callerAvatar,
+          chatAvatar,
+          groupAvatar: chatAvatar,
           senderId: user.id,
           isGroup: Boolean(huddle.is_group),
         },
         categoryId: "huddle-call-actions",
-        channelId: "huddle-calls",
+        channelId: "huddle-calls-ringtone",
       }).catch((pushError) => {
         console.warn("[ring-huddle-participants] push send failed", pushError);
       });

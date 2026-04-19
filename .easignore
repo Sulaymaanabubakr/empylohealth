@@ -1,14 +1,50 @@
-# Exclude non-mobile parts of the monorepo from EAS upload.
-.git/
-backend/
-web/
-brand_assets/
-docs/
+# EAS is packaging from the git repo root, not just /frontend.
+# Start by excluding everything in the monorepo, then opt the mobile app back in.
+/*
+!/frontend/
+!/frontend/**
 
-# Repo-level docs/config not needed for app builds.
-*.md
-.cpanel.yml
-.firebaserc
-firebase.json
-firestore.indexes.json
-firestore.rules
+# Exclude local / generated junk inside the mobile app.
+/frontend/node_modules/
+/frontend/**/node_modules/
+/frontend/.expo/
+/frontend/.expo-shared/
+/frontend/dist/
+/frontend/web-build/
+/frontend/coverage/
+/frontend/.DS_Store
+/frontend/.git/
+/frontend/.github/
+/frontend/.vscode/
+/frontend/.idea/
+/frontend/.npm/
+/frontend/.npm-cache/
+/frontend/npm-debug.log
+/frontend/yarn-debug.log
+/frontend/yarn-error.log
+/frontend/*.log
+
+# Native build caches / outputs
+/frontend/android/.gradle/
+/frontend/android/.cxx/
+/frontend/android/build/
+/frontend/android/app/build/
+/frontend/android/app/.cxx/
+/frontend/ios/Pods/
+/frontend/ios/build/
+
+# Local-only files not needed by EAS build
+/frontend/credentials/
+/frontend/credentials.json
+/frontend/*.md
+/frontend/*.pdf
+/frontend/**/*.zip
+/frontend/**/*.tar
+/frontend/**/*.tar.gz
+/frontend/**/*.tgz
+
+# Keep required store config files for EAS Build
+!/frontend/google-services.json
+!/frontend/**/google-services.json
+!/frontend/GoogleService-Info.plist
+!/frontend/**/GoogleService-Info.plist

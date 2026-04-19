@@ -1,0 +1,112 @@
+diff --git a/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt b/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
+index 610d303..f47c52e 100644
+--- a/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
++++ b/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
+@@ -5,13 +5,16 @@ import android.content.Context
+ import android.content.pm.PackageManager
+ import android.graphics.Bitmap
+ import android.graphics.BitmapFactory
++import android.net.Uri
+ import android.os.Build
+ import android.os.Bundle
+ import android.os.Parcel
+ import android.provider.Settings
+ import android.util.Log
+ import androidx.core.app.NotificationCompat
++import androidx.core.app.Person
+ import androidx.core.app.RemoteInput
++import androidx.core.graphics.drawable.IconCompat
+ import expo.modules.notifications.notifications.SoundResolver
+ import expo.modules.notifications.notifications.enums.NotificationPriority
+ import expo.modules.notifications.notifications.interfaces.INotificationContent
+@@ -20,6 +23,7 @@ import expo.modules.notifications.notifications.model.NotificationCategory
+ import expo.modules.notifications.notifications.model.NotificationRequest
+ import expo.modules.notifications.notifications.model.NotificationResponse
+ import expo.modules.notifications.notifications.model.TextInputNotificationAction
++import expo.modules.notifications.notifications.model.triggers.FirebaseNotificationTrigger
+ import expo.modules.notifications.service.NotificationsService
+ import expo.modules.notifications.service.NotificationsService.Companion.createNotificationResponseIntent
+ import expo.modules.notifications.service.delegates.SharedPreferencesNotificationCategoriesStore
+@@ -104,9 +108,8 @@ open class ExpoNotificationBuilder(
+     builder.setContentTitle(content.title)
+     builder.setContentText(content.text)
+     builder.setSubText(content.subText)
+-    // Sets the text/contentText as the bigText to allow the notification to be expanded and the
+-    // entire text to be viewed.
+-    builder.setStyle(NotificationCompat.BigTextStyle().bigText(content.text))
++    val chatAvatarApplied = applyChatStyleIfNeeded(builder, content)
+ 
+     color?.let { builder.color = it.toInt() }
+     notificationContent.badgeCount?.toInt()?.let { builder.setNumber(it) }
+@@ -151,11 +156,68 @@ open class ExpoNotificationBuilder(
+     if (notificationContent.containsImage()) {
+       val bitmap = notificationContent.getImage(context)
+       bitmap?.let { builder.setLargeIcon(it) }
+-    } else {
++    } else if (!chatAvatarApplied) {
+       builder.setLargeIcon(largeIcon)
+     }
+     return builder.build()
+   }
+ 
++  private suspend fun applyChatStyleIfNeeded(
++    builder: NotificationCompat.Builder,
++    content: INotificationContent
++  ): Boolean {
++    val remoteMessageData = getRemoteMessageData()
++    val type = remoteMessageData["type"]
++    if (type != "CHAT_MESSAGE") {
++      // Sets the text/contentText as the bigText to allow the notification to be expanded and the
++      // entire text to be viewed.
++      builder.setStyle(NotificationCompat.BigTextStyle().bigText(content.text))
++      return false
++    }
++
++    val senderName = remoteMessageData["senderName"]?.takeIf { it.isNotBlank() } ?: content.title ?: "Someone"
++    val chatName = remoteMessageData["chatName"]?.takeIf { it.isNotBlank() }
++    val isGroup = remoteMessageData["isGroup"]?.equals("true", ignoreCase = true) == true
++    val avatarBitmap = getAvatarBitmap(remoteMessageData["avatar"])
++
++    val senderPersonBuilder = Person.Builder()
++      .setName(senderName)
++      .setImportant(true)
++
++    avatarBitmap?.let {
++      senderPersonBuilder.setIcon(IconCompat.createWithBitmap(it))
++      builder.setLargeIcon(it)
++    }
++
++    val senderPerson = senderPersonBuilder.build()
++    val userPerson = Person.Builder()
++      .setName(context.applicationInfo.loadLabel(context.packageManager)?.toString() ?: "You")
++      .setImportant(false)
++      .build()
++
++    val style = NotificationCompat.MessagingStyle(userPerson)
++      .setGroupConversation(isGroup)
++      .addMessage(content.text ?: "", notification.originDate.time, senderPerson)
++
++    if (isGroup && !chatName.isNullOrBlank()) {
++      style.setConversationTitle(chatName)
++    }
++
++    builder.setStyle(style)
++    return avatarBitmap != null
++  }
++
++  private fun getRemoteMessageData(): Map<String, String> {
++    val trigger = notification.notificationRequest.trigger
++    if (trigger is FirebaseNotificationTrigger) {
++      return trigger.remoteMessage.data
++    }
++    return emptyMap()
++  }
++
++  private suspend fun getAvatarBitmap(avatarUrl: String?): Bitmap? {
++    if (avatarUrl.isNullOrBlank()) return null
++    return runCatching { downloadImage(Uri.parse(avatarUrl)) }.getOrNull()
++  }
++
+   private fun applySoundsAndVibrations(content: INotificationContent, builder: NotificationCompat.Builder) {
+     val shouldPlaySound = shouldPlaySound()
+     val shouldVibrate = shouldVibrate()

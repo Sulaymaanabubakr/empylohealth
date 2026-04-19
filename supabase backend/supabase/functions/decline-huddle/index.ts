@@ -2,6 +2,7 @@ import { requireUser } from "../_shared/auth.ts";
 import { writeAuditLog } from "../_shared/audit.ts";
 import { getChatMembership, sanitizeUuidArray } from "../_shared/chat.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { ensureMissedHuddleStatus, markMissedHuddleStatus } from "../_shared/huddles.ts";
 import { getIpAddress, getUserAgent } from "../_shared/request.ts";
 import { errorResponse, json } from "../_shared/response.ts";
 import { supabaseAdmin } from "../_shared/supabase.ts";
@@ -73,6 +74,21 @@ Deno.serve(async (req) => {
       last_action: "decline",
       updated_at: new Date().toISOString(),
     });
+
+    const missedUpdate = await markMissedHuddleStatus({
+      huddleId,
+      receiverId: user.id,
+      status: "declined",
+    }).catch(() => null);
+    if (!missedUpdate) {
+      await ensureMissedHuddleStatus({
+        huddleId,
+        chatId: String(huddle.chat_id || ""),
+        callerId: huddle.started_by ? String(huddle.started_by) : null,
+        receiverId: user.id,
+        status: "declined",
+      });
+    }
 
     await writeAuditLog({
       userId: user.id,

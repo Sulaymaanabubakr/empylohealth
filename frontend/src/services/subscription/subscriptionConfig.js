@@ -6,7 +6,7 @@ export const PLAN_RULES = {
             private: null,
             public: null
         },
-        huddlesPerDay: 2,
+        huddlesPerDay: null,
         huddleMinutesPerDay: 48,
         huddleMinutesPerSession: 10,
         activities: {
@@ -23,7 +23,7 @@ export const PLAN_RULES = {
             private: null,
             public: null
         },
-        huddlesPerDay: 3,
+        huddlesPerDay: null,
         huddleMinutesPerDay: 240,
         huddleMinutesPerSession: 30,
         activities: {
@@ -40,7 +40,7 @@ export const PLAN_RULES = {
             private: null,
             public: null
         },
-        huddlesPerDay: 5,
+        huddlesPerDay: null,
         huddleMinutesPerDay: 640,
         huddleMinutesPerSession: 60,
         activities: {

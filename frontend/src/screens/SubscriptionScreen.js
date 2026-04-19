@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Linking, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Linking, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useModal } from '../context/ModalContext';
@@ -7,6 +7,7 @@ import { LEGAL_LINKS } from '../constants/legalLinks';
 import { subscriptionService } from '../services/api/subscriptionService';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { getPlanRules, normalizePlanId } from '../services/subscription/subscriptionConfig';
+import { revenueCatService } from '../services/subscription/revenueCatService';
 import { COLORS, SPACING } from '../theme/theme';
 
 const PLAN_ORDER = ['free', 'pro', 'premium', 'enterprise'];
@@ -16,14 +17,28 @@ const FEATURE_ROWS = [
     { label: 'Start huddles', key: 'canStartHuddles', type: 'capability' },
     { label: 'Schedule huddles', key: 'canScheduleHuddles', type: 'capability' },
     { label: 'AI assistant', key: 'canUseAiAssistant', type: 'capability' },
-    { label: 'Full Key Challenges', key: 'hasFullKeyChallenges', type: 'capability' },
+    { label: 'Full Daily Focus', key: 'hasFullKeyChallenges', type: 'capability' },
     { label: 'Group activities', key: 'canAccessGroupActivities', type: 'capability' },
     { label: 'Share activities', key: 'canShareActivities', type: 'capability' },
     { label: 'Monthly AI credits', key: 'monthlyAiCredits', type: 'limit' },
     { label: 'Monthly huddle minutes', key: 'monthlyHuddleMinutes', type: 'limit' },
-    { label: 'Daily huddle starts', key: 'dailyHuddleStarts', type: 'limit' },
     { label: 'Max minutes per huddle', key: 'maxMinutesPerHuddle', type: 'limit' },
 ];
+
+const formatMoney = (value) => `GBP ${Number(value).toFixed(2)}`;
+
+const parsePriceLabel = (label = '') => {
+    const match = String(label || '').match(/(\d+(?:\.\d{1,2})?)/);
+    return match ? Number(match[1]) : null;
+};
+
+const getPlanProductIdForCadence = (plan, cadence = 'monthly') => {
+    const platformKey = Platform.OS === 'ios' ? 'ios' : 'android';
+    const productIds = Array.isArray(plan?.productIds?.[platformKey]) ? plan.productIds[platformKey] : [];
+    const needle = cadence === 'annual' ? 'annual' : 'monthly';
+    const exact = productIds.find((id) => String(id || '').toLowerCase().includes(`.${needle}.`));
+    return String(exact || productIds[0] || '').trim();
+};
 
 const formatExpiry = (expiresAt) => {
     const date = expiresAt?.toDate ? expiresAt.toDate() : (expiresAt ? new Date(expiresAt) : null);
@@ -54,6 +69,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const [busyProductId, setBusyProductId] = useState('');
     const [restoring, setRestoring] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState('pro');
+    const [selectedCadence, setSelectedCadence] = useState('annual');
 
     const refresh = async (forceRefresh = false) => {
         setLoading(true);
@@ -111,6 +127,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const limits = status?.limits || {};
     const capabilities = status?.capabilities || {};
     const currentPlan = entitlement?.plan || 'free';
+    const currentCadence = String(entitlement?.billingCadence || 'monthly').toLowerCase() === 'annual' ? 'annual' : 'monthly';
     const currentRules = getPlanRules(currentPlan);
     const normalizedPlans = useMemo(() => {
         const mapped = plans.map((plan) => ({
@@ -134,22 +151,51 @@ const SubscriptionScreen = ({ navigation, route }) => {
         setSelectedPlanId(fallbackPlan);
     }, [currentPlan]);
 
+    useEffect(() => {
+        if (selectedPlanId === 'free' || selectedPlanId === 'enterprise') {
+            setSelectedCadence('monthly');
+            return;
+        }
+        setSelectedCadence('annual');
+    }, [selectedPlanId]);
+
+    const selectedPlanPricing = useMemo(() => {
+        const monthlyPrice = parsePriceLabel(selectedPlan?.priceLabel);
+        const annualPrice = parsePriceLabel(selectedPlan?.annualPriceLabel);
+        const annualSavings = monthlyPrice != null && annualPrice != null ? Number((monthlyPrice * 12 - annualPrice).toFixed(2)) : null;
+        const annualMonthlyEquivalent = annualPrice != null ? Number((annualPrice / 12).toFixed(2)) : null;
+        const activePrice = selectedCadence === 'annual' && annualPrice != null ? annualPrice : monthlyPrice;
+        const activePriceLabel = activePrice != null
+            ? `${formatMoney(activePrice)}${selectedCadence === 'annual' ? '/year' : '/month'}`
+            : (selectedCadence === 'annual' ? selectedPlan?.annualPriceLabel : selectedPlan?.priceLabel) || '';
+        const productId = getPlanProductIdForCadence(selectedPlan, selectedCadence);
+
+        return {
+            monthlyPrice,
+            annualPrice,
+            annualSavings,
+            annualMonthlyEquivalent,
+            activePrice,
+            activePriceLabel,
+            productId,
+        };
+    }, [selectedCadence, selectedPlan]);
+
     const comparisonTitle = selectedPlan?.displayName || selectedPlan?.name || 'Choose your plan';
     const comparisonSubtitle = selectedPlanId === 'enterprise'
         ? 'Coach+ is managed outside the app for organisations and coaching teams.'
-        : 'Plans refresh on your renewal date. Subscription balances do not roll over.';
+        : selectedCadence === 'annual' && selectedPlanPricing.annualSavings
+            ? `Best value. Save ${formatMoney(selectedPlanPricing.annualSavings)} a year and pay ${formatMoney(selectedPlanPricing.annualMonthlyEquivalent)}/month on average.`
+            : 'Plans refresh on your renewal date. Subscription balances do not roll over.';
 
     const summaryRows = useMemo(() => ([
         `AI credits remaining: ${remaining?.aiCreditsRemaining ?? 0}${remaining?.boostAiCreditsRemaining ? ` (+${remaining.boostAiCreditsRemaining} boost)` : ''}`,
         `Huddle minutes remaining: ${remaining?.huddleMinutesRemaining ?? 0}${remaining?.boostHuddleMinutesRemaining ? ` (+${remaining.boostHuddleMinutesRemaining} boost)` : ''}`,
-        limits?.dailyHuddleStarts != null
-            ? `Daily huddle starts left: ${remaining?.dailyHuddleStartsRemaining ?? limits.dailyHuddleStarts}`
-            : 'Daily huddle starts: unlimited',
         `Current plan: ${currentRules.label}`,
-    ]), [currentRules.label, limits?.dailyHuddleStarts, remaining]);
+    ]), [currentRules.label, remaining]);
 
-    const handleSubscribe = async () => {
-        if (!selectedPlan?.productId) {
+    const handleSubscribe = async (planToBuy = selectedPlanPurchase) => {
+        if (!planToBuy?.productId) {
             showModal({
                 type: 'info',
                 title: 'Purchases unavailable',
@@ -160,10 +206,22 @@ const SubscriptionScreen = ({ navigation, route }) => {
             return;
         }
         try {
-            setBusyProductId(String(selectedPlan.productId));
-            await subscriptionService.requestPlanPurchase(selectedPlan);
+            setBusyProductId(String(planToBuy.productId));
+            const result = await subscriptionService.requestPlanPurchase(planToBuy);
+            if (!result) {
+                setBusyProductId('');
+                return;
+            }
+            await refresh(true);
+            showModal({
+                type: 'success',
+                title: 'Subscription updated',
+                message: 'Your subscription is active and your plan status has been refreshed.'
+            });
+            setBusyProductId('');
         } catch (error) {
             setBusyProductId('');
+            if (error?.userCancelled) return;
             showModal({
                 type: 'error',
                 title: 'Unable to start purchase',
@@ -175,7 +233,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const handleRestore = async () => {
         try {
             setRestoring(true);
-            await subscriptionService.restore({ productId: selectedPlan?.productId || '' });
+            await subscriptionService.restore({ productId: selectedPlanPricing.productId || '' });
             await refresh(true);
             showModal({
                 type: 'success',
@@ -206,6 +264,18 @@ const SubscriptionScreen = ({ navigation, route }) => {
         }
     };
 
+    const handleManageSubscription = async () => {
+        try {
+            await revenueCatService.presentCustomerCenter();
+        } catch (error) {
+            showModal({
+                type: 'error',
+                title: 'Subscription management unavailable',
+                message: error?.message || 'Unable to open subscription management right now.'
+            });
+        }
+    };
+
     const renderFeatureValue = (plan, row) => {
         if (row.type === 'capability') {
             return <PlanCell enabled={plan?.capabilities?.[row.key] === true} accent={plan?.id === selectedPlanId} />;
@@ -214,8 +284,12 @@ const SubscriptionScreen = ({ navigation, route }) => {
         return <PlanCell text={value == null ? 'Custom' : String(value)} accent={plan?.id === selectedPlanId} />;
     };
 
-    const isCurrentPlanSelected = selectedPlanId === normalizePlanId(currentPlan);
-    const currentProductBusy = busyProductId && busyProductId === selectedPlan?.productId;
+    const isCurrentPlanSelected = selectedPlanId === normalizePlanId(currentPlan) && (
+        selectedPlanId === 'free'
+        || selectedPlanId === 'enterprise'
+        || selectedCadence === currentCadence
+    );
+    const currentProductBusy = busyProductId && busyProductId === selectedPlanPricing.productId;
 
     const handleBoostPurchase = async (boost) => {
         const productId = String(boost?.productId || boost?.id || '').trim();
@@ -239,6 +313,14 @@ const SubscriptionScreen = ({ navigation, route }) => {
             });
         }
     };
+
+    const selectedPlanPurchase = selectedPlan
+        ? {
+            ...selectedPlan,
+            productId: selectedPlanPricing.productId,
+            selectedCadence,
+        }
+        : null;
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -281,6 +363,52 @@ const SubscriptionScreen = ({ navigation, route }) => {
                                     ))}
                                 </View>
                             </View>
+
+                            {selectedPlanId !== 'free' && selectedPlanId !== 'enterprise' && (
+                                <View style={styles.billingCard}>
+                                    <View style={styles.billingToggle}>
+                                        <TouchableOpacity
+                                            style={[styles.billingOption, selectedCadence === 'monthly' && styles.billingOptionActive]}
+                                            onPress={() => setSelectedCadence('monthly')}
+                                            activeOpacity={0.9}
+                                        >
+                                            <Text style={[styles.billingLabel, selectedCadence === 'monthly' ? styles.billingLabelActive : styles.billingLabelMuted]}>
+                                                Monthly
+                                            </Text>
+                                            <Text style={[styles.billingPrice, selectedCadence === 'monthly' ? styles.billingPriceActive : styles.billingPriceMuted]}>
+                                                {selectedPlan?.priceLabel || 'Unavailable'}
+                                            </Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.billingOption, styles.billingAnnualOption, selectedCadence === 'annual' && styles.billingOptionActive]}
+                                            onPress={() => setSelectedCadence('annual')}
+                                            activeOpacity={0.9}
+                                        >
+                                            <View style={styles.billingAnnualHeader}>
+                                                <Text style={[styles.billingLabel, selectedCadence === 'annual' ? styles.billingLabelActive : styles.billingLabelMuted]}>
+                                                    Annual
+                                                </Text>
+                                                {!!selectedPlanPricing.annualSavings && (
+                                                    <View style={styles.discountBadge}>
+                                                        <Text style={styles.discountBadgeText}>
+                                                            Save {formatMoney(selectedPlanPricing.annualSavings)}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                            <Text style={[styles.billingPrice, selectedCadence === 'annual' ? styles.billingPriceActive : styles.billingPriceMuted]}>
+                                                {selectedPlan?.annualPriceLabel || 'Unavailable'}
+                                            </Text>
+                                            {!!selectedPlanPricing.annualMonthlyEquivalent && (
+                                                <Text style={styles.billingHint}>
+                                                    {formatMoney(selectedPlanPricing.annualMonthlyEquivalent)}/month when billed yearly
+                                                </Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
                         </View>
 
                         {!!route?.params?.reasonCode && (
@@ -369,8 +497,8 @@ const SubscriptionScreen = ({ navigation, route }) => {
 
                         <TouchableOpacity
                             style={[styles.upgradeButton, (isCurrentPlanSelected || selectedPlanId === 'free') && styles.upgradeButtonDisabled]}
-                            onPress={selectedPlanId === 'enterprise' ? handleEnterprisePress : handleSubscribe}
-                            disabled={selectedPlanId !== 'enterprise' && (isCurrentPlanSelected || selectedPlanId === 'free' || !!busyProductId)}
+                            onPress={selectedPlanId === 'enterprise' ? handleEnterprisePress : () => handleSubscribe(selectedPlanPurchase)}
+                            disabled={selectedPlanId !== 'enterprise' && (isCurrentPlanSelected || selectedPlanId === 'free' || !!busyProductId || !selectedPlanPricing.productId)}
                         >
                             {currentProductBusy ? (
                                 <ActivityIndicator color="#FFFFFF" />
@@ -380,7 +508,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
                                         ? 'Contact us for a demo'
                                         : isCurrentPlanSelected
                                             ? `${currentRules.label} active`
-                                            : `Choose ${selectedPlan?.priceLabel || selectedPlan?.annualPriceLabel || 'this plan'}`}
+                                            : `Choose ${selectedPlanPricing.activePriceLabel || 'this plan'}`}
                                 </Text>
                             )}
                         </TouchableOpacity>
@@ -393,6 +521,12 @@ const SubscriptionScreen = ({ navigation, route }) => {
                             )}
                         </TouchableOpacity>
 
+                        {selectedPlanId !== 'enterprise' && (
+                            <TouchableOpacity style={styles.manageButton} onPress={handleManageSubscription}>
+                                <Text style={styles.manageButtonText}>Manage subscription</Text>
+                            </TouchableOpacity>
+                        )}
+
                         <View style={styles.footerBlock}>
                             <View style={styles.footerLinks}>
                                 <TouchableOpacity onPress={() => Linking.openURL(LEGAL_LINKS.terms)}>
@@ -402,7 +536,9 @@ const SubscriptionScreen = ({ navigation, route }) => {
                                     <Text style={styles.footerLink}>Privacy</Text>
                                 </TouchableOpacity>
                             </View>
-                            <Text style={styles.footerMeta}>Auto-renews monthly. Cancel anytime.</Text>
+                            <Text style={styles.footerMeta}>
+                                {selectedCadence === 'annual' ? 'Auto-renews yearly. Cancel anytime.' : 'Auto-renews monthly. Cancel anytime.'}
+                            </Text>
                         </View>
                     </>
                 )}
@@ -472,6 +608,78 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         textAlign: 'center',
         paddingHorizontal: 20
+    },
+    billingCard: {
+        marginTop: 18,
+        width: '100%',
+        maxWidth: 420,
+    },
+    billingToggle: {
+        gap: 12,
+    },
+    billingOption: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#D9E7E4',
+        paddingHorizontal: 18,
+        paddingVertical: 16,
+    },
+    billingAnnualOption: {
+        borderColor: '#BFE4DE',
+        backgroundColor: '#F4FBF9',
+    },
+    billingOptionActive: {
+        borderColor: COLORS.primary,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 18,
+        elevation: 3
+    },
+    billingAnnualHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    billingLabel: {
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 16,
+    },
+    billingLabelActive: {
+        color: COLORS.primary,
+    },
+    billingLabelMuted: {
+        color: '#6B7280',
+    },
+    billingPrice: {
+        marginTop: 6,
+        fontFamily: 'SpaceGrotesk_700Bold',
+        fontSize: 24,
+    },
+    billingPriceActive: {
+        color: COLORS.text,
+    },
+    billingPriceMuted: {
+        color: '#4B5563',
+    },
+    billingHint: {
+        marginTop: 6,
+        fontFamily: 'DMSans_500Medium',
+        fontSize: 13,
+        color: '#4D7A74',
+    },
+    discountBadge: {
+        backgroundColor: COLORS.primary,
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+    },
+    discountBadgeText: {
+        color: '#FFFFFF',
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 11,
     },
     toggleWrap: {
         marginTop: 24,
@@ -707,6 +915,16 @@ const styles = StyleSheet.create({
         fontSize: 18,
         color: COLORS.primary,
         textDecorationLine: 'underline'
+    },
+    manageButton: {
+        marginTop: 12,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    manageButtonText: {
+        fontFamily: 'DMSans_700Bold',
+        fontSize: 16,
+        color: '#4B5563'
     },
     footerBlock: {
         alignItems: 'center',

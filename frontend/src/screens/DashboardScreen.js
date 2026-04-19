@@ -23,6 +23,7 @@ import { assessmentService } from '../services/api/assessmentService';
 import { supabase } from '../services/supabase/supabaseClient';
 import { userService } from '../services/api/userService';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
+import { getChallengeSectionTitle } from '../utils/challengeLabels';
 
 const { width } = Dimensions.get('window');
 
@@ -783,7 +784,7 @@ const DashboardScreen = ({ navigation }) => {
                     </View>
                 )}
 
-                <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>{isFreePlan ? 'Today for You' : 'Key Challenges'}</Text>
+                <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>{isFreePlan ? 'Today for You' : getChallengeSectionTitle()}</Text>
 
                 {isFreePlan ? (
                     <View style={styles.freePanel}>
@@ -794,7 +795,7 @@ const DashboardScreen = ({ navigation }) => {
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.freePanelTitle}>Keep your momentum going</Text>
                                 <Text style={styles.freePanelBody}>
-                                    Key Challenges are available on paid plans. For now, here are simple next steps to support your wellbeing today.
+                                    {getChallengeSectionTitle()} is available on paid plans. For now, here are simple next steps to support your wellbeing today.
                                 </Text>
                             </View>
                         </View>
@@ -818,8 +819,8 @@ const DashboardScreen = ({ navigation }) => {
 
                             <TouchableOpacity style={[styles.freeActionCard, styles.freeUpgradeCard]} onPress={() => navigation.navigate('Subscription')}>
                                 <MaterialCommunityIcons name="star-four-points-outline" size={20} color="#FFFFFF" />
-                                <Text style={styles.freeUpgradeTitle}>Unlock Key Challenges</Text>
-                                <Text style={styles.freeUpgradeBody}>Upgrade to get AI-powered challenge insights and deeper guidance.</Text>
+                                <Text style={styles.freeUpgradeTitle}>Unlock {getChallengeSectionTitle()}</Text>
+                                <Text style={styles.freeUpgradeBody}>Upgrade to get AI-powered daily insight and deeper guidance.</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -887,7 +888,7 @@ const DashboardScreen = ({ navigation }) => {
                                 );
                             })
                         ) : (
-                            <Text style={{ color: '#999', fontStyle: 'italic', padding: 10 }}>No specific challenges flagged.</Text>
+                            <Text style={{ color: '#999', fontStyle: 'italic', padding: 10 }}>No daily focus areas are showing yet.</Text>
                         )}
                     </View>
                 )}

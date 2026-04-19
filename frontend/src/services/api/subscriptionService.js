@@ -1,15 +1,14 @@
 import {
     finishTransaction,
-    getAvailablePurchases,
     fetchProducts,
     initConnection,
     purchaseUpdatedListener,
     purchaseErrorListener,
-    requestPurchase,
-    requestSubscription
+    requestPurchase
 } from 'react-native-iap';
 import { Platform } from 'react-native';
 import { subscriptionGuardService } from '../subscription/subscriptionGuardService';
+import { revenueCatService, REVENUECAT_PACKAGE_IDS } from '../subscription/revenueCatService';
 
 let iapReady = false;
 let updateSub = null;
@@ -57,27 +56,78 @@ const normalizePlan = (plan, defaults) => {
     };
 };
 
-const buildPurchaseRequest = (productId) => (
-    Platform.OS === 'ios'
-        ? { ios: { sku: productId } }
-        : { android: { skus: [productId] } }
-);
+const buildPurchaseRequest = (productId, type = 'in-app') => ({
+    request: (
+        Platform.OS === 'ios'
+            ? { ios: { sku: productId } }
+            : { android: { skus: [productId] } }
+    ),
+    type
+});
+
+const getCurrentPlatformKey = () => (Platform.OS === 'ios' ? 'ios' : 'android');
+
+const enrichPlanWithRevenueCat = (plan, packageMap = {}) => {
+    const planId = String(plan?.id || '').trim().toLowerCase();
+    if (!planId || planId === 'free' || planId === 'enterprise') return plan;
+
+    const packageIds = planId === 'pro'
+        ? {
+            monthly: REVENUECAT_PACKAGE_IDS.PRO_MONTHLY,
+            annual: REVENUECAT_PACKAGE_IDS.PRO_ANNUAL,
+        }
+        : {
+            monthly: REVENUECAT_PACKAGE_IDS.PREMIUM_MONTHLY,
+            annual: REVENUECAT_PACKAGE_IDS.PREMIUM_ANNUAL,
+        };
+
+    const monthlyPackage = packageMap[packageIds.monthly] || null;
+    const annualPackage = packageMap[packageIds.annual] || null;
+
+    return {
+        ...plan,
+        productId: monthlyPackage?.product?.identifier || plan?.productId || '',
+        priceLabel: monthlyPackage?.product?.priceString || plan?.priceLabel || '',
+        annualPriceLabel: annualPackage?.product?.priceString || plan?.annualPriceLabel || '',
+        productIds: {
+            ...(plan?.productIds || {}),
+            [getCurrentPlatformKey()]: [
+                monthlyPackage?.product?.identifier,
+                annualPackage?.product?.identifier,
+            ].filter(Boolean),
+        },
+        revenueCatPackages: {
+            monthly: monthlyPackage,
+            annual: annualPackage,
+        },
+    };
+};
 
 export const subscriptionService = {
     async getCatalog() {
-        const catalog = await subscriptionGuardService.getSubscriptionCatalog();
+        const [catalog, offerings] = await Promise.all([
+            subscriptionGuardService.getSubscriptionCatalog(),
+            revenueCatService.getOfferings().catch(() => null),
+        ]);
         const defaults = catalog?.defaults || {};
+        const platformKey = getCurrentPlatformKey();
+        const currentOffering = revenueCatService.getCurrentOffering(offerings);
+        const packageMap = revenueCatService.getPackageMap(currentOffering);
         const plans = Array.isArray(catalog?.plans)
-            ? catalog.plans.map((plan) => normalizePlan(plan, defaults))
+            ? catalog.plans.map((plan) => enrichPlanWithRevenueCat(normalizePlan(plan, defaults), packageMap))
             : [];
-        const boosts = Array.isArray(catalog?.boosts) ? catalog.boosts : [];
+        const boosts = Array.isArray(catalog?.boosts)
+            ? catalog.boosts.filter((boost) => {
+                const platform = String(boost?.platform || '').trim().toLowerCase();
+                return !platform || platform === platformKey;
+            })
+            : [];
         const boostIds = Array.from(new Set(boosts.map((boost) => String(boost?.productId || boost?.id || '').trim()).filter(Boolean)));
         
         let storeProducts = [];
         try {
             await ensureConnection();
             const queries = [];
-            if (productIds.length > 0) queries.push(fetchProducts({ skus: productIds, type: 'subs' }));
             if (boostIds.length > 0) queries.push(fetchProducts({ skus: boostIds, type: 'in-app' }));
             
             if (queries.length > 0) {
@@ -92,7 +142,8 @@ export const subscriptionService = {
             plans,
             boosts,
             storeProducts,
-            enterprise: catalog?.enterprise || null
+            enterprise: catalog?.enterprise || null,
+            offering: currentOffering || null,
         };
     },
 
@@ -101,12 +152,27 @@ export const subscriptionService = {
     },
 
     async requestPlanPurchase(plan) {
-        const productId = String(plan?.productId || '').trim();
-        if (!productId) {
+        const selectedCadence = String(plan?.selectedCadence || 'monthly').toLowerCase() === 'annual' ? 'annual' : 'monthly';
+        const aPackage = selectedCadence === 'annual' ? plan?.revenueCatPackages?.annual : plan?.revenueCatPackages?.monthly;
+        if (!aPackage) {
             throw new Error('This plan is not configured for purchase yet.');
         }
-        await ensureConnection();
-        return requestSubscription(buildPurchaseRequest(productId));
+        try {
+            const customerInfo = await revenueCatService.purchasePackage(aPackage);
+            try {
+                await subscriptionGuardService.syncRevenueCatCustomer({
+                    customerInfo: revenueCatService.serializeCustomerInfo(customerInfo),
+                    source: 'subscription_purchase',
+                    forceDowngrade: false,
+                });
+            } catch (syncError) {
+                console.warn('[RevenueCat] purchase sync failed', syncError?.message || syncError);
+            }
+            return customerInfo;
+        } catch (error) {
+            if (error?.userCancelled) return null;
+            throw error;
+        }
     },
 
     async requestBoostPurchase(boost) {
@@ -115,35 +181,21 @@ export const subscriptionService = {
             throw new Error('This boost is not configured for purchase yet.');
         }
         await ensureConnection();
-        return requestPurchase(buildPurchaseRequest(productId));
+        return requestPurchase(buildPurchaseRequest(productId, 'in-app'));
     },
 
     async restore(payload = {}) {
-        await ensureConnection();
-        const purchases = await getAvailablePurchases();
-        const first = purchases[0];
-        if (!first) {
-            throw new Error('No purchases available to restore.');
-        }
-        const productId = payload?.productId || first.productId;
-        if (first.purchaseToken) {
-            return subscriptionGuardService.restoreSubscriptions({
-                platform: 'android',
-                purchaseToken: first.purchaseToken,
-                productId
+        const customerInfo = await revenueCatService.restorePurchases();
+        try {
+            await subscriptionGuardService.syncRevenueCatCustomer({
+                customerInfo: revenueCatService.serializeCustomerInfo(customerInfo),
+                source: 'restore',
+                forceDowngrade: false,
             });
+        } catch (syncError) {
+            console.warn('[RevenueCat] restore sync failed', syncError?.message || syncError);
         }
-        const applePayload = extractPurchasePayload(first);
-        if (!applePayload.transactionId && !applePayload.originalTransactionId && !applePayload.signedTransactionInfo) {
-            throw new Error('No Apple transaction identifier is available to restore this subscription.');
-        }
-        return subscriptionGuardService.restoreSubscriptions({
-            platform: 'ios',
-            productId,
-            transactionId: applePayload.transactionId,
-            originalTransactionId: applePayload.originalTransactionId,
-            signedTransactionInfo: applePayload.signedTransactionInfo
-        });
+        return customerInfo;
     },
 
     startPurchaseListeners({ onSuccess, onError } = {}) {

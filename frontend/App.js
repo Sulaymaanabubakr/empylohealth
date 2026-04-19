@@ -7,6 +7,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/context/ToastContext';
 import { ModalProvider } from './src/context/ModalContext';
 import { BrandedSplash } from './src/screens/SplashScreen';
+import RevenueCatBootstrap from './src/services/subscription/RevenueCatBootstrap';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 
@@ -118,6 +119,7 @@ export default function App() {
         <ToastProvider>
           <ModalProvider>
             <AuthProvider onAuthReady={onAuthReady}>
+              <RevenueCatBootstrap />
               <ErrorBoundary onError={setErrorState}>
                 {authBootReady ? (
                   <Navigation />

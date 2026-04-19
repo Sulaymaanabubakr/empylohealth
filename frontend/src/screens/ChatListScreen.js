@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/api/chatService';
+import { huddleService } from '../services/api/huddleService';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
 import { isPresenceOnline } from '../utils/presence';
 import Avatar from '../components/Avatar';
@@ -14,7 +15,7 @@ import { useModal } from '../context/ModalContext';
 
 const chatListCacheKey = (uid) => `chat_list_cache_v1:${uid}`;
 
-const ChatListScreen = ({ navigation }) => {
+const ChatListScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const { showModal } = useModal();
@@ -29,6 +30,7 @@ const ChatListScreen = ({ navigation }) => {
     const [mutingChatId, setMutingChatId] = useState(null);
     const [unreadState, setUnreadState] = useState({ byChat: {}, total: 0 });
     const [presenceByUid, setPresenceByUid] = useState({});
+    const [missedHuddles, setMissedHuddles] = useState([]);
     const swipeableRefs = useRef({});
 
     useEffect(() => {
@@ -63,6 +65,13 @@ const ChatListScreen = ({ navigation }) => {
             active = false;
             unsubscribe();
         };
+    }, [user?.uid]);
+
+    useEffect(() => {
+        if (!user?.uid) return undefined;
+        return huddleService.subscribeToMissedHuddles(user.uid, (items) => {
+            setMissedHuddles(items || []);
+        });
     }, [user?.uid]);
 
     useEffect(() => {
@@ -136,6 +145,13 @@ const ChatListScreen = ({ navigation }) => {
     const filteredChats = chatsWithUnread.filter((chat) =>
         (chat.name || 'Anonymous').toLowerCase().includes(searchQuery.toLowerCase())
     );
+    const filteredMissedHuddles = useMemo(
+        () => missedHuddles.filter((item) => {
+            const haystack = `${item?.callerName || ''} ${item?.chatName || ''}`.toLowerCase();
+            return haystack.includes(searchQuery.toLowerCase());
+        }),
+        [missedHuddles, searchQuery]
+    );
     // Keep final row clear of the floating tab bar while avoiding global screen padding.
     const listBottomInset = Math.max(insets.bottom, 20) + 84;
     const showInitialLoading = !hasFirstSnapshot && !hydratedCache && chatsWithUnread.length === 0;
@@ -208,6 +224,64 @@ const ChatListScreen = ({ navigation }) => {
             </TouchableOpacity>
         );
     };
+
+    const openMissedHuddle = async (item) => {
+        try {
+            const latest = await huddleService.getHuddle(item?.huddleId);
+            const isJoinable = latest && latest.isActive !== false && ['ringing', 'accepted', 'ongoing'].includes(String(latest.status || ''));
+            if (isJoinable) {
+                navigation.navigate('Huddle', {
+                    chat: {
+                        id: item?.chatId || latest.chatId || 'chat',
+                        name: item?.chatName || 'Huddle',
+                        isGroup: true,
+                    },
+                    huddleId: item?.huddleId,
+                    mode: 'join',
+                    callTapTs: Date.now(),
+                });
+                return;
+            }
+
+            showModal({
+                type: 'info',
+                title: 'Huddle ended',
+                message: 'This huddle is no longer active.',
+            });
+        } catch (error) {
+            showModal({
+                type: 'error',
+                title: 'Unable to open huddle',
+                message: error?.message || 'Please try again.',
+            });
+        }
+    };
+
+    useEffect(() => {
+        const targetHuddleId = route?.params?.missedHuddleId;
+        if (!targetHuddleId) return;
+        openMissedHuddle({
+            huddleId: targetHuddleId,
+            chatId: route?.params?.missedChatId || null,
+            chatName: 'Huddle',
+        });
+        navigation.setParams?.({ missedHuddleId: undefined, missedChatId: undefined });
+    }, [navigation, route?.params?.missedChatId, route?.params?.missedHuddleId]);
+
+    const renderMissedHuddle = ({ item }) => (
+        <TouchableOpacity style={styles.missedCard} activeOpacity={0.88} onPress={() => openMissedHuddle(item)}>
+            <View style={styles.missedIconWrap}>
+                <Ionicons name="call-outline" size={18} color={COLORS.primary} />
+            </View>
+            <View style={styles.missedTextWrap}>
+                <Text style={styles.missedTitle}>Missed huddle from {item?.callerName || 'Someone'}</Text>
+                <Text style={styles.missedSubtitle} numberOfLines={1}>
+                    {item?.chatName || 'Huddle'} • Tap to see if it is still live
+                </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+    );
 
     const handleDeleteChat = (chat) => {
         showModal({
@@ -413,6 +487,18 @@ const ChatListScreen = ({ navigation }) => {
                     data={filteredChats}
                     renderItem={renderRow}
                     keyExtractor={(item) => item.id}
+                    ListHeaderComponent={(
+                        filteredMissedHuddles.length > 0 ? (
+                            <View style={styles.missedSection}>
+                                <Text style={styles.missedSectionTitle}>Missed Huddles</Text>
+                                {filteredMissedHuddles.map((item) => (
+                                    <View key={item.id} style={styles.missedCardWrap}>
+                                        {renderMissedHuddle({ item })}
+                                    </View>
+                                ))}
+                            </View>
+                        ) : null
+                    )}
                     contentContainerStyle={[
                         styles.listContent,
                         { paddingBottom: listBottomInset },
@@ -422,7 +508,7 @@ const ChatListScreen = ({ navigation }) => {
                     keyboardShouldPersistTaps="handled"
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
                     ListEmptyComponent={
-                        showInitialLoading ? (
+                        filteredMissedHuddles.length > 0 ? null : showInitialLoading ? (
                             <View style={styles.emptyWrap}>
                                 <View style={styles.emptyIconWrap}>
                                     <Ionicons name="time-outline" size={30} color={COLORS.primary} />
@@ -602,6 +688,51 @@ const styles = StyleSheet.create({
         color: '#4A5568',
         fontSize: 12,
         fontWeight: '500'
+    },
+    missedSection: {
+        marginBottom: 10,
+    },
+    missedSectionTitle: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#1A1A1A',
+        marginBottom: 10,
+    },
+    missedCardWrap: {
+        marginBottom: 10,
+    },
+    missedCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#F2D7D5',
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+    },
+    missedIconWrap: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#E8F8F6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    missedTextWrap: {
+        flex: 1,
+    },
+    missedTitle: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#1F2937',
+    },
+    missedSubtitle: {
+        marginTop: 4,
+        fontSize: 12,
+        fontWeight: '500',
+        color: '#6B7280',
     },
     avatarContainer: {
         position: 'relative',

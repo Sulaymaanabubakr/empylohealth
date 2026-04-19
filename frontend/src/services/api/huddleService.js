@@ -33,6 +33,26 @@ const mapHuddle = (row) => {
     };
 };
 
+const mapMissedHuddle = (row, context = {}) => {
+    if (!row) return null;
+    const callerProfile = context?.callerById?.[row.caller_id] || null;
+    const chat = context?.chatById?.[row.chat_id] || null;
+    return {
+        id: row.id,
+        huddleId: row.huddle_id,
+        chatId: row.chat_id,
+        callerId: row.caller_id,
+        receiverId: row.receiver_id,
+        status: row.status,
+        createdAt: row.created_at,
+        handledAt: row.handled_at || null,
+        callerName: callerProfile?.name || 'Someone',
+        callerAvatar: callerProfile?.photo_url || '',
+        chatName: chat?.name || 'Huddle',
+        chatAvatar: chat?.avatar || '',
+    };
+};
+
 let activeLocalSession = null;
 const sessionListeners = new Set();
 let activeCallControlState = {
@@ -44,6 +64,7 @@ let activeCallActions = {
     toggleSpeaker: null,
     hangup: null
 };
+let activeSessionHuddleChannel = null;
 
 const buildSessionPayload = () => {
     if (!activeLocalSession) return null;
@@ -67,6 +88,55 @@ const emitSessionChange = () => {
             // ignore listener errors
         }
     });
+};
+
+const clearActiveSessionHuddleChannel = () => {
+    if (activeSessionHuddleChannel) {
+        supabase.removeChannel(activeSessionHuddleChannel);
+        activeSessionHuddleChannel = null;
+    }
+};
+
+const syncActiveSessionHuddle = (huddleId) => {
+    clearActiveSessionHuddleChannel();
+    if (!huddleId) return;
+
+    const load = async () => {
+        if (!activeLocalSession || activeLocalSession.huddleId !== huddleId) return;
+        const { data } = await supabase
+            .from('huddles')
+            .select('*')
+            .eq('id', huddleId)
+            .maybeSingle();
+        if (!data || !activeLocalSession || activeLocalSession.huddleId !== huddleId) return;
+
+        const nextStatus = String(data.status || '');
+        const previousStatus = String(activeLocalSession.firebaseStatus || '');
+        const didBecomeOngoing = nextStatus === 'ongoing' && previousStatus !== 'ongoing';
+
+        activeLocalSession = {
+            ...activeLocalSession,
+            firebaseStatus: nextStatus || null,
+            isActive: data.is_active !== false,
+            activeUserCount: Array.isArray(data.active_user_ids) ? data.active_user_ids.length : 0,
+            acceptedUserCount: Array.isArray(data.accepted_user_ids) ? data.accepted_user_ids.length : 0,
+            ...(didBecomeOngoing
+                ? {
+                    phase: 'ongoing',
+                    startedAtMs: Date.now(),
+                    elapsedSeconds: 0,
+                }
+                : {})
+        };
+        emitSessionChange();
+    };
+
+    load().catch(() => {});
+
+    activeSessionHuddleChannel = supabase
+        .channel(`active-huddle-session-${huddleId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'huddles', filter: `id=eq.${huddleId}` }, load)
+        .subscribe();
 };
 
 export const huddleService = {
@@ -101,6 +171,16 @@ export const huddleService = {
             return result;
         } catch (error) {
             console.error("Error joining huddle:", error);
+            throw error;
+        }
+    },
+
+    markHuddleAccepted: async (huddleId) => {
+        try {
+            const result = await authApiClient.invokeWithAuth('mark-huddle-accepted', { huddleId });
+            return result || { success: true };
+        } catch (error) {
+            console.error("Error accepting huddle:", error);
             throw error;
         }
     },
@@ -215,11 +295,97 @@ export const huddleService = {
         };
     },
 
+    getHuddle: async (huddleId) => {
+        if (!huddleId) return null;
+        const { data, error } = await supabase
+            .from('huddles')
+            .select('*')
+            .eq('id', huddleId)
+            .maybeSingle();
+        if (error) throw error;
+        return mapHuddle(data);
+    },
+
+    getMissedHuddles: async (uid) => {
+        if (!uid) return [];
+        const { data, error } = await supabase
+            .from('missed_huddles')
+            .select('*')
+            .eq('receiver_id', uid)
+            .eq('status', 'missed')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+
+        const rows = data || [];
+        const callerIds = Array.from(new Set(rows.map((row) => row.caller_id).filter(Boolean)));
+        const chatIds = Array.from(new Set(rows.map((row) => row.chat_id).filter(Boolean)));
+        const [{ data: callerProfiles }, { data: chats }] = await Promise.all([
+            callerIds.length
+                ? supabase.from('profiles').select('id, name, photo_url').in('id', callerIds)
+                : Promise.resolve({ data: [] }),
+            chatIds.length
+                ? supabase.from('chats').select('id, name, avatar').in('id', chatIds)
+                : Promise.resolve({ data: [] }),
+        ]);
+
+        const callerById = Object.fromEntries((callerProfiles || []).map((row) => [row.id, row]));
+        const chatById = Object.fromEntries((chats || []).map((row) => [row.id, row]));
+        return rows.map((row) => mapMissedHuddle(row, { callerById, chatById })).filter(Boolean);
+    },
+
+    subscribeToMissedHuddles: (uid, callback) => {
+        if (!uid) return () => {};
+
+        const load = async () => {
+            const items = await huddleService.getMissedHuddles(uid).catch(() => []);
+            callback(items);
+        };
+
+        load();
+
+        const channel = supabase
+            .channel(`missed-huddles-${uid}-${Math.random().toString(36).slice(2, 8)}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'missed_huddles', filter: `receiver_id=eq.${uid}` }, load)
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    },
+
+    subscribeToMissedHuddleStatus: (huddleId, uid, callback) => {
+        if (!huddleId || !uid) return () => {};
+
+        const load = async () => {
+            const { data } = await supabase
+                .from('missed_huddles')
+                .select('*')
+                .eq('huddle_id', huddleId)
+                .eq('receiver_id', uid)
+                .maybeSingle();
+            callback(data ? mapMissedHuddle(data) : null);
+        };
+
+        load();
+
+        const channel = supabase
+            .channel(`missed-huddle-${huddleId}-${uid}-${Math.random().toString(36).slice(2, 8)}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'missed_huddles', filter: `huddle_id=eq.${huddleId}` }, load)
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    },
+
     setActiveLocalSession: (session) => {
         activeLocalSession = session || null;
         if (!session) {
+            clearActiveSessionHuddleChannel();
             activeCallControlState = { isMuted: false, isSpeakerOn: true };
             activeCallActions = { toggleMute: null, toggleSpeaker: null, hangup: null };
+        } else {
+            syncActiveSessionHuddle(session.huddleId);
         }
         emitSessionChange();
     },
@@ -228,10 +394,14 @@ export const huddleService = {
 
     updateActiveLocalSession: (patch = {}) => {
         if (!activeLocalSession) return;
+        const previousHuddleId = activeLocalSession?.huddleId;
         activeLocalSession = {
             ...activeLocalSession,
             ...patch
         };
+        if (patch?.huddleId && patch.huddleId !== previousHuddleId) {
+            syncActiveSessionHuddle(patch.huddleId);
+        }
         emitSessionChange();
     },
 
@@ -338,6 +508,7 @@ export const huddleService = {
                 state: 'idle'
             }).catch(() => {});
         }
+        clearActiveSessionHuddleChannel();
         activeLocalSession = null;
         activeCallControlState = { isMuted: false, isSpeakerOn: true };
         activeCallActions = { toggleMute: null, toggleSpeaker: null, hangup: null };

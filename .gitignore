@@ -33,6 +33,11 @@ Library/
 .DS_Store
 *.pem
 !backend/certs/AppleRootCA-G3.pem
+.vscode/
+.gradle-temp/
+*.gradle-temp
+**/.gradle/
+**/.temp/
 
 # local env files
 .env*.local

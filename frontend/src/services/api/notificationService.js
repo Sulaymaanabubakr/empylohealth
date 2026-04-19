@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { navigate } from '../../navigation/navigationRef';
 import { nativeCallService } from '../native/nativeCallService';
+import { registerBackgroundNotificationTask } from './notificationBackgroundTasks';
 import { chatService } from './chatService';
 import { huddleService } from './huddleService';
 import { supabase } from '../supabase/supabaseClient';
@@ -27,7 +28,6 @@ const HUDDLE_CALL_CATEGORY_ID = 'huddle-call-actions';
 const HUDDLE_CALL_ACTION_ACCEPT = 'huddle-accept';
 const HUDDLE_CALL_ACTION_REJECT = 'huddle-reject';
 const HUDDLE_CALLS_CHANNEL_ID = 'huddle-calls-ringtone';
-const REQUIRE_NATIVE_INCOMING_CALL_UI = true;
 
 let VoipPushNotification = null;
 let currentAuthUid = null;
@@ -115,17 +115,30 @@ const navigateFromNotificationData = async (payload) => {
         const chatId = data?.chatId;
 
         if (type === 'HUDDLE_STARTED' && huddleId) {
-            await huddleService.updateHuddleState(huddleId, 'join').catch(() => {});
-            navigate('Huddle', {
-                chat: { id: chatId || 'chat', name: 'Huddle', isGroup: true },
+            navigate('IncomingHuddle', nativeCallService.toIncomingRouteParams({
                 huddleId,
-                mode: 'join',
-                callTapTs: Date.now()
+                chatId,
+                chatName: data?.chatName || 'Huddle',
+                callerName: data?.callerName || data?.chatName || 'Incoming Huddle',
+                avatar: data?.avatar || data?.senderAvatar || data?.chatAvatar || '',
+                isGroup: String(data?.isGroup || '').toLowerCase() === 'true',
+            }));
+            return true;
+        }
+
+        if (type === 'MISSED_HUDDLE' && huddleId) {
+            navigate('MainTabs', {
+                screen: 'ChatList',
+                params: {
+                    missedHuddleId: huddleId,
+                    missedChatId: chatId || null,
+                },
             });
             return true;
         }
 
         if ((type === 'CHAT_MESSAGE' || chatId) && chatId) {
+            await markChatNotificationsAsRead(chatId).catch(() => {});
             const chat = await resolveChatNavigationPayload(chatId);
             if (chat) {
                 navigate('ChatDetail', { chat: chatService.serializeChatForNavigation(chat) });
@@ -224,8 +237,8 @@ const handleNotificationAction = async (response) => {
 
     if (actionId === HUDDLE_CALL_ACTION_REJECT) {
         if (data?.huddleId) {
+            await nativeCallService.dismissIncomingHuddle(data.huddleId, 'declined').catch(() => {});
             await huddleService.declineHuddle(data.huddleId).catch(() => {});
-            nativeCallService.endHuddleCall(data.huddleId);
         }
         if (notificationId) {
             await Notifications.dismissNotificationAsync(notificationId).catch(() => {});
@@ -238,7 +251,12 @@ const handleNotificationAction = async (response) => {
             await Notifications.dismissNotificationAsync(notificationId).catch(() => {});
         }
         if (data?.huddleId) {
-            await huddleService.updateHuddleState(data.huddleId, 'join').catch(() => {});
+            const accepted = await huddleService.markHuddleAccepted(data.huddleId).catch(() => null);
+            if (!accepted?.success) {
+                return false;
+            }
+            await nativeCallService.setPendingJoinIntent(data).catch(() => {});
+            await nativeCallService.dismissIncomingHuddle(data.huddleId, 'accepted').catch(() => {});
             navigate('Huddle', {
                 chat: { id: data?.chatId || 'chat', name: data?.chatName || 'Huddle', isGroup: true },
                 huddleId: data.huddleId,
@@ -304,46 +322,20 @@ const configureNotificationCategories = async () => {
     }
 };
 
-const maybeShowNativeIncomingCall = async (payload) => {
+const maybeShowIncomingHuddle = async (payload) => {
     const data = extractNotificationData(payload);
     if (data?.type !== 'HUDDLE_STARTED' || !data?.huddleId) return false;
     const now = Date.now();
     const lastTs = Number(incomingHuddleDedupe.get(data.huddleId) || 0);
     if (now - lastTs < 15000) return true;
     incomingHuddleDedupe.set(data.huddleId, now);
-    const avatar = data?.avatar || data?.senderAvatar || data?.chatAvatar || '';
 
-    const shown = await nativeCallService.presentIncomingHuddleCall({
-        huddleId: data.huddleId,
-        uuid: data?.uuid || null,
-        chatId: data.chatId,
-        chatName: data.chatName || 'Huddle',
-        callerName: data.callerName || data.chatName || 'Incoming Huddle',
-        avatar
-    });
-    if (shown) return true;
+    const shouldShow = await nativeCallService.shouldShowIncomingHuddle(data).catch(() => false);
+    if (!shouldShow) return true;
 
-    const nativeSupported = nativeCallService.isSupported();
-    if (REQUIRE_NATIVE_INCOMING_CALL_UI && nativeSupported) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.log('[IncomingHuddle] Native UI unavailable; suppressed in-app ringing fallback', {
-                huddleId: data.huddleId,
-                platform: Platform.OS
-            });
-        }
-        return false;
-    }
-
-    // In-app fallback for builds without CallKeep: show accept/decline UI + ringtone.
     if (lastInAppIncoming.huddleId !== data.huddleId || (now - lastInAppIncoming.ts) > 15000) {
         lastInAppIncoming = { huddleId: data.huddleId, ts: now };
-        navigate('IncomingHuddle', {
-            huddleId: data.huddleId,
-            chatId: data.chatId,
-            chatName: data.chatName || 'Huddle',
-            callerName: data.callerName || data.chatName || 'Incoming Huddle',
-            avatar
-        });
+        navigate('IncomingHuddle', nativeCallService.toIncomingRouteParams(data));
     }
     return true;
 };
@@ -374,7 +366,7 @@ const registerVoipListeners = () => {
     VoipPushNotification.addEventListener('notification', (notification) => {
         const data = normalizeVoipNotificationData(notification);
         if (data.type === 'HUDDLE_STARTED' && data.huddleId) {
-            nativeCallService.presentIncomingHuddleCall(data).catch(() => {});
+            maybeShowIncomingHuddle({ data }).catch(() => {});
         }
 
         if (typeof notification?.completion === 'function') {
@@ -396,9 +388,12 @@ export const notificationService = {
         if (notificationRoutingInitialized) return;
         notificationRoutingInitialized = true;
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.log('[Calls] CallKeep supported:', nativeCallService.isSupported());
+            console.log('[Calls] Incoming huddles mode:', 'app-controlled');
         }
         nativeCallService.initialize();
+        registerBackgroundNotificationTask().catch((error) => {
+            console.warn('[NotificationRouting] Background notification task registration failed', error?.message || error);
+        });
         registerVoipListeners();
         configureNotificationCategories().catch(() => {});
 
@@ -415,11 +410,11 @@ export const notificationService = {
                         shouldSetBadge: false
                     };
                 }
-                const shownAsNativeCall = await maybeShowNativeIncomingCall(notification);
+                const shownAsIncomingHuddle = await maybeShowIncomingHuddle(notification);
                 return {
-                    shouldShowBanner: !shownAsNativeCall,
-                    shouldShowList: !shownAsNativeCall,
-                    shouldPlaySound: !shownAsNativeCall,
+                    shouldShowBanner: !shownAsIncomingHuddle,
+                    shouldShowList: !shownAsIncomingHuddle,
+                    shouldPlaySound: data?.type === 'HUDDLE_STARTED' ? true : !shownAsIncomingHuddle,
                     shouldSetBadge: false
                 };
             }
@@ -438,7 +433,7 @@ export const notificationService = {
                     // ignore foreground warning handler failure
                 }
             }
-            maybeShowNativeIncomingCall(notification);
+            maybeShowIncomingHuddle(notification);
         });
 
         responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -464,6 +459,17 @@ export const notificationService = {
                     });
             }
         }).catch(() => {});
+        nativeCallService.consumePendingJoinIntent()
+            .then((intent) => {
+                if (!intent?.huddleId) return;
+                navigate('Huddle', {
+                    chat: { id: intent?.chatId || 'chat', name: intent?.chatName || 'Huddle', isGroup: true },
+                    huddleId: intent.huddleId,
+                    mode: 'join',
+                    callTapTs: Date.now()
+                });
+            })
+            .catch(() => {});
     },
 
     cleanupNotificationRouting: () => {
@@ -528,7 +534,8 @@ export const notificationService = {
                     vibrationPattern: [0, 500, 250, 500, 250, 700],
                     lightColor: '#00A99D',
                     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-                    sound: 'default'
+                    sound: 'default',
+                    bypassDnd: true
                 });
                 await Notifications.setNotificationChannelAsync(HUDDLE_CALLS_CHANNEL_ID, {
                     name: 'Huddle Calls (Ringtone)',
@@ -536,7 +543,8 @@ export const notificationService = {
                     vibrationPattern: [0],
                     lightColor: '#00A99D',
                     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-                    sound: 'default'
+                    sound: 'default',
+                    bypassDnd: true
                 });
             }
 

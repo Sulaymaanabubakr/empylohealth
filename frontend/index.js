@@ -23,5 +23,8 @@ LogBox.ignoreLogs([
 ]);
 
 const { registerRootComponent } = require('expo');
+require('./src/services/api/notificationBackgroundTasks');
+const { notificationService } = require('./src/services/api/notificationService');
+notificationService.initializeNotificationRouting();
 const App = require('./App').default;
 registerRootComponent(App);

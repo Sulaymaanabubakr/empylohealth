@@ -1,16 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { useModal } from '../context/ModalContext';
 import { userService } from '../services/api/userService';
-import { LEGAL_LINKS } from '../constants/legalLinks';
 import { biometricPrefs } from '../services/security/biometricPrefs';
 
 const SecurityScreen = ({ navigation }) => {
-    const { user, userData, deleteAccount } = useAuth();
-    const { showModal } = useModal();
+    const { user, userData } = useAuth();
     // State for toggles
     const [securityNotif, setSecurityNotif] = useState(true);
     const [biometrics, setBiometrics] = useState(true);
@@ -49,33 +46,6 @@ const SecurityScreen = ({ navigation }) => {
         } catch (error) {
             console.error('Failed to update settings', error);
         }
-    };
-
-    const handleDeleteAccount = () => {
-        if (!user?.uid) return;
-
-        showModal({
-            type: 'confirmation',
-            title: 'Delete Account',
-            message: 'Are you sure you want to permanently delete your account? This action cannot be undone.',
-            confirmText: 'Delete',
-            cancelText: 'Cancel',
-            onConfirm: async () => {
-                try {
-                    await deleteAccount();
-                    showModal({
-                        type: 'success',
-                        title: 'Deleted',
-                        message: 'Your account has been deleted.',
-                        confirmText: 'Goodbye',
-                        onConfirm: () => navigation.navigate('SignIn')
-                    });
-                } catch (error) {
-                    console.error('Delete account failed', error);
-                    showModal({ type: 'error', title: 'Error', message: error.message || 'Unable to delete account.' });
-                }
-            }
-        });
     };
 
     const renderToggleCard = (label, description, value, onValueChange, iconName) => (
@@ -144,28 +114,6 @@ const SecurityScreen = ({ navigation }) => {
                     },
                     "finger-print-outline"
                 )}
-
-                {/* Delete Account */}
-                <TouchableOpacity
-                    style={styles.deleteCard}
-                    onPress={handleDeleteAccount}
-                >
-                    <View style={styles.deleteHeader}>
-                        <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#D32F2F" />
-                        <Text style={styles.deleteTitle}>Delete My Account</Text>
-                    </View>
-
-                    <Text style={styles.deleteDescription}>Deleting your account will permanently remove:</Text>
-                    <View style={styles.bulletList}>
-                        <Text style={styles.bulletItem}>• Your account info and profile photo</Text>
-                        <Text style={styles.bulletItem}>• You from all Circles groups</Text>
-                        <Text style={styles.bulletItem}>• Your message history on this device</Text>
-                        <Text style={styles.bulletItem}>• Any Circle that you created</Text>
-                    </View>
-                    <TouchableOpacity style={styles.learnMoreBtn} onPress={() => Linking.openURL(LEGAL_LINKS.deletionPolicy)}>
-                        <Text style={styles.learnMoreText}>Learn what is retained and why</Text>
-                    </TouchableOpacity>
-                </TouchableOpacity>
 
             </ScrollView>
 
@@ -251,50 +199,6 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#757575',
         lineHeight: 18,
-    },
-    deleteCard: {
-        backgroundColor: '#FFEBEE', // Light Red bg
-        borderRadius: 20,
-        padding: 20,
-        marginTop: 8,
-        borderWidth: 1,
-        borderColor: '#FFCDD2',
-    },
-    deleteHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-        gap: 8,
-    },
-    deleteTitle: {
-        fontSize: 16,
-        color: '#D32F2F',
-        fontWeight: '700',
-    },
-    deleteDescription: {
-        fontSize: 14,
-        color: '#B71C1C',
-        marginBottom: 8,
-        fontWeight: '500',
-    },
-    bulletList: {
-        marginLeft: 8,
-    },
-    bulletItem: {
-        fontSize: 13,
-        color: '#D32F2F',
-        marginBottom: 4,
-        lineHeight: 18,
-    },
-    learnMoreBtn: {
-        marginTop: 10,
-        alignSelf: 'flex-start'
-    },
-    learnMoreText: {
-        color: '#C62828',
-        fontSize: 12,
-        fontWeight: '700',
-        textDecorationLine: 'underline'
     },
 });
 

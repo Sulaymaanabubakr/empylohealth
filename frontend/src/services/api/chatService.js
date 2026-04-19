@@ -1,6 +1,7 @@
 import { chatRepository } from '../repositories/ChatRepository';
 import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { presenceRepository } from '../repositories/PresenceRepository';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../supabase/supabaseClient';
 import { resolveWellbeingScore } from '../../utils/wellbeing';
 import { isPresenceOnline } from '../../utils/presence';
@@ -8,6 +9,20 @@ import { formatTimeUK } from '../../utils/dateFormat';
 import { findUnsafeUrlsInMessage, sanitizeChatMessageText } from '../../utils/chatMessageSafety';
 
 const randomChannel = (prefix, id) => `${prefix}-${id}-${Math.random().toString(36).slice(2, 8)}`;
+
+const refreshNotificationBadgeCount = async (uid) => {
+    if (!uid) return;
+    try {
+        const { count } = await supabase
+            .from('notifications')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', uid)
+            .eq('read', false);
+        await Notifications.setBadgeCountAsync(Number(count || 0)).catch(() => {});
+    } catch {
+        // ignore badge refresh failures
+    }
+};
 
 const serializeChatTimestamp = (value) => {
     if (!value) return null;
@@ -322,11 +337,22 @@ export const chatService = {
 
     markChatNotificationsRead: async (chatId, uid = null) => {
         if (!uid || !chatId) return;
+        const nowIso = new Date().toISOString();
         await supabase
             .from('chat_participants')
-            .update({ last_read_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .update({ last_read_at: nowIso, updated_at: nowIso })
             .eq('chat_id', chatId)
             .eq('user_id', uid);
+
+        await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('user_id', uid)
+            .eq('type', 'CHAT_MESSAGE')
+            .filter('data->>chatId', 'eq', String(chatId))
+            .or('read.is.null,read.eq.false');
+
+        await refreshNotificationBadgeCount(uid);
     },
 
     preloadChatList: async (uid) => {

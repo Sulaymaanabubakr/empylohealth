@@ -1,17 +1,61 @@
+# Package manager / install artifacts
 node_modules/
-.expo/
-npm-debug.log
-yarn-error.log
+**/node_modules/
+.npm/
+.npm-cache/
+
+# VCS / editor / OS
+.git/
+.github/
+.vscode/
+.idea/
 .DS_Store
 
-# Android
-android/.gradle
-android/app/build
-android/build
-**/*.zip
-**/*.tar.gz
+# Expo / Metro / local generated state
+.expo/
+.expo-shared/
+dist/
+web-build/
+coverage/
 
-# Allow Google Services for EAS Build (overrides .gitignore)
+# Logs
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+*.log
+
+# Local docs and references not needed for native builds
+*.md
+*.pdf
+
+# Local credentials and machine-specific files
+credentials/
+credentials.json
+*.jks
+*.keystore
+*.p8
+*.mobileprovision
+
+# Android caches / build output
+android/.gradle/
+android/.cxx/
+android/build/
+android/app/build/
+android/app/.cxx/
+**/.gradle/
+**/.cxx/
+
+# iOS caches / build output
+ios/Pods/
+ios/build/
+
+# Archives
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/*.tgz
+
+# Keep required store config files for EAS Build
 !google-services.json
 !**/google-services.json
 !GoogleService-Info.plist

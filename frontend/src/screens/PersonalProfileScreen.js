@@ -358,13 +358,13 @@ const PersonalProfileScreen = ({ navigation }) => {
             { icon: 'person-outline', label: 'Personal Information', type: 'ionic' },
             { icon: 'lock-closed-outline', label: 'Security', type: 'ionic' },
             { icon: 'diamond-outline', label: 'Subscription', type: 'ionic' },
-            { icon: 'trash-outline', label: 'Delete Account', type: 'ionic', destructive: true },
             { icon: 'information-circle-outline', label: 'About Circles Health App', type: 'ionic' },
             { icon: 'school-outline', label: 'Community Education', type: 'ionic' },
             { icon: 'shield-checkmark-outline', label: 'Community Guidelines', type: 'ionic' },
             { icon: 'help-circle-outline', label: 'My Circles FAQ', type: 'ionic' },
             { icon: 'mail-open-outline', label: 'Invitations', type: 'ionic' },
             { icon: 'heart-outline', label: 'Tell a friend', type: 'ionic' },
+            { icon: 'trash-outline', label: 'Delete Account', type: 'ionic', destructive: true },
         ];
 
         return (
@@ -392,7 +392,7 @@ const PersonalProfileScreen = ({ navigation }) => {
                                 } else if (item.label === 'Subscription') {
                                     navigation.navigate('Subscription');
                                 } else if (item.label === 'Delete Account') {
-                                    navigation.navigate('Security');
+                                    navigation.navigate('DeleteAccount');
                                 } else if (item.label === 'About Circles Health App') {
                                     navigation.navigate('AboutCircles');
                                 } else if (item.label === 'Community Education') {

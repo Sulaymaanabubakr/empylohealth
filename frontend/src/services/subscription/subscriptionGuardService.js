@@ -94,16 +94,6 @@ export const subscriptionGuardService = {
                 usage
             });
         }
-        const remainingStarts = Number(remaining?.dailyHuddleStartsRemaining ?? limits?.dailyHuddleStarts ?? 0);
-        if (Number.isFinite(remainingStarts) && limits?.dailyHuddleStarts != null && remainingStarts <= 0) {
-            return normalizeGuard({
-                allowed: false,
-                reasonCode: 'daily_huddle_starts_reached',
-                message: 'You have reached your daily huddle start limit.',
-                plan,
-                usage
-            });
-        }
         return normalizeGuard({
             allowed: true,
             plan,
@@ -201,6 +191,12 @@ export const subscriptionGuardService = {
 
     async validateGooglePurchase({ purchaseToken, productId, idempotencyKey }) {
         const result = await callableClient.invokeWithAuth('validateGoogleSubscriptionPurchase', { purchaseToken, productId, idempotencyKey });
+        this.invalidateCache();
+        return result;
+    },
+
+    async syncRevenueCatCustomer(payload) {
+        const result = await callableClient.invokeWithAuth('syncRevenueCatCustomer', payload || {});
         this.invalidateCache();
         return result;
     },

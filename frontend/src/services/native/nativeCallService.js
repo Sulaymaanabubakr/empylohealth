@@ -1,239 +1,255 @@
-import { Platform } from 'react-native';
-import { navigate } from '../../navigation/navigationRef';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, Vibration } from 'react-native';
+import { loopingSound } from '../audio/loopingSound';
 
-let RNCallKeep = null;
-try {
-  // Optional native module: available only in dev/custom builds.
-  RNCallKeep = require('react-native-callkeep').default;
-} catch {
-  RNCallKeep = null;
-}
+const INCOMING_DEDUPE_MS = 15000;
+const HANDLED_TTL_MS = 2 * 60 * 60 * 1000;
+const RING_REPEAT_MS = 4200;
+const HANDLED_STORAGE_KEY = 'incoming_huddle_handled_v1';
+const PENDING_JOIN_STORAGE_KEY = 'incoming_huddle_pending_join_v1';
 
-const NAMESPACE = 'c0a80125b4e84b6fa0d9f8e4e8b3a4aa';
-
-const huddleIdToUuid = new Map();
-const uuidToPayload = new Map();
-const huddleIdToLastPresentedAt = new Map();
-const answeredCallUuids = new Set();
 let initialized = false;
-let subscriptions = [];
+let activeIncomingHuddleId = null;
+let ringtoneInstance = null;
+let ringtoneReplayInterval = null;
+let vibrationInterval = null;
+let ringtoneSession = 0;
+const dedupeMap = new Map();
+const handledMap = new Map();
 
-const hashToHex = (input = '') => {
-  let hash = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = ((hash << 5) - hash) + input.charCodeAt(i);
-    hash |= 0;
-  }
-  const positive = Math.abs(hash);
-  return positive.toString(16).padStart(8, '0');
-};
-
-const toUuid = (seed) => {
-  const p1 = hashToHex(`${seed}:${NAMESPACE}:1`);
-  const p2 = hashToHex(`${seed}:${NAMESPACE}:2`).slice(0, 4);
-  const p3 = hashToHex(`${seed}:${NAMESPACE}:3`).slice(0, 4);
-  const p4 = hashToHex(`${seed}:${NAMESPACE}:4`).slice(0, 4);
-  const p5 = `${hashToHex(`${seed}:${NAMESPACE}:5`)}${hashToHex(`${seed}:${NAMESPACE}:6`)}`.slice(0, 12);
-  return `${p1}-${p2}-${p3}-${p4}-${p5}`;
-};
-
-const getOrCreateUuid = (huddleId) => {
-  if (!huddleIdToUuid.has(huddleId)) {
-    huddleIdToUuid.set(huddleId, toUuid(huddleId));
-  }
-  return huddleIdToUuid.get(huddleId);
-};
-
-const isUuid = (value = '') => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value));
-
-const getSetupOptions = () => ({
-  ios: {
-    appName: 'Circles App',
-    supportsVideo: false,
-    includesCallsInRecents: false
-  },
-  android: {
-    alertTitle: 'Phone Account Permission',
-    alertDescription: 'Circles needs phone account access to show incoming huddles like a real call.',
-    cancelButton: 'Cancel',
-    okButton: 'Allow',
-    additionalPermissions: [
-      'android.permission.READ_PHONE_STATE',
-      'android.permission.CALL_PHONE'
-    ],
-    foregroundService: {
-      channelId: 'huddle-calls-ringtone',
-      channelName: 'Huddle Calls',
-      notificationTitle: 'Huddle call in progress'
-    }
-  }
-});
-
-const handleAnswerCall = (event) => {
-  const callUUID = event?.callUUID;
-  if (callUUID) {
-    answeredCallUuids.add(callUUID);
-    try {
-      RNCallKeep?.setCurrentCallActive?.(callUUID);
-    } catch {
-      // ignore
-    }
-  }
-  const payload = uuidToPayload.get(callUUID);
-  if (!payload?.huddleId) return;
-
-  // Reduce ringing/connecting drift by marking participant join intent immediately.
+const safeCall = async (fn) => {
   try {
-    // Lazy import avoids static dependency coupling.
-    // eslint-disable-next-line global-require
-    const { huddleService } = require('../api/huddleService');
-    huddleService?.updateHuddleState?.(payload.huddleId, 'join').catch(() => {});
+    return await fn();
   } catch {
-    // ignore
+    return null;
   }
+};
 
-  if (Platform.OS === 'android') {
-    RNCallKeep?.backToForeground?.();
-  }
-
-  navigate('Huddle', {
-    chat: { id: payload.chatId || 'chat', name: payload.chatName || 'Huddle', isGroup: true },
-    huddleId: payload.huddleId,
-    mode: 'join',
-    callTapTs: Date.now()
+const pruneHandledEntries = () => {
+  const cutoff = Date.now() - HANDLED_TTL_MS;
+  Array.from(handledMap.entries()).forEach(([huddleId, value]) => {
+    if (!value?.ts || value.ts < cutoff) {
+      handledMap.delete(huddleId);
+    }
   });
 };
 
-const handleEndCall = (event) => {
-  const callUUID = event?.callUUID;
-  if (!callUUID) return;
-  const payload = uuidToPayload.get(callUUID);
-  answeredCallUuids.delete(callUUID);
-  uuidToPayload.delete(callUUID);
-  if (payload?.huddleId) {
-    huddleIdToUuid.delete(payload.huddleId);
-    huddleIdToLastPresentedAt.delete(payload.huddleId);
+const persistHandledEntries = async () => {
+  pruneHandledEntries();
+  try {
+    await AsyncStorage.setItem(
+      HANDLED_STORAGE_KEY,
+      JSON.stringify(Array.from(handledMap.entries())),
+    );
+  } catch {
+    // ignore persistence failures
   }
 };
 
+const hydrateHandledEntries = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(HANDLED_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach(([huddleId, value]) => {
+      if (!huddleId || !value?.ts) return;
+      handledMap.set(String(huddleId), value);
+    });
+    pruneHandledEntries();
+  } catch {
+    // ignore hydration failures
+  }
+};
+
+const clearIntervals = () => {
+  if (ringtoneReplayInterval) {
+    clearInterval(ringtoneReplayInterval);
+    ringtoneReplayInterval = null;
+  }
+  if (vibrationInterval) {
+    clearInterval(vibrationInterval);
+    vibrationInterval = null;
+  }
+};
+
+const normalizePayload = (payload = {}) => ({
+  huddleId: payload?.huddleId || null,
+  chatId: payload?.chatId || null,
+  chatName: payload?.chatName || 'Huddle',
+  callerName: payload?.callerName || payload?.chatName || 'Incoming Huddle',
+  avatar: payload?.isGroup
+    ? (payload?.chatAvatar || payload?.groupAvatar || payload?.avatar || '')
+    : (payload?.callerAvatar || payload?.senderAvatar || payload?.avatar || payload?.chatAvatar || ''),
+  senderId: payload?.senderId || null,
+  isGroup: Boolean(payload?.isGroup),
+});
+
 export const nativeCallService = {
-  isSupported: () => !!RNCallKeep,
+  isSupported: () => false,
+
+  getAvailability: async () => ({
+    modulePresent: false,
+    connectionServiceAvailable: false,
+    mode: 'app-controlled',
+  }),
 
   initialize: async () => {
-    if (!RNCallKeep || initialized) return;
+    if (initialized) return;
     initialized = true;
-
-    try {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log('[CallKeep] native module present:', true);
-      }
-      await RNCallKeep.setup(getSetupOptions());
-      if (Platform.OS === 'android') {
-        RNCallKeep.setAvailable?.(true);
-      }
-
-      subscriptions.push(RNCallKeep.addEventListener('answerCall', handleAnswerCall));
-      subscriptions.push(RNCallKeep.addEventListener('endCall', handleEndCall));
-    } catch (error) {
-      // keep app functional without native call UI.
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log('[CallKeep] setup failed; using in-app IncomingHuddle fallback');
-      }
-      initialized = false;
-      subscriptions = [];
-    }
+    await hydrateHandledEntries();
   },
 
-  cleanup: () => {
-    subscriptions.forEach((sub) => {
-      try {
-        sub?.remove?.();
-      } catch {
-        // ignore
-      }
+  cleanup: async () => {
+    await nativeCallService.stopIncomingRingtone();
+    activeIncomingHuddleId = null;
+    dedupeMap.clear();
+  },
+
+  toIncomingRouteParams: (payload = {}) => {
+    const normalized = normalizePayload(payload);
+    return {
+      huddleId: normalized.huddleId,
+      chatId: normalized.chatId,
+      chatName: normalized.chatName,
+      callerName: normalized.callerName,
+      avatar: normalized.avatar,
+      isGroup: normalized.isGroup,
+    };
+  },
+
+  shouldShowIncomingHuddle: async (payload = {}) => {
+    await nativeCallService.initialize();
+    const normalized = normalizePayload(payload);
+    if (!normalized.huddleId) return false;
+    const handled = handledMap.get(normalized.huddleId);
+    if (handled?.status) return false;
+    const now = Date.now();
+    const lastSeenAt = Number(dedupeMap.get(normalized.huddleId) || 0);
+    if ((now - lastSeenAt) < INCOMING_DEDUPE_MS) return false;
+    dedupeMap.set(normalized.huddleId, now);
+    activeIncomingHuddleId = normalized.huddleId;
+    return true;
+  },
+
+  markIncomingHandled: async (huddleId, status = 'handled') => {
+    if (!huddleId) return;
+    handledMap.set(String(huddleId), {
+      status,
+      ts: Date.now(),
     });
-    subscriptions = [];
-    initialized = false;
+    if (activeIncomingHuddleId === huddleId) {
+      activeIncomingHuddleId = null;
+    }
+    await persistHandledEntries();
   },
 
-  presentIncomingHuddleCall: async ({ huddleId, uuid: externalUuid = null, chatId, chatName, callerName, avatar }) => {
-    if (!RNCallKeep || !huddleId) return false;
-    await nativeCallService.initialize();
+  clearHandledState: async (huddleId) => {
+    if (!huddleId) return;
+    handledMap.delete(String(huddleId));
+    await persistHandledEntries();
+  },
 
-    const lastPresentedAt = Number(huddleIdToLastPresentedAt.get(huddleId) || 0);
-    if (Date.now() - lastPresentedAt < 20000) {
-      return true;
-    }
-
-    const uuid = isUuid(externalUuid) ? String(externalUuid) : getOrCreateUuid(huddleId);
-    huddleIdToUuid.set(huddleId, uuid);
-    uuidToPayload.set(uuid, { huddleId, chatId, chatName, avatar: avatar || '' });
-
-    try {
-      huddleIdToLastPresentedAt.set(huddleId, Date.now());
-      RNCallKeep.displayIncomingCall(
-        uuid,
-        'huddle',
-        callerName || chatName || 'Incoming Huddle',
-        'generic',
-        false
-      );
-      return true;
-    } catch {
+  startIncomingRingtone: async (huddleId) => {
+    if (!huddleId) return false;
+    if (AppState.currentState !== 'active') {
       return false;
     }
-  },
+    if (activeIncomingHuddleId && activeIncomingHuddleId !== huddleId) {
+      await nativeCallService.stopIncomingRingtone();
+    }
+    activeIncomingHuddleId = huddleId;
+    ringtoneSession += 1;
+    const currentSession = ringtoneSession;
+    clearIntervals();
+    Vibration.cancel();
 
-  startOutgoingHuddleCall: async ({ huddleId, chatName }) => {
-    if (!RNCallKeep || !huddleId) return false;
-    await nativeCallService.initialize();
+    const instance = await safeCall(() => loopingSound.createAndPlay(
+      require('../../assets/sounds/circles_incoming_ringtone.wav'),
+      { volume: 1.0, loop: false },
+    ));
 
-    const uuid = getOrCreateUuid(huddleId);
-    uuidToPayload.set(uuid, { huddleId, chatName });
-    try {
-      RNCallKeep.startCall(uuid, 'huddle', chatName || 'Huddle', 'generic', false);
+    if (!instance?.handle) {
+      Vibration.vibrate(350);
+      vibrationInterval = setInterval(() => {
+        if (ringtoneSession !== currentSession) return;
+        Vibration.vibrate(350);
+      }, RING_REPEAT_MS);
       return true;
-    } catch {
-      return false;
+    }
+
+    ringtoneInstance = instance;
+    ringtoneReplayInterval = setInterval(() => {
+      if (ringtoneSession !== currentSession || !ringtoneInstance?.handle) return;
+      safeCall(async () => {
+        await ringtoneInstance.handle.seekTo?.(0);
+        ringtoneInstance.handle.play?.();
+      });
+    }, RING_REPEAT_MS);
+    return true;
+  },
+
+  stopIncomingRingtone: async () => {
+    ringtoneSession += 1;
+    clearIntervals();
+    Vibration.cancel();
+    const instance = ringtoneInstance;
+    ringtoneInstance = null;
+    if (instance) {
+      await safeCall(() => loopingSound.stopAndUnload(instance));
     }
   },
 
-  setHuddleCallActive: (huddleId) => {
-    if (!RNCallKeep || !huddleId) return;
-    const uuid = getOrCreateUuid(huddleId);
+  dismissIncomingHuddle: async (huddleId, status = 'dismissed') => {
+    await nativeCallService.stopIncomingRingtone();
+    if (huddleId) {
+      await nativeCallService.markIncomingHandled(huddleId, status);
+    }
+  },
+
+  setPendingJoinIntent: async (payload = {}) => {
+    const normalized = normalizePayload(payload);
+    if (!normalized.huddleId) return;
     try {
-      RNCallKeep.setCurrentCallActive?.(uuid);
+      await AsyncStorage.setItem(PENDING_JOIN_STORAGE_KEY, JSON.stringify({
+        ...normalized,
+        ts: Date.now(),
+      }));
+    } catch {
+      // ignore persistence failures
+    }
+  },
+
+  consumePendingJoinIntent: async () => {
+    try {
+      const raw = await AsyncStorage.getItem(PENDING_JOIN_STORAGE_KEY);
+      if (!raw) return null;
+      await AsyncStorage.removeItem(PENDING_JOIN_STORAGE_KEY);
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  },
+
+  clearPendingJoinIntent: async () => {
+    try {
+      await AsyncStorage.removeItem(PENDING_JOIN_STORAGE_KEY);
     } catch {
       // ignore
     }
   },
 
-  endHuddleCall: (huddleId) => {
-    if (!RNCallKeep || !huddleId) return;
-    const uuid = huddleIdToUuid.get(huddleId);
-    if (!uuid) return;
-    try {
-      RNCallKeep.endCall(uuid);
-    } catch {
-      // ignore
-    } finally {
-      uuidToPayload.delete(uuid);
-      huddleIdToUuid.delete(huddleId);
-      huddleIdToLastPresentedAt.delete(huddleId);
-    }
+  hasPendingIncomingHuddle: (huddleId) => {
+    if (!huddleId) return false;
+    return activeIncomingHuddleId === huddleId;
   },
 
-  endAll: () => {
-    if (!RNCallKeep) return;
-    try {
-      RNCallKeep.endAllCalls();
-    } catch {
-      // ignore
-    } finally {
-      uuidToPayload.clear();
-      huddleIdToUuid.clear();
-      huddleIdToLastPresentedAt.clear();
-      answeredCallUuids.clear();
-    }
-  }
+  getCurrentIncomingHuddleId: () => activeIncomingHuddleId,
+
+  clearIncomingHuddle: async (huddleId) => {
+    if (huddleId && activeIncomingHuddleId !== huddleId) return;
+    await nativeCallService.stopIncomingRingtone();
+    activeIncomingHuddleId = null;
+  },
 };

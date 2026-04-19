@@ -1179,7 +1179,7 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         paddingHorizontal: 12,
         paddingVertical: 8,
-        marginBottom: 8,
+        marginBottom: 16,
     },
     tierPillPro: {
         backgroundColor: 'rgba(255,236,192,0.18)',

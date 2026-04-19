@@ -20,6 +20,7 @@ import { aiService } from '../services/api/aiService';
 import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { AiMessageFormatter } from '../components/AiMessageFormatter';
+import { getChallengeLevelLabel } from '../utils/challengeLabels';
 
 const getLevelPalette = (level = 'medium') => {
     const normalized = String(level || 'medium').toLowerCase();
@@ -186,13 +187,13 @@ const ChallengeAiChatScreen = ({ navigation, route }) => {
                         <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
                     </TouchableOpacity>
                     <View style={styles.headerTextWrap}>
-                        <Text style={styles.headerTitle}>Continue with AI</Text>
+                        <Text style={styles.headerTitle}>Talk it through</Text>
                         <Text style={styles.headerSubtitle}>{challenge.title}</Text>
                     </View>
                 </View>
 
                 <View style={[styles.challengeBanner, { borderColor: palette.border, backgroundColor: palette.bubble }]}>
-                    <Text style={[styles.challengeBannerLevel, { color: palette.accent }]}>{String(challenge.level || 'medium').toUpperCase()}</Text>
+                    <Text style={[styles.challengeBannerLevel, { color: palette.accent }]}>{getChallengeLevelLabel(challenge.level)}</Text>
                     <Text style={styles.challengeBannerBody}>
                         {String(challenge.explanation || challenge.description || '').trim() || 'Tell the assistant what feels most relevant for you right now.'}
                     </Text>
@@ -216,7 +217,7 @@ const ChallengeAiChatScreen = ({ navigation, route }) => {
                     <View style={styles.composer}>
                         <TextInput
                             style={styles.input}
-                            placeholder="Ask about this challenge..."
+                            placeholder="Ask about today's focus..."
                             placeholderTextColor="#9E9E9E"
                             multiline
                             value={inputText}

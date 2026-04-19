@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
+import { getChallengeLevelLabel, getChallengeSectionTitle } from '../utils/challengeLabels';
 
 const getLevelPalette = (level = 'medium') => {
     const normalized = String(level || 'medium').toLowerCase();
@@ -67,7 +68,7 @@ const ChallengeDetailScreen = ({ navigation, route }) => {
     if (plan === 'free') {
         return (
             <SafeAreaView style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>Key Challenges are available on paid plans.</Text>
+                <Text style={styles.emptyText}>{getChallengeSectionTitle()} is available on paid plans.</Text>
                 <TouchableOpacity style={styles.lockedButton} onPress={() => navigation.replace('Subscription')}>
                     <Text style={styles.lockedButtonText}>View plans</Text>
                 </TouchableOpacity>
@@ -100,23 +101,23 @@ const ChallengeDetailScreen = ({ navigation, route }) => {
                             <MaterialCommunityIcons name={safeIconName} size={28} color={palette.text} />
                         </View>
                         <View style={styles.levelPill}>
-                            <Text style={styles.levelPillText}>{normalizedLevel}</Text>
+                            <Text style={styles.levelPillText}>{getChallengeLevelLabel(normalizedLevel)}</Text>
                         </View>
                         <Text style={styles.title}>{challenge.title}</Text>
-                        <Text style={styles.subtitle}>AI-generated insight based on your recent activity and assessments.</Text>
+                        <Text style={styles.subtitle}>AI-generated daily focus based on your recent check-ins, activity, and app signals.</Text>
                     </View>
                 </View>
 
                 <View style={styles.content}>
                     <View style={[styles.sectionCard, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-                        <Text style={styles.sectionLabel}>What this means</Text>
+                        <Text style={styles.sectionLabel}>What stands out</Text>
                         <Text style={styles.sectionBody}>
-                            {explanation || 'This challenge reflects an area that may need a bit more care, consistency, and attention right now.'}
+                            {explanation || 'This focus area reflects something in today’s signals that may need a bit more care or attention right now.'}
                         </Text>
                     </View>
 
                     <View style={styles.sectionCard}>
-                        <Text style={styles.sectionLabel}>Suggestions</Text>
+                        <Text style={styles.sectionLabel}>Helpful next steps</Text>
                         {suggestions.length > 0 ? suggestions.map((item, index) => (
                             <View key={`${challenge.id || 'challenge'}_${index}`} style={styles.suggestionRow}>
                                 <View style={[styles.suggestionDot, { backgroundColor: palette.text }]} />

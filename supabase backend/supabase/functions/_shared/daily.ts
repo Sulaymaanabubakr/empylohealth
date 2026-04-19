@@ -77,3 +77,24 @@ export const createDailyMeetingToken = async ({
 
   return String(payload.token);
 };
+
+export const getDailyRoom = async (roomName: string) => {
+  ensureDailyApiKey();
+
+  const response = await fetch(`https://api.daily.co/v1/rooms/${encodeURIComponent(roomName)}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${dailyApiKey}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (response.status === 404) return null;
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw errorResponse(500, "Unable to verify Daily room.");
+  }
+
+  return payload;
+};

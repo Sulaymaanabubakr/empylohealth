@@ -1,5 +1,6 @@
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
-import { createStoredNotifications, sendExpoPushNotifications } from "../_shared/push.ts";
+import { createStoredNotifications, loadProfilesForUsers, sendExpoPushNotifications } from "../_shared/push.ts";
+import { resolveHuddleAfterRecipientHandled } from "../_shared/huddles.ts";
 import { errorResponse, json } from "../_shared/response.ts";
 import { supabaseAdmin } from "../_shared/supabase.ts";
 
@@ -186,6 +187,112 @@ const dispatchScheduledHuddleReminders = async () => {
   return results;
 };
 
+const dispatchMissedHuddles = async () => {
+  const threshold = new Date(Date.now() - 60 * 1000).toISOString();
+  const { data: rows, error } = await supabaseAdmin
+    .from("missed_huddles")
+    .select("id, huddle_id, chat_id, caller_id, receiver_id, status, created_at")
+    .eq("status", "pending")
+    .lte("created_at", threshold)
+    .order("created_at", { ascending: true })
+    .limit(100);
+  if (error) throw error;
+
+  const pendingRows = rows || [];
+  if (!pendingRows.length) return [];
+
+  const huddleIds = Array.from(new Set(pendingRows.map((row) => String(row.huddle_id || "")).filter(Boolean)));
+  const callerIds = Array.from(new Set(pendingRows.map((row) => String(row.caller_id || "")).filter(Boolean)));
+  const chatIds = Array.from(new Set(pendingRows.map((row) => String(row.chat_id || "")).filter(Boolean)));
+
+  const [{ data: huddles }, callerProfiles, { data: chats }] = await Promise.all([
+    supabaseAdmin
+      .from("huddles")
+      .select("id, chat_id, started_by, type, status, is_active, invited_user_ids, accepted_user_ids, declined_user_ids")
+      .in("id", huddleIds),
+    loadProfilesForUsers(callerIds),
+    supabaseAdmin
+      .from("chats")
+      .select("id, name, avatar")
+      .in("id", chatIds),
+  ]);
+
+  const huddleById = new Map((huddles || []).map((row) => [String(row.id), row]));
+  const callerById = new Map(callerProfiles.map((row) => [String(row.id), row]));
+  const chatById = new Map((chats || []).map((row) => [String(row.id), row]));
+
+  const results = [];
+  for (const row of pendingRows) {
+    const huddleId = String(row.huddle_id || "");
+    const receiverId = String(row.receiver_id || "");
+    if (!huddleId || !receiverId) continue;
+
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from("missed_huddles")
+      .update({
+        status: "missed",
+        handled_at: new Date().toISOString(),
+      })
+      .eq("id", row.id)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle();
+    if (updateError) throw updateError;
+    if (!updated) continue;
+
+    const huddle = huddleById.get(huddleId);
+    if (huddle) {
+      await resolveHuddleAfterRecipientHandled({
+        huddle,
+        receiverId,
+        reason: "missed",
+      });
+    }
+
+    const caller = callerById.get(String(row.caller_id || ""));
+    const chat = chatById.get(String(row.chat_id || ""));
+    const title = caller?.name ? `You missed a huddle from ${caller.name}` : "You missed a huddle";
+    const body = chat?.name ? `Open ${chat.name} to check if it is still live.` : "Open the app to see whether it is still active.";
+
+    await createStoredNotifications({
+      userIds: [receiverId],
+      type: "MISSED_HUDDLE",
+      title,
+      body,
+      avatar: caller?.photo_url || chat?.avatar || "",
+      data: {
+        type: "MISSED_HUDDLE",
+        huddleId,
+        chatId: String(row.chat_id || ""),
+        callerId: String(row.caller_id || ""),
+        callerName: caller?.name || "",
+        chatName: chat?.name || "Huddle",
+      },
+    });
+
+    await sendExpoPushNotifications({
+      userIds: [receiverId],
+      type: "MISSED_HUDDLE",
+      title,
+      body,
+      avatar: caller?.photo_url || chat?.avatar || "",
+      data: {
+        type: "MISSED_HUDDLE",
+        huddleId,
+        chatId: String(row.chat_id || ""),
+        callerId: String(row.caller_id || ""),
+        callerName: caller?.name || "",
+        chatName: chat?.name || "Huddle",
+      },
+      channelId: "default",
+    }).catch(() => {});
+
+    results.push({ huddleId, receiverId, status: "missed" });
+  }
+
+  return results;
+};
+
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -202,6 +309,9 @@ Deno.serve(async (req) => {
     }
     if (mode === "all" || mode === "scheduled_huddle") {
       results.scheduledHuddles = await dispatchScheduledHuddleReminders();
+    }
+    if (mode === "all" || mode === "missed_huddles") {
+      results.missedHuddles = await dispatchMissedHuddles();
     }
 
     return json({ success: true, ...results }, { headers: corsHeaders });

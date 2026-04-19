@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#01A89E"
     },
     "ios": {
       "supportsTablet": true,
@@ -40,15 +40,15 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#01a89e"
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.empylo.circlesapp",
       "permissions": [
         "RECORD_AUDIO",
         "POST_NOTIFICATIONS",
         "VIBRATE",
-        "READ_PHONE_STATE",
-        "CALL_PHONE"
+        "FOREGROUND_SERVICE",
+        "WAKE_LOCK"
       ],
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,

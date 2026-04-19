@@ -22,6 +22,7 @@ import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { AiMessageFormatter } from '../components/AiMessageFormatter';
 import { assessmentService } from '../services/api/assessmentService';
+import { getChallengeSectionTitle } from '../utils/challengeLabels';
 
 const STORAGE_KEY = 'ai_hub_conversations';
 const MAX_CONVERSATIONS = 30;
@@ -63,8 +64,8 @@ const AiHubChatScreen = ({ navigation, route }) => {
         assessmentService.getKeyChallenges()
             .then((data) => {
                 if (Array.isArray(data) && data.length > 0) {
-                    const ctxText = "The user has completed a wellbeing assessment. Their current top challenges are:\n" + 
-                        data.slice(0, 3).map(c => `- ${c.title} (Level: ${c.level || 'medium'}). Details: ${c.explanation || ''}`).join('\n');
+                    const ctxText = `The user has completed a wellbeing assessment. Their current ${getChallengeSectionTitle().toLowerCase()} items are:\n` +
+                        data.slice(0, 3).map(c => `- ${c.title}. Details: ${c.explanation || ''}`).join('\n');
                     setUserChallengesContext(ctxText);
                 }
             })
@@ -176,7 +177,7 @@ const AiHubChatScreen = ({ navigation, route }) => {
             const response = await aiService.askAboutChallenge({
                 challenge: {
                     id: 'ai-hub-general',
-                    title: 'General Wellbeing Profile',
+                    title: 'Daily Focus Overview',
                     level: 'medium',
                     explanation: `[System Note: The user's name is ${displayName}. Address them naturally when appropriate.]\n\n${userChallengesContext || 'Open conversation with the AI wellbeing assistant.'}`,
                 },

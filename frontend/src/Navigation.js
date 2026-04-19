@@ -45,6 +45,7 @@ import AiHubChatScreen from './screens/AiHubChatScreen';
 import NotificationsSettingsScreen from './screens/NotificationsSettingsScreen';
 import PersonalInformationScreen from './screens/PersonalInformationScreen';
 import SecurityScreen from './screens/SecurityScreen';
+import DeleteAccountScreen from './screens/DeleteAccountScreen';
 import SubscriptionScreen from './screens/SubscriptionScreen';
 import TellAFriendScreen from './screens/TellAFriendScreen';
 import FAQScreen from './screens/FAQScreen';
@@ -59,6 +60,7 @@ import InviteLandingScreen from './screens/InviteLandingScreen';
 import AppInviteLandingScreen from './screens/AppInviteLandingScreen';
 import { navigationRef, flushPendingNavigation, navigate } from './navigation/navigationRef';
 import { huddleService } from './services/api/huddleService';
+import { loopingSound } from './services/audio/loopingSound';
 import { DeepLinkRouter } from './services/deepLink/DeepLinkRouter';
 import { biometricPrefs } from './services/security/biometricPrefs';
 import { useAppLockController } from './services/security/useAppLockController';
@@ -100,6 +102,8 @@ export default function Navigation() {
     const floatingPos = useRef(new Animated.ValueXY({ x: 14, y: Math.max(100, Dimensions.get('window').height - 130) })).current;
     const [floatingBox, setFloatingBox] = useState({ width: 320, height: 68 });
     const [nowMs, setNowMs] = useState(Date.now());
+    const floatingRingbackSoundRef = useRef(null);
+    const floatingRingbackReplayIntervalRef = useRef(null);
 
     const appLock = useAppLockController({ user, userData, routeTarget });
     const lockEnabled = appLock.state.lockEnabled;
@@ -141,6 +145,77 @@ export default function Navigation() {
         });
         return unsubscribe;
     }, []);
+
+    useEffect(() => {
+        const stopFloatingRingback = async () => {
+            if (floatingRingbackReplayIntervalRef.current) {
+                clearInterval(floatingRingbackReplayIntervalRef.current);
+                floatingRingbackReplayIntervalRef.current = null;
+            }
+            const instance = floatingRingbackSoundRef.current;
+            floatingRingbackSoundRef.current = null;
+            if (!instance) return;
+            try {
+                await loopingSound.stopAndUnload(instance);
+            } catch {
+                // ignore
+            }
+        };
+
+        const shouldPlayFloatingRingback =
+            !!activeHuddleSession &&
+            currentRouteName !== 'Huddle' &&
+            activeHuddleSession?.isHost &&
+            activeHuddleSession?.phase === 'ringing' &&
+            Number(activeHuddleSession?.remoteParticipantCount || 0) === 0 &&
+            (
+                activeHuddleSession?.firebaseStatus == null ||
+                activeHuddleSession?.firebaseStatus === 'ringing' ||
+                activeHuddleSession?.firebaseStatus === 'accepted'
+            );
+
+        if (!shouldPlayFloatingRingback) {
+            stopFloatingRingback();
+            return undefined;
+        }
+
+        if (floatingRingbackSoundRef.current?.handle) {
+            return () => {
+                stopFloatingRingback();
+            };
+        }
+
+        let cancelled = false;
+        const startFloatingRingback = async () => {
+            const instance = await loopingSound.createAndPlay(
+                require('./assets/sounds/uk_ringback.wav'),
+                { volume: 1.0, loop: false }
+            ).catch(() => null);
+
+            if (cancelled || !instance?.handle) {
+                if (instance) {
+                    await loopingSound.stopAndUnload(instance).catch(() => {});
+                }
+                return;
+            }
+
+            floatingRingbackSoundRef.current = instance;
+            floatingRingbackReplayIntervalRef.current = setInterval(() => {
+                const activeInstance = floatingRingbackSoundRef.current;
+                if (!activeInstance?.handle) return;
+                Promise.resolve(activeInstance.handle.seekTo?.(0))
+                    .then(() => activeInstance.handle.play?.())
+                    .catch(() => {});
+            }, 4200);
+        };
+
+        startFloatingRingback();
+
+        return () => {
+            cancelled = true;
+            stopFloatingRingback();
+        };
+    }, [activeHuddleSession, currentRouteName]);
 
     useEffect(() => {
         const sub = Dimensions.addEventListener('change', ({ window }) => {
@@ -252,9 +327,19 @@ export default function Navigation() {
         ? Math.max(0, Math.floor((nowMs - callStartedAtMs) / 1000))
         : Number(activeHuddleSession?.elapsedSeconds || 0);
     const activeSpeakerName = String(activeHuddleSession?.activeSpeakerName || '').trim();
-    const huddleSubtitle = activeSpeakerName
-        ? `${formatCallDuration(elapsedSeconds)} • ${activeSpeakerName} speaking`
-        : `${formatCallDuration(elapsedSeconds)} • Tap to return to call`;
+    const isWaitingForOthers =
+        activeHuddleSession?.phase === 'ringing' &&
+        Number(activeHuddleSession?.remoteParticipantCount || 0) === 0 &&
+        (
+            activeHuddleSession?.firebaseStatus == null ||
+            activeHuddleSession?.firebaseStatus === 'ringing' ||
+            activeHuddleSession?.firebaseStatus === 'accepted'
+        );
+    const huddleSubtitle = isWaitingForOthers
+        ? 'Waiting for others to join'
+        : activeSpeakerName
+            ? `${formatCallDuration(elapsedSeconds)} • ${activeSpeakerName} speaking`
+            : `${formatCallDuration(elapsedSeconds)} • Tap to return to call`;
 
     const clampFloating = (x, y) => {
         const window = screenSizeRef.current || Dimensions.get('window');
@@ -387,6 +472,7 @@ export default function Navigation() {
                         <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
                         <Stack.Screen name="PersonalInformation" component={PersonalInformationScreen} />
                         <Stack.Screen name="Security" component={SecurityScreen} />
+                        <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
                         <Stack.Screen name="Subscription" component={SubscriptionScreen} />
                         <Stack.Screen name="TellAFriend" component={TellAFriendScreen} />
                         <Stack.Screen name="Invitations" component={InvitationsScreen} />

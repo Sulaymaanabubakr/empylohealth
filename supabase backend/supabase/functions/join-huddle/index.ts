@@ -4,6 +4,7 @@ import { resolveSubscriptionStatus } from "../_shared/billing.ts";
 import { getChatMembership, sanitizeUuidArray } from "../_shared/chat.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
 import { createDailyMeetingToken } from "../_shared/daily.ts";
+import { ensureMissedHuddleStatus, markMissedHuddleStatus } from "../_shared/huddles.ts";
 import { getIpAddress, getUserAgent } from "../_shared/request.ts";
 import { errorResponse, json } from "../_shared/response.ts";
 import { supabaseAdmin } from "../_shared/supabase.ts";
@@ -52,6 +53,7 @@ Deno.serve(async (req) => {
 
     const acceptedUserIds = Array.from(new Set([...sanitizeUuidArray(huddle.accepted_user_ids), user.id]));
     const activeUserIds = sanitizeUuidArray(huddle.active_user_ids);
+    const invitedUserIds = sanitizeUuidArray(huddle.invited_user_ids).filter((id) => id !== user.id);
     const nextStatus = user.id !== String(huddle.started_by || "") && String(huddle.status || "ringing") === "ringing"
       ? "accepted"
       : String(huddle.status || "ringing");
@@ -60,6 +62,7 @@ Deno.serve(async (req) => {
       .from("huddles")
       .update({
         accepted_user_ids: acceptedUserIds,
+        invited_user_ids: invitedUserIds,
         status: nextStatus,
         accepted_by: nextStatus === "accepted" ? user.id : huddle.accepted_by,
         accepted_at: nextStatus === "accepted" ? new Date().toISOString() : huddle.accepted_at,
@@ -86,6 +89,21 @@ Deno.serve(async (req) => {
       last_action: "join",
       updated_at: new Date().toISOString(),
     });
+
+    const missedUpdate = await markMissedHuddleStatus({
+      huddleId,
+      receiverId: user.id,
+      status: "accepted",
+    }).catch(() => null);
+    if (!missedUpdate) {
+      await ensureMissedHuddleStatus({
+        huddleId,
+        chatId: String(huddle.chat_id || ""),
+        callerId: huddle.started_by ? String(huddle.started_by) : null,
+        receiverId: user.id,
+        status: "accepted",
+      });
+    }
 
     const token = await createDailyMeetingToken({
       roomName: String(huddle.room_name || ""),

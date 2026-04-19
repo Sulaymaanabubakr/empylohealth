@@ -18,6 +18,7 @@ import {
   verifyGoogleProductPurchase,
   verifyGoogleSubscriptionPurchase,
 } from "../_shared/storeVerification.ts";
+import { syncRevenueCatCustomerInfo } from "../_shared/revenuecat.ts";
 import { supabaseAdmin } from "../_shared/supabase.ts";
 
 const parseBody = async (req: Request) => {
@@ -68,7 +69,7 @@ const normalizeCatalog = (plans: Record<string, unknown>[], products: Record<str
         limits: {
           monthlyAiCredits: plan.monthly_ai_credits,
           monthlyHuddleMinutes: plan.monthly_huddle_minutes,
-          dailyHuddleStarts: plan.daily_huddle_starts,
+          dailyHuddleStarts: null,
           maxMinutesPerHuddle: plan.max_minutes_per_huddle,
         },
         capabilities: plan.capabilities || {},
@@ -216,6 +217,23 @@ Deno.serve(async (req) => {
     if (action === "getSubscriptionStatus") {
       const status = await resolveSubscriptionStatus(user.id);
       return json(status, { headers: corsHeaders });
+    }
+
+    if (action === "syncRevenueCatCustomer") {
+      const customerInfo = (body?.customerInfo && typeof body.customerInfo === "object")
+        ? body.customerInfo as Record<string, unknown>
+        : null;
+      if (!customerInfo) {
+        return errorResponse(400, "customerInfo is required.", undefined, { headers: corsHeaders });
+      }
+
+      const result = await syncRevenueCatCustomerInfo({
+        userId: user.id,
+        customerInfo,
+        source: body?.source ? String(body.source) : "app_sync",
+        forceDowngrade: body?.forceDowngrade === true,
+      });
+      return json(result, { headers: corsHeaders });
     }
 
     if (action === "validateBoostPurchase") {

@@ -4,10 +4,11 @@ import { writeAnalyticsEvent } from "../_shared/analytics.ts";
 import { consumeHuddleStart, resolveSubscriptionStatus, revertHuddleStart } from "../_shared/billing.ts";
 import { getChatMembership, listActiveParticipantIds } from "../_shared/chat.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
-import { createDailyMeetingToken, createDailyRoom } from "../_shared/daily.ts";
+import { createDailyMeetingToken, createDailyRoom, getDailyRoom } from "../_shared/daily.ts";
 import { createStoredNotifications, loadProfilesForUsers, sendExpoPushNotifications } from "../_shared/push.ts";
 import { getIpAddress, getUserAgent } from "../_shared/request.ts";
 import { errorResponse, json } from "../_shared/response.ts";
+import { createPendingMissedHuddles } from "../_shared/huddles.ts";
 import { supabaseAdmin } from "../_shared/supabase.ts";
 import { writeObservabilityEvent } from "../_shared/observability.ts";
 
@@ -52,19 +53,46 @@ Deno.serve(async (req) => {
     if (existingError) throw existingError;
 
     if (existing) {
-      const token = await createDailyMeetingToken({
-        roomName: String(existing.room_name),
-        userId: user.id,
-        isOwner: String(existing.started_by || "") === user.id,
+      const existingRoomName = String(existing.room_name || "");
+      const dailyRoom = existingRoomName ? await getDailyRoom(existingRoomName) : null;
+
+      if (dailyRoom) {
+        const token = await createDailyMeetingToken({
+          roomName: existingRoomName,
+          userId: user.id,
+          isOwner: String(existing.started_by || "") === user.id,
+        });
+        return json({
+          success: true,
+          huddleId: existing.id,
+          roomUrl: existing.room_url,
+          roomName: existing.room_name,
+          token,
+          startedBy: existing.started_by || null,
+        }, { headers: corsHeaders });
+      }
+
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("huddles")
+        .update({
+          is_active: false,
+          status: "ended",
+          ended_at: now,
+          ended_reason: "room_unavailable",
+          active_user_ids: [],
+          updated_at: now,
+        })
+        .eq("id", existing.id);
+
+      await supabaseAdmin.from("huddle_live_states").upsert({
+        huddle_id: existing.id,
+        chat_id: chatId,
+        host_uid: existing.started_by || user.id,
+        state: "ended",
+        last_action: "room_unavailable",
+        updated_at: now,
       });
-      return json({
-        success: true,
-        huddleId: existing.id,
-        roomUrl: existing.room_url,
-        roomName: existing.room_name,
-        token,
-        startedBy: existing.started_by || null,
-      }, { headers: corsHeaders });
     }
 
     const startGuard = await consumeHuddleStart(user.id, startAttemptId);
@@ -136,9 +164,19 @@ Deno.serve(async (req) => {
     });
 
     if (recipients.length) {
+      await createPendingMissedHuddles({
+        huddleId: huddle.id,
+        chatId,
+        callerId: user.id,
+        receiverIds: recipients,
+      });
+
       const profiles = await loadProfilesForUsers([user.id]);
       const starter = profiles.find((profile) => String(profile.id) === user.id);
       const chatName = chat.name || starter?.name || "Huddle";
+      const callerAvatar = starter?.photo_url || "";
+      const chatAvatar = chat.avatar || "";
+      const displayAvatar = isGroup ? (chatAvatar || callerAvatar) : (callerAvatar || chatAvatar);
       const notificationTitle = starter?.name ? `${starter.name} started a huddle` : "Incoming huddle";
       const notificationBody = isGroup
         ? `Join ${chatName}`
@@ -149,13 +187,16 @@ Deno.serve(async (req) => {
         type: "HUDDLE_STARTED",
         title: notificationTitle,
         body: notificationBody,
-        avatar: starter?.photo_url || chat.avatar || "",
+        avatar: displayAvatar,
         data: {
           type: "HUDDLE_STARTED",
           huddleId: huddle.id,
           chatId,
           chatName,
           callerName: starter?.name || "Someone",
+          callerAvatar,
+          chatAvatar,
+          groupAvatar: chatAvatar,
           senderId: user.id,
           isGroup,
         },
@@ -166,18 +207,21 @@ Deno.serve(async (req) => {
         type: "HUDDLE_STARTED",
         title: notificationTitle,
         body: notificationBody,
-        avatar: starter?.photo_url || chat.avatar || "",
+        avatar: displayAvatar,
         data: {
           type: "HUDDLE_STARTED",
           huddleId: huddle.id,
           chatId,
           chatName,
           callerName: starter?.name || "Someone",
+          callerAvatar,
+          chatAvatar,
+          groupAvatar: chatAvatar,
           senderId: user.id,
           isGroup,
         },
         categoryId: "huddle-call-actions",
-        channelId: "huddle-calls",
+        channelId: "huddle-calls-ringtone",
       }).catch((pushError) => {
         console.warn("[start-huddle] push send failed", pushError);
       });

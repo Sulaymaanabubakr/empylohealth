@@ -90,6 +90,14 @@ export const sendExpoPushNotifications = async ({
   if (!userIds.length) return { requestedUsers: 0, pushedTokens: 0 };
 
   const profiles = await loadProfilesForUsers(userIds);
+  const pushData = {
+    type,
+    ...data,
+    ...(avatar ? { avatar } : {}),
+    ...(image ? { image } : {}),
+    ...(subtitle ? { subtitle } : {}),
+    ...(color ? { color } : {}),
+  };
   const messages = profiles.flatMap((profile) => {
     const tokens = toStringArray(profile.expo_push_tokens).filter(isExpoPushToken);
     return tokens.map((token) => ({
@@ -98,7 +106,7 @@ export const sendExpoPushNotifications = async ({
       subtitle,
       body,
       sound,
-      data: { type, ...data },
+      data: pushData,
       categoryId,
       channelId,
       priority: "high",

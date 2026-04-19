@@ -19,7 +19,7 @@ const MAX_VISIBLE_PARTICIPANTS = 8;
 const JOIN_TIMEOUT_MS = 15000; // 10-15s
 const JOIN_MAX_ATTEMPTS = 1;
 const INVITE_TIMEOUT_MS = 45000; // 30-45s caller-side invite timeout
-const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 20000; // joined but alone >20s
+const ALONE_AFTER_ACCEPT_TIMEOUT_MS = 60000; // recipient waits up to 60s for caller/others to actually join
 const HOST_ALONE_PROMPT_DELAY_MS = 120000; // retained for optional UX
 const HOST_ALONE_FORCE_END_DELAY_MS = 300000; // retained for optional UX
 const FORCE_END_COUNTDOWN_SECONDS = 5;
@@ -154,6 +154,10 @@ const HuddleScreen = ({ navigation, route }) => {
     useEffect(() => {
         huddleIdRef.current = huddleId;
     }, [huddleId]);
+
+    useEffect(() => {
+        nativeCallService.clearPendingJoinIntent().catch(() => {});
+    }, []);
 
     useEffect(() => {
         isHostRef.current = isHost;
@@ -313,7 +317,7 @@ const HuddleScreen = ({ navigation, route }) => {
         ringbackSessionRef.current = sessionId;
 
         const instance = await safeCall(() => loopingSound.createAndPlay(
-            require('../assets/sounds/ringback.wav'),
+            require('../assets/sounds/uk_ringback.wav'),
             { volume: 1.0, loop: false }
         ));
         if (instance?.handle) {
@@ -492,7 +496,7 @@ const HuddleScreen = ({ navigation, route }) => {
         // Only call connection/end updates if this device actually joined Daily
         // or if the current user is the host/caller.
         if (currentHuddleId && (hasDailyJoinedRef.current || endForEveryone || startedByMeRef.current)) {
-            nativeCallService.endHuddleCall(currentHuddleId);
+            nativeCallService.clearIncomingHuddle(currentHuddleId).catch(() => {});
             if (hasDailyJoinedRef.current) {
                 huddleService.updateHuddleConnection(currentHuddleId, 'daily_left').catch(() => { });
             }
@@ -838,12 +842,12 @@ const HuddleScreen = ({ navigation, route }) => {
 	                const sessionHostUid = existingSession.startedBy || null;
 	                setIsHost(Boolean(sessionHostUid && sessionHostUid === user?.uid));
                     startedByMeRef.current = Boolean(sessionHostUid && sessionHostUid === user?.uid);
-	                setPhase('ongoing');
+	                setPhase(existingSession?.phase || 'ongoing');
 	                attachCallHandlers(existingSession.callObject);
 	                refreshParticipants();
                 const resumedStartedAtMs = Number(existingSession?.startedAtMs || 0);
-                callStartedAtMsRef.current = resumedStartedAtMs > 0 ? resumedStartedAtMs : Date.now();
-                setSeconds(Math.max(0, Math.floor((Date.now() - callStartedAtMsRef.current) / 1000)));
+                callStartedAtMsRef.current = resumedStartedAtMs > 0 ? resumedStartedAtMs : 0;
+                setSeconds(callStartedAtMsRef.current > 0 ? Math.max(0, Math.floor((Date.now() - callStartedAtMsRef.current) / 1000)) : 0);
                 hostAloneSinceMsRef.current = Number(existingSession?.hostAloneSinceMs || 0);
                 keepWaitingStartedAtMsRef.current = Number(existingSession?.keepWaitingStartedAtMs || 0);
                 if (existingSession?.huddleId) {
@@ -880,12 +884,6 @@ const HuddleScreen = ({ navigation, route }) => {
                     roomUrl: huddleSession?.roomUrl,
                     hasToken: !!huddleSession?.token
                 });
-                if (hostStatus && resolvedHuddleId) {
-                    nativeCallService.startOutgoingHuddleCall({
-                        huddleId: resolvedHuddleId,
-                        chatName: chat?.name || 'Huddle'
-                    });
-                }
                 // Phase is already 'ringing' for caller (set before callable) — no need to set again
                 if (joinFlowCancelledRef.current || isLeavingRef.current) {
                     return;
@@ -965,7 +963,7 @@ const HuddleScreen = ({ navigation, route }) => {
                 activeCallObject.setLocalVideo(false);
                 activeCallObject.setLocalAudio(true);
                 setIsMuted(false);
-                nativeCallService.setHuddleCallActive(resolvedHuddleId);
+                nativeCallService.clearIncomingHuddle(resolvedHuddleId).catch(() => {});
                 setIsSpeakerOn(true);
                 applyPreferredAudioRoute(true, true);
                 setTimeout(() => {
@@ -973,9 +971,9 @@ const HuddleScreen = ({ navigation, route }) => {
                 }, 1200);
                 refreshParticipants();
                 logAudioDiag('post_join_audio_route');
-                const startedAtMs = callStartedAtMsRef.current || Date.now();
+                const startedAtMs = remoteParticipantCount > 0 ? (callStartedAtMsRef.current || Date.now()) : 0;
                 callStartedAtMsRef.current = startedAtMs;
-                setSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
+                setSeconds(startedAtMs > 0 ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)) : 0);
                 huddleService.setActiveLocalSession({
                     chatId: chat.id,
                     huddleId: resolvedHuddleId,
@@ -985,6 +983,10 @@ const HuddleScreen = ({ navigation, route }) => {
                     callObject: activeCallObject,
                     startedAtMs,
                     elapsedSeconds: 0,
+                    participantCount: 1,
+                    remoteParticipantCount: 0,
+                    phase: Boolean(hostStatus) ? 'ringing' : 'joining',
+                    firebaseStatus: Boolean(hostStatus) ? 'ringing' : null,
                     hostAloneSinceMs: 0,
                     keepWaitingStartedAtMs: 0,
                     activeSpeakerSessionId: null,
@@ -1030,10 +1032,17 @@ const HuddleScreen = ({ navigation, route }) => {
     useEffect(() => {
         if (phase === 'ending' || phase === 'ended' || phase === 'error') return;
         if (remoteParticipantCount > 0) {
+            const isFirstRemoteParticipant = !everHadRemoteParticipantRef.current;
             everHadRemoteParticipantRef.current = true;
             hostAloneSinceMsRef.current = 0;
             keepWaitingStartedAtMsRef.current = 0;
+            if (isFirstRemoteParticipant) {
+                callStartedAtMsRef.current = Date.now();
+                setSeconds(0);
+            }
             huddleService.updateActiveLocalSession({
+                startedAtMs: callStartedAtMsRef.current,
+                elapsedSeconds: 0,
                 hostAloneSinceMs: 0,
                 keepWaitingStartedAtMs: 0
             });
@@ -1145,7 +1154,7 @@ const HuddleScreen = ({ navigation, route }) => {
             phase === 'ringing' &&
             isHost &&
             remoteParticipantCount === 0 &&
-            (firebaseStatus === 'ringing' || firebaseStatus == null);
+            (firebaseStatus === 'ringing' || firebaseStatus === 'accepted' || firebaseStatus == null);
         if (shouldPlayRingback) {
             startRingbackTone();
             return undefined;
@@ -1314,7 +1323,14 @@ const HuddleScreen = ({ navigation, route }) => {
         }, remainingMs);
     };
 
-	    const statusText = graceSeconds != null
+    const isRecipientWaitingAlone =
+        !isHost &&
+        hasLocalJoinedDaily &&
+        remoteParticipantCount === 0 &&
+        (phase === 'joining' || phase === 'ringing') &&
+        (firebaseStatus === 'accepted' || firebaseStatus === 'ongoing' || firebaseStatus == null);
+
+    const statusText = graceSeconds != null
             ? `Grace period: ${graceSeconds}s`
             : limitWarningSeconds != null
                 ? `Included time ends in ${formatTime(Math.max(0, limitWarningSeconds))}`
@@ -1326,6 +1342,8 @@ const HuddleScreen = ({ navigation, route }) => {
 	        ? 'Ending call...'
 	        : phase === 'ringing'
 	            ? (isHost && hasLocalJoinedDaily && remoteParticipantCount === 0 ? 'Waiting for others...' : 'Ringing...')
+                : isRecipientWaitingAlone
+                    ? 'Waiting for caller to join...'
 	            : phase === 'ongoing'
 	                ? formatTime(seconds)
 	                : phase === 'ended'
@@ -1407,7 +1425,9 @@ const HuddleScreen = ({ navigation, route }) => {
                     {phase === 'joining' && (
                         <View style={styles.connectingOverlay}>
                             <ActivityIndicator size="large" color={COLORS.primary} />
-                            <Text style={styles.connectingText}>Connecting call...</Text>
+                            <Text style={styles.connectingText}>
+                                {isRecipientWaitingAlone ? 'Waiting for caller to join...' : 'Connecting call...'}
+                            </Text>
                         </View>
                     )}
 

@@ -63,14 +63,14 @@ const SplashScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.primary, // Vibrant primary color
+    backgroundColor: '#01A89E',
     justifyContent: 'center',
     alignItems: 'center',
   },
   logo: {
-    width: '60%',
+    width: '68%',
     height: undefined,
-    aspectRatio: 1,
+    aspectRatio: 978 / 384,
   },
 });
 

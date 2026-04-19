@@ -55,6 +55,9 @@ verify_jwt = false
 [functions.join-huddle]
 verify_jwt = false
 
+[functions.mark-huddle-accepted]
+verify_jwt = false
+
 [functions.decline-huddle]
 verify_jwt = false
 

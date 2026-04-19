@@ -41,16 +41,46 @@ const extractSuggestions = (value: unknown): string[] => {
   return [];
 };
 
+const sanitizeAssistantText = (value: unknown) => {
+  let text = String(value || "").trim();
+  if (!text) return "";
+
+  const replacements: Array<[RegExp, string]> = [
+    [/\bfocusLevel\b/g, "Focus level"],
+    [/\bmotivationLevel\b/g, "Motivation level"],
+    [/\bstressLevel\b/g, "Stress level"],
+    [/\bsleepQuality\b/g, "Sleep quality"],
+    [/\bsocialConnection\b/g, "Social connection"],
+    [/\bin plain terms[:,]?\s*/gi, ""],
+    [/what the app thinks would help most/gi, "what stands out today"],
+    [/\byour loneliness\b/gi, "your lower connection score today"],
+    [/\bgiven your loneliness\b/gi, "given your lower connection score today"],
+  ];
+
+  for (const [pattern, replacement] of replacements) {
+    text = text.replace(pattern, replacement);
+  }
+
+  return text
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+\./g, ".")
+    .trim();
+};
+
 const parseChallengeResponse = (text: string) => {
   try {
     const parsed = JSON.parse(text);
     const items = Array.isArray(parsed?.challenges) ? parsed.challenges : Array.isArray(parsed) ? parsed : [];
     return items.map((item: Record<string, unknown>, index: number) => ({
-      title: String(item?.title || `Key challenge ${index + 1}`),
+      title: sanitizeAssistantText(item?.title || `Daily focus ${index + 1}`),
       level: String(item?.level || "medium").toLowerCase(),
-      explanation: String(item?.explanation || item?.description || ""),
-      suggestions: extractSuggestions(item?.suggestions),
-      details: item,
+      explanation: sanitizeAssistantText(item?.explanation || item?.description || ""),
+      suggestions: extractSuggestions(item?.suggestions).map((entry) => sanitizeAssistantText(entry)).filter(Boolean),
+      details: {
+        ...item,
+        theme: sanitizeAssistantText(item?.theme),
+        reason: sanitizeAssistantText(item?.reason),
+      },
       position: index,
     }));
   } catch {
@@ -116,7 +146,7 @@ const describeScaleValue = (key: string, value: number) => {
   if (normalized.includes("connection") || normalized.includes("social")) {
     if (value >= 8) return `${label} is ${value}/10, which suggests you feel well connected to others.`;
     if (value >= 5) return `${label} is ${value}/10, which suggests connection is present but could be stronger.`;
-    return `${label} is ${value}/10, which suggests you may be feeling disconnected or isolated.`;
+    return `${label} is ${value}/10, which suggests connection looks lower today.`;
   }
 
   return `${label} is ${value}/10.`;
@@ -155,6 +185,21 @@ const extractThemeScores = (stats: unknown) => {
     })
     .filter(Boolean)
     .sort((a, b) => Number(b?.value || 0) - Number(a?.value || 0)) as { key: string; label: string; value: number }[];
+};
+
+const summarizeAssessment = (assessment: Record<string, unknown> | null, signals: { label: string; value: number; explanation: string | null }[]) => {
+  if (!assessment) return null;
+  return {
+    type: String(assessment?.type || ""),
+    score: Number(assessment?.score || 0),
+    mood: String(assessment?.mood || ""),
+    createdAt: String(assessment?.created_at || ""),
+    signals: signals.map((item) => ({
+      label: item.label,
+      value: item.value,
+      explanation: item.explanation,
+    })),
+  };
 };
 
 Deno.serve(async (req) => {
@@ -259,6 +304,8 @@ Deno.serve(async (req) => {
         const engagementScore = joinedCircles.length + (huddleParticipation * 2);
         const circleEngagement = engagementScore > 5 ? "high" : engagementScore > 0 ? "medium" : "low";
 
+        const latestAssessmentSummary = summarizeAssessment(latestAssessment as Record<string, unknown> | null, assessmentSignals);
+
         const userContextJson = JSON.stringify({
           wellbeingScore: userProfile.wellbeing_score ?? 0,
           ringStatus: userProfile.wellbeing_label ?? "none",
@@ -269,7 +316,7 @@ Deno.serve(async (req) => {
           circles: joinedCircles.map(c => (c as Record<string, unknown>).circle_id),
           circleEngagement,
           huddleParticipation,
-          latestAssessment,
+          latestAssessment: latestAssessmentSummary,
           keyChallenges: activeChallenges,
           assessmentSignals,
           themeScores,
@@ -281,6 +328,7 @@ Deno.serve(async (req) => {
           system: [
             "You are a warm, highly empathetic mental wellbeing coach inside the Circles Health App.",
             "You speak naturally, conversationally, and kindly to the user above all else.",
+            "You are a general wellbeing support tool, not a clinical assessment tool.",
             "",
             "Your role is to understand the user using BOTH:",
             "1. What they say in chat",
@@ -295,13 +343,14 @@ Deno.serve(async (req) => {
             "1. Quick Support Mode -> short warm response, one clear next step, at most one gentle follow-up question.",
             "2. Insight Mode -> still conversational, but a little more detailed and structured in short paragraphs or short bullets.",
             "",
-            "When the user asks for their key insights, key challenges, or how they are doing:",
+            "When the user asks for their key insights, daily focus, or how they are doing:",
             "- Start with a natural transition like 'Sure, let me pull up your key insights for today.'",
-            "- Then explain what their latest strongest signal means in plain English.",
+            "- Then explain what their latest strongest signal means in a simple and direct way.",
             "- Compare it against their weaker signals or themes where relevant.",
             "- Example style: 'Your focus level is 10/10, which suggests you're able to maintain a high level of focus. Your motivation is 3/10, which suggests it may feel harder to start and finish tasks right now.'",
             "- Mention the strongest theme and weakest theme if they are available.",
             "- Never say 'what the app thinks would help most' or similar phrasing.",
+            "- Never use phrases like 'in plain terms'.",
             "- Do not make the insight sound like a machine verdict or system label.",
             "- Frame it more naturally as 'what stands out today', 'what may need a bit more support', or 'a few areas worth looking after today'.",
             "- Treat challenges as supportive focus areas for today, not as fixed problems or app-generated labels.",
@@ -321,9 +370,17 @@ Deno.serve(async (req) => {
             "3. Recommend Circles: ",
             "   - If they are struggling, encourage them to engage with their Existing Circles.",
             "   - If they are thriving, suggest they support others in their Existing Circles.",
-            "   - If suggesting Public Circles, limit to 1-2 recommendations mapped strictly against their wellbeing score and key challenges.",
-            "4. Key Challenges: Focus only on their stored challenges, extending/explaining them rather than randomly generating completely new ones.",
+            "   - If suggesting Public Circles, limit to 1-2 recommendations mapped strictly against their wellbeing score and stored focus areas.",
+            "4. Daily Focus: Focus only on their stored focus areas, extending or explaining them rather than randomly generating completely new ones.",
             "5. If the user asks 'what does X mean?', explain the exact signal plainly first, then relate it to the rest of their profile.",
+            "",
+            "NON-DIAGNOSTIC RULES:",
+            "- Only describe what the user reported or what the app measured.",
+            "- Say things like 'your latest check-in shows stress is 8/10' or 'your connection score is lower today'.",
+            "- Do NOT infer hidden causes, conditions, or diagnoses.",
+            "- Do NOT say or imply the user has anxiety, depression, burnout, ADHD, trauma, or any other condition unless they explicitly say those words first.",
+            "- Even if the user uses clinical words, do not confirm a diagnosis. Keep the response reflective and non-clinical.",
+            "- Do NOT say 'your loneliness', 'your anxiety', or similar ownership language unless the user explicitly used that wording themselves.",
             "",
             "CRISIS & LOW MOOD PROTOCOL:",
             "If the user expresses anxiety, low mood, or emotional distress you MUST:",
@@ -365,7 +422,7 @@ Deno.serve(async (req) => {
 
         const response = {
           success: true,
-          reply: generated.text,
+          reply: sanitizeAssistantText(generated.text),
           creditsCharged: 10,
           remaining: (await resolveSubscriptionStatus(user.id))?.remaining || null,
         };
@@ -445,9 +502,9 @@ Deno.serve(async (req) => {
       await failIdempotency({
         scope: "key_challenge_generation",
         key: idempotencyKey,
-        response: { success: false, message: "Your plan cannot generate key challenges right now." },
+        response: { success: false, message: "Your plan cannot generate daily focus right now." },
       });
-      return errorResponse(403, "Your plan cannot generate key challenges right now.", undefined, { headers: corsHeaders });
+      return errorResponse(403, "Your plan cannot generate daily focus right now.", undefined, { headers: corsHeaders });
     }
 
     const assessmentId = String(body?.assessmentId || "").trim();
@@ -525,14 +582,22 @@ Deno.serve(async (req) => {
       .eq("id", user.id)
       .maybeSingle();
 
+    const assessmentSignals = extractAssessmentSignals(assessmentRow.answers || {});
     const sourceSummary = {
       type: assessmentRow.type,
       score: assessmentRow.score,
       mood: assessmentRow.mood || "",
-      answers: assessmentRow.answers || {},
+      signals: assessmentSignals.map((item) => ({
+        label: item.label,
+        value: item.value,
+        explanation: item.explanation,
+      })),
       wellbeingScore: profile?.wellbeing_score ?? null,
       wellbeingLabel: profile?.wellbeing_label ?? "",
-      themes: profile?.stats?.themes || {},
+      themes: extractThemeScores(profile?.stats).map((item) => ({
+        label: item.label,
+        value: item.value,
+      })),
     };
 
     const { data: runRow, error: runError } = await supabaseAdmin
@@ -553,27 +618,33 @@ Deno.serve(async (req) => {
     try {
       const generated = await generateStructuredText({
         system: [
-          "You are a mental wellbeing coach.",
+          "You are a supportive, non-clinical wellbeing guide.",
           "Return strict JSON with a top-level 'challenges' array containing exactly 4 items.",
           "Each challenge MUST belong to a specific theme. The 4 themes are: 'Focus Area', 'Connection', 'Growth', 'Daily Win'.",
+          "These are not tasks. They are factual daily focus areas based on the user's own inputs and app data.",
           "Rules for each theme:",
-          " - Focus Area: Addresses the weakest or most needed area from the assessment.",
-          " - Connection: Social and relationship-based challenge.",
-          " - Growth: Personal development, consistency, mindset.",
-          " - Daily Win: Small, simple, achievable actions.",
-          "Each challenge MUST include:",
+          " - Focus Area: A factual observation about concentration, motivation, clarity, or energy.",
+          " - Connection: A factual observation about social connection, support, or participation.",
+          " - Growth: A factual observation about consistency, momentum, self-development, or progress.",
+          " - Daily Win: A factual observation about one small area that would be most helpful to steady today.",
+          "Each item MUST include:",
           " - 'theme' (string: strictly one of the 4 themes)",
-          " - 'title' (string: clear and engaging)",
-          " - 'explanation' (string: short description of what to do)",
-          " - 'suggestions' (array of strings: actionable steps to take)",
-          " - 'reason' (string: short, simple, human-readable reason why this is recommended based on the user's data. e.g. 'Based on your recent mood' or 'Because your social activity has been low').",
-          "Do not mix themes. Keep the challenge clear, short, and actionable.",
+          " - 'title' (string: short, factual, human, supportive. Example: 'Focus feels lower today')",
+          " - 'explanation' (string: 1-2 short sentences explaining what the data shows in a simple and direct way)",
+          " - 'suggestions' (array of strings: optional practical next steps, short and non-clinical)",
+          " - 'reason' (string: short factual basis using only reported inputs or measured scores. Example: 'Your latest check-in shows focus at 3/10').",
+          " - 'level' (string: one of 'high', 'medium', 'low', where high means more support may be helpful, medium means worth noticing, and low means looking steadier).",
+          "Do not mix themes. Keep each item clear, short, and grounded in the user's data.",
+          "Never describe a condition or diagnosis.",
+          "Never use words like anxiety, depression, burnout, ADHD, loneliness, trauma, or disorder unless the user explicitly wrote those exact words themselves, and even then do not confirm or label them.",
+          "Never infer hidden causes or internal states. Only describe reported moods, reported scores, and app activity facts.",
+          "Never use phrases like 'in plain terms' or 'what the app thinks would help most'.",
           "Return exactly 4 items, one for each theme."
         ].join(" "),
         messages: [
           {
             role: "user",
-            content: `Generate exactly 4 key challenges from this assessment summary: ${JSON.stringify(sourceSummary)}`,
+            content: `Generate exactly 4 daily focus items from this assessment summary: ${JSON.stringify(sourceSummary)}`,
           },
         ],
         maxContextTokens: Number((status?.limits as Record<string, unknown>)?.maxAiContextTokens || 4000),
@@ -583,43 +654,43 @@ Deno.serve(async (req) => {
       const parsed = parseChallengeResponse(generated.text);
       const normalized = (parsed.length === 4) ? parsed : [
         {
-          title: "Take a deep breath",
+          title: "Focus may need more support today",
           theme: "Focus Area",
-          reason: "Because taking a moment to recenter is always beneficial.",
-          level: "medium",
-          explanation: "Take a moment to recenter yourself and clear your mind.",
-          suggestions: ["Practice deep breathing for 2 minutes"],
-          details: { theme: "Focus Area", reason: "Because taking a moment to recenter is always beneficial." },
+          reason: "Your latest check-in suggests focus or mental clarity is not at its strongest today.",
+          level: "high",
+          explanation: "Your recent inputs suggest it may feel harder to stay locked in or keep momentum today.",
+          suggestions: ["Choose one priority for the next hour", "Reduce distractions for a short stretch"],
+          details: { theme: "Focus Area", reason: "Your latest check-in suggests focus or mental clarity is not at its strongest today." },
           position: 0,
         },
         {
-          title: "Reach out to someone",
+          title: "Connection looks quieter today",
           theme: "Connection",
-          reason: "Because maintaining social ties improves overall wellbeing.",
+          reason: "Your recent connection or huddle activity is lower today.",
           level: "medium",
-          explanation: "Send a quick message or call a friend you haven't spoken to recently.",
-          suggestions: ["Send a text to check in"],
-          details: { theme: "Connection", reason: "Because maintaining social ties improves overall wellbeing." },
+          explanation: "Your recent app activity suggests there may be less social contact or shared time showing up today.",
+          suggestions: ["Message one person you trust", "Join a circle conversation for a few minutes"],
+          details: { theme: "Connection", reason: "Your recent connection or huddle activity is lower today." },
           position: 1,
         },
         {
-          title: "Reflect on a recent win",
+          title: "Growth could use a small reset",
           theme: "Growth",
-          reason: "Because reviewing progress helps build confidence.",
-          level: "low",
-          explanation: "Think about something you achieved recently and appreciate the effort it took.",
-          suggestions: ["Write down one recent accomplishment"],
-          details: { theme: "Growth", reason: "Because reviewing progress helps build confidence." },
+          reason: "Your recent activity suggests progress or consistency has slowed a little.",
+          level: "medium",
+          explanation: "There may be an opportunity to rebuild momentum with one small, manageable step.",
+          suggestions: ["Pick one task you can complete today", "Notice one recent effort that still counts"],
+          details: { theme: "Growth", reason: "Your recent activity suggests progress or consistency has slowed a little." },
           position: 2,
         },
         {
-          title: "Drink a glass of water",
+          title: "A small daily win could help steady today",
           theme: "Daily Win",
-          reason: "Because staying hydrated is an easy daily goal.",
+          reason: "Your check-in suggests today may benefit from one simple, realistic win.",
           level: "low",
-          explanation: "Hydration is key. Drink a glass of water right now.",
-          suggestions: ["Drink water"],
-          details: { theme: "Daily Win", reason: "Because staying hydrated is an easy daily goal." },
+          explanation: "A small action may help create a sense of steadiness and movement today.",
+          suggestions: ["Take a short walk", "Clear one simple task", "Pause for a slow reset"],
+          details: { theme: "Daily Win", reason: "Your check-in suggests today may benefit from one simple, realistic win." },
           position: 3,
         }
       ];
