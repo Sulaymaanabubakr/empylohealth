@@ -29,12 +29,15 @@ yarn-error.log
 *.pdf
 
 # Local credentials and machine-specific files
+.env
+.env*.local
 credentials/
 credentials.json
 *.jks
 *.keystore
 *.p8
 *.mobileprovision
+*.pem
 
 # Android caches / build output
 android/.gradle/
