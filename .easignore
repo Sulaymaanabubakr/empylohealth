@@ -48,6 +48,11 @@ android/.cxx/
 android/build/
 android/app/build/
 android/app/.cxx/
+frontend/android/.gradle/
+frontend/android/.cxx/
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/app/.cxx/
 **/.gradle/
 **/.cxx/
 
