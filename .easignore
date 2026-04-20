@@ -1,43 +1,73 @@
-# EAS resolves this app from the monorepo root, so keep the upload context
-# on a strict allowlist: ship only the Expo app in /frontend.
-*
-!frontend/
-!frontend/**
+# Monorepo exclusions. These patterns are safe whether EAS evaluates them
+# from the repo root or from the frontend app directory.
 
-# Exclude local-only files inside the mobile app.
-frontend/node_modules/
-frontend/.git/
-frontend/.expo/
-frontend/.expo-shared/
-frontend/dist/
-frontend/web-build/
-frontend/coverage/
-frontend/.npm/
-frontend/.npm-cache/
-frontend/.DS_Store
-frontend/.env
-frontend/.env*.local
-frontend/credentials/
-frontend/credentials.json
-frontend/*.jks
-frontend/*.keystore
-frontend/*.p8
-frontend/*.mobileprovision
-frontend/*.pem
-frontend/android/.gradle/
-frontend/android/.cxx/
-frontend/android/build/
-frontend/android/app/build/
-frontend/android/app/.cxx/
-frontend/ios/Pods/
-frontend/ios/build/
-frontend/**/*.log
-frontend/npm-debug.log
-frontend/yarn-debug.log
-frontend/yarn-error.log
+# Exclude sibling projects and large non-app folders when packaging from repo root.
+admin-dashboard/
+backend/
+circles-site/
+empylo-site/
+brand_assets/
+docs/
+supabase backend/
+Circle health App/
+
+# VCS / editor / OS
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+
+# Package manager / install artifacts
+node_modules/
+**/node_modules/
+.npm/
+.npm-cache/
+
+# Expo / Metro / local generated state
+.expo/
+.expo-shared/
+dist/
+web-build/
+coverage/
+
+# Local credentials and machine-specific files
+.env
+.env*.local
+credentials/
+credentials.json
+*.jks
+*.keystore
+*.p8
+*.mobileprovision
+*.pem
+
+# Android caches / build output
+android/.gradle/
+android/.cxx/
+android/build/
+android/app/build/
+android/app/.cxx/
+**/.gradle/
+**/.cxx/
+
+# iOS caches / build output
+ios/Pods/
+ios/build/
+
+# Logs / archives / docs
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+*.log
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.pdf
 
 # Keep platform service config files available to the build.
-!frontend/google-services.json
-!frontend/**/google-services.json
-!frontend/GoogleService-Info.plist
-!frontend/**/GoogleService-Info.plist
+!google-services.json
+!**/google-services.json
+!GoogleService-Info.plist
+!**/GoogleService-Info.plist
