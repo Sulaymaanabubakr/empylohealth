@@ -13,6 +13,7 @@ const mapProfile = (row) => {
         gender: row.gender || '',
         location: row.location || '',
         bio: row.bio || '',
+        settings: row.settings || {},
         onboardingCompleted: Boolean(row.onboarding_completed),
         timezone: row.timezone || 'UTC',
         createdAt: row.created_at || null,

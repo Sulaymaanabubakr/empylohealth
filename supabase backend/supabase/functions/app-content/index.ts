@@ -91,18 +91,26 @@ Deno.serve(async (req) => {
       const today = new Date().toISOString().slice(0, 10);
       const { data: dailyRows } = await supabaseAdmin
         .from("daily_affirmations")
-        .select("affirmation_id")
+        .select("affirmation_id, slot_key")
         .eq("day_key", today);
 
       if (dailyRows?.length) {
-        const ids = Array.from(new Set(dailyRows.map((row) => row.affirmation_id).filter(Boolean)));
+        const orderedRows = [...dailyRows].sort((a, b) => {
+          const order = { morning: 0, afternoon: 1, evening: 2 } as Record<string, number>;
+          return (order[String(a.slot_key || "")] ?? 99) - (order[String(b.slot_key || "")] ?? 99);
+        });
+        const ids = Array.from(new Set(orderedRows.map((row) => row.affirmation_id).filter(Boolean)));
         const { data, error } = await supabaseAdmin
           .from("affirmations")
           .select("*")
           .in("id", ids)
           .eq("status", "active");
         if (error) throw error;
-        const scheduled = (data || []).map((item) => mapAffirmation(item as Record<string, unknown>));
+        const mappedById = new Map((data || []).map((item) => {
+          const mapped = mapAffirmation(item as Record<string, unknown>);
+          return [mapped.id, mapped];
+        }));
+        const scheduled = ids.map((id) => mappedById.get(String(id))).filter(Boolean);
 
         if (scheduled.length >= 3) {
           return json(scheduled.slice(0, 3), { headers: corsHeaders });

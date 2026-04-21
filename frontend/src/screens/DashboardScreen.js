@@ -209,22 +209,30 @@ const DashboardScreen = ({ navigation }) => {
         };
     }, [userData]);
 
+    const loadUnreadNotifications = useCallback(async () => {
+        if (!user?.uid) {
+            setHasUnreadNotifications(false);
+            return;
+        }
+        try {
+            const { count, error } = await supabase
+                .from('notifications')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.uid)
+                .eq('read', false);
+            if (error) throw error;
+            setHasUnreadNotifications((count || 0) > 0);
+        } catch (error) {
+            console.log("Error fetching notifications:", error);
+            setHasUnreadNotifications(false);
+        }
+    }, [user?.uid]);
+
     useEffect(() => {
         if (!user?.uid) return;
         let active = true;
         const load = async () => {
-            try {
-                const { count, error } = await supabase
-                    .from('notifications')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('user_id', user.uid)
-                    .eq('read', false);
-                if (error) throw error;
-                if (active) setHasUnreadNotifications((count || 0) > 0);
-            } catch (error) {
-                console.log("Error fetching notifications:", error);
-                if (active) setHasUnreadNotifications(false);
-            }
+            await loadUnreadNotifications();
         };
 
         load();
@@ -237,7 +245,14 @@ const DashboardScreen = ({ navigation }) => {
             active = false;
             supabase.removeChannel(channel).catch(() => {});
         };
-    }, [user?.uid]);
+    }, [loadUnreadNotifications, user?.uid]);
+
+    useFocusEffect(
+        useCallback(() => {
+            loadUnreadNotifications().catch(() => {});
+            return undefined;
+        }, [loadUnreadNotifications])
+    );
 
     useEffect(() => {
         if (!primaryCircleStorageKey) return;

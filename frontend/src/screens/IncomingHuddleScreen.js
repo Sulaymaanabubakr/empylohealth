@@ -25,6 +25,7 @@ export default function IncomingHuddleScreen({ navigation, route }) {
   const chatName = route?.params?.chatName || 'Huddle';
   const callerName = route?.params?.callerName || chatName || 'Incoming Huddle';
   const avatar = route?.params?.avatar || '';
+  const isGroup = route?.params?.isGroup === true || String(route?.params?.isGroup || '').toLowerCase() === 'true';
 
   const [status, setStatus] = useState(null);
   const [missedStatus, setMissedStatus] = useState('pending');
@@ -71,6 +72,14 @@ export default function IncomingHuddleScreen({ navigation, route }) {
   useEffect(() => () => {
     nativeCallService.stopIncomingRingtone().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!huddleId) return undefined;
+    nativeCallService.startIncomingRingtone(huddleId).catch(() => {});
+    return () => {
+      nativeCallService.stopIncomingRingtone().catch(() => {});
+    };
+  }, [huddleId]);
 
   useEffect(() => {
     if (!huddleId || loading || status !== 'ringing') return;

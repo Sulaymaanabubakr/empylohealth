@@ -15,6 +15,24 @@ const parseBody = async (req: Request) => {
 const truncate = (value: string, length = 120) =>
   value.length > length ? `${value.slice(0, length - 1)}…` : value;
 
+const resolveSlotKey = (rawSlot?: unknown) => {
+  const normalized = String(rawSlot || "").trim().toLowerCase();
+  if (normalized === "morning" || normalized === "afternoon" || normalized === "evening") {
+    return normalized;
+  }
+
+  const now = new Date();
+  const lagosHour = Number(new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    hour12: false,
+    timeZone: Deno.env.get("AFFIRMATION_TIMEZONE") || "Africa/Lagos",
+  }).format(now));
+
+  if (lagosHour < 12) return "morning";
+  if (lagosHour < 17) return "afternoon";
+  return "evening";
+};
+
 const isAuthorized = (req: Request) => {
   const expected = Deno.env.get("INTERNAL_CRON_SECRET") || "";
   if (!expected) return false;
@@ -40,18 +58,28 @@ const reserveDispatch = async (dispatchKey: string, kind: string, metadata: Reco
   return Boolean(data?.id);
 };
 
-const dispatchDailyAffirmation = async () => {
-  const today = new Date().toISOString().slice(0, 10);
-  const reserved = await reserveDispatch(`daily-affirmation:${today}`, "daily_affirmation", { dayKey: today });
+const dispatchDailyAffirmation = async (slotKeyInput?: unknown) => {
+  const lagosNow = new Intl.DateTimeFormat("en-CA", {
+    timeZone: Deno.env.get("AFFIRMATION_TIMEZONE") || "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date()).replaceAll("/", "-");
+  const slotKey = resolveSlotKey(slotKeyInput);
+  const reserved = await reserveDispatch(`daily-affirmation:${lagosNow}:${slotKey}`, "daily_affirmation", {
+    dayKey: lagosNow,
+    slotKey,
+  });
   if (!reserved) return { kind: "daily_affirmation", skipped: true, reason: "already-dispatched" };
 
   const { data: dailyRows, error: dailyError } = await supabaseAdmin
     .from("daily_affirmations")
-    .select("affirmation_id")
-    .eq("day_key", today)
+    .select("affirmation_id, slot_key")
+    .eq("day_key", lagosNow)
+    .eq("slot_key", slotKey)
     .limit(1);
   if (dailyError) throw dailyError;
-  if (!dailyRows?.length) return { kind: "daily_affirmation", skipped: true, reason: "no-affirmation" };
+  if (!dailyRows?.length) return { kind: "daily_affirmation", skipped: true, reason: "no-affirmation", slotKey };
 
   const affirmationId = String(dailyRows[0].affirmation_id || "");
   const { data: affirmation, error: affirmationError } = await supabaseAdmin
@@ -65,39 +93,49 @@ const dispatchDailyAffirmation = async () => {
 
   const { data: profiles, error: profilesError } = await supabaseAdmin
     .from("profiles")
-    .select("id")
-    .not("expo_push_tokens", "is", null);
+    .select("id, expo_push_tokens");
   if (profilesError) throw profilesError;
 
-  const userIds = (profiles || []).map((row) => String(row.id || "")).filter(Boolean);
-  if (!userIds.length) return { kind: "daily_affirmation", skipped: true, reason: "no-recipients" };
+  const userIds = (profiles || [])
+    .filter((row) => Array.isArray(row.expo_push_tokens) && row.expo_push_tokens.some((token) => String(token || "").trim()))
+    .map((row) => String(row.id || ""))
+    .filter(Boolean);
+  if (!userIds.length) return { kind: "daily_affirmation", skipped: true, reason: "no-recipients", slotKey };
+
+  const title = slotKey === "afternoon"
+    ? "Afternoon affirmation"
+    : slotKey === "evening"
+      ? "Evening affirmation"
+      : "Morning affirmation";
 
   await createStoredNotifications({
     userIds,
     type: "DAILY_AFFIRMATION",
-    title: "Daily affirmation",
+    title,
     body: truncate(String(affirmation.content || "Take a mindful moment today.")),
     image: String(affirmation.image || ""),
     data: {
       type: "DAILY_AFFIRMATION",
       affirmationId: affirmation.id,
+      slotKey,
     },
   });
 
   await sendExpoPushNotifications({
     userIds,
     type: "DAILY_AFFIRMATION",
-    title: "Daily affirmation",
+    title,
     body: truncate(String(affirmation.content || "Take a mindful moment today.")),
     image: String(affirmation.image || ""),
     data: {
       type: "DAILY_AFFIRMATION",
       affirmationId: affirmation.id,
+      slotKey,
     },
     channelId: "default",
   });
 
-  return { kind: "daily_affirmation", sent: userIds.length, affirmationId: affirmation.id };
+  return { kind: "daily_affirmation", sent: userIds.length, affirmationId: affirmation.id, slotKey };
 };
 
 const dispatchScheduledHuddleReminders = async () => {
@@ -302,10 +340,11 @@ Deno.serve(async (req) => {
   try {
     const body = await parseBody(req);
     const mode = String(body?.mode || "all");
+    const slotKey = body?.slotKey;
 
     const results: Record<string, unknown> = {};
     if (mode === "all" || mode === "daily_affirmation") {
-      results.dailyAffirmation = await dispatchDailyAffirmation();
+      results.dailyAffirmation = await dispatchDailyAffirmation(slotKey);
     }
     if (mode === "all" || mode === "scheduled_huddle") {
       results.scheduledHuddles = await dispatchScheduledHuddleReminders();

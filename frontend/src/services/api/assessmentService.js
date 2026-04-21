@@ -7,6 +7,7 @@ import { subscriptionGuardService } from '../subscription/subscriptionGuardServi
 let lastChallengeGenerationAttemptAt = 0;
 let lastChallengeGenerationFailureAt = 0;
 const CHALLENGE_GENERATION_THROTTLE_MS = 60 * 1000;
+const randomChannel = (prefix, value) => `${prefix}:${value}:${Math.random().toString(36).slice(2, 8)}`;
 
 export const assessmentService = {
     submitAssessment: async (type, score, answers = {}, mood = '') => {
@@ -42,7 +43,7 @@ export const assessmentService = {
         load();
 
         const channel = supabase
-            .channel(`wellbeing:${uid}`)
+            .channel(randomChannel('wellbeing', uid))
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',

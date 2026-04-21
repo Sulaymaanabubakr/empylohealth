@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
           isGroup: Boolean(huddle.is_group),
         },
         categoryId: "huddle-call-actions",
-        channelId: "huddle-calls-ringtone",
+        channelId: "huddle-calls-alert-v2",
       }).catch((pushError) => {
         console.warn("[ring-huddle-participants] push send failed", pushError);
       });

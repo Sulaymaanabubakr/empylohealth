@@ -221,7 +221,7 @@ Deno.serve(async (req) => {
           isGroup,
         },
         categoryId: "huddle-call-actions",
-        channelId: "huddle-calls-ringtone",
+        channelId: "huddle-calls-alert-v2",
       }).catch((pushError) => {
         console.warn("[start-huddle] push send failed", pushError);
       });

@@ -27,7 +27,7 @@ const CHAT_MESSAGE_ACTION_MARK_READ = 'chat-mark-read';
 const HUDDLE_CALL_CATEGORY_ID = 'huddle-call-actions';
 const HUDDLE_CALL_ACTION_ACCEPT = 'huddle-accept';
 const HUDDLE_CALL_ACTION_REJECT = 'huddle-reject';
-const HUDDLE_CALLS_CHANNEL_ID = 'huddle-calls-ringtone';
+const HUDDLE_CALLS_CHANNEL_ID = 'huddle-calls-alert-v2';
 
 let VoipPushNotification = null;
 let currentAuthUid = null;
@@ -528,19 +528,10 @@ export const notificationService = {
                     sound: null,
                     lightColor: '#9CA3AF'
                 });
-                await Notifications.setNotificationChannelAsync('huddle-calls', {
+                await Notifications.setNotificationChannelAsync(HUDDLE_CALLS_CHANNEL_ID, {
                     name: 'Huddle Calls',
                     importance: Notifications.AndroidImportance.MAX,
-                    vibrationPattern: [0, 500, 250, 500, 250, 700],
-                    lightColor: '#00A99D',
-                    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-                    sound: 'default',
-                    bypassDnd: true
-                });
-                await Notifications.setNotificationChannelAsync(HUDDLE_CALLS_CHANNEL_ID, {
-                    name: 'Huddle Calls (Ringtone)',
-                    importance: Notifications.AndroidImportance.MAX,
-                    vibrationPattern: [0],
+                    vibrationPattern: [0, 700, 350, 700, 350, 900],
                     lightColor: '#00A99D',
                     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
                     sound: 'default',

@@ -355,6 +355,25 @@ export const chatService = {
         await refreshNotificationBadgeCount(uid);
     },
 
+    markAllChatsRead: async (uid = null) => {
+        if (!uid) return;
+        const nowIso = new Date().toISOString();
+        await supabase
+            .from('chat_participants')
+            .update({ last_read_at: nowIso, updated_at: nowIso })
+            .eq('user_id', uid)
+            .is('left_at', null);
+
+        await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('user_id', uid)
+            .eq('type', 'CHAT_MESSAGE')
+            .or('read.is.null,read.eq.false');
+
+        await refreshNotificationBadgeCount(uid);
+    },
+
     preloadChatList: async (uid) => {
         if (!uid) return [];
         return fetchChatList(uid);

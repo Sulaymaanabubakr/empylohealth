@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, StatusBar, Platform, RefreshControl, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -89,6 +90,14 @@ const ChatListScreen = ({ navigation, route }) => {
             setUnreadState(state || { byChat: {}, total: 0 });
         });
     }, [user?.uid]);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            if (!user?.uid) return undefined;
+            chatService.markAllChatsRead(user.uid).catch(() => {});
+            return undefined;
+        }, [user?.uid])
+    );
 
     useEffect(() => {
         if (!user?.uid) return undefined;
