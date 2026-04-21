@@ -340,6 +340,35 @@ export const AuthProvider = ({ children, onAuthReady }) => {
         }
     };
 
+    const applyProfilePatch = async (updates = {}) => {
+        if (!updates || typeof updates !== 'object') return;
+
+        setUserData((previous) => {
+            if (!previous) return previous;
+            return {
+                ...previous,
+                ...updates,
+            };
+        });
+
+        setUser((previous) => {
+            if (!previous) return previous;
+            return {
+                ...previous,
+                displayName: Object.prototype.hasOwnProperty.call(updates, 'name') ? updates.name : previous.displayName,
+                photoURL: Object.prototype.hasOwnProperty.call(updates, 'photoURL') ? updates.photoURL : previous.photoURL,
+            };
+        });
+
+        if (activeAuthUidRef.current) {
+            const nextProfile = {
+                ...(userData || {}),
+                ...updates,
+            };
+            await profileCache.save(activeAuthUidRef.current, nextProfile).catch(() => {});
+        }
+    };
+
     const deleteAccount = async () => {
         const uid = user?.uid;
         if (!uid) {
@@ -373,7 +402,8 @@ export const AuthProvider = ({ children, onAuthReady }) => {
             deleteAccount,
             loginWithGoogle,
             loginWithApple,
-            refreshUser
+            refreshUser,
+            applyProfilePatch
         }),
         [user, userData, loading, isAuthenticating, routeTarget, bootPhase]
     );

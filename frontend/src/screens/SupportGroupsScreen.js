@@ -235,13 +235,6 @@ const SupportGroupsScreen = ({ route }) => {
                 <View style={styles.circleHeaderMain}>
                     <View style={styles.circleTitleRow}>
                         <Text style={styles.circleTitle} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
-                        {circleTier === 'pro' && (
-                            <View style={[styles.circleTierBadge, styles.circleTierBadgePro]}>
-                                <Text style={[styles.circleTierBadgeText, styles.circleTierBadgeTextPro]}>
-                                    Pro Circle
-                                </Text>
-                            </View>
-                        )}
                     </View>
                     <Text style={styles.circleMembers}>
                         {getActiveMemberCount(item.id, item.members, activeMemberIdsMap)} Members • Cap {getCircleMemberCap(item)}
@@ -666,24 +659,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#757575',
         fontWeight: '500',
-    },
-    circleTierBadge: {
-        borderRadius: 999,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        backgroundColor: '#E7F2ED',
-    },
-    circleTierBadgePro: {
-        backgroundColor: '#FFF2D6',
-    },
-    circleTierBadgeText: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#166534',
-        textTransform: 'uppercase',
-    },
-    circleTierBadgeTextPro: {
-        color: '#8A5A00',
     },
     timelineEmptyText: {
         fontSize: 13,

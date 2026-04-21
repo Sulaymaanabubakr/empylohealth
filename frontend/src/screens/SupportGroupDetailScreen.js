@@ -78,13 +78,6 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
                     </View>
                     <View style={styles.titleContainer}>
                         <Text style={styles.heroTitle}>{group.name}</Text>
-                        {circleTier === 'pro' && (
-                            <View style={[styles.tierBadge, styles.tierBadgePro]}>
-                                <Text style={[styles.tierBadgeText, styles.tierBadgeTextPro]}>
-                                    Pro Circle
-                                </Text>
-                            </View>
-                        )}
                         {group.verified && (
                             <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} style={{ marginLeft: 6 }} />
                         )}
@@ -205,25 +198,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         flexWrap: 'wrap',
         marginBottom: 8,
-    },
-    tierBadge: {
-        marginLeft: 8,
-        borderRadius: 999,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        backgroundColor: '#E7F2ED',
-    },
-    tierBadgePro: {
-        backgroundColor: '#FFF2D6',
-    },
-    tierBadgeText: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#166534',
-        textTransform: 'uppercase',
-    },
-    tierBadgeTextPro: {
-        color: '#8A5A00',
     },
     heroTitle: {
         fontSize: 20,

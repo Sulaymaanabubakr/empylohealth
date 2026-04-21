@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient'; // Only for button
 import Input from '../components/Input';
@@ -15,9 +15,11 @@ import Avatar from '../components/Avatar';
 import { authService } from '../services/auth/authService';
 import { getDeviceIdentity } from '../services/auth/deviceIdentity';
 import { COUNTRY_OPTIONS } from '../constants/countries';
+import ImageCropper from '../components/ImageCropper';
 
 const PersonalInformationScreen = ({ navigation }) => {
-    const { user, userData } = useAuth();
+    const insets = useSafeAreaInsets();
+    const { user, userData, applyProfilePatch } = useAuth();
     const { showModal } = useModal();
 
     // Form State (initialized with userData)
@@ -29,6 +31,8 @@ const PersonalInformationScreen = ({ navigation }) => {
     const [bio, setBio] = useState(userData?.bio || userData?.about || '');
     const [avatarUri, setAvatarUri] = useState(userData?.photoURL || user?.photoURL || '');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [cropperVisible, setCropperVisible] = useState(false);
+    const [tempImage, setTempImage] = useState(null);
 
     // Track if avatar changed to avoid unnecessary uploads
     const [hasNewAvatar, setHasNewAvatar] = useState(false);
@@ -44,14 +48,14 @@ const PersonalInformationScreen = ({ navigation }) => {
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
-            allowsEditing: true,
-            aspect: [1, 1],
+            allowsEditing: false,
             quality: 0.8,
+            exif: false,
         });
 
         if (!result.canceled && result.assets[0]) {
-            setAvatarUri(result.assets[0].uri);
-            setHasNewAvatar(true);
+            setTempImage(result.assets[0].uri);
+            setTimeout(() => setCropperVisible(true), 250);
         }
     };
 
@@ -64,6 +68,7 @@ const PersonalInformationScreen = ({ navigation }) => {
             // 1. Upload new avatar if selected
             if (hasNewAvatar) {
                 photoURL = await mediaService.uploadAsset(avatarUri, 'avatars');
+                photoURL = photoURL.replace('/upload/', '/upload/c_thumb,g_face,w_400,h_400,z_0.7/');
             }
 
             // 2. Prepare Data
@@ -74,14 +79,21 @@ const PersonalInformationScreen = ({ navigation }) => {
                 location,
                 timezone,
                 bio: bio.trim(),
-                about: bio.trim(), // Keep legacy field in sync for older readers.
                 photoURL,
                 updatedAt: new Date()
             };
 
             // 3. Update Firestore via userService
             if (user?.uid) {
-                await userService.updateUserDocument(user.uid, updateData);
+                const shouldSyncAuthProfile =
+                    name !== (userData?.name || user?.displayName || '')
+                    || photoURL !== (userData?.photoURL || user?.photoURL || '');
+
+                await Promise.all([
+                    userService.updateUserDocument(user.uid, updateData),
+                    shouldSyncAuthProfile ? authService.updateAuthProfile(name, photoURL) : Promise.resolve(),
+                ]);
+                await applyProfilePatch(updateData);
                 if (newPassword) {
                     const metadata = await getDeviceIdentity();
                     const otpResult = await authService.requestOtp({
@@ -135,7 +147,14 @@ const PersonalInformationScreen = ({ navigation }) => {
                 style={{ flex: 1 }}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                    contentContainerStyle={[
+                        styles.scrollContent,
+                        { paddingBottom: Math.max(insets.bottom, 20) + 120 }
+                    ]}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                >
 
                     {/* Avatar */}
                     <View style={styles.avatarSection}>
@@ -215,20 +234,36 @@ const PersonalInformationScreen = ({ navigation }) => {
                         </View>
                     </View>
 
-                    {/* Gradient Save Button */}
-                    <TouchableOpacity style={styles.saveButtonContainer} onPress={handleSave} disabled={isSubmitting}>
-                        <LinearGradient
-                            colors={['#009688', '#4DB6AC']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={styles.saveButton}
-                        >
-                            <Text style={styles.saveButtonText}>{isSubmitting ? 'Saving...' : 'Save Changes'}</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-
                 </ScrollView>
             </KeyboardAvoidingView>
+
+            <View style={[styles.floatingSaveWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+                <TouchableOpacity style={styles.saveButtonContainer} onPress={handleSave} disabled={isSubmitting}>
+                    <LinearGradient
+                        colors={['#009688', '#4DB6AC']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.saveButton}
+                    >
+                        <Text style={styles.saveButtonText}>{isSubmitting ? 'Saving...' : 'Save Changes'}</Text>
+                    </LinearGradient>
+                </TouchableOpacity>
+            </View>
+
+            <ImageCropper
+                visible={cropperVisible}
+                imageUri={tempImage}
+                onClose={() => {
+                    setCropperVisible(false);
+                    setTempImage(null);
+                }}
+                onCrop={(uri) => {
+                    setCropperVisible(false);
+                    setTempImage(null);
+                    setAvatarUri(uri);
+                    setHasNewAvatar(true);
+                }}
+            />
         </SafeAreaView>
     );
 };
@@ -261,7 +296,6 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: 20,
-        paddingBottom: 40,
         paddingTop: 10,
     },
     avatarSection: {
@@ -314,6 +348,7 @@ const styles = StyleSheet.create({
         gap: 16,
     },
     saveButtonContainer: {
+        width: '100%',
         borderRadius: 28,
         elevation: 4,
         shadowColor: "#009688",
@@ -332,6 +367,17 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         letterSpacing: 0.5,
+    },
+    floatingSaveWrap: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        backgroundColor: 'rgba(248, 249, 250, 0.96)',
+        borderTopWidth: 1,
+        borderTopColor: '#E6ECEB',
     },
     bioSection: {
         marginTop: 2,

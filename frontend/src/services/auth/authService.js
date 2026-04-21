@@ -4,7 +4,6 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 import { authApiClient } from './authApiClient';
-import { authProfileService } from './authProfileService';
 import { supabase } from '../supabase/supabaseClient';
 
 const mapSupabaseUser = (user) => {
@@ -191,12 +190,6 @@ export const authService = {
         });
         if (error) throw error;
         cachedUser = mapSupabaseUser(data.user);
-        if (cachedUser?.uid) {
-            await authProfileService.updateProfile(cachedUser.uid, {
-                name: displayName || '',
-                photoURL: photoURL || '',
-            }).catch(() => {});
-        }
         return { success: true };
     },
 

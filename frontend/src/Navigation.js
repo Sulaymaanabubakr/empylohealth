@@ -103,7 +103,6 @@ export default function Navigation() {
     const [floatingBox, setFloatingBox] = useState({ width: 320, height: 68 });
     const [nowMs, setNowMs] = useState(Date.now());
     const floatingRingbackSoundRef = useRef(null);
-    const floatingRingbackReplayIntervalRef = useRef(null);
 
     const appLock = useAppLockController({ user, userData, routeTarget });
     const lockEnabled = appLock.state.lockEnabled;
@@ -148,10 +147,6 @@ export default function Navigation() {
 
     useEffect(() => {
         const stopFloatingRingback = async () => {
-            if (floatingRingbackReplayIntervalRef.current) {
-                clearInterval(floatingRingbackReplayIntervalRef.current);
-                floatingRingbackReplayIntervalRef.current = null;
-            }
             const instance = floatingRingbackSoundRef.current;
             floatingRingbackSoundRef.current = null;
             if (!instance) return;
@@ -200,13 +195,7 @@ export default function Navigation() {
             }
 
             floatingRingbackSoundRef.current = instance;
-            floatingRingbackReplayIntervalRef.current = setInterval(() => {
-                const activeInstance = floatingRingbackSoundRef.current;
-                if (!activeInstance?.handle) return;
-                Promise.resolve(activeInstance.handle.seekTo?.(0))
-                    .then(() => activeInstance.handle.play?.())
-                    .catch(() => {});
-            }, 4200);
+            loopingSound.attachGapLoop(instance, { gapMs: 300 });
         };
 
         startFloatingRingback();

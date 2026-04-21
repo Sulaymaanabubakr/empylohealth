@@ -47,8 +47,54 @@ export const loopingSound = {
     return null;
   },
 
+  attachGapLoop: (instance, { gapMs = 0 } = {}) => {
+    if (!instance?.handle?.addListener) return;
+
+    loopingSound.detachGapLoop(instance);
+
+    let restartTimeout = null;
+    const subscription = instance.handle.addListener?.('playbackStatusUpdate', (status) => {
+      if (!status?.didJustFinish) return;
+      if (restartTimeout) {
+        clearTimeout(restartTimeout);
+      }
+      restartTimeout = setTimeout(() => {
+        restartTimeout = null;
+        loopingSound.restart(instance).catch(() => {});
+      }, gapMs);
+    });
+
+    instance._gapLoop = {
+      subscription,
+      clear: () => {
+        if (restartTimeout) {
+          clearTimeout(restartTimeout);
+          restartTimeout = null;
+        }
+        subscription?.remove?.();
+      },
+    };
+  },
+
+  detachGapLoop: (instance) => {
+    if (!instance?._gapLoop) return;
+    instance._gapLoop.clear?.();
+    instance._gapLoop = null;
+  },
+
+  restart: async (instance) => {
+    if (!instance?.handle) return;
+    const { kind, handle } = instance;
+    if (kind === 'expo-audio') {
+      await handle.pause?.();
+      await handle.seekTo?.(0);
+      handle.play?.();
+    }
+  },
+
   stopAndUnload: async (instance) => {
     if (!instance?.handle) return;
+    loopingSound.detachGapLoop(instance);
     const { kind, handle } = instance;
     if (kind === 'expo-audio') {
       await handle.pause?.();

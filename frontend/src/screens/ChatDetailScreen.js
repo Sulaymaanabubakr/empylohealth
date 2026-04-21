@@ -24,6 +24,7 @@ import { findUnsafeUrlsInMessage, sanitizeChatMessageText } from '../utils/chatM
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
 import { supabase } from '../services/supabase/supabaseClient';
+import { getCircleBillingTier } from '../services/circles/circleLimits';
 
 const ACTIVE_HUDDLE_STATUSES = new Set(['ringing', 'accepted', 'ongoing']);
 
@@ -55,6 +56,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
     const [profileCache, setProfileCache] = useState({});
     const [circleRole, setCircleRole] = useState(null);
     const [activeHuddle, setActiveHuddle] = useState(null);
+    const [circleBillingTier, setCircleBillingTier] = useState('free');
     const [typingUsers, setTypingUsers] = useState({});
     const [chatPresence, setChatPresence] = useState({});
     const [otherPresence, setOtherPresence] = useState({ state: 'offline', lastChanged: null });
@@ -266,6 +268,7 @@ const ChatDetailScreen = ({ navigation, route }) => {
         if (!chat?.isGroup || !chat?.circleId || !user?.uid) {
             setCircleRole(null);
             setActiveHuddle(null);
+            setCircleBillingTier('free');
             return undefined;
         }
         let active = true;
@@ -282,14 +285,20 @@ const ChatDetailScreen = ({ navigation, route }) => {
                 ]);
                 if (!active) return;
                 if (circleData) {
+                    setCircleBillingTier(getCircleBillingTier(circleData));
                     setActiveHuddle(circleData?.activeHuddle || null);
                     setResolvedChatName(circleData?.name || chat?.name || 'Chat');
                     setResolvedChatAvatar(circleData?.image || chat?.avatar || chat?.photoURL || chat?.image || '');
+                } else {
+                    setCircleBillingTier('free');
                 }
                 const member = memberData.data;
                 setCircleRole(member?.status === 'active' ? (member?.role || null) : null);
             } catch {
-                if (active) setCircleRole(null);
+                if (active) {
+                    setCircleRole(null);
+                    setCircleBillingTier('free');
+                }
             }
         };
 
@@ -609,9 +618,10 @@ const ChatDetailScreen = ({ navigation, route }) => {
         ? 'Typing...'
         : (isDirectChat ? (isOtherOnline ? 'Online' : 'Offline') : (chat.members ? `${chat.members} members active` : 'Group'));
 
-    const hasActiveHuddle = isPotentiallyActiveHuddle(activeHuddle);
+    const isProCircle = circleBillingTier === 'pro';
+    const hasActiveHuddle = isProCircle && isPotentiallyActiveHuddle(activeHuddle);
     const canStartHuddleInCircle = ['creator', 'admin', 'moderator'].includes(circleRole);
-    const canShowCallButton = !chat?.isGroup || hasActiveHuddle || canStartHuddleInCircle;
+    const canShowCallButton = !chat?.isGroup || (isProCircle && (hasActiveHuddle || canStartHuddleInCircle));
     const hasNewJoinRequests = pendingRequestsCount > 0 && latestRequestCreatedAt > lastSeenRequestsAt;
     const directOtherId = !chat?.isGroup ? getOtherParticipantId() : null;
     const directOtherProfile = directOtherId ? profileCache[directOtherId] : null;
@@ -624,6 +634,15 @@ const ChatDetailScreen = ({ navigation, route }) => {
 
     const handleCall = async () => {
         if (chat?.isGroup) {
+            if (!isProCircle) {
+                showModal({
+                    type: 'info',
+                    title: 'Huddles unavailable',
+                    message: 'This circle is currently on the Free tier, so huddles are hidden.'
+                });
+                return;
+            }
+
             if (isPotentiallyActiveHuddle(activeHuddle)) {
                 const { data: huddleData } = await supabase
                     .from('huddles')

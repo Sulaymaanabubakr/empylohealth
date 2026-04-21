@@ -4,14 +4,14 @@ import { loopingSound } from '../audio/loopingSound';
 
 const INCOMING_DEDUPE_MS = 15000;
 const HANDLED_TTL_MS = 2 * 60 * 60 * 1000;
-const RING_REPEAT_MS = 4200;
+const RING_REPEAT_MS = 4500;
+const RING_GAP_MS = 300;
 const HANDLED_STORAGE_KEY = 'incoming_huddle_handled_v1';
 const PENDING_JOIN_STORAGE_KEY = 'incoming_huddle_pending_join_v1';
 
 let initialized = false;
 let activeIncomingHuddleId = null;
 let ringtoneInstance = null;
-let ringtoneReplayInterval = null;
 let vibrationInterval = null;
 let ringtoneSession = 0;
 const dedupeMap = new Map();
@@ -63,10 +63,6 @@ const hydrateHandledEntries = async () => {
 };
 
 const clearIntervals = () => {
-  if (ringtoneReplayInterval) {
-    clearInterval(ringtoneReplayInterval);
-    ringtoneReplayInterval = null;
-  }
   if (vibrationInterval) {
     clearInterval(vibrationInterval);
     vibrationInterval = null;
@@ -179,13 +175,7 @@ export const nativeCallService = {
     }
 
     ringtoneInstance = instance;
-    ringtoneReplayInterval = setInterval(() => {
-      if (ringtoneSession !== currentSession || !ringtoneInstance?.handle) return;
-      safeCall(async () => {
-        await ringtoneInstance.handle.seekTo?.(0);
-        ringtoneInstance.handle.play?.();
-      });
-    }, RING_REPEAT_MS);
+    loopingSound.attachGapLoop(instance, { gapMs: RING_GAP_MS });
     return true;
   },
 

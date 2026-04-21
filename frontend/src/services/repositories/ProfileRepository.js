@@ -13,6 +13,7 @@ const mapProfile = (row) => {
         dob: row.dob || '',
         gender: row.gender || '',
         location: row.location || '',
+        bio: row.bio || '',
         onboardingCompleted: Boolean(row.onboarding_completed),
         timezone: row.timezone || 'UTC',
         wellbeingScore: typeof row.wellbeing_score === 'number' ? row.wellbeing_score : null,

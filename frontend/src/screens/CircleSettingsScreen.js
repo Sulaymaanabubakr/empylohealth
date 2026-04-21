@@ -385,7 +385,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
         return () => {
             active = false;
-            channels.forEach((channel) => supabase.removeChannel(channel).catch(() => {}));
+            channels.forEach((channel) => supabase.removeChannel(channel).catch(() => { }));
             unsubEvents();
         };
     }, [circleId]);
@@ -721,6 +721,16 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 try {
                     setActionLoading(true);
                     const result = await circleService.setCircleBillingTier(circleId, nextTier);
+                    const updatedCircle = result?.circle || null;
+                    setCircle((prev) => {
+                        if (updatedCircle) {
+                            return {
+                                ...prev,
+                                ...updatedCircle,
+                            };
+                        }
+                        return prev ? { ...prev, billingTier: nextTier } : prev;
+                    });
                     showModal({
                         type: 'success',
                         title: 'Updated',

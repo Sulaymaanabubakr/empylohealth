@@ -26,6 +26,7 @@ import { subscriptionGuardService } from '../services/subscription/subscriptionG
 import { getChallengeSectionTitle } from '../utils/challengeLabels';
 
 const { width } = Dimensions.get('window');
+const realtimeChannelId = (prefix, value) => `${prefix}:${value}:${Math.random().toString(36).slice(2, 8)}`;
 
 /**
  * Calculates a dynamic "Health Score" for the circle based on members and activity.
@@ -228,7 +229,7 @@ const DashboardScreen = ({ navigation }) => {
 
         load();
         const channel = supabase
-            .channel(`dashboard-notifications:${user.uid}`)
+            .channel(realtimeChannelId('dashboard-notifications', user.uid))
             .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.uid}` }, load)
             .subscribe();
 

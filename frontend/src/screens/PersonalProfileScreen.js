@@ -25,7 +25,7 @@ const PersonalProfileScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     // Modal States
     // Modal States
-    const { user, userData } = useAuth();
+    const { user, userData, applyProfilePatch } = useAuth();
     const { showToast } = useToast();
     const { showModal } = useModal();
     const [activeTab, setActiveTab] = useState('My circles');
@@ -204,7 +204,11 @@ const PersonalProfileScreen = ({ navigation }) => {
         try {
             setUploading(true);
             setIsEditPhotoVisible(false);
-            await userService.updateUserDocument(user.uid, { photoURL: '' });
+            await Promise.all([
+                userService.updateUserDocument(user.uid, { photoURL: '' }),
+                authService.updateAuthProfile(userData?.name || user?.displayName || '', ''),
+                applyProfilePatch({ photoURL: '' }),
+            ]);
             setUploading(false);
             showModal({ type: 'success', title: 'Success', message: 'Profile photo removed.' });
         } catch (error) {
@@ -444,9 +448,13 @@ const PersonalProfileScreen = ({ navigation }) => {
             <ImageCropper
                 visible={cropperVisible}
                 imageUri={tempImage}
-                onClose={() => setCropperVisible(false)}
-                onCrop={async (uri, cropData) => {
+                onClose={() => {
                     setCropperVisible(false);
+                    setTempImage(null);
+                }}
+                onCrop={async (uri) => {
+                    setCropperVisible(false);
+                    setTempImage(null);
                     // Let modal close first so the UI doesn't appear frozen.
                     setTimeout(() => setUploading(true), 0);
                     try {
@@ -456,7 +464,11 @@ const PersonalProfileScreen = ({ navigation }) => {
                         const optimizedUrl = uploadedUrl.replace('/upload/', '/upload/c_thumb,g_face,w_400,h_400,z_0.7/');
 
                         // Update User
-                        await userService.updateUserDocument(user.uid, { photoURL: optimizedUrl });
+                        await Promise.all([
+                            userService.updateUserDocument(user.uid, { photoURL: optimizedUrl }),
+                            authService.updateAuthProfile(userData?.name || user?.displayName || '', optimizedUrl),
+                            applyProfilePatch({ photoURL: optimizedUrl }),
+                        ]);
                         showModal({ type: 'success', title: 'Success', message: 'Profile photo updated!' });
                     } catch (error) {
                         console.error("Upload failed", error);

@@ -27,7 +27,7 @@ const MAX_CALL_DURATION_MS = 3600000; // 1 hour
 const MAX_CALL_DURATION_WARNING_MS = 300000; // final 5 minutes
 const HUDDLE_LIMIT_WARNING_MS = 60000;
 const HUDDLE_GRACE_PERIOD_MS = 45000;
-const RINGBACK_REPEAT_MS = 4200;
+const RINGBACK_GAP_MS = 300;
 const ENABLE_ACCEPTED_ALONE_AUTO_END = true;
 const ENABLE_HOST_ALONE_AUTOMATION = false;
 // Audio playback is handled via loopingSound (expo-audio).
@@ -43,7 +43,6 @@ const HuddleScreen = ({ navigation, route }) => {
     const ringbackSoundRef = useRef(null);
     const ringbackSessionRef = useRef(0);
     const ringbackVibrationIntervalRef = useRef(null);
-    const ringbackReplayIntervalRef = useRef(null);
     const lastAudioRouteApplyAtRef = useRef(0);
     const firstRemoteAudioLoggedRef = useRef(false);
     const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -300,10 +299,6 @@ const HuddleScreen = ({ navigation, route }) => {
             clearInterval(ringbackVibrationIntervalRef.current);
             ringbackVibrationIntervalRef.current = null;
         }
-        if (ringbackReplayIntervalRef.current) {
-            clearInterval(ringbackReplayIntervalRef.current);
-            ringbackReplayIntervalRef.current = null;
-        }
         Vibration.cancel();
         const instance = ringbackSoundRef.current;
         ringbackSoundRef.current = null;
@@ -326,13 +321,7 @@ const HuddleScreen = ({ navigation, route }) => {
                 return;
             }
             ringbackSoundRef.current = instance;
-            ringbackReplayIntervalRef.current = setInterval(() => {
-                if (ringbackSessionRef.current !== sessionId || !ringbackSoundRef.current?.handle) return;
-                safeCall(async () => {
-                    await ringbackSoundRef.current.handle.seekTo?.(0);
-                    ringbackSoundRef.current.handle.play?.();
-                });
-            }, RINGBACK_REPEAT_MS);
+            loopingSound.attachGapLoop(instance, { gapMs: RINGBACK_GAP_MS });
             return;
         }
 
@@ -340,7 +329,7 @@ const HuddleScreen = ({ navigation, route }) => {
         Vibration.vibrate(350);
         ringbackVibrationIntervalRef.current = setInterval(() => {
             Vibration.vibrate(350);
-        }, RINGBACK_REPEAT_MS);
+        }, 4500);
     }, [stopRingbackTone]);
 
     const detachCallHandlers = useCallback(() => {

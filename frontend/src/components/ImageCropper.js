@@ -66,9 +66,7 @@ const ImageCropper = ({ visible, imageUri, onClose, onCrop }) => {
                         <Ionicons name="close" size={28} color="#FFF" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Edit Photo</Text>
-                    <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-                        <Text style={styles.saveText}>Save</Text>
-                    </TouchableOpacity>
+                    <View style={styles.headerSpacer} />
                 </View>
 
                 <View style={styles.cropperContainer}>
@@ -93,6 +91,12 @@ const ImageCropper = ({ visible, imageUri, onClose, onCrop }) => {
                 </View>
 
                 <Text style={styles.instruction}>Drag to position</Text>
+
+                <View style={styles.actions}>
+                    <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
+                        <Text style={styles.saveText}>Save</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
         </Modal>
     );
@@ -121,15 +125,23 @@ const styles = StyleSheet.create({
     closeButton: {
         padding: 8,
     },
+    headerSpacer: {
+        width: 60,
+    },
+    actions: {
+        paddingHorizontal: 20,
+        paddingBottom: 32,
+    },
     saveButton: {
         backgroundColor: COLORS.primary,
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
+        paddingVertical: 14,
+        borderRadius: 24,
+        alignItems: 'center',
     },
     saveText: {
         color: '#FFF',
         fontWeight: '700',
+        fontSize: 16,
     },
     cropperContainer: {
         flex: 1,

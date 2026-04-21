@@ -97,10 +97,11 @@ const SignUpScreen = ({ navigation }) => {
             >
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                     <View style={styles.header}>
+                        <View style={styles.headerShape} />
                         <Image
-                            source={require('../assets/images/header_shape.png')}
-                            style={styles.headerShape}
-                            resizeMode="stretch"
+                            source={require('../assets/images/logo_teal.png')}
+                            style={styles.logo}
+                            resizeMode="contain"
                         />
                     </View>
 
@@ -244,20 +245,22 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
+        overflow: 'hidden',
     },
     headerShape: {
         position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        width: '100%',
-        height: '100%',
+        top: -120,
+        width: width * 1.55,
+        height: 280,
+        backgroundColor: COLORS.primary,
+        borderBottomLeftRadius: width,
+        borderBottomRightRadius: width,
     },
     logo: {
-        width: 60,
-        height: 60,
+        width: 68,
+        height: 68,
+        marginTop: 18,
         tintColor: COLORS.white,
-        marginTop: 30,
     },
     formContainer: {
         flex: 1,

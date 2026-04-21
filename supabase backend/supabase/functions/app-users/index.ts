@@ -19,10 +19,15 @@ const toPublicProfile = (profile: Record<string, unknown> | null | undefined, ui
   name: String(profile?.name || "Member"),
   displayName: String(profile?.name || "Member"),
   photoURL: String(profile?.photo_url || ""),
+  bio: String(profile?.bio || ""),
   wellbeingScore: typeof profile?.wellbeing_score === "number" ? profile.wellbeing_score : null,
   wellbeingLabel: String(profile?.wellbeing_label || ""),
   streak: typeof profile?.streak === "number" ? profile.streak : 0,
   stats: profile?.stats || {},
+  role: String(profile?.role || "personal"),
+  location: String(profile?.location || ""),
+  gender: String(profile?.gender || ""),
+  createdAt: profile?.created_at || null,
 });
 
 Deno.serve(async (req) => {
@@ -44,7 +49,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await supabaseAdmin
         .from("profiles")
-        .select("id, name, photo_url, wellbeing_score, wellbeing_label, streak, stats")
+        .select("id, name, photo_url, bio, wellbeing_score, wellbeing_label, streak, stats, role, location, gender, created_at")
         .eq("id", uid)
         .maybeSingle();
 

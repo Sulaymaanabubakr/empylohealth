@@ -69,10 +69,9 @@ const CircleDetailScreen = ({ navigation, route }) => {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [nowMs, setNowMs] = useState(Date.now());
     const [reminderLoadingId, setReminderLoadingId] = useState(null);
-    const [presenceTick, setPresenceTick] = useState(0);
-
+    const [presenceByUid, setPresenceByUid] = useState({});
+    const [, setPresenceTick] = useState(0);
     const memberCount = getCircleMemberCount(circle);
-    const circleTier = getCircleBillingTier(circle);
     const circleMemberCap = getCircleMemberCap(circle);
     const isFullForNonMembers = !isMember && memberCount >= circleMemberCap;
 
@@ -166,8 +165,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
 
                 const docs = await Promise.all(
                     effectiveMemberIds.map(async (uid) => {
-                        const [presence, memberDoc, profile] = await Promise.all([
-                            presenceRepository.getPresence(uid).catch(() => ({ state: 'offline' })),
+                        const [memberDoc, profile] = await Promise.all([
                             Promise.resolve({ data: { role: roleByUid.get(uid) } }),
                             (async () => {
                                 try {
@@ -193,7 +191,6 @@ const CircleDetailScreen = ({ navigation, route }) => {
                             name: profile.name,
                             image: profile.photoURL,
                             role: memberRole,
-                            status: isPresenceOnline(presence) ? 'online' : 'offline',
                             score: profile.score
                         };
                     })
@@ -255,7 +252,29 @@ const CircleDetailScreen = ({ navigation, route }) => {
             unsubscribe();
             unsubscribeEvents();
         };
-    }, [circleId, circle?.members, circle?.adminId, user?.uid, presenceTick]);
+    }, [circleId, circle?.members, circle?.adminId, user?.uid]);
+
+    useEffect(() => {
+        const memberIds = memberProfiles.map((member) => member?.id).filter(Boolean);
+        if (memberIds.length === 0) {
+            setPresenceByUid({});
+            return undefined;
+        }
+
+        const unsubscribers = memberIds.map((uid) => presenceRepository.subscribeToPresence(uid, (presence) => {
+            setPresenceByUid((prev) => ({ ...prev, [uid]: presence || { state: 'offline', lastChanged: null } }));
+        }));
+
+        return () => {
+            unsubscribers.forEach((unsubscribe) => {
+                try {
+                    unsubscribe?.();
+                } catch {
+                    // ignore
+                }
+            });
+        };
+    }, [memberProfiles]);
 
     useEffect(() => {
         if (!circleId) return undefined;
@@ -534,10 +553,11 @@ const CircleDetailScreen = ({ navigation, route }) => {
         </View>
     );
 
-    const hasActiveHuddle = isPotentiallyActiveHuddle(circle?.activeHuddle);
+    const isProCircle = getCircleBillingTier(circle) === 'pro';
+    const hasActiveHuddle = isProCircle && isPotentiallyActiveHuddle(circle?.activeHuddle);
     const canStartHuddle = ['creator', 'admin', 'moderator'].includes(role);
     const canManageJoinRequests = ['creator', 'admin', 'moderator'].includes(role);
-    const canSeeHuddleAction = hasActiveHuddle || canStartHuddle;
+    const canSeeHuddleAction = isProCircle && (hasActiveHuddle || canStartHuddle);
     const upcomingEvents = events.filter((event) => toMillis(event?.scheduledAt) > nowMs);
 
     return (
@@ -579,18 +599,6 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                 )}
                             </View>
                             <Text style={styles.circleTitle}>{circle.name}</Text>
-                            {circleTier === 'pro' && (
-                                <View style={[styles.tierPill, styles.tierPillPro]}>
-                                    <MaterialCommunityIcons
-                                        name="crown-outline"
-                                        size={14}
-                                        color="#8A5A00"
-                                    />
-                                    <Text style={[styles.tierPillText, styles.tierPillTextPro]}>
-                                        Pro Circle · Pro huddles only
-                                    </Text>
-                                </View>
-                            )}
                             <Text style={styles.circleCategory}>{circle.category || 'General'}</Text>
                         </View>
                     </SafeAreaView>
@@ -599,7 +607,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                 {/* Main Content Card */}
                 <View style={styles.contentCard}>
 
-                    <View style={{ marginTop: -40, marginBottom: 24 }}>
+                    <View style={{ marginTop: -24, marginBottom: 24 }}>
                         <StatsRow />
                     </View>
 
@@ -848,13 +856,15 @@ const CircleDetailScreen = ({ navigation, route }) => {
                             )}
                             {memberProfiles
                                 .slice(0, isMember ? (showAllMembers ? undefined : 5) : 5)
-                                .map((member) => (
-                                <TouchableOpacity
-                                    key={member.id}
-                                    style={styles.memberRow}
-                                    activeOpacity={0.85}
-                                    onPress={() => openMemberModal(member)}
-                                >
+                                .map((member) => {
+                                    const isOnline = isPresenceOnline(presenceByUid[member.id]);
+                                    return (
+                                        <TouchableOpacity
+                                            key={member.id}
+                                            style={styles.memberRow}
+                                            activeOpacity={0.85}
+                                            onPress={() => openMemberModal(member)}
+                                        >
                                     <Avatar
                                         uri={member.image}
                                         name={member.name}
@@ -877,22 +887,23 @@ const CircleDetailScreen = ({ navigation, route }) => {
                                     {isMember && (
                                         <View style={[
                                             styles.statusBadge,
-                                            { backgroundColor: member.status === 'online' ? '#E8F5E9' : '#F5F5F5' }
+                                            { backgroundColor: isOnline ? '#E8F5E9' : '#F5F5F5' }
                                         ]}>
                                             <View style={[
                                                 styles.statusDot,
-                                                { backgroundColor: member.status === 'online' ? '#4CAF50' : '#BDBDBD' }
+                                                { backgroundColor: isOnline ? '#4CAF50' : '#BDBDBD' }
                                             ]} />
                                             <Text style={[
                                                 styles.statusText,
-                                                { color: member.status === 'online' ? '#4CAF50' : '#9E9E9E' }
+                                                { color: isOnline ? '#4CAF50' : '#9E9E9E' }
                                             ]}>
-                                                {member.status === 'online' ? 'Online' : 'Offline'}
+                                                {isOnline ? 'Online' : 'Offline'}
                                             </Text>
                                         </View>
                                     )}
-                                </TouchableOpacity>
-                                ))}
+                                        </TouchableOpacity>
+                                    );
+                                })}
                             {!isMember && memberProfiles.length > 5 && (
                                 <Text style={styles.moreMembersText}>+ {(memberProfiles.length - 5)} more members</Text>
                             )}
@@ -936,7 +947,7 @@ const CircleDetailScreen = ({ navigation, route }) => {
                         )}
                     </TouchableOpacity>
                     <Text style={styles.joinButtonSubtext}>
-                        {isFullForNonMembers ? `This circle is at capacity (${circleMemberCap}).` : (circleTier === 'pro' ? 'This is a Pro Circle. New members must be on Pro, and huddles are limited to Pro members.' : 'Join the conversation and connect with others!')}
+                        {isFullForNonMembers ? `This circle is at capacity (${circleMemberCap}).` : 'Join the conversation and connect with others!'}
                     </Text>
                 </View>
             )}
@@ -1168,30 +1179,6 @@ const styles = StyleSheet.create({
         color: '#FFF',
         marginBottom: 6,
         textAlign: 'center',
-    },
-    tierPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(230,255,244,0.18)',
-        borderWidth: 1,
-        borderColor: 'rgba(230,255,244,0.24)',
-        borderRadius: 999,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        marginBottom: 16,
-    },
-    tierPillPro: {
-        backgroundColor: 'rgba(255,236,192,0.18)',
-        borderColor: 'rgba(255,236,192,0.30)',
-    },
-    tierPillText: {
-        color: '#DDF7EA',
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    tierPillTextPro: {
-        color: '#FFE7AE',
     },
     circleCategory: {
         fontSize: 14,

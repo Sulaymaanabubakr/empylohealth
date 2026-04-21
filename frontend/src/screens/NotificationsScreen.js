@@ -8,6 +8,8 @@ import Avatar from '../components/Avatar';
 import { notificationService } from '../services/api/notificationService';
 import { supabase } from '../services/supabase/supabaseClient';
 
+const realtimeChannelId = (prefix, value) => `${prefix}:${value}:${Math.random().toString(36).slice(2, 8)}`;
+
 const NotificationsScreen = ({ navigation }) => {
   const { user, userData } = useAuth();
   const [notifications, setNotifications] = useState([]);
@@ -48,7 +50,7 @@ const NotificationsScreen = ({ navigation }) => {
     load();
 
     const channel = supabase
-      .channel(`notifications:${user.uid}`)
+      .channel(realtimeChannelId('notifications', user.uid))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.uid}` }, load)
       .subscribe();
 
