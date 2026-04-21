@@ -11,7 +11,7 @@ import { circleService } from '../services/api/circleService';
 import { chatService } from '../services/api/chatService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { presenceRepository } from '../services/repositories/PresenceRepository';
-import { getCircleBillingTier, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
+import { getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
 import { toMillis, formatCountdown, formatEventDateTime } from '../utils/scheduledHuddle';
 import { buildCircleShareText } from '../utils/deepLinks';
 import { isPresenceOnline, presenceFreshnessMs } from '../utils/presence';
@@ -553,11 +553,10 @@ const CircleDetailScreen = ({ navigation, route }) => {
         </View>
     );
 
-    const isProCircle = getCircleBillingTier(circle) === 'pro';
-    const hasActiveHuddle = isProCircle && isPotentiallyActiveHuddle(circle?.activeHuddle);
+    const hasActiveHuddle = isPotentiallyActiveHuddle(circle?.activeHuddle);
     const canStartHuddle = ['creator', 'admin', 'moderator'].includes(role);
     const canManageJoinRequests = ['creator', 'admin', 'moderator'].includes(role);
-    const canSeeHuddleAction = isProCircle && (hasActiveHuddle || canStartHuddle);
+    const canSeeHuddleAction = hasActiveHuddle || canStartHuddle;
     const upcomingEvents = events.filter((event) => toMillis(event?.scheduledAt) > nowMs);
 
     return (

@@ -9,17 +9,17 @@ import VisibleSlider from '../components/VisibleSlider';
 import { assessmentService } from '../services/api/assessmentService';
 
 const AssessmentScreen = ({ navigation }) => {
-    // 0 = Default (Gray), 1 = Nope, 2 = Not sure, 3 = A little bit, 4 = Kind of, 5 = Absolutely
+    // 0 = Default (Gray), 1 = Not at all, 2 = A little bit, 3 = In moments, 4 = Quite a lot, 5 = Very much
     const [sliderValue, setSliderValue] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const labels = {
         0: '',
-        1: 'Nope',
-        2: 'Not sure',
-        3: 'A little bit',
-        4: 'Kind of',
-        5: 'Absolutely'
+        1: 'Not at all',
+        2: 'A little bit',
+        3: 'In moments',
+        4: 'Quite a lot',
+        5: 'Very much'
     };
 
     const handleContinue = async () => {
@@ -42,14 +42,14 @@ const AssessmentScreen = ({ navigation }) => {
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Ionicons name="chevron-back" size={24} color="black" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Assessment</Text>
+                <Text style={styles.headerTitle}>Check In</Text>
                 <View style={styles.badge}>
                     <Text style={styles.badgeText}>1 OF 2</Text>
                 </View>
             </View>
 
             <View style={styles.content}>
-                <Text style={styles.question}>Do you feel loved{"\n"}today?</Text>
+                <Text style={styles.question}>Feeling cared for{"\n"}Today?</Text>
 
                 <View style={styles.assessmentCard}>
                     <Text style={styles.emojiLabel}>{labels[sliderValue]}</Text>

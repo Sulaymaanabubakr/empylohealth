@@ -38,7 +38,6 @@ const FUNCTION_MAP = {
     getDashboardData: { endpoint: 'app-content', auth: true, map: (payload) => ({ action: 'getDashboardData', ...payload }) },
     createCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'createCircle', ...payload }) },
     updateCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'updateCircle', ...payload }) },
-    setCircleBillingTier: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'setCircleBillingTier', ...payload }) },
     joinCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'joinCircle', ...payload }) },
     leaveCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'leaveCircle', ...payload }) },
     deleteCircle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'deleteCircle', ...payload }) },

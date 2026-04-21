@@ -20,11 +20,6 @@ export const circleRepository = {
         return callableClient.invokeWithAuth('updateCircle', { circleId, ...data });
     },
 
-    async setCircleBillingTier(circleId, billingTier) {
-        if (!circleId) throw new Error('Invalid request.');
-        return callableClient.invokeWithAuth('setCircleBillingTier', { circleId, billingTier });
-    },
-
     async joinCircle(circleId) {
         if (!circleId) throw new Error('Invalid request.');
         return callableClient.invokeWithAuth('joinCircle', { circleId });

@@ -6,7 +6,7 @@ import { COLORS, SPACING } from '../theme/theme';
 import Avatar from '../components/Avatar';
 import { circleService } from '../services/api/circleService';
 import { useAuth } from '../context/AuthContext';
-import { getCircleBillingTier, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
+import { getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
 
 const SupportGroupDetailScreen = ({ navigation, route }) => {
     const group = route.params?.group;
@@ -24,7 +24,6 @@ const SupportGroupDetailScreen = ({ navigation, route }) => {
     }, [group.members, joinedOverride, user?.uid]);
     const tags = group?.tags || (group?.category ? [group.category] : []);
     const memberCount = getCircleMemberCount(group);
-    const circleTier = getCircleBillingTier(group);
     const isFull = !isJoined && memberCount >= getCircleMemberCap(group);
 
     if (!group) {

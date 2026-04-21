@@ -99,41 +99,6 @@ const CreateCircleScreen = ({ navigation }) => {
             if (createdCircleId) {
                 const newCircle = createdCircle || await circleService.getCircleById(createdCircleId);
                 if (newCircle) {
-                    const status = await subscriptionGuardService.getEffectiveSubscriptionStatus(true).catch(() => ({ plan: 'free' }));
-                    if (['pro', 'premium', 'enterprise'].includes(String(status?.plan || 'free').toLowerCase())) {
-                        showModal({
-                            type: 'confirmation',
-                            title: 'Make this a Pro Circle?',
-                            message: 'Free Circles support chat for everyone. Pro Circles unlock huddles, allow only Pro users to join going forward, and require Pro admins or moderators to start or schedule huddles.',
-                            confirmText: 'Make it Pro',
-                            cancelText: 'Keep it Free',
-                            onConfirm: async () => {
-                                try {
-                                    setLoading(true);
-                                    const upgradeResult = await circleService.setCircleBillingTier(createdCircleId, 'pro');
-                                    const refreshedCircle = await circleService.getCircleById(createdCircleId).catch(() => newCircle);
-                                    showModal({
-                                        type: 'success',
-                                        title: 'Pro Circle enabled',
-                                        message: Number(upgradeResult?.demotedModeratorCount || 0) > 0
-                                            ? 'This circle is now Pro. Existing free admins or moderators were changed back to members.'
-                                            : 'This circle is now Pro and ready for Pro-only huddles.'
-                                    });
-                                    navigation.replace('CircleDetail', { circle: refreshedCircle || newCircle });
-                                } catch (error) {
-                                    showModal({
-                                        type: 'error',
-                                        title: 'Could not enable Pro Circle',
-                                        message: error?.message || 'The circle was created, but we could not turn on Pro huddles.'
-                                    });
-                                    navigation.replace('CircleDetail', { circle: newCircle });
-                                } finally {
-                                    setLoading(false);
-                                }
-                            }
-                        });
-                        return;
-                    }
                     navigation.replace('CircleDetail', { circle: newCircle });
                     return;
                 }

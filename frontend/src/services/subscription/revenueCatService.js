@@ -20,6 +20,7 @@ export const REVENUECAT_PACKAGE_IDS = {
 };
 
 let configured = false;
+const isAnonymousAppUserId = (value) => String(value || '').startsWith('$RCAnonymousID:');
 
 const getApiKey = () => {
     if (Platform.OS === 'ios') return IOS_API_KEY;
@@ -107,7 +108,10 @@ export const revenueCatService = {
         try {
             return await Purchases.logOut();
         } catch (error) {
-            console.warn('[RevenueCat] logOut failed', error?.message || error);
+            const message = String(error?.message || error || '');
+            if (!message.toLowerCase().includes('current user is anonymous')) {
+                console.warn('[RevenueCat] logOut failed', message);
+            }
             return null;
         }
     },
@@ -122,6 +126,16 @@ export const revenueCatService = {
         const ok = await this.configure();
         if (!ok) return null;
         return Purchases.getCustomerInfo();
+    },
+
+    async logOutIfNeeded() {
+        if (!configured) return null;
+        const customerInfo = await this.getCustomerInfo().catch(() => null);
+        const currentAppUserId = String(customerInfo?.originalAppUserId || '');
+        if (!currentAppUserId || isAnonymousAppUserId(currentAppUserId)) {
+            return null;
+        }
+        return this.logOut();
     },
 
     async syncPurchases() {
@@ -200,4 +214,3 @@ export const revenueCatService = {
         };
     },
 };
-

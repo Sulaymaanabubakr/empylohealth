@@ -40,7 +40,6 @@ const normalizeCircle = (circle: Record<string, unknown> | null | undefined) => 
     location: String(circle.location || ""),
     tags: Array.isArray(circle.tags) ? circle.tags : [],
     status: String(circle.status || "active"),
-    billingTier: String(circle.billing_tier || "free"),
     creatorId: circle.creator_id || null,
     adminId: circle.admin_id || null,
     members: Array.isArray(circle.members) ? circle.members : [],
@@ -143,7 +142,6 @@ Deno.serve(async (req) => {
           creator_id: user.id,
           admin_id: user.id,
           status: "active",
-          billing_tier: "free",
         })
         .select("*")
         .single();
@@ -217,23 +215,6 @@ Deno.serve(async (req) => {
       }
 
       return json(normalizeCircle(data), { headers: corsHeaders });
-    }
-
-    if (action === "setCircleBillingTier") {
-      if (!user) return errorResponse(401, "Authentication required.", undefined, { headers: corsHeaders });
-      const circleId = String(body?.circleId || "");
-      const role = await requireCircleRole(circleId, user.id);
-      if (!canAdmin(role)) return errorResponse(403, "Only admins can change circle tier.", undefined, { headers: corsHeaders });
-
-      const billingTier = String(body?.billingTier || "free").toLowerCase() === "pro" ? "pro" : "free";
-      const { data, error } = await supabaseAdmin
-        .from("circles")
-        .update({ billing_tier: billingTier })
-        .eq("id", circleId)
-        .select("*")
-        .single();
-      if (error) throw error;
-      return json({ success: true, circle: normalizeCircle(data) }, { headers: corsHeaders });
     }
 
     if (action === "joinCircle") {

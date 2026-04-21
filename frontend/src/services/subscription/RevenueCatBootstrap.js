@@ -37,7 +37,7 @@ const RevenueCatBootstrap = () => {
 
             if (!user?.uid) {
                 cleanupListener();
-                await revenueCatService.logOut();
+                await revenueCatService.logOutIfNeeded();
                 return;
             }
 
@@ -92,4 +92,3 @@ const RevenueCatBootstrap = () => {
 };
 
 export default RevenueCatBootstrap;
-

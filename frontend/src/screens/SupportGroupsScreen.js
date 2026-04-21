@@ -8,7 +8,7 @@ import CircleMemberLane from '../components/CircleMemberLane';
 import { circleService } from '../services/api/circleService';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { MAX_CIRCLE_MEMBERS, getCircleBillingTier, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
+import { MAX_CIRCLE_MEMBERS, getCircleMemberCap, getCircleMemberCount } from '../services/circles/circleLimits';
 import { screenCacheService } from '../services/bootstrap/screenCacheService';
 import { useModal } from '../context/ModalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -55,7 +55,6 @@ const SupportGroupsScreen = ({ route }) => {
     const scope = route?.params?.scope || 'public';
     const showJoinedOnly = scope === 'joined';
     const [activeFilter, setActiveFilter] = useState('All');
-    const [tierFilter, setTierFilter] = useState('All circles');
     const [searchQuery, setSearchQuery] = useState('');
     const [groups, setGroups] = useState([]);
     const [memberPreviewMap, setMemberPreviewMap] = useState({});
@@ -65,7 +64,6 @@ const SupportGroupsScreen = ({ route }) => {
     const filterStateStorageKey = `support_groups_filter:${scope}:${user?.uid || 'guest'}`;
     const resetFilters = () => {
         setActiveFilter('All');
-        setTierFilter('All circles');
         setSearchQuery('');
     };
 
@@ -84,9 +82,6 @@ const SupportGroupsScreen = ({ route }) => {
                         }
                         if (parsed?.activeFilter) {
                             setActiveFilter(parsed.activeFilter);
-                        }
-                        if (parsed?.tierFilter) {
-                            setTierFilter(parsed.tierFilter);
                         }
                         if (typeof parsed?.searchQuery === 'string') {
                             setSearchQuery(parsed.searchQuery);
@@ -118,8 +113,8 @@ const SupportGroupsScreen = ({ route }) => {
     );
 
     useEffect(() => {
-        AsyncStorage.setItem(filterStateStorageKey, JSON.stringify({ activeFilter, tierFilter, searchQuery })).catch(() => {});
-    }, [filterStateStorageKey, activeFilter, tierFilter, searchQuery]);
+        AsyncStorage.setItem(filterStateStorageKey, JSON.stringify({ activeFilter, searchQuery })).catch(() => {});
+    }, [filterStateStorageKey, activeFilter, searchQuery]);
 
     useEffect(() => {
         let cancelled = false;
@@ -149,20 +144,15 @@ const SupportGroupsScreen = ({ route }) => {
             const matchesFilter =
                 normalizedFilter === 'all' ||
                 filterTerms.has(normalizedFilter);
-            const circleTier = getCircleBillingTier(group);
-            const matchesTier =
-                tierFilter === 'All circles' ||
-                (tierFilter === 'Free circles' && circleTier === 'free') ||
-                (tierFilter === 'Pro circles' && circleTier === 'pro');
             const isMember = !!user?.uid && Array.isArray(group.members) && group.members.includes(user.uid);
             if (showJoinedOnly) {
-                return matchesSearch && matchesFilter && matchesTier && isMember;
+                return matchesSearch && matchesFilter && isMember;
             }
             const isPublic = (group?.type || 'public') === 'public';
             const isFull = !isMember && getCircleMemberCount(group) >= getCircleMemberCap(group);
-            return matchesSearch && matchesFilter && matchesTier && isPublic && !isFull;
+            return matchesSearch && matchesFilter && isPublic && !isFull;
         });
-    }, [activeFilter, groups, searchQuery, showJoinedOnly, tierFilter, user?.uid]);
+    }, [activeFilter, groups, searchQuery, showJoinedOnly, user?.uid]);
 
     const filterOptions = useMemo(() => {
         const termsByNormalized = new Map();
@@ -224,7 +214,6 @@ const SupportGroupsScreen = ({ route }) => {
     }, [deleteInProgress, deletingCircleId, groups]);
 
     const renderGroupCard = ({ item, insideSwipe = false }) => {
-        const circleTier = getCircleBillingTier(item);
         return (
         <TouchableOpacity
             style={[styles.groupCard, insideSwipe && styles.groupCardNoMargin]}
@@ -373,22 +362,6 @@ const SupportGroupsScreen = ({ route }) => {
                 </View>
             </View>
 
-            {!showJoinedOnly && (
-                <View style={styles.tierFilterRow}>
-                    {['All circles', 'Free circles', 'Pro circles'].map((option) => (
-                        <TouchableOpacity
-                            key={option}
-                            style={[styles.tierFilterChip, tierFilter === option && styles.tierFilterChipActive]}
-                            onPress={() => setTierFilter(option)}
-                        >
-                            <Text style={[styles.tierFilterText, tierFilter === option && styles.tierFilterTextActive]}>
-                                {option}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            )}
-
             {/* Filters */}
             <View style={styles.filterContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent}>
@@ -502,29 +475,6 @@ const styles = StyleSheet.create({
     searchWrapper: {
         paddingHorizontal: 20,
         marginBottom: 16,
-    },
-    tierFilterRow: {
-        flexDirection: 'row',
-        paddingHorizontal: 20,
-        marginBottom: 12,
-        gap: 10,
-    },
-    tierFilterChip: {
-        borderRadius: 999,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        backgroundColor: '#F2F4F7',
-    },
-    tierFilterChipActive: {
-        backgroundColor: '#0D9488',
-    },
-    tierFilterText: {
-        color: '#4B5563',
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    tierFilterTextActive: {
-        color: '#FFFFFF',
     },
     searchContainer: {
         flexDirection: 'row',

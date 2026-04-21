@@ -21,7 +21,6 @@ const normalizeCircle = (row) => {
         location: row.location || '',
         tags: Array.isArray(row.tags) ? row.tags : [],
         status: row.status || 'active',
-        billingTier: row.billing_tier || 'free',
         adminId: row.admin_id || null,
         creatorId: row.creator_id || null,
         members: Array.isArray(row.members) ? row.members : [],
@@ -111,7 +110,6 @@ const subscribeTableReload = (channelName, table, filter, load, onError) => {
 export const circleService = {
     createCircle: async (...args) => circleRepository.createCircle(...args),
     updateCircle: async (circleId, data) => circleRepository.updateCircle(circleId, data),
-    setCircleBillingTier: async (circleId, billingTier) => circleRepository.setCircleBillingTier(circleId, billingTier),
     createCircleInvite: async (circleId, options = {}) => callableClient.invokeWithAuth('createCircleInvite', { circleId, expiresInHours: options?.expiresInHours, maxUses: options?.maxUses }),
     createAppInvite: async (options = {}) => callableClient.invokeWithAuth('createAppInvite', { expiresInHours: options?.expiresInHours, maxUses: options?.maxUses }),
     listUserInvitations: async () => callableClient.invokeWithAuth('listUserInvitations', {}),

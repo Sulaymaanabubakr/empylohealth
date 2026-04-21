@@ -33,7 +33,7 @@ const EmojiFace = ({ type, size = 160 }) => {
                         />
                     </>
                 );
-            case 1: // Nope - Closed eyes, straight line
+            case 1: // Not at all - Closed eyes, straight line
                 return (
                     <>
                         {/* Closed Eyes (Arcs) */}
@@ -60,7 +60,7 @@ const EmojiFace = ({ type, size = 160 }) => {
                         />
                     </>
                 );
-            case 2: // Not sure - Worried/Sad
+            case 2: // A little bit - Worried/Sad
                 return (
                     <>
                         {/* Worried Eyes */}
@@ -79,7 +79,7 @@ const EmojiFace = ({ type, size = 160 }) => {
                         />
                     </>
                 );
-            case 3: // A little bit - Slight smile
+            case 3: // In moments - Slight smile
                 return (
                     <>
                         <Circle cx={size * 0.35} cy={size * 0.45} r={eyeSize} fill="black" />
@@ -93,7 +93,7 @@ const EmojiFace = ({ type, size = 160 }) => {
                         />
                     </>
                 );
-            case 4: // Kind of - Wink
+            case 4: // Quite a lot - Wink
                 return (
                     <>
                         {/* Left Eye Open */}
@@ -116,7 +116,7 @@ const EmojiFace = ({ type, size = 160 }) => {
                         />
                     </>
                 );
-            case 5: // Absolutely - Heart Eyes
+            case 5: // Very much - Heart Eyes
                 return (
                     <>
                         {/* Heart Eyes */}
