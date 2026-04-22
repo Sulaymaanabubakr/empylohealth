@@ -67,6 +67,16 @@ const buildPurchaseRequest = (productId, type = 'in-app') => ({
 
 const getCurrentPlatformKey = () => (Platform.OS === 'ios' ? 'ios' : 'android');
 
+const getStoreProductPriceLabel = (product) => (
+    product?.displayPrice
+    || product?.localizedPrice
+    || product?.priceString
+    || product?.oneTimePurchaseOfferDetails?.formattedPrice
+    || product?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0]?.formattedPrice
+    || product?.formattedPrice
+    || ''
+);
+
 const enrichPlanWithRevenueCat = (plan, packageMap = {}) => {
     const planId = String(plan?.id || '').trim().toLowerCase();
     if (!planId || planId === 'free' || planId === 'enterprise') return plan;
@@ -138,9 +148,24 @@ export const subscriptionService = {
             console.warn('[subscriptionService] Failed to fetch store products:', error?.message || error);
         }
 
+        const storeProductMap = new Map(
+            storeProducts.map((product) => [
+                String(product?.productId || product?.id || product?.sku || '').trim(),
+                product,
+            ])
+        );
+        const enrichedBoosts = boosts.map((boost) => {
+            const productId = String(boost?.productId || boost?.id || '').trim();
+            const storeProduct = storeProductMap.get(productId);
+            return {
+                ...boost,
+                priceLabel: getStoreProductPriceLabel(storeProduct) || boost?.priceLabel || '',
+            };
+        });
+
         return {
             plans,
-            boosts,
+            boosts: enrichedBoosts,
             storeProducts,
             enterprise: catalog?.enterprise || null,
             offering: currentOffering || null,

@@ -53,6 +53,11 @@ const normalizeCatalog = (plans: Record<string, unknown>[], products: Record<str
   return {
     plans: plans.map((plan) => {
       const id = String(plan.id || "");
+      const monthlyPriceGbp = Number(plan.monthly_price_gbp || 0);
+      const annualPriceGbp = Number(plan.annual_price_gbp || 0);
+      const annualSavingsPercent = monthlyPriceGbp > 0 && annualPriceGbp > 0 && (monthlyPriceGbp * 12) > annualPriceGbp
+        ? Math.round((((monthlyPriceGbp * 12) - annualPriceGbp) / (monthlyPriceGbp * 12)) * 100)
+        : null;
       const productRows = byPlan.get(id) || [];
       const productIds = productRows.reduce<Record<string, string[]>>((acc, row) => {
         const platform = String(row.platform || "");
@@ -64,8 +69,9 @@ const normalizeCatalog = (plans: Record<string, unknown>[], products: Record<str
         id,
         name: plan.display_name,
         displayName: plan.display_name,
-        priceLabel: plan.monthly_price_gbp ? `£${Number(plan.monthly_price_gbp).toFixed(2)}/month` : "External pricing",
-        annualPriceLabel: plan.annual_price_gbp ? `£${Number(plan.annual_price_gbp).toFixed(2)}/year` : "",
+        priceLabel: plan.monthly_price_gbp ? `£${monthlyPriceGbp.toFixed(2)}/month` : "External pricing",
+        annualPriceLabel: plan.annual_price_gbp ? `£${annualPriceGbp.toFixed(2)}/year` : "",
+        annualSavingsPercent,
         limits: {
           monthlyAiCredits: plan.monthly_ai_credits,
           monthlyHuddleMinutes: plan.monthly_huddle_minutes,

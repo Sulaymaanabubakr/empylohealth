@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/theme';
 import { circleService } from '../services/api/circleService';
@@ -18,6 +18,7 @@ import { formatDateTimeUK } from '../utils/dateFormat';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { showUpgradePrompt } from '../services/subscription/subscriptionUi';
 import { supabase } from '../services/supabase/supabaseClient';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const CIRCLE_NAME_MAX_LENGTH = 40;
 
@@ -170,7 +171,6 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const initialTab = route?.params?.initialTab;
     const { user } = useAuth();
     const { showModal } = useModal();
-    const insets = useSafeAreaInsets();
 
     const [activeTab, setActiveTab] = useState('General'); // 'General', 'Members', 'Requests', 'Reports', 'Events'
     const [circle, setCircle] = useState(null);
@@ -181,14 +181,13 @@ const CircleSettingsScreen = ({ navigation, route }) => {
     const [events, setEvents] = useState([]);
     const [initialLoading, setInitialLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
+    const [actionLoadingMessage, setActionLoadingMessage] = useState('Please wait while we save your changes.');
 
     const [processingId, setProcessingId] = useState(null);
 
     // Image Cropper State
     const [cropperVisible, setCropperVisible] = useState(false);
     const [tempImage, setTempImage] = useState(null);
-    // Note: uploading state might conflict with actionLoading if not careful, but useful for specific overlay
-    const [uploading, setUploading] = useState(false);
 
     if (!circleId || !user?.uid) {
         return (
@@ -242,6 +241,16 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
     const selectedTime24 = `${String(eventDate.getHours()).padStart(2, '0')}:${String(eventDate.getMinutes()).padStart(2, '0')}`;
 
+    const beginAction = (message) => {
+        setActionLoadingMessage(message || 'Please wait while we save your changes.');
+        setActionLoading(true);
+    };
+
+    const finishAction = () => {
+        setActionLoading(false);
+        setActionLoadingMessage('Please wait while we save your changes.');
+    };
+
     const setDatePart = (formattedDate) => {
         const raw = String(formattedDate || '').trim();
         if (!raw) return;
@@ -281,7 +290,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             showModal({ type: 'error', title: 'Error', message: `Circle name must be ${CIRCLE_NAME_MAX_LENGTH} characters or fewer.` });
             return;
         }
-        setActionLoading(true);
+        beginAction('Updating your circle details.');
         try {
             await circleService.updateCircle(circleId, {
                 name: editName.trim(),
@@ -294,7 +303,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         } catch (error) {
             showModal({ type: 'error', title: 'Error', message: 'Failed to update circle.' });
         } finally {
-            setActionLoading(false);
+            finishAction();
         }
     };
 
@@ -580,7 +589,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             showModal({ type: 'error', title: 'Required', message: 'Please provide a reason.' });
             return;
         }
-        setActionLoading(true);
+        beginAction('Sending your report for review.');
         try {
             await circleService.submitReport(
                 circleId,
@@ -597,12 +606,12 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         } catch (error) {
             showModal({ type: 'error', title: 'Error', message: 'Failed to submit report.' });
         } finally {
-            setActionLoading(false);
+            finishAction();
         }
     };
 
     const performMemberAction = async (member, action) => {
-        setActionLoading(true);
+        beginAction('Updating member permissions.');
         try {
             await circleService.manageMember(circleId, member.uid, action);
             showModal({ type: 'success', title: 'Success', message: 'Member updated.' });
@@ -611,7 +620,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             const backendMessage = error?.message?.replace(/^functions\/[a-z-]+\s*/i, '') || 'Action failed.';
             showModal({ type: 'error', title: 'Error', message: backendMessage });
         } finally {
-            setActionLoading(false);
+            finishAction();
         }
     };
 
@@ -628,10 +637,10 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             return;
         }
         try {
-            setActionLoading(true);
+            beginAction('Scheduling this huddle.');
             const guard = await subscriptionGuardService.canScheduleHuddle({ circleId });
             if (!guard.allowed) {
-                setActionLoading(false);
+                finishAction();
                 showUpgradePrompt({
                     navigation,
                     showModal,
@@ -647,7 +656,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         } catch (error) {
             showModal({ type: 'error', title: 'Error', message: 'Failed to schedule huddle.' });
         } finally {
-            setActionLoading(false);
+            finishAction();
         }
     };
 
@@ -661,14 +670,14 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             cancelText: 'Cancel',
             onConfirm: async () => {
                 try {
-                    setActionLoading(true);
+                    beginAction('Removing this scheduled huddle.');
                     await circleService.deleteScheduledHuddle(circleId, eventId);
                     showModal({ type: 'success', title: 'Deleted', message: 'Event successfully deleted.' });
                 } catch (error) {
                     console.error("Error deleting event:", error);
                     showModal({ type: 'error', title: 'Error', message: 'Failed to delete event.' });
                 } finally {
-                    setActionLoading(false);
+                    finishAction();
                 }
             }
         });
@@ -713,7 +722,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             message: `Are you sure you want to ${actionLabel}?`,
             confirmText: 'Confirm',
             onConfirm: async () => {
-                setActionLoading(true);
+                beginAction('Resolving this report.');
                 try {
                     await circleService.resolveCircleReport(circleId, report.id, action, `Action taken by ${user.uid}`);
                     setTimeout(() => {
@@ -724,7 +733,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         showModal({ type: 'error', title: 'Error', message: 'Failed to resolve report.' });
                     }, 500);
                 } finally {
-                    setActionLoading(false);
+                    finishAction();
                 }
             }
         });
@@ -806,10 +815,6 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         </View>
     );
 
-    if (initialLoading || !circle) {
-        return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
-    }
-
     const renderHeader = () => (
         <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -853,29 +858,44 @@ const CircleSettingsScreen = ({ navigation, route }) => {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                {activeTab === 'General' && (
-                    <GeneralSettings
-                        circle={circle}
-                        onEdit={openEditModal}
-                        canEdit={isAdminOrCreator}
-                        onEditPhoto={handleUpdatePhoto}
-                        busy={actionLoading}
-                    />
-                )}
-                {activeTab === 'Members' && <MembersTab />}
-                {activeTab === 'Requests' && isModOrAbove && <RequestsTab />}
-                {activeTab === 'Reports' && isModOrAbove && <ReportsTab />}
-                {activeTab === 'Events' && <EventsTab />}
-            </ScrollView>
-
-            {actionLoading && (
-                <View style={styles.actionLoadingOverlay}>
-                    <View style={styles.actionLoadingCard}>
-                        <ActivityIndicator size="large" color={COLORS.primary} />
-                        <Text style={styles.actionLoadingText}>Updating...</Text>
+                {initialLoading ? (
+                    <View style={styles.initialStateWrap}>
+                        <View style={styles.initialCard}>
+                            <View style={[styles.loadingBar, styles.loadingBarWide]} />
+                            <View style={[styles.loadingBar, styles.loadingBarShort]} />
+                            <View style={styles.initialHeroPlaceholder} />
+                            <View style={[styles.loadingBar, styles.loadingBarWide]} />
+                            <View style={[styles.loadingBar, styles.loadingBarMedium]} />
+                        </View>
+                        <View style={styles.initialCard}>
+                            <View style={[styles.loadingBar, styles.loadingBarMedium]} />
+                            <View style={styles.initialListItemPlaceholder} />
+                            <View style={styles.initialListItemPlaceholder} />
+                            <View style={styles.initialListItemPlaceholder} />
+                        </View>
                     </View>
-                </View>
-            )}
+                ) : !circle ? (
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyStateText}>Circle settings are unavailable.</Text>
+                    </View>
+                ) : (
+                    <>
+                        {activeTab === 'General' && (
+                            <GeneralSettings
+                                circle={circle}
+                                onEdit={openEditModal}
+                                canEdit={isAdminOrCreator}
+                                onEditPhoto={handleUpdatePhoto}
+                                busy={actionLoading}
+                            />
+                        )}
+                        {activeTab === 'Members' && <MembersTab />}
+                        {activeTab === 'Requests' && isModOrAbove && <RequestsTab />}
+                        {activeTab === 'Reports' && isModOrAbove && <ReportsTab />}
+                        {activeTab === 'Events' && <EventsTab />}
+                    </>
+                )}
+            </ScrollView>
 
             <Modal visible={showScheduleModal} animationType="slide" transparent>
                 <KeyboardAvoidingView
@@ -1070,9 +1090,9 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 visible={cropperVisible}
                 imageUri={tempImage}
                 onClose={() => setCropperVisible(false)}
-                onCrop={async (uri, cropData) => {
+                onCrop={async (uri) => {
                     setCropperVisible(false);
-                    setActionLoading(true); // Block UI
+                    beginAction('Uploading your new circle photo.');
                     try {
                         const uploadedUrl = await mediaService.uploadAsset(uri, 'circles');
                         // Apply standard header transformation
@@ -1089,9 +1109,15 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                         console.error("Upload failed", error);
                         showModal({ type: 'error', title: 'Error', message: 'Failed to upload photo.' });
                     } finally {
-                        setActionLoading(false);
+                        finishAction();
                     }
                 }}
+            />
+
+            <LoadingOverlay
+                visible={actionLoading}
+                title="Updating circle"
+                message={actionLoadingMessage}
             />
         </SafeAreaView >
     );
@@ -1099,31 +1125,6 @@ const CircleSettingsScreen = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F5F7FA' },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    actionLoadingOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(255,255,255,0.7)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 20
-    },
-    actionLoadingCard: {
-        backgroundColor: '#FFF',
-        borderRadius: 14,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        alignItems: 'center',
-        minWidth: 140,
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4
-    },
-    actionLoadingText: {
-        marginTop: 10,
-        color: '#555',
-        fontWeight: '600'
-    },
     disabledButton: {
         opacity: 0.6
     },
@@ -1177,6 +1178,41 @@ const styles = StyleSheet.create({
     },
     badgeText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
     content: { padding: 16 },
+    initialStateWrap: {
+        gap: 14,
+    },
+    initialCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#E6ECEA',
+        padding: 18,
+        gap: 12,
+    },
+    loadingBar: {
+        height: 13,
+        borderRadius: 999,
+        backgroundColor: '#E8EFEC',
+    },
+    loadingBarWide: {
+        width: '76%',
+    },
+    loadingBarMedium: {
+        width: '58%',
+    },
+    loadingBarShort: {
+        width: '36%',
+    },
+    initialHeroPlaceholder: {
+        height: 110,
+        borderRadius: 18,
+        backgroundColor: '#EFF5F2',
+    },
+    initialListItemPlaceholder: {
+        height: 68,
+        borderRadius: 18,
+        backgroundColor: '#EFF5F2',
+    },
     tabContent: {},
     sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16, color: '#333' },
     infoCard: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 16 },

@@ -8,6 +8,7 @@ import { subscriptionService } from '../services/api/subscriptionService';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { getPlanRules, normalizePlanId } from '../services/subscription/subscriptionConfig';
 import { revenueCatService } from '../services/subscription/revenueCatService';
+import LoadingOverlay from '../components/LoadingOverlay';
 import { COLORS, SPACING } from '../theme/theme';
 
 const PLAN_ORDER = ['free', 'pro', 'premium', 'enterprise'];
@@ -24,13 +25,6 @@ const FEATURE_ROWS = [
     { label: 'Monthly huddle minutes', key: 'monthlyHuddleMinutes', type: 'limit' },
     { label: 'Max minutes per huddle', key: 'maxMinutesPerHuddle', type: 'limit' },
 ];
-
-const formatMoney = (value) => `GBP ${Number(value).toFixed(2)}`;
-
-const parsePriceLabel = (label = '') => {
-    const match = String(label || '').match(/(\d+(?:\.\d{1,2})?)/);
-    return match ? Number(match[1]) : null;
-};
 
 const getPlanProductIdForCadence = (plan, cadence = 'monthly') => {
     const platformKey = Platform.OS === 'ios' ? 'ios' : 'android';
@@ -160,23 +154,14 @@ const SubscriptionScreen = ({ navigation, route }) => {
     }, [selectedPlanId]);
 
     const selectedPlanPricing = useMemo(() => {
-        const monthlyPrice = parsePriceLabel(selectedPlan?.priceLabel);
-        const annualPrice = parsePriceLabel(selectedPlan?.annualPriceLabel);
-        const annualSavings = monthlyPrice != null && annualPrice != null ? Number((monthlyPrice * 12 - annualPrice).toFixed(2)) : null;
-        const annualMonthlyEquivalent = annualPrice != null ? Number((annualPrice / 12).toFixed(2)) : null;
-        const activePrice = selectedCadence === 'annual' && annualPrice != null ? annualPrice : monthlyPrice;
-        const activePriceLabel = activePrice != null
-            ? `${formatMoney(activePrice)}${selectedCadence === 'annual' ? '/year' : '/month'}`
-            : (selectedCadence === 'annual' ? selectedPlan?.annualPriceLabel : selectedPlan?.priceLabel) || '';
+        const activePriceLabel = (selectedCadence === 'annual' ? selectedPlan?.annualPriceLabel : selectedPlan?.priceLabel)
+            || '';
         const productId = getPlanProductIdForCadence(selectedPlan, selectedCadence);
+        const annualSavingsPercent = Number(selectedPlan?.annualSavingsPercent || 0);
 
         return {
-            monthlyPrice,
-            annualPrice,
-            annualSavings,
-            annualMonthlyEquivalent,
-            activePrice,
             activePriceLabel,
+            annualSavingsPercent: annualSavingsPercent > 0 ? annualSavingsPercent : null,
             productId,
         };
     }, [selectedCadence, selectedPlan]);
@@ -184,8 +169,10 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const comparisonTitle = selectedPlan?.displayName || selectedPlan?.name || 'Choose your plan';
     const comparisonSubtitle = selectedPlanId === 'enterprise'
         ? 'Coach+ is managed outside the app for organisations and coaching teams.'
-        : selectedCadence === 'annual' && selectedPlanPricing.annualSavings
-            ? `Best value. Save ${formatMoney(selectedPlanPricing.annualSavings)} a year and pay ${formatMoney(selectedPlanPricing.annualMonthlyEquivalent)}/month on average.`
+        : selectedCadence === 'annual' && selectedPlanPricing.annualSavingsPercent
+            ? `Best value. Save ${selectedPlanPricing.annualSavingsPercent}% with yearly billing.`
+            : selectedCadence === 'annual'
+                ? 'Yearly billing keeps everything on one renewal and is usually the best value.'
             : 'Plans refresh on your renewal date. Subscription balances do not roll over.';
 
     const summaryRows = useMemo(() => ([
@@ -322,6 +309,47 @@ const SubscriptionScreen = ({ navigation, route }) => {
         }
         : null;
 
+    const renderLoadingState = () => (
+        <View style={styles.loadingState}>
+            <View style={styles.hero}>
+                <View style={styles.heroIcon}>
+                    <Image source={require('../assets/images/logo_teal.png')} style={styles.heroLogo} resizeMode="contain" />
+                </View>
+                <Text style={styles.heroTitle}>Membership</Text>
+                <Text style={styles.heroSubtitle}>
+                    Loading your current plan, usage, and upgrade options.
+                </Text>
+            </View>
+
+            <View style={styles.loadingCard}>
+                <View style={[styles.loadingLine, styles.loadingLineWide]} />
+                <View style={[styles.loadingLine, styles.loadingLineMedium]} />
+                <View style={[styles.loadingPillRow]}>
+                    <View style={styles.loadingPill} />
+                    <View style={styles.loadingPill} />
+                    <View style={styles.loadingPill} />
+                </View>
+            </View>
+
+            <View style={styles.loadingCard}>
+                <View style={[styles.loadingLine, styles.loadingLineWide]} />
+                <View style={[styles.loadingLine, styles.loadingLineShort]} />
+                <View style={[styles.loadingComparisonRow]}>
+                    <View style={styles.loadingColumn} />
+                    <View style={styles.loadingColumn} />
+                </View>
+                <View style={[styles.loadingComparisonRow]}>
+                    <View style={styles.loadingColumn} />
+                    <View style={styles.loadingColumn} />
+                </View>
+                <View style={[styles.loadingComparisonRow]}>
+                    <View style={styles.loadingColumn} />
+                    <View style={styles.loadingColumn} />
+                </View>
+            </View>
+        </View>
+    );
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="dark-content" />
@@ -334,11 +362,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
             </View>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-                {loading ? (
-                    <View style={styles.loadingWrap}>
-                        <ActivityIndicator color={COLORS.primary} />
-                    </View>
-                ) : (
+                {loading ? renderLoadingState() : (
                     <>
                         <View style={styles.hero}>
                             <View style={styles.heroIcon}>
@@ -389,22 +413,22 @@ const SubscriptionScreen = ({ navigation, route }) => {
                                                 <Text style={[styles.billingLabel, selectedCadence === 'annual' ? styles.billingLabelActive : styles.billingLabelMuted]}>
                                                     Annual
                                                 </Text>
-                                                {!!selectedPlanPricing.annualSavings && (
-                                                    <View style={styles.discountBadge}>
-                                                        <Text style={styles.discountBadgeText}>
-                                                            Save {formatMoney(selectedPlanPricing.annualSavings)}
-                                                        </Text>
-                                                    </View>
-                                                )}
+                                                <View style={styles.discountBadge}>
+                                                    <Text style={styles.discountBadgeText}>
+                                                        {selectedPlanPricing.annualSavingsPercent
+                                                            ? `Save ${selectedPlanPricing.annualSavingsPercent}%`
+                                                            : 'Best value'}
+                                                    </Text>
+                                                </View>
                                             </View>
                                             <Text style={[styles.billingPrice, selectedCadence === 'annual' ? styles.billingPriceActive : styles.billingPriceMuted]}>
                                                 {selectedPlan?.annualPriceLabel || 'Unavailable'}
                                             </Text>
-                                            {!!selectedPlanPricing.annualMonthlyEquivalent && (
-                                                <Text style={styles.billingHint}>
-                                                    {formatMoney(selectedPlanPricing.annualMonthlyEquivalent)}/month when billed yearly
-                                                </Text>
-                                            )}
+                                            <Text style={styles.billingHint}>
+                                                {selectedPlanPricing.annualSavingsPercent
+                                                    ? `Pay yearly and save ${selectedPlanPricing.annualSavingsPercent}%`
+                                                    : 'Pay yearly for the best value'}
+                                            </Text>
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -543,6 +567,12 @@ const SubscriptionScreen = ({ navigation, route }) => {
                     </>
                 )}
             </ScrollView>
+
+            <LoadingOverlay
+                visible={loading}
+                title="Preparing subscription"
+                message="Fetching your plan details and storefront options."
+            />
         </SafeAreaView>
     );
 };
@@ -573,9 +603,52 @@ const styles = StyleSheet.create({
         paddingBottom: 36,
         paddingTop: 8
     },
-    loadingWrap: {
-        paddingTop: 96,
-        alignItems: 'center'
+    loadingState: {
+        paddingTop: 12,
+        gap: 18,
+    },
+    loadingCard: {
+        borderRadius: 24,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E7EEEB',
+        padding: 20,
+        gap: 14,
+    },
+    loadingLine: {
+        height: 14,
+        borderRadius: 999,
+        backgroundColor: '#E6EEEB',
+    },
+    loadingLineWide: {
+        width: '78%',
+    },
+    loadingLineMedium: {
+        width: '56%',
+    },
+    loadingLineShort: {
+        width: '42%',
+    },
+    loadingPillRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginTop: 6,
+    },
+    loadingPill: {
+        flex: 1,
+        height: 44,
+        borderRadius: 16,
+        backgroundColor: '#EEF4F1',
+    },
+    loadingComparisonRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    loadingColumn: {
+        flex: 1,
+        height: 46,
+        borderRadius: 16,
+        backgroundColor: '#EEF4F1',
     },
     hero: {
         alignItems: 'center',
@@ -596,15 +669,15 @@ const styles = StyleSheet.create({
     },
     heroTitle: {
         fontFamily: 'SpaceGrotesk_700Bold',
-        fontSize: 38,
+        fontSize: 28,
         color: COLORS.text,
         textAlign: 'center'
     },
     heroSubtitle: {
         marginTop: 10,
         fontFamily: 'DMSans_500Medium',
-        fontSize: 17,
-        lineHeight: 24,
+        fontSize: 14,
+        lineHeight: 20,
         color: '#6B7280',
         textAlign: 'center',
         paddingHorizontal: 20
@@ -645,7 +718,7 @@ const styles = StyleSheet.create({
     },
     billingLabel: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 16,
+        fontSize: 14,
     },
     billingLabelActive: {
         color: COLORS.primary,
@@ -656,7 +729,7 @@ const styles = StyleSheet.create({
     billingPrice: {
         marginTop: 6,
         fontFamily: 'SpaceGrotesk_700Bold',
-        fontSize: 24,
+        fontSize: 19,
     },
     billingPriceActive: {
         color: COLORS.text,
@@ -667,7 +740,7 @@ const styles = StyleSheet.create({
     billingHint: {
         marginTop: 6,
         fontFamily: 'DMSans_500Medium',
-        fontSize: 13,
+        fontSize: 12,
         color: '#4D7A74',
     },
     discountBadge: {
@@ -703,7 +776,7 @@ const styles = StyleSheet.create({
     },
     toggleLabel: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 15,
+        fontSize: 13,
     },
     toggleLabelMuted: {
         color: '#6E8E89'
@@ -732,7 +805,7 @@ const styles = StyleSheet.create({
     },
     noticeText: {
         fontFamily: 'DMSans_500Medium',
-        fontSize: 13,
+        fontSize: 12,
         color: '#0C7F76'
     },
     compareCard: {
@@ -753,7 +826,7 @@ const styles = StyleSheet.create({
     compareHeaderTitle: {
         flex: 1,
         fontFamily: 'DMSans_700Bold',
-        fontSize: 17,
+        fontSize: 14,
         color: '#8A8F98'
     },
     compareColumnsHeader: {
@@ -765,14 +838,14 @@ const styles = StyleSheet.create({
         width: 48,
         textAlign: 'center',
         fontFamily: 'DMSans_700Bold',
-        fontSize: 16,
+        fontSize: 13,
         color: '#8A8F98'
     },
     compareProHeader: {
         width: 48,
         textAlign: 'center',
         fontFamily: 'DMSans_700Bold',
-        fontSize: 16,
+        fontSize: 13,
         color: COLORS.primary
     },
     compareRow: {
@@ -791,8 +864,8 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingRight: 12,
         fontFamily: 'DMSans_700Bold',
-        fontSize: 18,
-        lineHeight: 24,
+        fontSize: 14,
+        lineHeight: 20,
         color: COLORS.text
     },
     compareColumns: {
@@ -807,7 +880,7 @@ const styles = StyleSheet.create({
     },
     planCellText: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 12,
+        fontSize: 11,
         color: '#8A8F98',
         textAlign: 'center'
     },
@@ -830,25 +903,25 @@ const styles = StyleSheet.create({
     },
     statusTitle: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 15,
+        fontSize: 13,
         color: '#8A8F98'
     },
     statusValue: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 15,
+        fontSize: 13,
         color: COLORS.text
     },
     statusLine: {
         fontFamily: 'DMSans_500Medium',
-        fontSize: 14,
-        lineHeight: 21,
+        fontSize: 13,
+        lineHeight: 19,
         color: '#4B5563',
         marginTop: 4
     },
     statusMeta: {
         marginTop: 12,
         fontFamily: 'DMSans_500Medium',
-        fontSize: 13,
+        fontSize: 12,
         color: '#8A8F98'
     },
     boostRow: {
@@ -866,7 +939,7 @@ const styles = StyleSheet.create({
     },
     boostTitle: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 14,
+        fontSize: 13,
         color: COLORS.text
     },
     boostButton: {
@@ -881,7 +954,7 @@ const styles = StyleSheet.create({
     boostButtonText: {
         color: '#FFFFFF',
         fontFamily: 'DMSans_700Bold',
-        fontSize: 14
+        fontSize: 13
     },
     upgradeButton: {
         marginTop: 28,
@@ -903,7 +976,7 @@ const styles = StyleSheet.create({
     upgradeButtonText: {
         color: COLORS.white,
         fontFamily: 'DMSans_700Bold',
-        fontSize: 20
+        fontSize: 15
     },
     restoreButton: {
         marginTop: 18,
@@ -912,7 +985,7 @@ const styles = StyleSheet.create({
     },
     restoreButtonText: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 18,
+        fontSize: 15,
         color: COLORS.primary,
         textDecorationLine: 'underline'
     },
@@ -923,7 +996,7 @@ const styles = StyleSheet.create({
     },
     manageButtonText: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 16,
+        fontSize: 14,
         color: '#4B5563'
     },
     footerBlock: {
@@ -937,12 +1010,12 @@ const styles = StyleSheet.create({
     },
     footerLink: {
         fontFamily: 'DMSans_700Bold',
-        fontSize: 13,
+        fontSize: 12,
         color: '#4B5563'
     },
     footerMeta: {
         fontFamily: 'DMSans_500Medium',
-        fontSize: 15,
+        fontSize: 13,
         color: COLORS.text,
         textAlign: 'center'
     }

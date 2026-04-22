@@ -13,6 +13,13 @@ const realtimeChannelId = (prefix, value) => `${prefix}:${value}:${Math.random()
 const NotificationsScreen = ({ navigation }) => {
   const { user, userData } = useAuth();
   const [notifications, setNotifications] = useState([]);
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('MainTabs', { screen: 'Dashboard' });
+  };
 
   useEffect(() => {
     if (!user?.uid) return null;
@@ -135,7 +142,7 @@ const NotificationsScreen = ({ navigation }) => {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>

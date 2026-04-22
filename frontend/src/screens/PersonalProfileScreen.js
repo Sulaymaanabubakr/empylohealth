@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator, PanResponder } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -39,6 +39,7 @@ const PersonalProfileScreen = ({ navigation }) => {
     // Cropper State
     const [cropperVisible, setCropperVisible] = useState(false);
     const [tempImage, setTempImage] = useState(null);
+    const tabs = ['My circles', 'Account'];
 
     useEffect(() => {
         if (!user?.uid) return;
@@ -260,7 +261,7 @@ const PersonalProfileScreen = ({ navigation }) => {
 
     const renderTabs = () => (
         <View style={styles.tabsContainer}>
-            {['My circles', 'Account'].map((tab) => (
+            {tabs.map((tab) => (
                 <TouchableOpacity
                     key={tab}
                     style={[styles.tab, activeTab === tab && styles.activeTab]}
@@ -272,8 +273,31 @@ const PersonalProfileScreen = ({ navigation }) => {
         </View>
     );
 
+    const swipeResponder = useMemo(() => PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gestureState) => {
+            const horizontalDistance = Math.abs(gestureState.dx);
+            const verticalDistance = Math.abs(gestureState.dy);
+            return horizontalDistance > 24 && horizontalDistance > verticalDistance * 1.2;
+        },
+        onPanResponderRelease: (_event, gestureState) => {
+            if (gestureState.dx <= -48 && activeTab !== tabs[tabs.length - 1]) {
+                setActiveTab((current) => {
+                    const currentIndex = tabs.indexOf(current);
+                    return tabs[Math.min(currentIndex + 1, tabs.length - 1)];
+                });
+                return;
+            }
+            if (gestureState.dx >= 48 && activeTab !== tabs[0]) {
+                setActiveTab((current) => {
+                    const currentIndex = tabs.indexOf(current);
+                    return tabs[Math.max(currentIndex - 1, 0)];
+                });
+            }
+        },
+    }), [activeTab, tabs]);
+
     const renderMyCircles = () => (
-        <View style={styles.contentSection}>
+        <View style={[styles.contentSection, styles.swipeContentSection]}>
             <TouchableOpacity
                 style={styles.joinButton}
                 onPress={() => navigation.navigate('CreateCircle')}
@@ -357,22 +381,68 @@ const PersonalProfileScreen = ({ navigation }) => {
     );
 
     const renderAccount = () => {
-        const settings = [
-            { icon: 'notifications-outline', label: 'Notifications', type: 'ionic' },
-            { icon: 'person-outline', label: 'Personal Information', type: 'ionic' },
-            { icon: 'lock-closed-outline', label: 'Security', type: 'ionic' },
-            { icon: 'diamond-outline', label: 'Subscription', type: 'ionic' },
-            { icon: 'information-circle-outline', label: 'About Circles Health App', type: 'ionic' },
-            { icon: 'school-outline', label: 'Community Education', type: 'ionic' },
-            { icon: 'shield-checkmark-outline', label: 'Community Guidelines', type: 'ionic' },
-            { icon: 'help-circle-outline', label: 'My Circles FAQ', type: 'ionic' },
-            { icon: 'mail-open-outline', label: 'Invitations', type: 'ionic' },
-            { icon: 'heart-outline', label: 'Tell a friend', type: 'ionic' },
-            { icon: 'trash-outline', label: 'Delete Account', type: 'ionic', destructive: true },
+        const accountSections = [
+            {
+                title: 'Profile',
+                items: [
+                    { icon: 'notifications-outline', label: 'Notifications' },
+                    { icon: 'person-outline', label: 'Personal Information' },
+                    { icon: 'lock-closed-outline', label: 'Security' },
+                    { icon: 'diamond-outline', label: 'Subscription' },
+                ],
+            },
+            {
+                title: 'Social',
+                items: [
+                    { icon: 'mail-open-outline', label: 'Invitations' },
+                    { icon: 'heart-outline', label: 'Tell a friend' },
+                ],
+            },
+            {
+                title: 'Help & Info',
+                items: [
+                    { icon: 'help-circle-outline', label: 'My Circles FAQ' },
+                    { icon: 'school-outline', label: 'Community Education' },
+                    { icon: 'shield-checkmark-outline', label: 'Community Guidelines' },
+                    { icon: 'information-circle-outline', label: 'About Circles Health App' },
+                ],
+            },
+            {
+                title: 'Danger Zone',
+                items: [
+                    { icon: 'trash-outline', label: 'Delete Account', destructive: true },
+                ],
+            },
         ];
 
+        const openAccountDestination = (label) => {
+            if (label === 'Notifications') {
+                navigation.navigate('NotificationsSettings');
+            } else if (label === 'Personal Information') {
+                navigation.navigate('PersonalInformation');
+            } else if (label === 'Security') {
+                navigation.navigate('Security');
+            } else if (label === 'Subscription') {
+                navigation.navigate('Subscription');
+            } else if (label === 'Delete Account') {
+                navigation.navigate('DeleteAccount');
+            } else if (label === 'About Circles Health App') {
+                navigation.navigate('AboutCircles');
+            } else if (label === 'Community Education') {
+                navigation.navigate('CommunityEducation');
+            } else if (label === 'Community Guidelines') {
+                navigation.navigate('CommunityGuidelines');
+            } else if (label === 'Tell a friend') {
+                navigation.navigate('TellAFriend');
+            } else if (label === 'My Circles FAQ') {
+                navigation.navigate('FAQ');
+            } else if (label === 'Invitations') {
+                navigation.navigate('Invitations');
+            }
+        };
+
         return (
-            <View style={styles.contentSection}>
+            <View style={[styles.contentSection, styles.swipeContentSection]}>
                 <TouchableOpacity
                     style={styles.changePhotoButton}
                     onPress={() => setIsEditPhotoVisible(true)}
@@ -381,45 +451,29 @@ const PersonalProfileScreen = ({ navigation }) => {
                     <Text style={styles.changePhotoText}>Change Profile Photo</Text>
                 </TouchableOpacity>
 
-                <View style={styles.settingsContainer}>
-                    {settings.map((item, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={styles.settingItem}
-                            onPress={() => {
-                                if (item.label === 'Notifications') {
-                                    navigation.navigate('NotificationsSettings');
-                                } else if (item.label === 'Personal Information') {
-                                    navigation.navigate('PersonalInformation');
-                                } else if (item.label === 'Security') {
-                                    navigation.navigate('Security');
-                                } else if (item.label === 'Subscription') {
-                                    navigation.navigate('Subscription');
-                                } else if (item.label === 'Delete Account') {
-                                    navigation.navigate('DeleteAccount');
-                                } else if (item.label === 'About Circles Health App') {
-                                    navigation.navigate('AboutCircles');
-                                } else if (item.label === 'Community Education') {
-                                    navigation.navigate('CommunityEducation');
-                                } else if (item.label === 'Community Guidelines') {
-                                    navigation.navigate('CommunityGuidelines');
-                                } else if (item.label === 'Tell a friend') {
-                                    navigation.navigate('TellAFriend');
-                                } else if (item.label === 'My Circles FAQ') {
-                                    navigation.navigate('FAQ');
-                                } else if (item.label === 'Invitations') {
-                                    navigation.navigate('Invitations');
-                                }
-                            }}
-                        >
-                            <View style={styles.settingLeft}>
-                                <Ionicons name={item.icon} size={22} color={item.destructive ? '#D32F2F' : '#FFA000'} />
-                                <Text style={[styles.settingLabel, item.destructive && styles.settingLabelDestructive]}>{item.label}</Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color="#757575" />
-                        </TouchableOpacity>
-                    ))}
-                </View>
+                {accountSections.map((section) => (
+                    <View key={section.title} style={styles.accountSectionBlock}>
+                        <Text style={styles.accountSectionTitle}>{section.title}</Text>
+                        <View style={styles.settingsContainer}>
+                            {section.items.map((item, index) => (
+                                <TouchableOpacity
+                                    key={`${section.title}-${item.label}`}
+                                    style={[
+                                        styles.settingItem,
+                                        index === section.items.length - 1 && styles.settingItemLast
+                                    ]}
+                                    onPress={() => openAccountDestination(item.label)}
+                                >
+                                    <View style={styles.settingLeft}>
+                                        <Ionicons name={item.icon} size={22} color={item.destructive ? '#D32F2F' : '#FFA000'} />
+                                        <Text style={[styles.settingLabel, item.destructive && styles.settingLabelDestructive]}>{item.label}</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={20} color="#757575" />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                ))}
 
                 <TouchableOpacity
                     style={styles.logoutButton}
@@ -435,11 +489,16 @@ const PersonalProfileScreen = ({ navigation }) => {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="dark-content" />
-            <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 84 }]}>
+            <ScrollView
+                {...swipeResponder.panHandlers}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 84 }]}
+            >
                 {renderHeader()}
                 {renderTabs()}
-                {activeTab === 'My circles' && renderMyCircles()}
-                {activeTab === 'Account' && renderAccount()}
+                <View style={styles.swipeViewport}>
+                    {activeTab === 'My circles' && renderMyCircles()}
+                    {activeTab === 'Account' && renderAccount()}
+                </View>
             </ScrollView>
 
 
@@ -596,6 +655,25 @@ const styles = StyleSheet.create({
     },
     contentSection: {
         paddingHorizontal: 20,
+    },
+    swipeViewport: {
+        flex: 1,
+        minHeight: 420,
+    },
+    swipeContentSection: {
+        minHeight: 420,
+    },
+    accountSectionBlock: {
+        marginBottom: 18,
+    },
+    accountSectionTitle: {
+        fontSize: 12,
+        fontWeight: '800',
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
+        color: '#7A7F87',
+        marginBottom: 8,
+        marginLeft: 4,
     },
     joinButton: {
         flexDirection: 'row',
@@ -993,6 +1071,7 @@ const styles = StyleSheet.create({
     settingsContainer: {
         backgroundColor: '#FFF',
         borderRadius: 20,
+        overflow: 'hidden',
         marginBottom: 24,
     },
     settingItem: {
@@ -1003,6 +1082,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         borderBottomWidth: 1,
         borderBottomColor: '#F5F5F5',
+    },
+    settingItemLast: {
+        borderBottomWidth: 0,
     },
     settingLeft: {
         flexDirection: 'row',

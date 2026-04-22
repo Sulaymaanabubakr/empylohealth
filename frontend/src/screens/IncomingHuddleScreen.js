@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +31,13 @@ export default function IncomingHuddleScreen({ navigation, route }) {
   const [missedStatus, setMissedStatus] = useState('pending');
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const closeIncoming = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('MainTabs', { screen: 'ChatList' });
+  }, [navigation]);
 
   useEffect(() => {
     if (!huddleId) return undefined;
@@ -39,18 +46,18 @@ export default function IncomingHuddleScreen({ navigation, route }) {
       if (!data) {
         setStatus('ended');
         nativeCallService.dismissIncomingHuddle(huddleId, 'ended').catch(() => {});
-        navigation.goBack();
+        closeIncoming();
         return;
       }
       const next = data.status || null;
       setStatus(next);
       if (next === 'ended' || data.isActive === false) {
         nativeCallService.dismissIncomingHuddle(huddleId, 'ended').catch(() => {});
-        navigation.goBack();
+        closeIncoming();
       }
     });
     return unsub;
-  }, [huddleId, navigation]);
+  }, [closeIncoming, huddleId, navigation]);
 
   useEffect(() => {
     if (!huddleId || !user?.uid) return undefined;
@@ -63,11 +70,11 @@ export default function IncomingHuddleScreen({ navigation, route }) {
         }
       }
       if (nextStatus === 'missed' || nextStatus === 'declined') {
-        navigation.goBack();
+        closeIncoming();
       }
     });
     return unsub;
-  }, [huddleId, navigation, user?.uid]);
+  }, [closeIncoming, huddleId, navigation, user?.uid]);
 
   useEffect(() => () => {
     nativeCallService.stopIncomingRingtone().catch(() => {});
@@ -116,7 +123,7 @@ export default function IncomingHuddleScreen({ navigation, route }) {
     callDiagnostics.log(huddleId, 'incoming_decline');
     await nativeCallService.dismissIncomingHuddle(huddleId, 'declined').catch(() => {});
     await safeCall(() => huddleService.declineHuddle(huddleId));
-    navigation.goBack();
+    closeIncoming();
   };
 
   return (
