@@ -23,7 +23,7 @@ const { width } = Dimensions.get('window');
 
 const ProfileSetupScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
-    const { user } = useAuth();
+    const { user, applyProfilePatch } = useAuth();
     const { showToast } = useToast();
     const [name, setName] = useState(user?.displayName || '');
     const [gender, setGender] = useState('');
@@ -116,6 +116,7 @@ const ProfileSetupScreen = ({ navigation }) => {
                 authService.updateAuthProfile(name, photoURL)
             ]);
 
+            await applyProfilePatch(updateData);
             showToast('Profile saved successfully!', 'success');
             // Navigation is now controlled by bootstrap route decision in AuthContext.
         } catch (error) {

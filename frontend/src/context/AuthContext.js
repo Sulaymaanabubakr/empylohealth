@@ -27,6 +27,12 @@ const ROUTE_TARGETS = {
 };
 const ACCOUNT_DELETION_FLAG_PREFIX = 'accountDeletionPending:';
 
+const isAccountDeletionPending = async (uid) => {
+    if (!uid) return false;
+    const flag = await AsyncStorage.getItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${uid}`).catch(() => null);
+    return flag === '1';
+};
+
 const decideInitialRoute = (user, profile) => {
     if (!user) return ROUTE_TARGETS.UNAUTH;
     if (!profile?.onboardingCompleted) return ROUTE_TARGETS.PROFILE_SETUP;
@@ -132,7 +138,9 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                 profileUnsubscribeRef.current = null;
             }
             if (presenceCleanupRef.current) {
-                await presenceCleanupRef.current();
+                const previousUid = activeAuthUidRef.current;
+                const skipOfflineWrite = !nextUid || await isAccountDeletionPending(previousUid);
+                await presenceCleanupRef.current({ writeOffline: !skipOfflineWrite });
                 presenceCleanupRef.current = null;
             }
 
@@ -235,18 +243,23 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                         });
                     }
 
+                    const decidedRoute = decideInitialRoute(currentUser, normalizedProfile);
+                    setRouteTarget((previousRoute) => {
+                        if (previousRoute !== decidedRoute) {
+                            console.log('[BOOT] Route decision from network profile:', decidedRoute);
+                        }
+                        return decidedRoute;
+                    });
+                    setBootPhase(BOOT_PHASES.READY);
+
                     if (networkProfileBootstrappedRef.current) {
-                        // After bootstrap is complete, keep profile fresh but avoid re-running boot routing/perf.
+                        // After bootstrap is complete, keep profile and route fresh
+                        // without re-running one-time boot performance reporting.
                         return;
                     }
 
-                    const decidedRoute = decideInitialRoute(currentUser, normalizedProfile);
-                    setRouteTarget(decidedRoute);
-                    setBootPhase(BOOT_PHASES.READY);
                     networkProfileBootstrappedRef.current = true;
-
                     perfLogger.log('time_to_profile_ready', perfLogger.elapsedSince('auth_resolve_start'));
-                    console.log('[BOOT] Route decision from network profile:', decidedRoute);
                 },
                 (error) => {
                     console.error('[BOOT] Profile listener failed:', error);
@@ -273,7 +286,11 @@ export const AuthProvider = ({ children, onAuthReady }) => {
                 profileUnsubscribeRef.current();
             }
             if (presenceCleanupRef.current) {
-                presenceCleanupRef.current().catch(() => {});
+                const previousUid = activeAuthUidRef.current;
+                isAccountDeletionPending(previousUid)
+                    .then((skipOfflineWrite) => presenceCleanupRef.current?.({ writeOffline: !skipOfflineWrite }))
+                    .catch(() => presenceCleanupRef.current?.())
+                    .catch(() => {});
             }
             clearTimeout(safetyTimer);
         };
@@ -309,7 +326,10 @@ export const AuthProvider = ({ children, onAuthReady }) => {
         const uid = user?.uid;
         if (uid) {
             await profileCache.clear(uid);
-            await presenceRepository.markOffline(uid).catch(() => {});
+            const skipOfflineWrite = await isAccountDeletionPending(uid);
+            if (!skipOfflineWrite) {
+                await presenceRepository.markOffline(uid).catch(() => {});
+            }
         }
         return authService.logout();
     };
@@ -343,13 +363,15 @@ export const AuthProvider = ({ children, onAuthReady }) => {
     const applyProfilePatch = async (updates = {}) => {
         if (!updates || typeof updates !== 'object') return;
 
-        setUserData((previous) => {
-            if (!previous) return previous;
-            return {
-                ...previous,
-                ...updates,
-            };
-        });
+        const nextProfile = {
+            ...(userData || {}),
+            ...updates,
+        };
+
+        setUserData((previous) => ({
+            ...(previous || {}),
+            ...updates,
+        }));
 
         setUser((previous) => {
             if (!previous) return previous;
@@ -360,11 +382,12 @@ export const AuthProvider = ({ children, onAuthReady }) => {
             };
         });
 
+        if (user) {
+            setRouteTarget(decideInitialRoute(user, nextProfile));
+            setBootPhase(BOOT_PHASES.READY);
+        }
+
         if (activeAuthUidRef.current) {
-            const nextProfile = {
-                ...(userData || {}),
-                ...updates,
-            };
             await profileCache.save(activeAuthUidRef.current, nextProfile).catch(() => {});
         }
     };
@@ -377,8 +400,12 @@ export const AuthProvider = ({ children, onAuthReady }) => {
 
         await AsyncStorage.setItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${uid}`, '1');
         try {
+            if (presenceCleanupRef.current) {
+                await presenceCleanupRef.current({ writeOffline: false }).catch(() => {});
+                presenceCleanupRef.current = null;
+            }
             await authService.deleteAccount();
-            await logout().catch(() => {});
+            await authService.logout().catch(() => {});
             await profileCache.clear(uid).catch(() => {});
             await AsyncStorage.removeItem(`${ACCOUNT_DELETION_FLAG_PREFIX}${uid}`).catch(() => {});
         } catch (error) {

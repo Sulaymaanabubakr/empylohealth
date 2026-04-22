@@ -110,10 +110,13 @@ export const presenceRepository = {
             pushPresence('offline').catch(() => {});
         });
 
-        return async () => {
+        return async ({ writeOffline = true } = {}) => {
             active = false;
             stopHeartbeat();
             appStateSubscription?.remove?.();
+            if (!writeOffline) {
+                return;
+            }
             if (!resolvedDeviceId) {
                 const deviceIdentity = await getDeviceIdentity().catch(() => null);
                 resolvedDeviceId = deviceIdentity?.deviceId || null;

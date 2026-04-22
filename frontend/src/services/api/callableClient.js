@@ -51,9 +51,30 @@ const FUNCTION_MAP = {
     joinCircleWithInvite: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'joinCircleWithInvite', ...payload }) },
     resolveAppInvite: { endpoint: 'app-circles', auth: false, map: (payload) => ({ action: 'resolveAppInvite', ...payload }) },
     consumeAppInvite: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'consumeAppInvite', ...payload }) },
-    manageMember: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'manageMember', ...payload, actionType: payload?.action }) },
-    handleJoinRequest: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'handleJoinRequest', ...payload, requestAction: payload?.action }) },
-    resolveCircleReport: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'resolveCircleReport', ...payload, resolutionAction: payload?.action }) },
+    manageMember: {
+        endpoint: 'app-circles',
+        auth: true,
+        map: (payload) => {
+            const { action: memberAction, ...rest } = payload || {};
+            return { action: 'manageMember', ...rest, actionType: memberAction };
+        }
+    },
+    handleJoinRequest: {
+        endpoint: 'app-circles',
+        auth: true,
+        map: (payload) => {
+            const { action: requestAction, ...rest } = payload || {};
+            return { action: 'handleJoinRequest', ...rest, requestAction };
+        }
+    },
+    resolveCircleReport: {
+        endpoint: 'app-circles',
+        auth: true,
+        map: (payload) => {
+            const { action: resolutionAction, ...rest } = payload || {};
+            return { action: 'resolveCircleReport', ...rest, resolutionAction };
+        }
+    },
     submitReport: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'submitReport', ...payload }) },
     scheduleHuddle: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'scheduleHuddle', ...payload }) },
     toggleScheduledHuddleReminder: { endpoint: 'app-circles', auth: true, map: (payload) => ({ action: 'toggleScheduledHuddleReminder', ...payload }) },

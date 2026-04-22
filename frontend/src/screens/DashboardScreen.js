@@ -239,6 +239,7 @@ const DashboardScreen = ({ navigation, route }) => {
     const [plannerDraftCircleId, setPlannerDraftCircleId] = useState('');
     const [plannerCircleRoles, setPlannerCircleRoles] = useState({});
     const [plannerSaving, setPlannerSaving] = useState(false);
+    const [plannerInlineFeedback, setPlannerInlineFeedback] = useState(null);
     const primaryCircleStorageKey = user?.uid ? `dashboard_primary_circle:${user.uid}` : '';
     const isFreePlan = subscriptionPlanResolved && subscriptionPlan === 'free';
     const plannerRouteParams = route?.params || {};
@@ -729,11 +730,28 @@ const DashboardScreen = ({ navigation, route }) => {
 
     const taskKindOptions = ['Personal', 'Work', 'Health', 'Errand'];
     const eventKindOptions = ['Meetup', 'Appointment', 'Class', 'Celebration'];
-    const premiumPlannerHuddleEnabled = subscriptionPlan === 'premium';
+    const premiumPlannerHuddleEnabled = subscriptionPlanResolved && subscriptionPlan === 'premium';
     const eligibleHuddleCircles = useMemo(() => allCircles.filter((circle) => {
         const role = plannerCircleRoles[circle?.id];
         return ['creator', 'admin', 'moderator'].includes(String(role || '').toLowerCase());
     }), [allCircles, plannerCircleRoles]);
+
+    useEffect(() => {
+        if (plannerDraftType !== 'huddle') return;
+        if (!premiumPlannerHuddleEnabled) {
+            setPlannerDraftType('task');
+            setPlannerDraftCircleId('');
+            return;
+        }
+        if (!eligibleHuddleCircles.length) {
+            setPlannerDraftCircleId('');
+            return;
+        }
+        const currentStillEligible = eligibleHuddleCircles.some((circle) => circle.id === plannerDraftCircleId);
+        if (!currentStillEligible) {
+            setPlannerDraftCircleId(eligibleHuddleCircles[0].id);
+        }
+    }, [eligibleHuddleCircles, plannerDraftCircleId, plannerDraftType, premiumPlannerHuddleEnabled]);
 
     const plannerMarkedDates = useMemo(() => {
         const marks = {};
@@ -796,6 +814,7 @@ const DashboardScreen = ({ navigation, route }) => {
 
     const openPlanner = (dateKey = toDateKey(new Date())) => {
         setSelectedPlannerDate(dateKey);
+        setPlannerInlineFeedback(null);
         setPlannerModalVisible(true);
     };
 
@@ -826,6 +845,19 @@ const DashboardScreen = ({ navigation, route }) => {
     const removePlannerItemLocally = useCallback((itemId) => {
         if (!itemId) return;
         setPlannerItems((current) => current.filter((item) => item.id !== itemId));
+    }, []);
+
+    const insertPlannerItemLocally = useCallback((nextItem) => {
+        if (!nextItem?.id) return;
+        setPlannerItems((current) => {
+            const exists = current.some((item) => item.id === nextItem.id);
+            if (exists) {
+                return current.map((item) => item.id === nextItem.id ? { ...item, ...nextItem } : item);
+            }
+            const next = [...current, nextItem];
+            next.sort((a, b) => new Date(a.scheduledFor || 0).getTime() - new Date(b.scheduledFor || 0).getTime());
+            return next;
+        });
     }, []);
 
     const handleCreatePlannerItem = async () => {
@@ -883,19 +915,67 @@ const DashboardScreen = ({ navigation, route }) => {
         const notes = plannerDraftType === 'event'
             ? plannerDraftVenue.trim()
             : '';
+        const scheduledFor = buildScheduledPlannerDate().toISOString();
+        const optimisticId = `planner-local-${Date.now()}`;
+        const optimisticItem = {
+            id: optimisticId,
+            userId: user.uid,
+            title,
+            itemType: plannerDraftType,
+            scheduledFor,
+            allDay: false,
+            status: 'pending',
+            notes,
+            metadata,
+            completedAt: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        const draftSnapshot = {
+            title: plannerDraftTitle,
+            type: plannerDraftType,
+            time24: plannerDraftTime24,
+            taskKind: plannerDraftTaskKind,
+            eventKind: plannerDraftEventKind,
+            venue: plannerDraftVenue,
+            circleId: plannerDraftCircleId,
+        };
 
         setPlannerSaving(true);
+        setPlannerInlineFeedback({
+            type: 'saving',
+            message: 'Saving to your planner...'
+        });
+        insertPlannerItemLocally(optimisticItem);
+        resetPlannerComposer();
         try {
-            await plannerService.createItem({
+            const createdItem = await plannerService.createItem({
                 userId: user.uid,
                 title,
-                itemType: plannerDraftType,
-                scheduledFor: buildScheduledPlannerDate().toISOString(),
+                itemType: draftSnapshot.type,
+                scheduledFor,
                 notes,
                 metadata,
             });
-            resetPlannerComposer();
+            removePlannerItemLocally(optimisticId);
+            insertPlannerItemLocally(createdItem);
+            setPlannerInlineFeedback({
+                type: 'success',
+                message: 'Added to your planner.'
+            });
         } catch (error) {
+            removePlannerItemLocally(optimisticId);
+            setPlannerDraftTitle(draftSnapshot.title);
+            setPlannerDraftType(draftSnapshot.type);
+            setPlannerDraftTime24(draftSnapshot.time24);
+            setPlannerDraftTaskKind(draftSnapshot.taskKind);
+            setPlannerDraftEventKind(draftSnapshot.eventKind);
+            setPlannerDraftVenue(draftSnapshot.venue);
+            setPlannerDraftCircleId(draftSnapshot.circleId);
+            setPlannerInlineFeedback({
+                type: 'error',
+                message: error?.message || 'Unable to save. Please try again.'
+            });
             showModal({
                 type: 'error',
                 title: 'Unable to save',
@@ -1479,7 +1559,12 @@ const DashboardScreen = ({ navigation, route }) => {
 
                                 <TextInput
                                     value={plannerDraftTitle}
-                                    onChangeText={setPlannerDraftTitle}
+                                    onChangeText={(value) => {
+                                        setPlannerDraftTitle(value);
+                                        if (plannerInlineFeedback?.type !== 'saving') {
+                                            setPlannerInlineFeedback(null);
+                                        }
+                                    }}
                                     placeholder={
                                         plannerDraftType === 'event'
                                             ? 'What event are you planning?'
@@ -1612,6 +1697,45 @@ const DashboardScreen = ({ navigation, route }) => {
                                         minute: '2-digit',
                                     })}
                                 </Text>
+
+                                {!!plannerInlineFeedback && (
+                                    <View
+                                        style={[
+                                            styles.plannerFeedbackBanner,
+                                            plannerInlineFeedback.type === 'success' && styles.plannerFeedbackBannerSuccess,
+                                            plannerInlineFeedback.type === 'error' && styles.plannerFeedbackBannerError,
+                                            plannerInlineFeedback.type === 'saving' && styles.plannerFeedbackBannerSaving,
+                                        ]}
+                                    >
+                                        <Ionicons
+                                            name={
+                                                plannerInlineFeedback.type === 'success'
+                                                    ? 'checkmark-circle'
+                                                    : plannerInlineFeedback.type === 'error'
+                                                        ? 'alert-circle'
+                                                        : 'time'
+                                            }
+                                            size={16}
+                                            color={
+                                                plannerInlineFeedback.type === 'success'
+                                                    ? '#0F766E'
+                                                    : plannerInlineFeedback.type === 'error'
+                                                        ? '#B42318'
+                                                        : '#1D4ED8'
+                                            }
+                                        />
+                                        <Text
+                                            style={[
+                                                styles.plannerFeedbackText,
+                                                plannerInlineFeedback.type === 'success' && styles.plannerFeedbackTextSuccess,
+                                                plannerInlineFeedback.type === 'error' && styles.plannerFeedbackTextError,
+                                                plannerInlineFeedback.type === 'saving' && styles.plannerFeedbackTextSaving,
+                                            ]}
+                                        >
+                                            {plannerInlineFeedback.message}
+                                        </Text>
+                                    </View>
+                                )}
 
                                 <TouchableOpacity
                                     style={[styles.plannerSaveButton, plannerSaving && styles.plannerSaveButtonDisabled]}
@@ -1991,6 +2115,43 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#6F858C',
         lineHeight: 18,
+    },
+    plannerFeedbackBanner: {
+        marginTop: -2,
+        marginBottom: 14,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 14,
+        borderWidth: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    plannerFeedbackBannerSuccess: {
+        backgroundColor: '#ECFDF3',
+        borderColor: '#ABEFC6',
+    },
+    plannerFeedbackBannerError: {
+        backgroundColor: '#FEF3F2',
+        borderColor: '#FECDCA',
+    },
+    plannerFeedbackBannerSaving: {
+        backgroundColor: '#EFF6FF',
+        borderColor: '#BFDBFE',
+    },
+    plannerFeedbackText: {
+        flex: 1,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    plannerFeedbackTextSuccess: {
+        color: '#0F766E',
+    },
+    plannerFeedbackTextError: {
+        color: '#B42318',
+    },
+    plannerFeedbackTextSaving: {
+        color: '#1D4ED8',
     },
     plannerSaveButton: {
         backgroundColor: '#0F766E',

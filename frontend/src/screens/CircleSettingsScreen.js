@@ -507,6 +507,17 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         setProcessingId(req.uid);
         try {
             await circleService.handleJoinRequest(circleId, req.uid, 'approve');
+            setRequests((current) => current.filter((item) => item.uid !== req.uid));
+            setMembers((current) => {
+                const exists = current.some((item) => item.uid === req.uid);
+                if (exists) return current;
+                return [{
+                    uid: req.uid,
+                    role: 'member',
+                    status: 'active',
+                    joinedAt: new Date().toISOString(),
+                }, ...current];
+            });
             showModal({ type: 'success', title: 'Approved', message: `${req.displayName} has gathered to the circle.` });
         } catch (error) {
             if (__DEV__) {
@@ -527,6 +538,8 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         setProcessingId(req.uid);
         try {
             await circleService.handleJoinRequest(circleId, req.uid, 'reject');
+            setRequests((current) => current.filter((item) => item.uid !== req.uid));
+            showModal({ type: 'success', title: 'Rejected', message: 'Request rejected.' });
         } catch (error) {
             if (__DEV__) {
                 console.error('[CircleSettings] reject join request failed', {
@@ -614,8 +627,27 @@ const CircleSettingsScreen = ({ navigation, route }) => {
         beginAction('Updating member permissions.');
         try {
             await circleService.manageMember(circleId, member.uid, action);
+            setMembers((current) => {
+                if (action === 'remove' || action === 'kick' || action === 'ban') {
+                    return current.filter((item) => item.uid !== member.uid);
+                }
+
+                return current.map((item) => {
+                    if (item.uid !== member.uid) return item;
+
+                    if (action === 'promote_moderator' || action === 'promote_mod') {
+                        return { ...item, role: 'moderator' };
+                    }
+                    if (action === 'promote_admin') {
+                        return { ...item, role: 'admin' };
+                    }
+                    if (action === 'demote_member' || action === 'demote') {
+                        return { ...item, role: 'member' };
+                    }
+                    return item;
+                });
+            });
             showModal({ type: 'success', title: 'Success', message: 'Member updated.' });
-            // List updates automatically via onSnapshot
         } catch (error) {
             const backendMessage = error?.message?.replace(/^functions\/[a-z-]+\s*/i, '') || 'Action failed.';
             showModal({ type: 'error', title: 'Error', message: backendMessage });
@@ -649,9 +681,27 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 });
                 return;
             }
-            await circleService.scheduleHuddle(circleId, eventTitle, eventDate);
+            const createdEvent = await circleService.scheduleHuddle(circleId, eventTitle, eventDate);
+            setEvents((current) => {
+                const next = [{
+                    id: createdEvent.id,
+                    circleId: createdEvent.circle_id || circleId,
+                    chatId: createdEvent.chat_id || null,
+                    title: createdEvent.title || eventTitle.trim(),
+                    scheduledAt: createdEvent.scheduled_at || eventDate.toISOString(),
+                    reminderEnabled: createdEvent.reminder_enabled !== false,
+                    metadata: createdEvent.metadata || {},
+                    createdBy: createdEvent.created_by || user.uid,
+                    createdAt: createdEvent.created_at || new Date().toISOString(),
+                    updatedAt: createdEvent.updated_at || new Date().toISOString(),
+                    status: 'scheduled',
+                }, ...current];
+                next.sort((a, b) => new Date(a.scheduledAt || 0).getTime() - new Date(b.scheduledAt || 0).getTime());
+                return next;
+            });
             setShowScheduleModal(false);
             setEventTitle('');
+            setEventDate(getInitialScheduleDate());
             showModal({ type: 'success', title: 'Success', message: 'Huddle scheduled.' });
         } catch (error) {
             showModal({ type: 'error', title: 'Error', message: 'Failed to schedule huddle.' });
@@ -672,6 +722,7 @@ const CircleSettingsScreen = ({ navigation, route }) => {
                 try {
                     beginAction('Removing this scheduled huddle.');
                     await circleService.deleteScheduledHuddle(circleId, eventId);
+                    setEvents((current) => current.filter((item) => item.id !== eventId));
                     showModal({ type: 'success', title: 'Deleted', message: 'Event successfully deleted.' });
                 } catch (error) {
                     console.error("Error deleting event:", error);
