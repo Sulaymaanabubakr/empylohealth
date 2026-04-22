@@ -6,6 +6,7 @@ import { useModal } from '../context/ModalContext';
 import { authService } from '../services/auth/authService';
 import { getDeviceIdentity } from '../services/auth/deviceIdentity';
 import { COLORS, SPACING, TYPOGRAPHY } from '../theme/theme';
+import { FONT_FAMILIES } from '../theme/fonts';
 
 const OTP_DIGITS = 6;
 const OTP_EXPIRY_MINUTES = 10;
@@ -314,7 +315,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFE0B5',
   },
   emailPillText: {
-    fontFamily: 'DMSans_500Medium',
+    fontFamily: FONT_FAMILIES.bodyMedium,
     fontSize: 13,
     color: '#8A5A18',
   },
@@ -331,7 +332,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardLabel: {
-    fontFamily: 'DMSans_700Bold',
+    fontFamily: FONT_FAMILIES.bodyBold,
     fontSize: 15,
     color: '#334155',
     marginBottom: 14,
@@ -347,11 +348,11 @@ const styles = StyleSheet.create({
     letterSpacing: 8,
     textAlign: 'center',
     color: '#0F172A',
-    fontFamily: 'SpaceGrotesk_700Bold'
+    fontFamily: FONT_FAMILIES.displayBold
   },
   helperText: {
     marginTop: 12,
-    fontFamily: 'DMSans_400Regular',
+    fontFamily: FONT_FAMILIES.bodyRegular,
     fontSize: 13,
     lineHeight: 19,
     color: '#7A8898',
@@ -372,7 +373,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontFamily: 'DMSans_700Bold'
+    fontFamily: FONT_FAMILIES.bodyBold
   },
   secondaryButton: {
     marginTop: 14,
@@ -387,7 +388,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: COLORS.primary,
     fontSize: 15,
-    fontFamily: 'DMSans_700Bold'
+    fontFamily: FONT_FAMILIES.bodyBold
   },
   buttonDisabled: {
     opacity: 0.6
@@ -395,7 +396,7 @@ const styles = StyleSheet.create({
   footerHint: {
     marginTop: SPACING.lg,
     textAlign: 'center',
-    fontFamily: 'DMSans_400Regular',
+    fontFamily: FONT_FAMILIES.bodyRegular,
     fontSize: 13,
     lineHeight: 19,
     color: '#7A8898',

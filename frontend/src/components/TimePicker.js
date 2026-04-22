@@ -205,34 +205,34 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)'
     },
     modalContent: {
-        width: '90%',
+        width: '84%',
         backgroundColor: COLORS.white,
         borderRadius: RADIUS.lg,
-        padding: SPACING.lg,
-        maxHeight: '80%',
+        padding: SPACING.md,
+        maxHeight: '68%',
         zIndex: 1
     },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
-    modalTitle: { fontSize: 18, fontWeight: '600', color: COLORS.text },
-    pickerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.md, gap: 8 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
+    modalTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text },
+    pickerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.sm, gap: 6 },
     iosPickerWrap: {
-        marginBottom: SPACING.md,
+        marginBottom: SPACING.sm,
         alignItems: 'center'
     },
     inlinePickerColumn: { flex: 1 },
-    inlinePickerLabel: { fontSize: 12, color: '#7A8699', fontWeight: '600', marginBottom: 6, textAlign: 'center' },
-    inlinePickerList: { maxHeight: 170, backgroundColor: COLORS.lightGray, borderRadius: RADIUS.md, padding: 4 },
-    periodList: { backgroundColor: COLORS.lightGray, borderRadius: RADIUS.md, padding: 4 },
-    previewText: { textAlign: 'center', fontSize: 24, fontWeight: '700', color: COLORS.primary, marginBottom: SPACING.lg },
+    inlinePickerLabel: { fontSize: 11, color: '#7A8699', fontWeight: '600', marginBottom: 4, textAlign: 'center' },
+    inlinePickerList: { maxHeight: 132, backgroundColor: COLORS.lightGray, borderRadius: RADIUS.md, padding: 3 },
+    periodList: { backgroundColor: COLORS.lightGray, borderRadius: RADIUS.md, padding: 3 },
+    previewText: { textAlign: 'center', fontSize: 19, fontWeight: '700', color: COLORS.primary, marginBottom: SPACING.md },
     actions: { flexDirection: 'row' },
-    actionBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, paddingVertical: SPACING.md },
+    actionBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, paddingVertical: 12 },
     cancelBtn: { backgroundColor: COLORS.lightGray, marginRight: 8 },
     confirmBtn: { backgroundColor: COLORS.primary, marginLeft: 8 },
     cancelText: { color: COLORS.text, fontWeight: '600' },
     confirmText: { color: '#FFF', fontWeight: '700' },
-    pickerItem: { paddingVertical: SPACING.md, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.xs },
+    pickerItem: { paddingVertical: 10, paddingHorizontal: 8, borderRadius: RADIUS.md, marginBottom: 4 },
     pickerItemSelected: { backgroundColor: `${COLORS.primary}20` },
-    pickerItemText: { fontSize: 16, color: COLORS.text, textAlign: 'center' },
+    pickerItemText: { fontSize: 14, color: COLORS.text, textAlign: 'center' },
     pickerItemTextSelected: { color: COLORS.primary, fontWeight: '600' }
 });
 

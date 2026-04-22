@@ -2,6 +2,7 @@
 import { liveStateRepository } from '../repositories/LiveStateRepository';
 import { authApiClient } from '../auth/authApiClient';
 import { supabase } from '../supabase/supabaseClient';
+import { subscriptionGuardService } from '../subscription/subscriptionGuardService';
 
 const mapHuddle = (row) => {
     if (!row) return null;
@@ -199,6 +200,7 @@ export const huddleService = {
     endHuddle: async (huddleId) => {
         try {
             const result = await authApiClient.invokeWithAuth('end-huddle', { huddleId });
+            subscriptionGuardService.invalidateCache();
             await liveStateRepository.upsertHuddleLiveState(huddleId, {
                 state: 'ended'
             }).catch(() => {});
@@ -212,6 +214,7 @@ export const huddleService = {
     endHuddleWithReason: async (huddleId, reason) => {
         try {
             const result = await authApiClient.invokeWithAuth('end-huddle', { huddleId, reason });
+            subscriptionGuardService.invalidateCache();
             await liveStateRepository.upsertHuddleLiveState(huddleId, { state: 'ended' }).catch(() => {});
             return result;
         } catch (error) {
@@ -223,6 +226,9 @@ export const huddleService = {
     updateHuddleConnection: async (huddleId, action) => {
         try {
             const result = await authApiClient.invokeWithAuth('update-huddle-connection', { huddleId, action });
+            if (action === 'daily_joined' || action === 'daily_left') {
+                subscriptionGuardService.invalidateCache();
+            }
             return result || { success: true };
         } catch (error) {
             console.error("Error updating huddle connection:", error);

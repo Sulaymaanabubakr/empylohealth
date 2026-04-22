@@ -2,6 +2,7 @@ import React from 'react';
 import { Dimensions, Linking, StyleSheet, useWindowDimensions, View } from 'react-native';
 import RenderHTML, { HTMLContentModel, HTMLElementModel, defaultSystemFonts } from 'react-native-render-html';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { FONT_FAMILIES } from '../theme/fonts';
 
 const videoModel = HTMLElementModel.fromCustomModel({
     tagName: 'video',
@@ -20,16 +21,15 @@ const customHTMLElementModels = {
 
 const systemFonts = [
     ...defaultSystemFonts,
-    'DMSans_400Regular',
-    'DMSans_500Medium',
-    'DMSans_700Bold',
-    'SpaceGrotesk_400Regular',
-    'SpaceGrotesk_600SemiBold',
-    'SpaceGrotesk_700Bold',
+    FONT_FAMILIES.bodyRegular,
+    FONT_FAMILIES.bodyMedium,
+    FONT_FAMILIES.bodyBold,
+    FONT_FAMILIES.displaySemiBold,
+    FONT_FAMILIES.displayBold,
     'System',
     'serif',
     'monospace'
-];
+].filter(Boolean);
 
 const extractVideoSource = (tnode) => {
     if (tnode?.attributes?.src) return tnode.attributes.src;
@@ -63,7 +63,7 @@ const renderers = {
 const tagsStyles = {
     body: {
         color: '#424242',
-        fontFamily: 'DMSans_400Regular',
+        fontFamily: FONT_FAMILIES.bodyRegular,
         fontSize: 16,
         lineHeight: 28
     },
@@ -72,7 +72,7 @@ const tagsStyles = {
         marginBottom: 18
     },
     h1: {
-        fontFamily: 'SpaceGrotesk_700Bold',
+        fontFamily: FONT_FAMILIES.displayBold,
         fontSize: 32,
         lineHeight: 38,
         color: '#102027',
@@ -80,7 +80,7 @@ const tagsStyles = {
         marginBottom: 16
     },
     h2: {
-        fontFamily: 'SpaceGrotesk_700Bold',
+        fontFamily: FONT_FAMILIES.displayBold,
         fontSize: 26,
         lineHeight: 32,
         color: '#102027',
@@ -88,7 +88,7 @@ const tagsStyles = {
         marginBottom: 14
     },
     h3: {
-        fontFamily: 'SpaceGrotesk_600SemiBold',
+        fontFamily: FONT_FAMILIES.displaySemiBold,
         fontSize: 22,
         lineHeight: 28,
         color: '#102027',

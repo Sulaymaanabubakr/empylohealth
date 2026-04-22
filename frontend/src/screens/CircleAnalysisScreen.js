@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, StatusBar, Dimensions, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, StatusBar, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING } from '../theme/theme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import Avatar from '../components/Avatar';
 import { supabase } from '../services/supabase/supabaseClient';
 import { circleService } from '../services/api/circleService';
 import { userService } from '../services/api/userService';
+import { FONT_FAMILIES } from '../theme/fonts';
 
 const { width } = Dimensions.get('window');
 
@@ -407,10 +408,9 @@ const styles = StyleSheet.create({
     headerTitle: {
         flex: 1,
         fontSize: 18,
-        fontWeight: '800',
         color: '#1A1A1A',
         textAlign: 'center',
-        fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     content: {
         padding: 20,
@@ -434,15 +434,15 @@ const styles = StyleSheet.create({
     },
     healthTitle: {
         fontSize: 22,
-        fontWeight: '900',
         color: '#1A1A1A',
         marginBottom: 4,
         letterSpacing: -0.5,
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     healthSubtitle: {
         fontSize: 14,
         color: '#718096',
-        fontWeight: '600',
+        fontFamily: FONT_FAMILIES.bodyMedium,
     },
     ratingBadge: {
         flexDirection: 'row',
@@ -454,8 +454,8 @@ const styles = StyleSheet.create({
     },
     ratingText: {
         fontSize: 18,
-        fontWeight: '800',
         color: '#2E7D32',
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     separator: {
         height: 1,
@@ -473,16 +473,16 @@ const styles = StyleSheet.create({
     },
     statValue: {
         fontSize: 18,
-        fontWeight: '800',
         color: '#1A1A1A',
         marginBottom: 4,
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     statLabel: {
         fontSize: 11,
         color: '#A0AEC0',
         textTransform: 'uppercase',
-        fontWeight: '800',
         letterSpacing: 1,
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     statVerticalLine: {
         width: 1,
@@ -501,9 +501,9 @@ const styles = StyleSheet.create({
     },
     sectionLabel: {
         fontSize: 12,
-        fontWeight: '800',
         color: '#A0AEC0',
         letterSpacing: 1.5,
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     chartContainer: {
         backgroundColor: '#FFFFFF',
@@ -543,8 +543,8 @@ const styles = StyleSheet.create({
     },
     rankNumber: {
         fontSize: 12,
-        fontWeight: '900',
         marginTop: 2,
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     rankUser: {
         flex: 1,
@@ -557,14 +557,14 @@ const styles = StyleSheet.create({
     },
     rankName: {
         fontSize: 16,
-        fontWeight: '700',
         color: '#1A1A1A',
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     rankLevel: {
         fontSize: 12,
         color: COLORS.primary,
-        fontWeight: '700',
         marginTop: 2,
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     topBadge: {
         paddingVertical: 6,
@@ -573,18 +573,18 @@ const styles = StyleSheet.create({
     },
     topBadgeText: {
         fontSize: 10,
-        fontWeight: '800',
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     loadingText: {
         marginTop: 10,
         color: '#A0AEC0',
-        fontWeight: '600',
+        fontFamily: FONT_FAMILIES.bodyMedium,
     },
     emptyText: {
         padding: 30,
         textAlign: 'center',
         color: '#718096',
-        fontWeight: '500',
+        fontFamily: FONT_FAMILIES.bodyMedium,
     }
 });
 

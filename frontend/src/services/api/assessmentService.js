@@ -17,6 +17,7 @@ export const assessmentService = {
                 assessmentId: result?.assessmentId || '',
                 idempotencyKey: `assessment:${result?.assessmentId || 'latest'}`
             });
+            subscriptionGuardService.invalidateCache();
         } catch (error) {
             console.warn('generateKeyChallengesForLatestAssessment failed:', error?.message || error);
         }
@@ -88,6 +89,7 @@ export const assessmentService = {
             await callableClient.invokeWithAuth('generateKeyChallengesForLatestAssessment', {
                 idempotencyKey: 'assessment:latest'
             });
+            subscriptionGuardService.invalidateCache();
 
             const retryResponse = await callableClient.invokeWithAuth('getKeyChallenges', {});
             const retryItems = Array.isArray(retryResponse)

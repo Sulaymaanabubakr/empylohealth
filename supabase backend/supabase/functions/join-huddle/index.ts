@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
       huddle_id: huddleId,
       user_id: user.id,
       role: user.id === String(huddle.started_by || "") ? "host" : "member",
-      joined_at: new Date().toISOString(),
+      joined_at: null,
       left_at: null,
       declined_at: null,
       updated_at: new Date().toISOString(),

@@ -92,6 +92,7 @@ const NotificationsScreen = ({ navigation }) => {
     if (type === 'HUDDLE_STARTED' || type === 'SCHEDULED_HUDDLE_REMINDER') return 'call-outline';
     if (type === 'MISSED_HUDDLE') return 'call-outline';
     if (type === 'DAILY_AFFIRMATION') return 'sparkles-outline';
+    if (type === 'PLANNER_ITEM_REMINDER') return 'calendar-outline';
     if (type === 'ROLE_UPDATED') return 'shield-checkmark-outline';
     if (type === 'MODERATION_WARNING') return 'alert-circle-outline';
     return 'notifications-outline';

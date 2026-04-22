@@ -292,6 +292,20 @@ Deno.serve(async (req) => {
         purchaseEventId: purchaseEvent.id,
         metadata: { platform: String(verified.platform || platform), startsAt: verified.startsAt || null },
       });
+      if (grant?.success !== true) {
+        const response = {
+          success: false,
+          grant,
+          purchaseEventId: purchaseEvent.id,
+          message: "Boosts require an active paid subscription.",
+        };
+        await failIdempotency({
+          scope: "boost_purchase",
+          key: idempotencyKey,
+          response,
+        });
+        return errorResponse(409, "Boosts require an active paid subscription.", undefined, { headers: corsHeaders });
+      }
       const status = await resolveSubscriptionStatus(user.id);
       const response = { success: true, grant, status, purchaseEventId: purchaseEvent.id };
       await writeAnalyticsEvent({

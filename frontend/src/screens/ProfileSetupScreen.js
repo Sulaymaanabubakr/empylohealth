@@ -17,6 +17,7 @@ import { userService } from '../services/api/userService';
 import { authService } from '../services/auth/authService';
 import { mediaService } from '../services/api/mediaService';
 import { COUNTRY_OPTIONS } from '../constants/countries';
+import { FONT_FAMILIES } from '../theme/fonts';
 
 const { width } = Dimensions.get('window');
 
@@ -278,7 +279,7 @@ const styles = StyleSheet.create({
     headerTitle: {
         flex: 1,
         fontSize: 16,
-        fontFamily: 'SpaceGrotesk_700Bold',
+        fontFamily: FONT_FAMILIES.displayBold,
         color: '#1A1A1A',
         textAlign: 'center',
         letterSpacing: 0.5,
@@ -296,7 +297,7 @@ const styles = StyleSheet.create({
     introTitle: {
         fontSize: 28,
         color: '#1A1A1A',
-        fontFamily: 'SpaceGrotesk_700Bold',
+        fontFamily: FONT_FAMILIES.displayBold,
         textAlign: 'center',
         marginBottom: 10,
     },
@@ -351,7 +352,7 @@ const styles = StyleSheet.create({
         marginTop: 14,
         fontSize: 14,
         color: COLORS.primary,
-        fontFamily: 'DMSans_500Medium',
+        fontFamily: FONT_FAMILIES.bodyMedium,
         fontWeight: '600',
     },
     formContainer: {

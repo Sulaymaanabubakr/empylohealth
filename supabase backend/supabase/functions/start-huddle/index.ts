@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
         huddle_id: huddle.id,
         user_id: participantId,
         role: participantId === user.id ? "host" : "member",
-        joined_at: participantId === user.id ? new Date().toISOString() : null,
+        joined_at: null,
       })),
     );
 

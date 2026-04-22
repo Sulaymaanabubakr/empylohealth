@@ -13,6 +13,7 @@ import { COLORS, SPACING } from '../theme/theme';
 import { isPresenceOnline } from '../utils/presence';
 import { formatDateUK } from '../utils/dateFormat';
 import { getWellbeingRingColor, labelFromWellbeingScore, normalizeWellbeingLabel } from '../utils/wellbeing';
+import { FONT_FAMILIES } from '../theme/fonts';
 
 const ringColorFromProfile = (profile = {}) => {
     return getWellbeingRingColor({
@@ -250,7 +251,7 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 16,
-        fontFamily: 'SpaceGrotesk_700Bold',
+        fontFamily: FONT_FAMILIES.displayBold,
         color: '#1A1A1A'
     },
     centerState: {
@@ -287,7 +288,7 @@ const styles = StyleSheet.create({
     name: {
         marginTop: 14,
         fontSize: 24,
-        fontFamily: 'SpaceGrotesk_700Bold',
+        fontFamily: FONT_FAMILIES.displayBold,
         color: '#FFFFFF'
     },
     score: {
@@ -340,13 +341,13 @@ const styles = StyleSheet.create({
     metricLabel: {
         fontSize: 12,
         color: '#6A7385',
-        fontFamily: 'DMSans_500Medium'
+        fontFamily: FONT_FAMILIES.bodyMedium
     },
     metricValue: {
         marginTop: 6,
         fontSize: 16,
         color: '#1A1A1A',
-        fontFamily: 'SpaceGrotesk_700Bold'
+        fontFamily: FONT_FAMILIES.displayBold
     },
     bioCard: {
         marginTop: 14,
@@ -357,7 +358,7 @@ const styles = StyleSheet.create({
         borderColor: '#E9ECEF'
     },
     bioTitle: {
-        fontFamily: 'SpaceGrotesk_600SemiBold',
+        fontFamily: FONT_FAMILIES.displaySemiBold,
         fontSize: 16,
         color: '#1A1A1A',
         marginBottom: 8
@@ -366,7 +367,7 @@ const styles = StyleSheet.create({
         fontSize: 15,
         lineHeight: 22,
         color: '#4A5565',
-        fontFamily: 'DMSans_400Regular'
+        fontFamily: FONT_FAMILIES.bodyRegular
     },
     detailRow: {
         flexDirection: 'row',
@@ -377,12 +378,12 @@ const styles = StyleSheet.create({
     detailKey: {
         color: '#6A7385',
         fontSize: 13,
-        fontFamily: 'DMSans_500Medium'
+        fontFamily: FONT_FAMILIES.bodyMedium
     },
     detailValue: {
         color: '#1A1A1A',
         fontSize: 13,
-        fontFamily: 'DMSans_500Medium',
+        fontFamily: FONT_FAMILIES.bodyMedium,
         maxWidth: '62%',
         textAlign: 'right'
     },
@@ -408,14 +409,14 @@ const styles = StyleSheet.create({
     },
     primaryBtnText: {
         color: '#FFFFFF',
-        fontFamily: 'SpaceGrotesk_700Bold'
+        fontFamily: FONT_FAMILIES.displayBold
     },
     secondaryBtn: {
         backgroundColor: '#E9F7F6'
     },
     secondaryBtnText: {
         color: COLORS.primary,
-        fontFamily: 'SpaceGrotesk_700Bold'
+        fontFamily: FONT_FAMILIES.displayBold
     }
 });
 

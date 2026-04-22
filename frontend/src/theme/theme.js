@@ -1,4 +1,5 @@
 import { Dimensions } from 'react-native';
+import { FONT_FAMILIES, FONT_STYLES } from './fonts';
 
 export const COLORS = {
   primary: '#00A99D', // Empylo Turquoise
@@ -36,22 +37,22 @@ export const RADIUS = {
 
 export const TYPOGRAPHY = {
   h1: {
-    fontFamily: 'SpaceGrotesk_700Bold',
+    ...FONT_STYLES.displayBold,
     fontSize: 28,
     color: COLORS.text,
   },
   h2: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
+    ...FONT_STYLES.displaySemiBold,
     fontSize: 24,
     color: COLORS.text,
   },
   body: {
-    fontFamily: 'DMSans_400Regular',
+    ...FONT_STYLES.bodyRegular,
     fontSize: 16,
     color: COLORS.text,
   },
   caption: {
-    fontFamily: 'DMSans_400Regular',
+    ...FONT_STYLES.bodyRegular,
     fontSize: 14,
     color: COLORS.gray,
   },
@@ -77,8 +78,14 @@ export const theme = {
   radius: RADIUS,
   typography: {
     ...TYPOGRAPHY,
-    title: 'SpaceGrotesk_700Bold',
-    body: 'DMSans_400Regular',
-    bodyMedium: 'DMSans_500Medium',
+    title: FONT_FAMILIES.displayBold,
+    body: FONT_FAMILIES.bodyRegular,
+    bodyMedium: FONT_FAMILIES.bodyMedium,
+    bodyBold: FONT_FAMILIES.bodyBold,
+    titleStyle: FONT_STYLES.displayBold,
+    titleSemiBoldStyle: FONT_STYLES.displaySemiBold,
+    bodyStyle: FONT_STYLES.bodyRegular,
+    bodyMediumStyle: FONT_STYLES.bodyMedium,
+    bodyBoldStyle: FONT_STYLES.bodyBold,
   },
 };

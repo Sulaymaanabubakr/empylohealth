@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, StatusBar } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../theme/theme';
 import { assessmentService } from '../services/api/assessmentService';
 import { formatDateUK, formatTimeUK } from '../utils/dateFormat';
+import { FONT_FAMILIES } from '../theme/fonts';
 
 const StatsScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
@@ -176,10 +177,9 @@ const styles = StyleSheet.create({
     headerTitle: {
         flex: 1,
         fontSize: 18,
-        fontWeight: '800',
         color: '#1A1A1A',
         textAlign: 'center',
-        fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     scrollContent: {
         padding: 20,
@@ -191,11 +191,11 @@ const styles = StyleSheet.create({
     },
     sectionLabel: {
         fontSize: 12,
-        fontWeight: '800',
         color: '#A0AEC0',
         letterSpacing: 1.5,
         marginBottom: 15,
         marginLeft: 5,
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     statsRow: {
         flexDirection: 'row',
@@ -227,15 +227,15 @@ const styles = StyleSheet.create({
     },
     statLabelLight: {
         fontSize: 13,
-        fontWeight: '600',
         color: 'rgba(255,255,255,0.8)',
         marginBottom: 10,
+        fontFamily: FONT_FAMILIES.bodyMedium,
     },
     statValueLight: {
         fontSize: 36,
-        fontWeight: '800',
         color: '#FFFFFF',
         marginBottom: 10,
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     labelBadgeLight: {
         backgroundColor: 'rgba(255,255,255,0.2)',
@@ -245,25 +245,25 @@ const styles = StyleSheet.create({
     },
     labelBadgeTextLight: {
         fontSize: 11,
-        fontWeight: '700',
         color: '#FFFFFF',
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     statLabelDark: {
         fontSize: 13,
-        fontWeight: '600',
         color: '#718096',
         marginBottom: 10,
+        fontFamily: FONT_FAMILIES.bodyMedium,
     },
     statValueDark: {
         fontSize: 36,
-        fontWeight: '800',
         color: '#1A1A1A',
         marginBottom: 10,
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     statSubtextDark: {
         fontSize: 12,
-        fontWeight: '700',
         color: COLORS.primary,
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     historyCard: {
         flexDirection: 'row',
@@ -288,8 +288,8 @@ const styles = StyleSheet.create({
     },
     historyScore: {
         fontSize: 18,
-        fontWeight: '800',
         color: '#FFFFFF',
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     historyContent: {
         flex: 1,
@@ -302,18 +302,18 @@ const styles = StyleSheet.create({
     },
     historyDate: {
         fontSize: 15,
-        fontWeight: '700',
         color: '#1A1A1A',
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
     historyTime: {
         fontSize: 12,
         color: '#A0AEC0',
-        fontWeight: '600',
+        fontFamily: FONT_FAMILIES.bodyMedium,
     },
     historyMood: {
         fontSize: 14,
         color: '#718096',
-        fontWeight: '500',
+        fontFamily: FONT_FAMILIES.bodyMedium,
     },
     emptyState: {
         alignItems: 'center',
@@ -336,9 +336,9 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: 20,
-        fontWeight: '800',
         color: '#1A1A1A',
         marginBottom: 10,
+        fontFamily: FONT_FAMILIES.displayBold,
     },
     emptySubtext: {
         fontSize: 15,
@@ -347,6 +347,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 40,
         lineHeight: 22,
         marginBottom: 30,
+        fontFamily: FONT_FAMILIES.bodyMedium,
     },
     reloadButton: {
         backgroundColor: '#FFFFFF',
@@ -358,8 +359,8 @@ const styles = StyleSheet.create({
     },
     reloadButtonText: {
         color: COLORS.primary,
-        fontWeight: '700',
         fontSize: 14,
+        fontFamily: FONT_FAMILIES.bodyBold,
     },
 });
 

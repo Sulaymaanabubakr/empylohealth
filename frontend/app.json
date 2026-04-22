@@ -34,7 +34,7 @@
         ],
         "NSMicrophoneUsageDescription": "Empylo uses the microphone for voice and video calls.",
         "NSCameraUsageDescription": "Empylo uses the camera for video calls.",
-        "NSPhotoLibraryUsageDescription": "Empylo uses your photo library so you can choose and upload a profile picture or circle photo."
+        "NSPhotoLibraryUsageDescription": "Empylo uses your photo library so you can choose a photo to upload as your profile picture or a circle photo."
       }
     },
     "android": {

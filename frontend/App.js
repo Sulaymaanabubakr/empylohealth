@@ -14,6 +14,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { View, Text, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { perfLogger } from './src/services/diagnostics/perfLogger';
+import { FONT_FAMILIES, FONT_STYLES, logFontDiagnostics } from './src/theme/fonts';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -43,6 +44,8 @@ Text.defaultProps.allowFontScaling = false;
 TextInput.defaultProps.allowFontScaling = false;
 Text.defaultProps.maxFontSizeMultiplier = 1;
 TextInput.defaultProps.maxFontSizeMultiplier = 1;
+Text.defaultProps.style = [Object.keys(FONT_STYLES.bodyRegular).length ? FONT_STYLES.bodyRegular : null, Text.defaultProps.style].filter(Boolean);
+TextInput.defaultProps.style = [FONT_FAMILIES.bodyRegular ? { fontFamily: FONT_FAMILIES.bodyRegular } : null, TextInput.defaultProps.style].filter(Boolean);
 
 export default function App() {
   console.log('[PERF] App: Starting...');
@@ -89,6 +92,7 @@ export default function App() {
     if (fontsLoaded) {
       console.log('[PERF] App: Fonts and icon fonts loaded', `${Date.now() - fontLoadStart}ms`);
       perfLogger.log('time_to_first_render_fonts_ready', perfLogger.elapsedSince('app_process_start'));
+      logFontDiagnostics();
     }
   }, [fontsLoaded]);
 

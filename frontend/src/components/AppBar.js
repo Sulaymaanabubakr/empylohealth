@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme, COLORS } from '../theme/theme';
+import { FONT_FAMILIES } from '../theme/fonts';
 
 
 export const AppBar = ({ title, subtitle, right }) => {
@@ -23,12 +24,12 @@ const styles = StyleSheet.create({
     gap: theme.space.sm,
   },
   appBarTitle: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontFamily: FONT_FAMILIES.displaySemiBold,
     fontSize: 24,
     color: COLORS.text,
   },
   appBarSubtitle: {
-    fontFamily: 'DMSans_400Regular',
+    fontFamily: FONT_FAMILIES.bodyRegular,
     fontSize: 14,
     color: COLORS.gray,
   },

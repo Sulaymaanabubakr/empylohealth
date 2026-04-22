@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions, RefreshControl, Image, Modal, TextInput, Alert, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import Svg, { Circle, G, Defs, LinearGradient, Stop, SvgXml } from 'react-native-svg';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
+import { Calendar } from 'react-native-calendars';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AssessmentModal from '../components/AssessmentModal';
+import DatePicker from '../components/DatePicker';
+import TimePicker from '../components/TimePicker';
 import { weeklyAssessment } from '../services/assessments/weeklyAssessment';
 import { useAuth } from '../context/AuthContext';
 import { circleService } from '../services/api/circleService';
@@ -24,9 +27,35 @@ import { supabase } from '../services/supabase/supabaseClient';
 import { userService } from '../services/api/userService';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { getChallengeSectionTitle } from '../utils/challengeLabels';
+import { plannerService } from '../services/api/plannerService';
+import { useModal } from '../context/ModalContext';
 
 const { width } = Dimensions.get('window');
 const realtimeChannelId = (prefix, value) => `${prefix}:${value}:${Math.random().toString(36).slice(2, 8)}`;
+
+const toDateKey = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const fromDateKey = (dateKey) => {
+    const [year, month, day] = String(dateKey || '').split('-').map(Number);
+    if (!year || !month || !day) return new Date();
+    return new Date(year, month - 1, day);
+};
+
+const formatReminderDateLabel = (dateKey) => fromDateKey(dateKey).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+});
+
+const formatReminderTimeLabel = (value) => new Date(value).toLocaleTimeString('en-GB', {
+    hour: 'numeric',
+    minute: '2-digit'
+});
 
 /**
  * Calculates a dynamic "Health Score" for the circle based on members and activity.
@@ -179,9 +208,10 @@ const CircularProgress = ({ score, label }) => {
 
 
 
-const DashboardScreen = ({ navigation }) => {
+const DashboardScreen = ({ navigation, route }) => {
     const insets = useSafeAreaInsets();
     const { userData, user } = useAuth();
+    const { showModal } = useModal();
     const [allCircles, setAllCircles] = useState([]);
     const [selectedCircleId, setSelectedCircleId] = useState('');
     const [wellbeing, setWellbeing] = useState({ score: null, label: '' });
@@ -197,8 +227,21 @@ const DashboardScreen = ({ navigation }) => {
     const [lastUpdatedAt, setLastUpdatedAt] = useState(0);
     const [subscriptionPlan, setSubscriptionPlan] = useState(null);
     const [subscriptionPlanResolved, setSubscriptionPlanResolved] = useState(false);
+    const [plannerItems, setPlannerItems] = useState([]);
+    const [plannerModalVisible, setPlannerModalVisible] = useState(false);
+    const [selectedPlannerDate, setSelectedPlannerDate] = useState(toDateKey(new Date()));
+    const [plannerDraftType, setPlannerDraftType] = useState('task');
+    const [plannerDraftTitle, setPlannerDraftTitle] = useState('');
+    const [plannerDraftTime24, setPlannerDraftTime24] = useState('09:00');
+    const [plannerDraftTaskKind, setPlannerDraftTaskKind] = useState('Personal');
+    const [plannerDraftEventKind, setPlannerDraftEventKind] = useState('Meetup');
+    const [plannerDraftVenue, setPlannerDraftVenue] = useState('');
+    const [plannerDraftCircleId, setPlannerDraftCircleId] = useState('');
+    const [plannerCircleRoles, setPlannerCircleRoles] = useState({});
+    const [plannerSaving, setPlannerSaving] = useState(false);
     const primaryCircleStorageKey = user?.uid ? `dashboard_primary_circle:${user.uid}` : '';
     const isFreePlan = subscriptionPlanResolved && subscriptionPlan === 'free';
+    const plannerRouteParams = route?.params || {};
 
     const localWellbeingFallback = useCallback(() => {
         const resolved = resolveMemberWellbeing(userData || {});
@@ -347,6 +390,77 @@ const DashboardScreen = ({ navigation }) => {
             active = false;
         };
     }, [user?.uid]);
+
+    useEffect(() => {
+        if (!user?.uid) {
+            setPlannerItems([]);
+            return undefined;
+        }
+        return plannerService.subscribe(
+            user.uid,
+            (items) => setPlannerItems(Array.isArray(items) ? items : []),
+            (error) => console.log('Error syncing planner items', error)
+        );
+    }, [user?.uid]);
+
+    useEffect(() => {
+        if (!user?.uid || !allCircles.length) {
+            setPlannerCircleRoles({});
+            return;
+        }
+
+        let cancelled = false;
+        const loadRoles = async () => {
+            try {
+                const circleIds = allCircles.map((circle) => circle?.id).filter(Boolean);
+                if (!circleIds.length) {
+                    if (!cancelled) setPlannerCircleRoles({});
+                    return;
+                }
+
+                const { data, error } = await supabase
+                    .from('circle_members')
+                    .select('circle_id, role')
+                    .eq('user_id', user.uid)
+                    .eq('status', 'active')
+                    .in('circle_id', circleIds);
+                if (error) throw error;
+
+                const nextRoles = {};
+                (data || []).forEach((row) => {
+                    if (!row?.circle_id) return;
+                    nextRoles[row.circle_id] = row.role || 'member';
+                });
+                if (!cancelled) {
+                    setPlannerCircleRoles(nextRoles);
+                }
+            } catch (error) {
+                console.log('Error loading planner circle roles', error);
+                if (!cancelled) setPlannerCircleRoles({});
+            }
+        };
+
+        loadRoles();
+        return () => {
+            cancelled = true;
+        };
+    }, [allCircles, user?.uid]);
+
+    useEffect(() => {
+        const shouldOpenPlanner = plannerRouteParams?.openPlanner === true;
+        const plannerDate = typeof plannerRouteParams?.plannerDate === 'string' ? plannerRouteParams.plannerDate : '';
+        if (!shouldOpenPlanner) return;
+
+        if (plannerDate) {
+            setSelectedPlannerDate(plannerDate);
+        }
+        setPlannerModalVisible(true);
+        navigation.setParams?.({
+            openPlanner: undefined,
+            plannerDate: undefined,
+            plannerItemId: undefined,
+        });
+    }, [navigation, plannerRouteParams?.openPlanner, plannerRouteParams?.plannerDate, plannerRouteParams?.plannerItemId]);
 
     const selectedCircle = useMemo(() => {
         if (!allCircles.length) return null;
@@ -595,6 +709,290 @@ const DashboardScreen = ({ navigation }) => {
         }
     };
 
+    const plannerTypeMeta = {
+        task: {
+            label: 'Task',
+            color: '#2563EB',
+            icon: 'checkmark-circle',
+        },
+        event: {
+            label: 'Event',
+            color: '#F59E0B',
+            icon: 'calendar-clear',
+        },
+        huddle: {
+            label: 'Huddle',
+            color: COLORS.primary,
+            icon: 'people',
+        },
+    };
+
+    const taskKindOptions = ['Personal', 'Work', 'Health', 'Errand'];
+    const eventKindOptions = ['Meetup', 'Appointment', 'Class', 'Celebration'];
+    const premiumPlannerHuddleEnabled = subscriptionPlan === 'premium';
+    const eligibleHuddleCircles = useMemo(() => allCircles.filter((circle) => {
+        const role = plannerCircleRoles[circle?.id];
+        return ['creator', 'admin', 'moderator'].includes(String(role || '').toLowerCase());
+    }), [allCircles, plannerCircleRoles]);
+
+    const plannerMarkedDates = useMemo(() => {
+        const marks = {};
+        plannerItems.forEach((item) => {
+            const dateKey = toDateKey(new Date(item.scheduledFor));
+            const meta = plannerTypeMeta[item.itemType] || plannerTypeMeta.task;
+            const existing = marks[dateKey] || { dots: [] };
+            const hasDot = existing.dots.some((dot) => dot.key === item.itemType);
+            marks[dateKey] = {
+                ...existing,
+                marked: true,
+                dots: hasDot ? existing.dots : [...existing.dots, { key: item.itemType, color: meta.color }],
+            };
+        });
+
+        marks[selectedPlannerDate] = {
+            ...(marks[selectedPlannerDate] || {}),
+            selected: true,
+            selectedColor: '#0F766E',
+        };
+
+        const todayKey = toDateKey(new Date());
+        marks[todayKey] = {
+            ...(marks[todayKey] || {}),
+            today: true,
+        };
+
+        return marks;
+    }, [plannerItems, selectedPlannerDate]);
+
+    const selectedPlannerItems = useMemo(() => plannerItems
+        .filter((item) => item?.scheduledFor && toDateKey(new Date(item.scheduledFor)) === selectedPlannerDate)
+        .sort((a, b) => new Date(a.scheduledFor).getTime() - new Date(b.scheduledFor).getTime()), [plannerItems, selectedPlannerDate]);
+
+    const todaysPlannerItems = useMemo(() => plannerItems
+        .filter((item) => item?.scheduledFor && toDateKey(new Date(item.scheduledFor)) === toDateKey(new Date())), [plannerItems]);
+
+    const plannerSummaryText = useMemo(() => {
+        if (!todaysPlannerItems.length) {
+            return 'Plan tasks, events, and huddles';
+        }
+
+        const activeItems = todaysPlannerItems.filter((item) => item?.status !== 'done');
+        const source = activeItems.length ? activeItems : todaysPlannerItems;
+        const labels = source.slice(0, 2).map((item) => String(item?.title || '').trim()).filter(Boolean);
+
+        if (labels.length === 1) {
+            return labels[0];
+        }
+
+        if (labels.length >= 2) {
+            const extraCount = source.length - 2;
+            return extraCount > 0
+                ? `${labels[0]}, ${labels[1]} +${extraCount}`
+                : `${labels[0]} and ${labels[1]}`;
+        }
+
+        return `${source.length} planned for today`;
+    }, [todaysPlannerItems]);
+
+    const openPlanner = (dateKey = toDateKey(new Date())) => {
+        setSelectedPlannerDate(dateKey);
+        setPlannerModalVisible(true);
+    };
+
+    const buildScheduledPlannerDate = () => {
+        const date = fromDateKey(selectedPlannerDate);
+        const [hourPart, minutePart] = String(plannerDraftTime24 || '09:00').split(':');
+        const hour24 = Math.max(0, Math.min(23, Number(hourPart) || 9));
+        const minute = Math.max(0, Math.min(59, Number(minutePart) || 0));
+        date.setHours(hour24, minute, 0, 0);
+        return date;
+    };
+
+    const resetPlannerComposer = () => {
+        setPlannerDraftTitle('');
+        setPlannerDraftType('task');
+        setPlannerDraftTime24('09:00');
+        setPlannerDraftTaskKind('Personal');
+        setPlannerDraftEventKind('Meetup');
+        setPlannerDraftVenue('');
+        setPlannerDraftCircleId('');
+    };
+
+    const replacePlannerItemLocally = useCallback((nextItem) => {
+        if (!nextItem?.id) return;
+        setPlannerItems((current) => current.map((item) => item.id === nextItem.id ? { ...item, ...nextItem } : item));
+    }, []);
+
+    const removePlannerItemLocally = useCallback((itemId) => {
+        if (!itemId) return;
+        setPlannerItems((current) => current.filter((item) => item.id !== itemId));
+    }, []);
+
+    const handleCreatePlannerItem = async () => {
+        const title = plannerDraftTitle.trim();
+        if (!title) {
+            Alert.alert('Add a title', 'Give this plan a short title first.');
+            return;
+        }
+        if (!user?.uid) return;
+
+        if (plannerDraftType === 'event' && !plannerDraftVenue.trim()) {
+            showModal({
+                type: 'error',
+                title: 'Venue needed',
+                message: 'Add a venue or meeting place for this event.'
+            });
+            return;
+        }
+
+        if (plannerDraftType === 'huddle') {
+            if (!premiumPlannerHuddleEnabled) {
+                showModal({
+                    type: 'confirmation',
+                    title: 'Premium required',
+                    message: 'Planner huddle scheduling is available on Premium. Upgrade to unlock it.',
+                    confirmText: 'Upgrade',
+                    cancelText: 'Cancel',
+                    onConfirm: () => {
+                        navigation.navigate('Subscription');
+                        return true;
+                    }
+                });
+                return;
+            }
+
+            if (!plannerDraftCircleId) {
+                showModal({
+                    type: 'error',
+                    title: 'Choose a circle',
+                    message: 'Pick which joined circle this huddle is for.'
+                });
+                return;
+            }
+        }
+
+        const metadata = plannerDraftType === 'task'
+            ? { taskKind: plannerDraftTaskKind }
+            : plannerDraftType === 'event'
+                ? { eventKind: plannerDraftEventKind, venue: plannerDraftVenue.trim() }
+                : {
+                    circleId: plannerDraftCircleId,
+                    circleName: eligibleHuddleCircles.find((circle) => circle.id === plannerDraftCircleId)?.name || '',
+                };
+
+        const notes = plannerDraftType === 'event'
+            ? plannerDraftVenue.trim()
+            : '';
+
+        setPlannerSaving(true);
+        try {
+            await plannerService.createItem({
+                userId: user.uid,
+                title,
+                itemType: plannerDraftType,
+                scheduledFor: buildScheduledPlannerDate().toISOString(),
+                notes,
+                metadata,
+            });
+            resetPlannerComposer();
+        } catch (error) {
+            showModal({
+                type: 'error',
+                title: 'Unable to save',
+                message: error?.message || 'Please try again.'
+            });
+        } finally {
+            setPlannerSaving(false);
+        }
+    };
+
+    const handleTogglePlannerDone = async (item) => {
+        const isDone = item?.status === 'done';
+        showModal({
+            type: 'confirmation',
+            title: isDone ? 'Mark as not done?' : 'Mark as done?',
+            message: isDone
+                ? 'This will move it back into your active planner items.'
+                : 'This will mark it as completed for the day.',
+            confirmText: isDone ? 'Mark active' : 'Mark done',
+            cancelText: 'Cancel',
+            onConfirm: () => {
+                const optimisticItem = {
+                    ...item,
+                    status: isDone ? 'pending' : 'done',
+                    completedAt: isDone ? null : new Date().toISOString(),
+                };
+                replacePlannerItemLocally(optimisticItem);
+
+                plannerService.toggleDone(item.id, !isDone)
+                    .then((updatedItem) => {
+                        replacePlannerItemLocally(updatedItem);
+                    })
+                    .catch((error) => {
+                        replacePlannerItemLocally(item);
+                        showModal({
+                            type: 'error',
+                            title: 'Unable to update',
+                            message: error?.message || 'Please try again.'
+                        });
+                    });
+
+                return true;
+            }
+        });
+    };
+
+    const handleDeletePlannerItem = async (item) => {
+        showModal({
+            type: 'confirmation',
+            title: 'Delete item',
+            message: 'This will remove it from your planner.',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            onConfirm: () => {
+                removePlannerItemLocally(item.id);
+
+                plannerService.deleteItem(item.id)
+                    .catch((error) => {
+                        setPlannerItems((current) => {
+                            const exists = current.some((entry) => entry.id === item.id);
+                            if (exists) return current;
+                            const next = [...current, item];
+                            next.sort((a, b) => new Date(a.scheduledFor || 0).getTime() - new Date(b.scheduledFor || 0).getTime());
+                            return next;
+                        });
+                        showModal({
+                            type: 'error',
+                            title: 'Unable to delete',
+                            message: error?.message || 'Please try again.'
+                        });
+                    });
+
+                return true;
+            }
+        });
+    };
+
+    const plannerItemSubtitle = useCallback((item) => {
+        const metadata = item?.metadata || {};
+        if (item?.itemType === 'task') {
+            return metadata?.taskKind ? `${metadata.taskKind} task` : '';
+        }
+        if (item?.itemType === 'event') {
+            const kind = String(metadata?.eventKind || '').trim();
+            const venue = String(metadata?.venue || item?.notes || '').trim();
+            if (kind && venue) return `${kind} at ${venue}`;
+            if (kind) return kind;
+            if (venue) return venue;
+            return '';
+        }
+        if (item?.itemType === 'huddle') {
+            const circleName = String(metadata?.circleName || '').trim();
+            return circleName ? `For ${circleName}` : 'Circle huddle';
+        }
+        return '';
+    }, []);
+
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
             <StatusBar barStyle="dark-content" backgroundColor="#FAFAFA" />
@@ -606,12 +1004,15 @@ const DashboardScreen = ({ navigation }) => {
                     ? { marginTop: 0, paddingTop: Math.max(2, insets.top * 0.15) }
                     : null
             ]}>
-                <View style={styles.dateContainer}>
+                <TouchableOpacity style={styles.dateContainer} activeOpacity={0.9} onPress={() => openPlanner()}>
                     <View style={styles.calendarIconContainer}>
                         <Ionicons name="calendar" size={18} color={COLORS.primary} />
                     </View>
-                    <Text style={styles.dateText}>{currentDate}</Text>
-                </View>
+                    <View style={styles.dateTextBlock}>
+                        <Text style={styles.dateText}>{currentDate}</Text>
+                        <Text style={styles.dateSubtext}>{plannerSummaryText}</Text>
+                    </View>
+                </TouchableOpacity>
                 <View style={styles.headerActions}>
                     <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
                         <Feather name="refresh-cw" size={18} color="#333" />
@@ -922,6 +1323,309 @@ const DashboardScreen = ({ navigation }) => {
                 mandatory={assessmentMandatory}
             />
 
+            <Modal
+                visible={plannerModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setPlannerModalVisible(false)}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.plannerOverlay}
+                >
+                    <TouchableOpacity style={styles.plannerOverlayTap} activeOpacity={1} onPress={() => setPlannerModalVisible(false)} />
+                    <View style={styles.plannerSheet}>
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            style={styles.plannerHandleTap}
+                            onPress={() => setPlannerModalVisible(false)}
+                            hitSlop={{ top: 18, bottom: 18, left: 40, right: 40 }}
+                        >
+                            <View style={styles.plannerHandle} />
+                        </TouchableOpacity>
+                        <View style={styles.plannerHeader}>
+                            <View style={styles.plannerHeaderCopy}>
+                                <Text style={styles.plannerTitle}>My planner</Text>
+                                <Text style={styles.plannerSubtitle}>Tasks, events, and huddle reminders that stay with your account.</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setPlannerModalVisible(false)} style={styles.plannerCloseButton}>
+                                <Feather name="x" size={20} color="#23343A" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView
+                            style={styles.plannerBody}
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="on-drag"
+                            nestedScrollEnabled
+                            overScrollMode="always"
+                            bounces
+                            alwaysBounceVertical={false}
+                            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+                            contentContainerStyle={styles.plannerBodyContent}
+                        >
+                            <View style={styles.plannerCalendarCard}>
+                                <Calendar
+                                    current={selectedPlannerDate}
+                                    onDayPress={(day) => setSelectedPlannerDate(day.dateString)}
+                                    markedDates={plannerMarkedDates}
+                                    markingType="multi-dot"
+                                    theme={{
+                                        backgroundColor: '#ffffff',
+                                        calendarBackground: '#ffffff',
+                                        textSectionTitleColor: '#61727A',
+                                        selectedDayBackgroundColor: '#0F766E',
+                                        selectedDayTextColor: '#ffffff',
+                                        todayTextColor: '#0F766E',
+                                        dayTextColor: '#23343A',
+                                        textDisabledColor: '#CBD5DC',
+                                        arrowColor: '#0F766E',
+                                        monthTextColor: '#122227',
+                                        textDayFontSize: 15,
+                                        textMonthFontSize: 18,
+                                        textDayHeaderFontSize: 12
+                                    }}
+                                />
+                            </View>
+
+                            <View style={styles.plannerSectionHeader}>
+                                <View>
+                                    <Text style={styles.plannerSectionTitle}>{formatReminderDateLabel(selectedPlannerDate)}</Text>
+                                    <Text style={styles.plannerSectionHint}>Select a day, plan it, and tick things off when done.</Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.plannerList}>
+                                {selectedPlannerItems.length ? selectedPlannerItems.map((item) => {
+                                    const meta = plannerTypeMeta[item.itemType] || plannerTypeMeta.task;
+                                    const done = item.status === 'done';
+                                    const subtitle = plannerItemSubtitle(item);
+                                    return (
+                                        <View key={item.id} style={styles.plannerItemCard}>
+                                            <TouchableOpacity style={styles.plannerDoneButton} onPress={() => handleTogglePlannerDone(item)}>
+                                                <Ionicons name={done ? 'checkmark-circle' : 'ellipse-outline'} size={24} color={done ? '#0F766E' : '#9AA8AE'} />
+                                            </TouchableOpacity>
+                                            <View style={styles.plannerItemBody}>
+                                                <View style={styles.plannerItemMetaRow}>
+                                                    <View style={[styles.plannerItemTypePill, { backgroundColor: `${meta.color}16` }]}>
+                                                        <Ionicons name={meta.icon} size={12} color={meta.color} />
+                                                        <Text style={[styles.plannerItemTypeText, { color: meta.color }]}>{meta.label}</Text>
+                                                    </View>
+                                                    <Text style={styles.plannerItemTime}>{formatReminderTimeLabel(item.scheduledFor)}</Text>
+                                                </View>
+                                                <Text style={[styles.plannerItemTitle, done && styles.plannerItemTitleDone]}>{item.title}</Text>
+                                                {!!subtitle && (
+                                                    <Text style={[styles.plannerItemSubtitle, done && styles.plannerItemSubtitleDone]}>
+                                                        {subtitle}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                            <TouchableOpacity style={styles.plannerDeleteButton} onPress={() => handleDeletePlannerItem(item)}>
+                                                <Feather name="trash-2" size={16} color="#A15353" />
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                }) : (
+                                    <View style={styles.plannerEmptyCard}>
+                                        <Ionicons name="calendar-outline" size={20} color="#8CA1A8" />
+                                        <Text style={styles.plannerEmptyText}>Nothing planned for this day yet.</Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            <View style={styles.plannerComposer}>
+                                <Text style={styles.plannerComposerTitle}>Add something to this day</Text>
+
+                                <View style={styles.plannerTypeRow}>
+                                    {['task', 'event', 'huddle'].map((type) => {
+                                        const meta = plannerTypeMeta[type];
+                                        const active = plannerDraftType === type;
+                                        const locked = type === 'huddle' && !premiumPlannerHuddleEnabled;
+                                        return (
+                                            <TouchableOpacity
+                                                key={type}
+                                                style={[
+                                                    styles.plannerTypeChip,
+                                                    active && !locked && { backgroundColor: meta.color, borderColor: meta.color },
+                                                    locked && styles.plannerTypeChipLocked,
+                                                ]}
+                                                onPress={() => {
+                                                    if (locked) {
+                                                        showModal({
+                                                            type: 'confirmation',
+                                                            title: 'Premium required',
+                                                            message: 'Planner huddle scheduling is available on Premium. Upgrade to unlock it.',
+                                                            confirmText: 'Upgrade',
+                                                            cancelText: 'Cancel',
+                                                            onConfirm: () => {
+                                                                navigation.navigate('Subscription');
+                                                                return true;
+                                                            }
+                                                        });
+                                                        return;
+                                                    }
+                                                    setPlannerDraftType(type);
+                                                }}
+                                            >
+                                                <Ionicons name={locked ? 'lock-closed' : meta.icon} size={14} color={active && !locked ? '#fff' : meta.color} />
+                                                <Text style={[styles.plannerTypeChipText, active && !locked && styles.plannerTypeChipTextActive]}>
+                                                    {meta.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+
+                                <TextInput
+                                    value={plannerDraftTitle}
+                                    onChangeText={setPlannerDraftTitle}
+                                    placeholder={
+                                        plannerDraftType === 'event'
+                                            ? 'What event are you planning?'
+                                            : plannerDraftType === 'huddle'
+                                                ? 'What is this huddle about?'
+                                                : 'What do you need to do?'
+                                    }
+                                    placeholderTextColor="#8CA1A8"
+                                    style={styles.plannerTitleInput}
+                                />
+
+                                {plannerDraftType === 'task' && (
+                                    <View style={styles.plannerInlineSection}>
+                                        <Text style={styles.plannerInlineLabel}>Task type</Text>
+                                        <View style={styles.plannerOptionRow}>
+                                            {taskKindOptions.map((option) => {
+                                                const active = plannerDraftTaskKind === option;
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={option}
+                                                        style={[styles.plannerOptionChip, active && styles.plannerOptionChipActive]}
+                                                        onPress={() => setPlannerDraftTaskKind(option)}
+                                                    >
+                                                        <Text style={[styles.plannerOptionChipText, active && styles.plannerOptionChipTextActive]}>
+                                                            {option}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    </View>
+                                )}
+
+                                {plannerDraftType === 'event' && (
+                                    <>
+                                        <View style={styles.plannerInlineSection}>
+                                            <Text style={styles.plannerInlineLabel}>Event type</Text>
+                                            <View style={styles.plannerOptionRow}>
+                                                {eventKindOptions.map((option) => {
+                                                    const active = plannerDraftEventKind === option;
+                                                    return (
+                                                        <TouchableOpacity
+                                                            key={option}
+                                                            style={[styles.plannerOptionChip, active && styles.plannerOptionChipActive]}
+                                                            onPress={() => setPlannerDraftEventKind(option)}
+                                                        >
+                                                            <Text style={[styles.plannerOptionChipText, active && styles.plannerOptionChipTextActive]}>
+                                                                {option}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+                                        </View>
+
+                                        <TextInput
+                                            value={plannerDraftVenue}
+                                            onChangeText={setPlannerDraftVenue}
+                                            placeholder="Venue or meeting place"
+                                            placeholderTextColor="#8CA1A8"
+                                            style={styles.plannerTitleInput}
+                                        />
+                                    </>
+                                )}
+
+                                {plannerDraftType === 'huddle' && (
+                                    <>
+                                        <View style={styles.plannerInlineSection}>
+                                            <Text style={styles.plannerInlineLabel}>Choose circle</Text>
+                                            {premiumPlannerHuddleEnabled ? (
+                                                eligibleHuddleCircles.length ? (
+                                                    <View style={styles.plannerOptionRow}>
+                                                        {eligibleHuddleCircles.map((circle) => {
+                                                            const active = plannerDraftCircleId === circle.id;
+                                                            return (
+                                                                <TouchableOpacity
+                                                                    key={circle.id}
+                                                                    style={[styles.plannerOptionChip, active && styles.plannerOptionChipActive]}
+                                                                    onPress={() => setPlannerDraftCircleId(circle.id)}
+                                                                >
+                                                                    <Text style={[styles.plannerOptionChipText, active && styles.plannerOptionChipTextActive]}>
+                                                                        {circle.name}
+                                                                    </Text>
+                                                                </TouchableOpacity>
+                                                            );
+                                                        })}
+                                                    </View>
+                                                ) : (
+                                                    <Text style={styles.plannerInlineHint}>
+                                                        Only circles where you are a creator, admin, or moderator can be used for huddles.
+                                                    </Text>
+                                                )
+                                            ) : (
+                                                <Text style={styles.plannerInlineHint}>
+                                                    Upgrade to Premium to add scheduled huddles to your planner.
+                                                </Text>
+                                            )}
+                                        </View>
+                                    </>
+                                )}
+
+                                <DatePicker
+                                    label="Date"
+                                    value={formatReminderDateLabel(selectedPlannerDate)}
+                                    onSelect={(value) => {
+                                        const [day, month, year] = String(value || '').split('/');
+                                        if (day && month && year) {
+                                            setSelectedPlannerDate(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
+                                        }
+                                    }}
+                                    placeholder="Select date"
+                                    icon={<Ionicons name="calendar-outline" size={18} color={COLORS.primary} />}
+                                />
+
+                                <TimePicker
+                                    label="Time"
+                                    value={buildScheduledPlannerDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    time24Value={plannerDraftTime24}
+                                    onSelect={setPlannerDraftTime24}
+                                    placeholder="Select time"
+                                    icon={<Ionicons name="time-outline" size={18} color={COLORS.primary} />}
+                                />
+
+                                <Text style={styles.plannerPreviewText}>
+                                    Reminder set for {buildScheduledPlannerDate().toLocaleString([], {
+                                        weekday: 'short',
+                                        day: 'numeric',
+                                        month: 'short',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                    })}
+                                </Text>
+
+                                <TouchableOpacity
+                                    style={[styles.plannerSaveButton, plannerSaving && styles.plannerSaveButtonDisabled]}
+                                    onPress={handleCreatePlannerItem}
+                                    disabled={plannerSaving}
+                                >
+                                    <Text style={styles.plannerSaveButtonText}>{plannerSaving ? 'Saving...' : 'Add to planner'}</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
 
         </SafeAreaView>
     );
@@ -956,6 +1660,12 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 5,
+        marginRight: 12,
+        alignSelf: 'flex-start',
+    },
+    dateTextBlock: {
+        flexShrink: 1,
+        alignSelf: 'center',
     },
     calendarIconContainer: {
         marginRight: 8,
@@ -964,6 +1674,12 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#424242',
         fontWeight: '600',
+    },
+    dateSubtext: {
+        marginTop: 2,
+        fontSize: 11,
+        color: COLORS.primary,
+        fontWeight: '700',
     },
     notificationButton: {
         position: 'relative',
@@ -981,7 +1697,9 @@ const styles = StyleSheet.create({
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'flex-end',
         gap: 8,
+        flexShrink: 0,
     },
     refreshButton: {
         backgroundColor: '#FFF',
@@ -1005,6 +1723,288 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.lg,
         paddingBottom: 110,
         paddingTop: 10,
+    },
+    plannerOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(12, 18, 21, 0.28)',
+        justifyContent: 'flex-end',
+    },
+    plannerOverlayTap: {
+        flex: 1,
+    },
+    plannerSheet: {
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
+        paddingTop: 10,
+        maxHeight: '88%',
+    },
+    plannerHandleTap: {
+        alignSelf: 'stretch',
+        alignItems: 'center',
+        paddingTop: 6,
+        paddingBottom: 10,
+        minHeight: 28,
+    },
+    plannerHandle: {
+        width: 52,
+        height: 5,
+        borderRadius: 999,
+        alignSelf: 'center',
+        backgroundColor: '#D7E1E4',
+        marginBottom: 14,
+    },
+    plannerHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        marginBottom: 8,
+    },
+    plannerHeaderCopy: {
+        flex: 1,
+        paddingRight: 12,
+    },
+    plannerTitle: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: '#122227',
+    },
+    plannerSubtitle: {
+        marginTop: 4,
+        fontSize: 13,
+        lineHeight: 18,
+        color: '#6D8188',
+    },
+    plannerCloseButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F3F7F8',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    plannerBody: {
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 24,
+    },
+    plannerBodyContent: {
+        paddingBottom: 24,
+    },
+    plannerCalendarCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#E8F0F2',
+        paddingVertical: 6,
+        marginBottom: 14,
+    },
+    plannerSectionHeader: {
+        marginBottom: 14,
+    },
+    plannerSectionTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#163038',
+    },
+    plannerSectionHint: {
+        marginTop: 4,
+        fontSize: 13,
+        color: '#789097',
+    },
+    plannerList: {
+        marginBottom: 20,
+    },
+    plannerItemCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FAFCFC',
+        borderRadius: 18,
+        padding: 14,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: '#EEF3F4',
+    },
+    plannerDoneButton: {
+        marginRight: 12,
+    },
+    plannerItemBody: {
+        flex: 1,
+    },
+    plannerItemMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 6,
+    },
+    plannerItemTypePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
+        borderRadius: 999,
+    },
+    plannerItemTypeText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    plannerItemTime: {
+        fontSize: 12,
+        color: '#789097',
+        fontWeight: '600',
+    },
+    plannerItemTitle: {
+        fontSize: 15,
+        color: '#1A2E34',
+        fontWeight: '700',
+    },
+    plannerItemTitleDone: {
+        color: '#7A8D93',
+        textDecorationLine: 'line-through',
+    },
+    plannerItemSubtitle: {
+        marginTop: 4,
+        fontSize: 12,
+        color: '#6F858C',
+        fontWeight: '600',
+    },
+    plannerItemSubtitleDone: {
+        color: '#96A7AC',
+    },
+    plannerDeleteButton: {
+        width: 32,
+        alignItems: 'flex-end',
+    },
+    plannerEmptyCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 16,
+        borderRadius: 18,
+        backgroundColor: '#FAFCFC',
+        borderWidth: 1,
+        borderColor: '#EEF3F4',
+    },
+    plannerEmptyText: {
+        fontSize: 14,
+        color: '#7B8F96',
+        fontWeight: '600',
+    },
+    plannerComposer: {
+        backgroundColor: '#F7FBFB',
+        borderRadius: 22,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#E4EFF0',
+        marginBottom: 24,
+    },
+    plannerComposerTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#163038',
+        marginBottom: 12,
+    },
+    plannerTypeRow: {
+        flexDirection: 'row',
+        marginBottom: 12,
+    },
+    plannerTypeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        borderWidth: 1,
+        borderColor: '#D6E3E6',
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 12,
+        paddingVertical: 9,
+        borderRadius: 999,
+        marginRight: 8,
+    },
+    plannerTypeChipLocked: {
+        opacity: 0.75,
+        backgroundColor: '#F7FAFB',
+    },
+    plannerTypeChipText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#42575D',
+    },
+    plannerTypeChipTextActive: {
+        color: '#FFFFFF',
+    },
+    plannerInlineSection: {
+        marginBottom: 12,
+    },
+    plannerInlineLabel: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#3B5057',
+        marginBottom: 8,
+    },
+    plannerInlineHint: {
+        fontSize: 12,
+        lineHeight: 18,
+        color: '#6F858C',
+    },
+    plannerOptionRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    plannerOptionChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 9,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: '#D6E3E6',
+        backgroundColor: '#FFFFFF',
+    },
+    plannerOptionChipActive: {
+        backgroundColor: '#163038',
+        borderColor: '#163038',
+    },
+    plannerOptionChipText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#4B6168',
+    },
+    plannerOptionChipTextActive: {
+        color: '#FFFFFF',
+    },
+    plannerTitleInput: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#D8E6E9',
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+        fontSize: 15,
+        color: '#163038',
+        marginBottom: 12,
+    },
+    plannerPreviewText: {
+        marginTop: -2,
+        marginBottom: 14,
+        fontSize: 13,
+        color: '#6F858C',
+        lineHeight: 18,
+    },
+    plannerSaveButton: {
+        backgroundColor: '#0F766E',
+        borderRadius: 16,
+        paddingVertical: 15,
+        alignItems: 'center',
+    },
+    plannerSaveButtonDisabled: {
+        opacity: 0.6,
+    },
+    plannerSaveButtonText: {
+        fontSize: 15,
+        color: '#FFFFFF',
+        fontWeight: '800',
     },
     greetingContainer: {
         flexDirection: 'row',

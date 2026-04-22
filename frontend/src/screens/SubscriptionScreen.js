@@ -2,14 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Linking, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useModal } from '../context/ModalContext';
 import { LEGAL_LINKS } from '../constants/legalLinks';
 import { subscriptionService } from '../services/api/subscriptionService';
 import { subscriptionGuardService } from '../services/subscription/subscriptionGuardService';
 import { getPlanRules, normalizePlanId } from '../services/subscription/subscriptionConfig';
-import { revenueCatService } from '../services/subscription/revenueCatService';
 import LoadingOverlay from '../components/LoadingOverlay';
 import { COLORS, SPACING } from '../theme/theme';
+import { FONT_FAMILIES } from '../theme/fonts';
 
 const PLAN_ORDER = ['free', 'pro', 'premium', 'enterprise'];
 
@@ -25,6 +26,43 @@ const FEATURE_ROWS = [
     { label: 'Monthly huddle minutes', key: 'monthlyHuddleMinutes', type: 'limit' },
     { label: 'Max minutes per huddle', key: 'maxMinutesPerHuddle', type: 'limit' },
 ];
+
+const getUsageTone = (remainingRatio) => {
+    if (remainingRatio <= 0.25) {
+        return {
+            fill: '#DC2626',
+            track: '#FEE2E2',
+            badgeBg: '#FEF2F2',
+            badgeText: '#B91C1C',
+            label: 'Low',
+        };
+    }
+    if (remainingRatio <= 0.55) {
+        return {
+            fill: '#D97706',
+            track: '#FEF3C7',
+            badgeBg: '#FFFBEB',
+            badgeText: '#B45309',
+            label: 'Watch',
+        };
+    }
+    return {
+        fill: '#059669',
+        track: '#D1FAE5',
+        badgeBg: '#ECFDF5',
+        badgeText: '#047857',
+        label: 'Healthy',
+    };
+};
+
+const formatUsagePercent = (ratio) => {
+    const safeRatio = Math.max(0, Math.min(1, Number(ratio) || 0));
+    const percent = safeRatio * 100;
+    if (percent >= 100) return '100%';
+    if (percent <= 0) return '0%';
+    if (percent >= 99) return `${percent.toFixed(1)}%`;
+    return `${Math.round(percent)}%`;
+};
 
 const getPlanProductIdForCadence = (plan, cadence = 'monthly') => {
     const platformKey = Platform.OS === 'ios' ? 'ios' : 'android';
@@ -115,6 +153,12 @@ const SubscriptionScreen = ({ navigation, route }) => {
         };
     }, []);
 
+    useFocusEffect(
+        React.useCallback(() => {
+            refresh(true).catch(() => {});
+        }, [])
+    );
+
     const entitlement = status?.entitlement || { plan: 'free', status: 'expired' };
     const usage = status?.usage || {};
     const remaining = status?.remaining || {};
@@ -122,6 +166,7 @@ const SubscriptionScreen = ({ navigation, route }) => {
     const capabilities = status?.capabilities || {};
     const currentPlan = entitlement?.plan || 'free';
     const currentCadence = String(entitlement?.billingCadence || 'monthly').toLowerCase() === 'annual' ? 'annual' : 'monthly';
+    const currentRenewalLabel = currentCadence === 'annual' ? 'Auto renews yearly.' : 'Auto renews monthly.';
     const currentRules = getPlanRules(currentPlan);
     const normalizedPlans = useMemo(() => {
         const mapped = plans.map((plan) => ({
@@ -135,6 +180,25 @@ const SubscriptionScreen = ({ navigation, route }) => {
             .map((id) => byId.get(id))
             .filter(Boolean);
     }, [plans]);
+    const orderedBoosts = useMemo(() => {
+        return [...boosts].sort((a, b) => {
+            const aRank = Number(a?.sortOrder ?? a?.order ?? a?.rank ?? -1);
+            const bRank = Number(b?.sortOrder ?? b?.order ?? b?.rank ?? -1);
+            if (aRank >= 0 || bRank >= 0) {
+                return aRank - bRank;
+            }
+
+            const aMinutes = Number(a?.huddleMinutes || 0);
+            const bMinutes = Number(b?.huddleMinutes || 0);
+            if (aMinutes !== bMinutes) return aMinutes - bMinutes;
+
+            const aCredits = Number(a?.aiCredits || 0);
+            const bCredits = Number(b?.aiCredits || 0);
+            if (aCredits !== bCredits) return aCredits - bCredits;
+
+            return String(a?.title || a?.name || '').localeCompare(String(b?.title || b?.name || ''));
+        });
+    }, [boosts]);
 
     const selectedPlan = normalizedPlans.find((plan) => plan.id === selectedPlanId)
         || normalizedPlans.find((plan) => plan.id === 'pro')
@@ -175,11 +239,37 @@ const SubscriptionScreen = ({ navigation, route }) => {
                 ? 'Yearly billing keeps everything on one renewal and is usually the best value.'
             : 'Plans refresh on your renewal date. Subscription balances do not roll over.';
 
-    const summaryRows = useMemo(() => ([
-        `AI credits remaining: ${remaining?.aiCreditsRemaining ?? 0}${remaining?.boostAiCreditsRemaining ? ` (+${remaining.boostAiCreditsRemaining} boost)` : ''}`,
-        `Huddle minutes remaining: ${remaining?.huddleMinutesRemaining ?? 0}${remaining?.boostHuddleMinutesRemaining ? ` (+${remaining.boostHuddleMinutesRemaining} boost)` : ''}`,
-        `Current plan: ${currentRules.label}`,
-    ]), [currentRules.label, remaining]);
+    const usageItems = useMemo(() => {
+        const items = [
+            {
+                key: 'ai',
+                label: 'AI credits',
+                remaining: Number(remaining?.aiCreditsRemaining ?? 0),
+                total: Number(limits?.monthlyAiCredits ?? 0),
+                boostRemaining: Number(remaining?.boostAiCreditsRemaining ?? 0),
+            },
+            {
+                key: 'huddles',
+                label: 'Huddle minutes',
+                remaining: Number(remaining?.huddleMinutesRemaining ?? 0),
+                total: Number(limits?.monthlyHuddleMinutes ?? 0),
+                boostRemaining: Number(remaining?.boostHuddleMinutesRemaining ?? 0),
+            },
+        ];
+
+        return items
+            .filter((item) => item.total > 0)
+            .map((item) => {
+                const remainingRatio = item.total > 0 ? Math.max(0, Math.min(1, item.remaining / item.total)) : 0;
+                const used = Math.max(0, item.total - item.remaining);
+                return {
+                    ...item,
+                    used,
+                    remainingRatio,
+                    tone: getUsageTone(remainingRatio),
+                };
+            });
+    }, [limits, remaining]);
 
     const handleSubscribe = async (planToBuy = selectedPlanPurchase) => {
         if (!planToBuy?.productId) {
@@ -247,18 +337,6 @@ const SubscriptionScreen = ({ navigation, route }) => {
                 type: 'error',
                 title: 'Unable to open link',
                 message: 'Please try again later.'
-            });
-        }
-    };
-
-    const handleManageSubscription = async () => {
-        try {
-            await revenueCatService.presentCustomerCenter();
-        } catch (error) {
-            showModal({
-                type: 'error',
-                title: 'Subscription management unavailable',
-                message: error?.message || 'Unable to open subscription management right now.'
             });
         }
     };
@@ -472,50 +550,116 @@ const SubscriptionScreen = ({ navigation, route }) => {
 
                         <View style={styles.statusCard}>
                             <View style={styles.statusCardHeader}>
-                                <Text style={styles.statusTitle}>Current plan</Text>
-                                <Text style={styles.statusValue}>{status?.entitlement?.displayName || currentRules.label}</Text>
+                                <View>
+                                    <Text style={styles.statusTitle}>Current plan</Text>
+                                    <Text style={styles.statusPlanName}>{status?.entitlement?.displayName || currentRules.label}</Text>
+                                </View>
+                                <View style={styles.statusPlanBadge}>
+                                    <Text style={styles.statusPlanBadgeText}>Active</Text>
+                                </View>
                             </View>
-                            {summaryRows.map((row) => (
-                                <Text key={row} style={styles.statusLine}>{row}</Text>
-                            ))}
+                            <Text style={styles.statusLead}>
+                                Your monthly allowance refreshes automatically.
+                            </Text>
+                            <Text style={styles.statusMeta}>
+                                {currentRenewalLabel}
+                            </Text>
+
+                            <View style={styles.usageStack}>
+                                {usageItems.map((item) => (
+                                    <View key={item.key} style={styles.usageCard}>
+                                        <View style={styles.usageHeader}>
+                                            <View>
+                                                <Text style={styles.usageLabel}>{item.label}</Text>
+                                                <Text style={styles.usageValue}>
+                                                    {item.remaining} left of {item.total}
+                                                    {item.boostRemaining > 0 ? ` + ${item.boostRemaining} boost` : ''}
+                                                </Text>
+                                            </View>
+                                            <View style={[styles.usageBadge, { backgroundColor: item.tone.badgeBg }]}>
+                                                <Text style={[styles.usageBadgeText, { color: item.tone.badgeText }]}>
+                                                    {item.tone.label}
+                                                </Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={[styles.usageTrack, { backgroundColor: item.tone.track }]}>
+                                            <View
+                                                style={[
+                                                    styles.usageFill,
+                                                    {
+                                                        backgroundColor: item.tone.fill,
+                                                        width: `${Math.max(
+                                                            item.remainingRatio >= 0.995 ? 99.2 : item.remainingRatio * 100,
+                                                            item.remainingRatio > 0 ? 8 : 0
+                                                        )}%`,
+                                                    }
+                                                ]}
+                                            />
+                                        </View>
+
+                                        <View style={styles.usageFooter}>
+                                            <Text style={styles.usageMeta}>{item.used} used this cycle</Text>
+                                            <Text style={styles.usageMeta}>{formatUsagePercent(item.remainingRatio)} remaining</Text>
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+
                             <Text style={styles.statusMeta}>
                                 {status?.refreshesOn
-                                    ? `Credits refresh on ${new Date(status.refreshesOn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.`
+                                    ? `Next renewal ${new Date(status.refreshesOn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.`
                                     : formatExpiry(entitlement?.expiresAt)}
                             </Text>
                         </View>
 
-                        {boosts.length > 0 && capabilities?.canUseBoosts === true && (
+                        {orderedBoosts.length > 0 && capabilities?.canUseBoosts === true && (
                             <View style={styles.statusCard}>
                                 <View style={styles.statusCardHeader}>
                                     <Text style={styles.statusTitle}>Boost packs</Text>
-                                    <Text style={styles.statusValue}>Non-expiring</Text>
+                                    <Text style={styles.statusValue}>3 months expiry</Text>
                                 </View>
-                                {boosts.map((boost) => {
+                                <Text style={styles.statusLead}>
+                                    Top up extra AI credits or huddle time for up to 3 months while your subscription stays active.
+                                </Text>
+                                <View style={styles.boostList}>
+                                {orderedBoosts.map((boost) => {
                                     const boostId = boost.productId || boost.id;
                                     const isBusy = busyProductId === boostId;
                                     return (
-                                        <View key={boostId} style={styles.boostRow}>
-                                            <View style={styles.boostCopy}>
-                                                <Text style={styles.boostTitle}>{boost.title || boost.name || boost.productId}</Text>
-                                                <Text style={styles.statusLine}>
-                                                    {(boost.priceLabel ? `${boost.priceLabel} · ` : '')}+{boost.aiCredits || 0} AI credits and +{boost.huddleMinutes || 0} huddle minutes
-                                                </Text>
+                                        <View key={boostId} style={styles.boostCard}>
+                                            <View style={styles.boostCardTop}>
+                                                <View style={styles.boostCopy}>
+                                                    <Text style={styles.boostTitle}>{boost.title || boost.name || boost.productId}</Text>
+                                                    {!!boost.priceLabel && <Text style={styles.boostPrice}>{boost.priceLabel}</Text>}
+                                                </View>
+                                                <TouchableOpacity
+                                                    style={[styles.boostButton, !!busyProductId && styles.boostButtonDisabled]}
+                                                    onPress={() => handleBoostPurchase(boost)}
+                                                    disabled={!!busyProductId}
+                                                >
+                                                    {isBusy ? (
+                                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                                    ) : (
+                                                        <Text style={styles.boostButtonText}>Buy</Text>
+                                                    )}
+                                                </TouchableOpacity>
                                             </View>
-                                            <TouchableOpacity
-                                                style={styles.boostButton}
-                                                onPress={() => handleBoostPurchase(boost)}
-                                                disabled={!!busyProductId}
-                                            >
-                                                {isBusy ? (
-                                                    <ActivityIndicator color="#FFFFFF" size="small" />
-                                                ) : (
-                                                    <Text style={styles.boostButtonText}>Buy</Text>
-                                                )}
-                                            </TouchableOpacity>
+
+                                            <View style={styles.boostBenefits}>
+                                                <View style={styles.boostBenefitPill}>
+                                                    <Ionicons name="sparkles-outline" size={14} color={COLORS.primary} />
+                                                    <Text style={styles.boostBenefitText}>+{boost.aiCredits || 0} AI credits</Text>
+                                                </View>
+                                                <View style={styles.boostBenefitPill}>
+                                                    <Ionicons name="call-outline" size={14} color={COLORS.primary} />
+                                                    <Text style={styles.boostBenefitText}>+{boost.huddleMinutes || 0} huddle mins</Text>
+                                                </View>
+                                            </View>
                                         </View>
                                     );
                                 })}
+                                </View>
                             </View>
                         )}
 
@@ -545,12 +689,6 @@ const SubscriptionScreen = ({ navigation, route }) => {
                             )}
                         </TouchableOpacity>
 
-                        {selectedPlanId !== 'enterprise' && (
-                            <TouchableOpacity style={styles.manageButton} onPress={handleManageSubscription}>
-                                <Text style={styles.manageButtonText}>Manage subscription</Text>
-                            </TouchableOpacity>
-                        )}
-
                         <View style={styles.footerBlock}>
                             <View style={styles.footerLinks}>
                                 <TouchableOpacity onPress={() => Linking.openURL(LEGAL_LINKS.terms)}>
@@ -560,9 +698,6 @@ const SubscriptionScreen = ({ navigation, route }) => {
                                     <Text style={styles.footerLink}>Privacy</Text>
                                 </TouchableOpacity>
                             </View>
-                            <Text style={styles.footerMeta}>
-                                {selectedCadence === 'annual' ? 'Auto-renews yearly. Cancel anytime.' : 'Auto-renews monthly. Cancel anytime.'}
-                            </Text>
                         </View>
                     </>
                 )}
@@ -668,14 +803,14 @@ const styles = StyleSheet.create({
         height: 68,
     },
     heroTitle: {
-        fontFamily: 'SpaceGrotesk_700Bold',
+        fontFamily: FONT_FAMILIES.displayBold,
         fontSize: 28,
         color: COLORS.text,
         textAlign: 'center'
     },
     heroSubtitle: {
         marginTop: 10,
-        fontFamily: 'DMSans_500Medium',
+        fontFamily: FONT_FAMILIES.bodyMedium,
         fontSize: 14,
         lineHeight: 20,
         color: '#6B7280',
@@ -717,7 +852,7 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     billingLabel: {
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 14,
     },
     billingLabelActive: {
@@ -728,7 +863,7 @@ const styles = StyleSheet.create({
     },
     billingPrice: {
         marginTop: 6,
-        fontFamily: 'SpaceGrotesk_700Bold',
+        fontFamily: FONT_FAMILIES.displayBold,
         fontSize: 19,
     },
     billingPriceActive: {
@@ -739,7 +874,7 @@ const styles = StyleSheet.create({
     },
     billingHint: {
         marginTop: 6,
-        fontFamily: 'DMSans_500Medium',
+        fontFamily: FONT_FAMILIES.bodyMedium,
         fontSize: 12,
         color: '#4D7A74',
     },
@@ -751,7 +886,7 @@ const styles = StyleSheet.create({
     },
     discountBadgeText: {
         color: '#FFFFFF',
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 11,
     },
     toggleWrap: {
@@ -775,7 +910,7 @@ const styles = StyleSheet.create({
         paddingVertical: 12
     },
     toggleLabel: {
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 13,
     },
     toggleLabelMuted: {
@@ -804,7 +939,7 @@ const styles = StyleSheet.create({
         marginBottom: 16
     },
     noticeText: {
-        fontFamily: 'DMSans_500Medium',
+        fontFamily: FONT_FAMILIES.bodyMedium,
         fontSize: 12,
         color: '#0C7F76'
     },
@@ -825,7 +960,7 @@ const styles = StyleSheet.create({
     },
     compareHeaderTitle: {
         flex: 1,
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 14,
         color: '#8A8F98'
     },
@@ -837,14 +972,14 @@ const styles = StyleSheet.create({
     compareFreeHeader: {
         width: 48,
         textAlign: 'center',
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 13,
         color: '#8A8F98'
     },
     compareProHeader: {
         width: 48,
         textAlign: 'center',
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 13,
         color: COLORS.primary
     },
@@ -863,7 +998,7 @@ const styles = StyleSheet.create({
     compareLabel: {
         flex: 1,
         paddingRight: 12,
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 14,
         lineHeight: 20,
         color: COLORS.text
@@ -879,7 +1014,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center'
     },
     planCellText: {
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 11,
         color: '#8A8F98',
         textAlign: 'center'
@@ -902,17 +1037,99 @@ const styles = StyleSheet.create({
         marginBottom: 10
     },
     statusTitle: {
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 13,
         color: '#8A8F98'
     },
     statusValue: {
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 13,
         color: COLORS.text
     },
+    statusPlanName: {
+        marginTop: 3,
+        fontFamily: FONT_FAMILIES.displayBold,
+        fontSize: 22,
+        color: COLORS.text
+    },
+    statusPlanBadge: {
+        backgroundColor: '#E8F7F5',
+        borderRadius: 999,
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+    },
+    statusPlanBadgeText: {
+        fontFamily: FONT_FAMILIES.bodyBold,
+        fontSize: 11,
+        color: COLORS.primary,
+    },
+    statusLead: {
+        fontFamily: FONT_FAMILIES.bodyMedium,
+        fontSize: 13,
+        lineHeight: 19,
+        color: '#4B5563',
+        marginBottom: 14,
+    },
+    usageStack: {
+        gap: 12,
+    },
+    usageCard: {
+        backgroundColor: '#F8FBFA',
+        borderRadius: 18,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: '#E8EFEC',
+    },
+    usageHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: 12,
+    },
+    usageLabel: {
+        fontFamily: FONT_FAMILIES.bodyBold,
+        fontSize: 14,
+        color: COLORS.text,
+    },
+    usageValue: {
+        marginTop: 3,
+        fontFamily: FONT_FAMILIES.bodyMedium,
+        fontSize: 12,
+        lineHeight: 18,
+        color: '#5B6470',
+    },
+    usageBadge: {
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    usageBadgeText: {
+        fontFamily: FONT_FAMILIES.bodyBold,
+        fontSize: 11,
+    },
+    usageTrack: {
+        marginTop: 12,
+        height: 10,
+        borderRadius: 999,
+        overflow: 'hidden',
+    },
+    usageFill: {
+        height: '100%',
+        borderRadius: 999,
+    },
+    usageFooter: {
+        marginTop: 8,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    usageMeta: {
+        fontFamily: FONT_FAMILIES.bodyMedium,
+        fontSize: 11,
+        color: '#7B8591',
+    },
     statusLine: {
-        fontFamily: 'DMSans_500Medium',
+        fontFamily: FONT_FAMILIES.bodyMedium,
         fontSize: 13,
         lineHeight: 19,
         color: '#4B5563',
@@ -920,7 +1137,7 @@ const styles = StyleSheet.create({
     },
     statusMeta: {
         marginTop: 12,
-        fontFamily: 'DMSans_500Medium',
+        fontFamily: FONT_FAMILIES.bodyMedium,
         fontSize: 12,
         color: '#8A8F98'
     },
@@ -938,9 +1155,51 @@ const styles = StyleSheet.create({
         flex: 1
     },
     boostTitle: {
-        fontFamily: 'DMSans_700Bold',
-        fontSize: 13,
+        fontFamily: FONT_FAMILIES.bodyBold,
+        fontSize: 15,
         color: COLORS.text
+    },
+    boostPrice: {
+        marginTop: 4,
+        fontFamily: FONT_FAMILIES.displayBold,
+        fontSize: 17,
+        color: COLORS.text,
+    },
+    boostList: {
+        gap: 12,
+    },
+    boostCard: {
+        borderRadius: 20,
+        backgroundColor: '#F8FBFA',
+        borderWidth: 1,
+        borderColor: '#E8EFEC',
+        padding: 14,
+        gap: 12,
+    },
+    boostCardTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    boostBenefits: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    boostBenefitPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        borderRadius: 999,
+        backgroundColor: '#ECF7F4',
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+    },
+    boostBenefitText: {
+        fontFamily: FONT_FAMILIES.bodyBold,
+        fontSize: 12,
+        color: '#25665E',
     },
     boostButton: {
         minWidth: 72,
@@ -951,9 +1210,12 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingHorizontal: 14
     },
+    boostButtonDisabled: {
+        opacity: 0.6,
+    },
     boostButtonText: {
         color: '#FFFFFF',
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 13
     },
     upgradeButton: {
@@ -975,7 +1237,7 @@ const styles = StyleSheet.create({
     },
     upgradeButtonText: {
         color: COLORS.white,
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 15
     },
     restoreButton: {
@@ -984,20 +1246,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center'
     },
     restoreButtonText: {
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 15,
         color: COLORS.primary,
         textDecorationLine: 'underline'
-    },
-    manageButton: {
-        marginTop: 12,
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    manageButtonText: {
-        fontFamily: 'DMSans_700Bold',
-        fontSize: 14,
-        color: '#4B5563'
     },
     footerBlock: {
         alignItems: 'center',
@@ -1009,16 +1261,10 @@ const styles = StyleSheet.create({
         gap: 18
     },
     footerLink: {
-        fontFamily: 'DMSans_700Bold',
+        fontFamily: FONT_FAMILIES.bodyBold,
         fontSize: 12,
         color: '#4B5563'
     },
-    footerMeta: {
-        fontFamily: 'DMSans_500Medium',
-        fontSize: 13,
-        color: COLORS.text,
-        textAlign: 'center'
-    }
 });
 
 export default SubscriptionScreen;

@@ -160,6 +160,18 @@ const navigateFromNotificationData = async (payload) => {
             return true;
         }
 
+        if (type === 'PLANNER_ITEM_REMINDER') {
+            navigate('MainTabs', {
+                screen: 'Dashboard',
+                params: {
+                    plannerDate: data?.plannerDate || null,
+                    plannerItemId: data?.plannerItemId || null,
+                    openPlanner: true,
+                },
+            });
+            return true;
+        }
+
         if (type === 'SCHEDULED_HUDDLE_REMINDER') {
             if (data?.circleId) {
                 navigate('CircleDetail', { circle: { id: data.circleId } });
